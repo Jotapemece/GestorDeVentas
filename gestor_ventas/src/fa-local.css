@@ -1,0 +1,45 @@
+@font-face {
+  font-family: 'Font Awesome 6 Free';
+  font-style: normal;
+  font-weight: 900;
+  src: url('fonts/fa-solid-900.woff2') format('woff2'),
+       url('fonts/fa-solid-900.ttf') format('truetype');
+}
+
+.nf {
+  display: inline-block;
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  font-style: normal;
+  font-variant: normal;
+  line-height: 1;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: auto;
+}
+
+.nf-fa-shopping_cart::before { content: "\f07a"; }
+.nf-fa-archive::before { content: "\f187"; }
+.nf-fa-credit_card::before { content: "\f09d"; }
+.nf-fa-money::before { content: "\f0d6"; }
+.nf-fa-users::before { content: "\f0c0"; }
+.nf-fa-history::before { content: "\f1da"; }
+.nf-fa-cog::before { content: "\f013"; }
+.nf-fa-sign_out::before { content: "\f08b"; }
+.nf-fa-lock::before { content: "\f023"; }
+.nf-fa-unlock::before { content: "\f09c"; }
+.nf-fa-upload::before { content: "\f093"; }
+.nf-fa-download::before { content: "\f019"; }
+.nf-fa-plus::before { content: "\2b"; }
+.nf-fa-trash::before { content: "\f1f8"; }
+.nf-fa-check::before { content: "\f00c"; }
+.nf-fa-file_text::before { content: "\f15c"; }
+.nf-fa-paint_brush::before { content: "\f1fc"; }
+.nf-fa-palette::before { content: "\f53f"; }
+.nf-fa-moon::before { content: "\f186"; }
+.nf-fa-sun::before { content: "\f185"; }
+.nf-fa-info_circle::before { content: "\f05a"; }
+.nf-fa-bar_chart::before { content: "\f080"; }
+.nf-fa-print::before { content: "\f02f"; }
+.nf-fa-display::before { content: "\f108"; }
+.nf-fa-music::before { content: "\f001"; }

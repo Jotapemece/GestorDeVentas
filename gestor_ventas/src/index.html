@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestor de Ventas</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="fa-local.css">
+</head>
+<body class="compact">
+  <div id="app">
+    <div id="login-screen">
+      <div class="login-card">
+        <div class="login-icon">
+          <svg viewBox="0 0 100 100" width="64" height="64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M30 20 L10 45 L25 55 L30 45 L45 50 L50 35 L30 20Z" fill="#D47A4A"/>
+            <path d="M70 20 L90 45 L75 55 L70 45 L55 50 L50 35 L70 20Z" fill="#D47A4A"/>
+            <path d="M25 30 L10 20 L20 35 L25 30Z" fill="#C06030"/>
+            <path d="M75 30 L90 20 L80 35 L75 30Z" fill="#C06030"/>
+            <ellipse cx="38" cy="42" rx="3" ry="3.5" fill="#2D1B0E"/>
+            <ellipse cx="62" cy="42" rx="3" ry="3.5" fill="#2D1B0E"/>
+            <ellipse cx="38" cy="41" rx="1.5" ry="2" fill="#fff"/>
+            <ellipse cx="62" cy="41" rx="1.5" ry="2" fill="#fff"/>
+            <ellipse cx="50" cy="55" rx="6" ry="4" fill="#2D1B0E"/>
+            <ellipse cx="50" cy="54" rx="3.5" ry="2.5" fill="#D47A4A"/>
+          </svg>
+        </div>
+        <h1>InariMarket</h1>
+        <p class="login-subtitle">Sistema de Punto de Venta</p>
+        <div class="form-group">
+          <label for="login-username">Usuario</label>
+          <input type="text" id="login-username" name="username" placeholder="Nombre de usuario" autocomplete="off" autofocus>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Contraseña</label>
+          <input type="password" id="login-password" name="password" placeholder="Contraseña">
+        </div>
+        <div class="form-group remember-row">
+          <label class="remember-label">
+            <input type="checkbox" id="remember-me">
+            <span>Recordar usuario</span>
+          </label>
+        </div>
+        <button id="login-btn" class="btn btn-primary btn-full">Iniciar Sesi&oacute;n</button>
+        <p id="login-error" class="login-error"></p>
+      </div>
+    </div>
+
+    <div id="main-app" style="display:none;">
+      <aside id="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-logo">
+            <svg viewBox="0 0 100 100" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+              <path d="M30 22 L10 45 L25 53 L30 45 L45 48 L50 35 L30 22Z" fill="#D47A4A"/>
+              <path d="M70 22 L90 45 L75 53 L70 45 L55 48 L50 35 L70 22Z" fill="#D47A4A"/>
+              <path d="M25 32 L10 22 L20 37 L25 32Z" fill="#C06030"/>
+              <path d="M75 32 L90 22 L80 37 L75 32Z" fill="#C06030"/>
+              <ellipse cx="38" cy="42" rx="2.5" ry="3" fill="#2D1B0E"/>
+              <ellipse cx="62" cy="42" rx="2.5" ry="3" fill="#2D1B0E"/>
+              <ellipse cx="38" cy="41" rx="1.2" ry="1.5" fill="#fff"/>
+              <ellipse cx="62" cy="41" rx="1.2" ry="1.5" fill="#fff"/>
+              <ellipse cx="50" cy="54" rx="5" ry="3.5" fill="#2D1B0E"/>
+              <ellipse cx="50" cy="53" rx="3" ry="2" fill="#D47A4A"/>
+            </svg>
+            <span class="sidebar-title">InariMarket</span>
+          </div>
+          <p id="sidebar-user" class="sidebar-user"></p>
+        </div>
+        <nav class="sidebar-nav">
+          <button class="nav-btn active" data-view="sales">
+            <span class="nav-icon"><i class="nf nf-fa-shopping_cart"></i></span>
+            <span class="nav-text">Ventas</span>
+          </button>
+          <button class="nav-btn" data-view="inventory">
+            <span class="nav-icon"><i class="nf nf-fa-archive"></i></span>
+            <span class="nav-text">Inventario</span>
+          </button>
+          <button class="nav-btn" data-view="creditos">
+            <span class="nav-icon"><i class="nf nf-fa-credit_card"></i></span>
+            <span class="nav-text">Cr&eacute;dito</span>
+          </button>
+          <button class="nav-btn" data-view="cashier">
+            <span class="nav-icon"><i class="nf nf-fa-money"></i></span>
+            <span class="nav-text">Caja</span>
+          </button>
+          <button class="nav-btn" data-view="audit">
+            <span class="nav-icon"><i class="nf nf-fa-history"></i></span>
+            <span class="nav-text">Historial</span>
+          </button>
+          <button class="nav-btn admin-only" data-view="config">
+            <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
+            <span class="nav-text">Config.</span>
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="sidebar-version">InariMarket v1.0</div>
+          <button id="logout-btn" class="btn btn-outline btn-full"><i class="nf nf-fa-sign_out"></i> Salir</button>
+        </div>
+      </aside>
+
+      <main id="main-content">
+        <section id="view-sales" class="view active">
+          <div class="sales-header">
+            <div class="search-box">
+              <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo...">
+            </div>
+            <div class="tasa-input-group">
+              <label>Tasa Bs./$:</label>
+              <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal">
+            </div>
+          </div>
+          <div class="sales-body">
+            <div class="sales-panel sales-left">
+              <div class="panel-header">Productos</div>
+              <div class="product-list-container">
+                <table class="table" id="product-search-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Precio ($)</th>
+                      <th>Precio (Bs.)</th>
+                      <th>Stock</th>
+                      <th>Acci&oacute;n</th>
+                    </tr>
+                  </thead>
+                  <tbody id="product-search-body"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="sales-panel sales-center" id="sales-center">
+              <div class="panel-header">Carrito de Ventas</div>
+              <div class="cart-container">
+                <table class="table" id="cart-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Cant.</th>
+                      <th>Total</th>
+                      <th>Acci&oacute;n</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cart-body"></tbody>
+                </table>
+                <div class="cart-empty" id="cart-empty">El carrito est&aacute; vac&iacute;o</div>
+              </div>
+              <div class="cart-footer">
+                <div class="cart-totals">
+                  <div class="cart-total"><span>Total USD:</span><span id="cart-total-usd">$0.00</span></div>
+                  <div class="cart-total"><span>Total Bs.:</span><span id="cart-total-bs">Bs. 0,00</span></div>
+                </div>
+                <div class="cart-actions">
+                  <button id="checkout-btn" class="btn btn-primary" disabled>Cobrar</button>
+                  <button id="cancel-sale-btn" class="btn btn-cancel" onclick="clearCart()" title="Cancelar venta">&times;</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <section id="view-inventory" class="view">
+          <div class="view-header">
+            <h2><i class="nf nf-fa-archive"></i> Inventario de Productos</h2>
+            <div class="inventory-actions">
+              <button id="inventory-import-btn" class="btn btn-outline admin-only"><i class="nf nf-fa-upload"></i> Importar</button>
+              <button id="inventory-export-btn" class="btn btn-accent"><i class="nf nf-fa-download"></i> Exportar</button>
+              <button id="inventory-add-btn" class="btn btn-add admin-only"><i class="nf nf-fa-plus"></i> Agregar Producto</button>
+            </div>
+          </div>
+          <div class="search-box" style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="inventory-search" placeholder="Buscar en inventario..." style="max-width:320px;">
+            <select id="inventory-category-filter" class="filter-select" title="Filtrar por categor&iacute;a">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="table-container">
+            <table class="table" id="inventory-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Categor&iacute;a</th>
+                  <th>Precio ($)</th>
+                  <th>Precio (Bs.)</th>
+                  <th>Stock</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="inventory-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="view-creditos" class="view">
+          <div class="view-header">
+            <h2><i class="nf nf-fa-credit_card"></i> Gesti&oacute;n de Cr&eacute;dito</h2>
+            <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
+          </div>
+          <div class="table-container">
+            <table class="table" id="creditos-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Deuda ($)</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="creditos-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="view-cashier" class="view">
+          <div class="view-header">
+            <h2><i class="nf nf-fa-money"></i> M&oacute;dulo de Caja</h2>
+            <div class="cashier-actions">
+              <button id="open-cashier-btn" class="btn btn-accent" style="display:none;"><i class="nf nf-fa-unlock"></i> Abrir Caja</button>
+              <button id="close-cashier-btn" class="btn btn-danger" style="display:none;"><i class="nf nf-fa-lock"></i> Cerrar Jornada</button>
+              <button id="historial-cierres-btn" class="btn btn-outline"><i class="nf nf-fa-history"></i> Cierres anteriores</button>
+            </div>
+          </div>
+          <div id="caja-status-bar" class="caja-status cerrada">
+            <span id="caja-status-text"><i class="nf nf-fa-lock"></i> Caja cerrada</span>
+          </div>
+          <div class="summary-cards">
+            <div class="summary-card">
+              <div class="summary-label">Ventas del D&iacute;a</div>
+              <div class="summary-value" id="daily-count">0</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Total USD</div>
+              <div class="summary-value" id="daily-usd">$0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Total Bs.</div>
+              <div class="summary-value" id="daily-bs">Bs. 0,00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Tasa Aplicada</div>
+              <div class="summary-value" id="daily-tasa">Bs. 0,00</div>
+            </div>
+          </div>
+          <div class="table-container">
+            <h3>Ventas del D&iacute;a</h3>
+            <table class="table" id="daily-sales-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Hora</th>
+                  <th>Usuario</th>
+                  <th>M&eacute;todo Pago</th>
+                  <th>Total ($)</th>
+                  <th>Total (Bs.)</th>
+                </tr>
+              </thead>
+              <tbody id="daily-sales-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="view-audit" class="view">
+          <div class="view-header">
+            <h2><i class="nf nf-fa-history"></i> Historial de Auditor&iacute;a</h2>
+          </div>
+          <div class="table-container">
+            <table class="table" id="audit-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Fecha / Hora</th>
+                  <th>Usuario</th>
+                  <th>Acci&oacute;n</th>
+                </tr>
+              </thead>
+              <tbody id="audit-body"></tbody>
+            </table>
+            <div style="text-align:center;padding:12px;"><button id="audit-load-more" class="btn btn-outline" onclick="loadAuditMore()" style="display:none;">Cargar m&aacute;s</button></div>
+          </div>
+        </section>
+
+        <section id="view-config" class="view">
+          <div class="view-header">
+            <h2><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</h2>
+          </div>
+          <div class="config-card">
+            <h3><i class="nf nf-fa-paint_brush"></i> Tema de la aplicaci&oacute;n</h3>
+            <div class="theme-selector">
+              <button class="theme-btn" data-theme="oscuro">
+                <i class="nf nf-fa-moon"></i>
+                <span>Oscuro</span>
+              </button>
+              <button class="theme-btn" data-theme="claro">
+                <i class="nf nf-fa-sun"></i>
+                <span>Claro</span>
+              </button>
+              <button class="theme-btn" data-theme="azul">
+                <i class="nf nf-fa-palette"></i>
+                <span>Azul</span>
+              </button>
+              <button class="theme-btn" data-theme="verde">
+                <i class="nf nf-fa-palette"></i>
+                <span>Verde</span>
+              </button>
+              <button class="theme-btn" data-theme="morado">
+                <i class="nf nf-fa-palette"></i>
+                <span>Morado</span>
+              </button>
+              <button class="theme-btn" data-theme="turquesa">
+                <i class="nf nf-fa-palette"></i>
+                <span>Turquesa</span>
+              </button>
+              <button class="theme-btn" data-theme="naranja">
+                <i class="nf nf-fa-palette"></i>
+                <span>Naranja</span>
+              </button>
+            </div>
+          </div>
+          <div class="config-card">
+            <h3><i class="nf nf-fa-text_height"></i> Tama&ntilde;o de fuente</h3>
+            <div class="font-size-control">
+              <button id="font-dec-btn" class="btn btn-sm btn-outline" title="Reducir">A-</button>
+              <span id="font-size-display" class="font-size-display">100%</span>
+              <button id="font-inc-btn" class="btn btn-sm btn-outline" title="Aumentar">A+</button>
+            </div>
+          </div>
+          <div class="config-card">
+            <h3><i class="nf nf-fa-display"></i> Pantalla completa</h3>
+            <label><input type="checkbox" id="fullscreen-toggle"> Pantalla completa</label>
+          </div>
+          <div class="config-card">
+            <h3><i class="nf nf-fa-music"></i> Sonidos</h3>
+            <label><input type="checkbox" id="sound-toggle" checked> Habilitar sonidos</label>
+            <div style="margin-top:8px"><label>Volumen: <input type="range" id="sound-volume" min="0" max="100" value="50"></label></div>
+          </div>
+          <div class="config-card admin-only">
+            <h3><i class="nf nf-fa-tags"></i> Categor&iacute;as</h3>
+            <div class="categoria-list" id="categoria-list">
+              <p class="text-muted">Cargando...</p>
+            </div>
+            <div class="categoria-form" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input type="text" id="categoria-nombre-input" placeholder="Nombre de categor&iacute;a" style="flex:1;min-width:140px;">
+              <input type="color" id="categoria-color-input" value="#CCCCCC" style="width:40px;height:36px;padding:2px;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;">
+              <button id="categoria-add-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-plus"></i> Agregar</button>
+            </div>
+          </div>
+          <div class="config-card">
+            <h3><i class="nf nf-fa-info_circle"></i> Informaci&oacute;n del sistema</h3>
+            <div class="config-info">
+              <p><strong>Versi&oacute;n:</strong> 1.0.0</p>
+              <p><strong>Base de datos:</strong> SQLite local</p>
+              <p><strong>Framework:</strong> Tauri v2 + Rust</p>
+            </div>
+          </div>
+
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="payment-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Procesar Pago</h3>
+        <span class="modal-close" id="payment-modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="payment-total">
+          <span>Total USD:</span>
+          <span id="payment-total-usd">$0.00</span>
+        </div>
+        <div class="payment-total">
+          <span>Total Bs.:</span>
+          <span id="payment-total-bs">Bs. 0,00</span>
+        </div>
+          <div class="form-group">
+          <label>M&eacute;todo de Pago</label>
+          <div class="payment-methods">
+            <button class="payment-method-btn active" data-method="efectivo_bs">Efectivo Bs.</button>
+            <button class="payment-method-btn" data-method="efectivo_usd">Efectivo USD</button>
+            <button class="payment-method-btn" data-method="biopago">Biopago</button>
+            <button class="payment-method-btn" data-method="punto">Punto</button>
+            <button class="payment-method-btn" data-method="pago_movil">Pago M&oacute;vil</button>
+            <button class="payment-method-btn" data-method="credito">Cr&eacute;dito</button>
+            <button class="payment-method-btn" data-method="mixto">Mixto</button>
+          </div>
+        </div>
+        <div class="form-group" id="referencia-group" style="display:none;">
+          <label>&Uacute;ltimos 4 d&iacute;gitos de referencia</label>
+          <input type="text" id="referencia-input" maxlength="4" placeholder="0000">
+        </div>
+        <div class="form-group" id="cliente-group" style="display:none;">
+          <label>Seleccionar Cliente</label>
+          <select id="cliente-select"></select>
+        </div>
+        <div class="form-group" id="mixto-group" style="display:none;">
+          <label>Desglose de pago</label>
+          <div id="mixto-items"></div>
+          <button id="mixto-add-row" class="btn btn-sm btn-outline" style="margin-top:4px;">+ Agregar m&eacute;todo</button>
+          <div id="mixto-warning" class="mixto-warning" style="display:none;"><span class="warning-icon">&#9888;</span> <span id="mixto-warning-text"></span></div>
+          <div id="mixto-error" class="field-error" style="display:none;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="payment-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="payment-confirm-btn" class="btn btn-primary">Confirmar Pago</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="product-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="product-modal-title">Registrar Nuevo Producto</h3>
+        <span class="modal-close" id="product-modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" id="product-codigo-group">
+          <label>C&oacute;digo</label>
+          <input type="text" id="product-codigo" placeholder="C&oacute;digo del producto">
+        </div>
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" id="product-nombre" placeholder="Nombre del producto">
+        </div>
+        <div class="form-group">
+          <label>Precio en USD ($)</label>
+          <input type="number" id="product-precio" step="any" min="0" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Stock</label>
+          <input type="number" id="product-stock" step="1" min="0" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Categor&iacute;a</label>
+          <select id="product-categoria" class="form-select">
+            <option value="">Sin categor&iacute;a</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="product-delete-btn" class="btn btn-danger" style="display:none;"><i class="nf nf-fa-trash"></i> Eliminar</button>
+        <button id="product-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="product-save-btn" class="btn btn-primary"><span id="product-save-text">Registrar</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="product-detail-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Detalle del Producto</h3>
+        <span class="modal-close" id="product-detail-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid">
+          <div class="detail-field"><span class="detail-label">Nombre</span><span class="detail-value" id="detail-nombre"></span></div>
+          <div class="detail-field"><span class="detail-label">C&oacute;digo</span><span class="detail-value" id="detail-codigo"></span></div>
+          <div class="detail-field"><span class="detail-label">Precio ($)</span><span class="detail-value" id="detail-precio"></span></div>
+          <div class="detail-field"><span class="detail-label">Stock</span><span class="detail-value" id="detail-stock"></span></div>
+          <div class="detail-field"><span class="detail-label">Categor&iacute;a</span><span class="detail-value" id="detail-categoria"></span></div>
+          <div class="detail-field"><span class="detail-label">Fecha de Creaci&oacute;n</span><span class="detail-value" id="detail-created"></span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="product-detail-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="client-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="client-modal-title">Nuevo Cliente</h3>
+        <span class="modal-close" id="client-modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nombre del Cliente</label>
+          <input type="text" id="client-nombre" placeholder="Nombre completo">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="client-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="client-save-btn" class="btn btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="debt-detail-modal" class="modal" style="display:none;">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3 id="debt-detail-title">Detalle de Deuda</h3>
+        <span class="modal-close" id="debt-detail-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="client-info-bar" id="debt-detail-bar">
+          <span>Saldo Deuda: <strong id="debt-detail-debt">$0.00</strong></span>
+        </div>
+        <div id="debt-detail-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="debt-detail-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="abono-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="abono-title">Registrar Abono</h3>
+        <span class="modal-close" id="abono-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="abono-cliente-info" id="abono-cliente-info">
+          <span class="abono-cliente-nombre" id="abono-cliente-nombre"></span>
+          <span class="abono-deuda-total">Deuda: <strong id="abono-deuda-usd">$0.00</strong> / <strong id="abono-deuda-bs">Bs. 0,00</strong></span>
+        </div>
+        <div class="abono-cart">
+          <div class="abono-input-group">
+            <label>Monto a abonar ($)</label>
+            <input type="number" id="abono-monto" step="any" min="0" placeholder="0.00" inputmode="decimal">
+          </div>
+          <div class="abono-saldo-restante" id="abono-saldo-restante">Saldo Restante: $0.00</div>
+          <div class="abono-metodo">
+            <label>M&eacute;todo de Pago</label>
+            <div class="abono-metodo-btns">
+              <button class="btn btn-sm abono-metodo-btn active" data-method="efectivo_bs">Efectivo Bs.</button>
+              <button class="btn btn-sm abono-metodo-btn" data-method="efectivo_usd">Efectivo USD</button>
+              <button class="btn btn-sm abono-metodo-btn" data-method="pago_movil">Pago M&oacute;vil</button>
+              <button class="btn btn-sm abono-metodo-btn" data-method="punto">Punto</button>
+              <button class="btn btn-sm abono-metodo-btn" data-method="biopago">Biopago</button>
+              <button class="btn btn-sm abono-metodo-btn" data-method="mixto">Mixto</button>
+            </div>
+            <div class="abono-referencia-group" id="abono-referencia-group" style="display:none;">
+              <label>Referencia (4 &uacute;ltimos d&iacute;gitos)</label>
+              <input type="text" id="abono-referencia" maxlength="4" placeholder="0000">
+            </div>
+            <div id="abono-mixto-group" style="display:none;margin-top:6px;">
+              <label>Desglose de pago</label>
+              <div id="abono-mixto-items"></div>
+              <button id="abono-mixto-add-row" class="btn btn-sm btn-outline" style="margin-top:4px;">+ Agregar m&eacute;todo</button>
+              <div id="abono-mixto-warning" class="mixto-warning" style="display:none;"><span class="warning-icon">&#9888;</span> <span id="abono-mixto-warning-text"></span></div>
+              <div id="abono-mixto-error" class="field-error" style="display:none;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="abono-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="abono-confirm-btn" class="btn btn-primary">Confirmar Abono</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="close-cashier-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Confirmar Cierre de Jornada</h3>
+        <span class="modal-close" id="close-cashier-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>Se generar&aacute; un reporte de cierre con los siguientes datos:</p>
+        <div id="close-summary"></div>
+        <p class="warning-text">Esta acci&oacute;n congelar&aacute; los datos de la jornada actual.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="close-cashier-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="close-cashier-confirm-btn" class="btn btn-danger"><i class="nf nf-fa-check"></i> Confirmar Cierre</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="close-report-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-file_text"></i> Reporte de Cierre</h3>
+        <span class="modal-close" id="close-report-close">&times;</span>
+      </div>
+      <div class="modal-body" id="close-report-body"></div>
+      <div class="modal-footer">
+        <button id="close-report-ok-btn" class="btn btn-primary">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="historial-cierres-modal" class="modal" style="display:none;">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-history"></i> Historial de Cierres</h3>
+        <span class="modal-close" id="historial-cierres-close">&times;</span>
+      </div>
+      <div class="modal-body" id="historial-cierres-body">
+        <div id="historial-cierres-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="historial-cierres-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para detalle de cierre histórico -->
+  <div id="historial-cierre-detalle-modal" class="modal" style="display:none;">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3 id="historial-cierre-detalle-title"><i class="nf nf-fa-file_text"></i> Detalle del Cierre</h3>
+        <span class="modal-close" id="historial-cierre-detalle-close">&times;</span>
+      </div>
+      <div class="modal-body" id="historial-cierre-detalle-body"></div>
+      <div class="modal-footer">
+        <button id="historial-cierre-detalle-ok-btn" class="btn btn-outline">Volver</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="import-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-upload"></i> Importar Productos</h3>
+        <span class="modal-close" id="import-modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>Se importar&aacute;n productos desde un archivo separado por tabs (TSV).</p>
+        <p>Por defecto busca <strong>productos</strong> en el mismo directorio del ejecutable. Especifique una ruta absoluta si el archivo est&aacute; en otra ubicaci&oacute;n.</p>
+        <p>Formato esperado: <code>Nombre, Stock, Precio</code> (separado por tabs)</p>
+        <div class="form-group">
+          <label>Ruta del archivo</label>
+          <input type="text" id="import-file-path" placeholder="productos" value="productos">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="import-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="import-confirm-btn" class="btn btn-primary"><i class="nf nf-fa-upload"></i> Importar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="print-receipt" style="display:none;position:fixed;bottom:80px;right:24px;z-index:2001;">
+    <button class="btn btn-primary" onclick="printReceipt()"><i class="nf nf-fa-print" style="margin-right:6px;"></i> Imprimir Recibo</button>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
