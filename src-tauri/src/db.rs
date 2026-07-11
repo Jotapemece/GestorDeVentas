@@ -1,7 +1,7 @@
 use rusqlite::{Connection, params};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 const SQL_CREATE_TABLES: &str = "
     CREATE TABLE IF NOT EXISTS productos (
@@ -79,11 +79,6 @@ const SQL_CREATE_TABLES: &str = "
         detalle_json TEXT NOT NULL,
         FOREIGN KEY(cierre_id) REFERENCES cierres_caja(id)
     );
-
-    CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha_hora);
-    CREATE INDEX IF NOT EXISTS idx_ventas_cliente ON ventas(cliente_id);
-    CREATE INDEX IF NOT EXISTS idx_detalles_venta ON detalles_ventas(venta_id);
-    CREATE INDEX IF NOT EXISTS idx_historial_fecha ON historial_acciones(fecha_hora);
 ";
 
 pub struct AppState {
@@ -91,13 +86,14 @@ pub struct AppState {
     pub current_user: Mutex<Option<crate::models::Usuario>>,
 }
 
-fn get_db_path(_app_handle: &AppHandle) -> PathBuf {
+fn get_db_path(app_handle: &AppHandle) -> PathBuf {
     #[cfg(target_os = "android")]
     {
-        let app_data_dir = _app_handle.path().app_data_dir()
-            .expect("No se pudo obtener el directorio de datos de la aplicación");
-        return app_data_dir.join("gestor_ventas.db");
+        let data_dir = app_handle.path().app_data_dir()
+            .unwrap_or_else(|_| PathBuf::from("/data/data/com.gestor-ventas.app/databases"));
+        return data_dir.join("gestor_ventas.db");
     }
+
     #[cfg(not(target_os = "android"))]
     {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -141,10 +137,8 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
 
     migrate_productos(&conn);
 
-    // Migration: add stock_minimo column
     conn.execute_batch("ALTER TABLE productos ADD COLUMN stock_minimo INTEGER NOT NULL DEFAULT 0;").ok();
 
-    // Migration: add categorias table and categoria_id column
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS categorias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,7 +162,6 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
 
     conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria_id);").ok();
 
-    // Migration: add pago_detalle column + remove CHECK constraint from ventas
     let ventas_sql: String = conn
         .query_row("SELECT sql FROM sqlite_master WHERE type='table' AND name='ventas'", [], |row| row.get(0))
         .unwrap_or_default();
@@ -212,7 +205,6 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
         }
     }
 
-    // Migration: add activo column to productos (soft delete)
     let has_activo: bool = conn
         .prepare("PRAGMA table_info(productos)")
         .ok()
@@ -226,7 +218,6 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
         conn.execute_batch("ALTER TABLE productos ADD COLUMN activo INTEGER NOT NULL DEFAULT 1;").ok();
     }
 
-    // Migration: add tasa_cierre column to cierres_caja
     let has_tasa_cierre: bool = conn
         .prepare("PRAGMA table_info(cierres_caja)")
         .ok()
@@ -244,7 +235,6 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     insert_default_vendedor(&conn);
     insert_default_config(&conn);
 
-    // Migration: remove *UND*- suffix from product names
     conn.execute_batch(
         "UPDATE productos SET nombre = REPLACE(nombre, '*UND*-', '') WHERE nombre LIKE '%*UND*-%';"
     ).ok();
@@ -311,64 +301,64 @@ fn insert_default_vendedor(conn: &Connection) {
     }
 }
 
-fn auto_import_products(conn: &Connection, app_handle: &AppHandle) {
-    #[cfg(target_os = "android")]
-    return;
-
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM productos", [], |row| row.get(0))
-        .unwrap_or(0);
-    if count > 0 {
-        return;
-    }
-    let db_path = get_db_path(app_handle);
-    let dir = db_path.parent().unwrap_or(std::path::Path::new("."));
-    let file_path = if dir.join("productos").exists() {
-        dir.join("productos")
-    } else {
-        let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
-        let fallback = project_root.join("productos");
-        if !fallback.exists() { return; }
-        fallback
-    };
-    let content = match std::fs::read_to_string(&file_path) {
-        Ok(c) => c,
-        Err(_) => return,
-    };
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() { continue; }
-        let cols: Vec<&str> = line.split('\t').collect();
-        if cols.len() < 3 { continue; }
-        let (codigo, nombre, stock_str, precio_str) = match cols.len() {
-            7 => {
-                let code = cols[0].trim();
-                let name = cols[1].trim().trim_end_matches(',');
-                let stock = cols[2].trim().trim_end_matches(',');
-                let price = cols[5].trim().replace(',', ".");
-                (Some(code.to_string()), name, stock, price)
-            }
-            6 => {
-                let name = cols[0].trim().trim_end_matches(',');
-                let stock = cols[1].trim().trim_end_matches(',');
-                let price = cols[4].trim().replace(',', ".");
-                (None, name, stock, price)
-            }
-            _ => {
-                let name = cols[0].trim().trim_end_matches(',');
-                let stock = cols[1].trim().trim_end_matches(',');
-                let price = cols[2].trim().replace(',', ".");
-                (None, name, stock, price)
-            }
+fn auto_import_products(_conn: &Connection, _app_handle: &AppHandle) {
+    #[cfg(not(target_os = "android"))]
+    {
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM productos", [], |row| row.get(0))
+            .unwrap_or(0);
+        if count > 0 {
+            return;
+        }
+        let db_path = get_db_path(app_handle);
+        let dir = db_path.parent().unwrap_or(std::path::Path::new("."));
+        let file_path = if dir.join("productos").exists() {
+            dir.join("productos")
+        } else {
+            let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+            let fallback = project_root.join("productos");
+            if !fallback.exists() { return; }
+            fallback
         };
-        let stock: i64 = match stock_str.parse() { Ok(s) => s, Err(_) => continue };
-        let precio_usd: f64 = match precio_str.parse() { Ok(p) => p, Err(_) => continue };
-        let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
-        let nombre = nombre.trim_end_matches("*UND*-").trim_end_matches(',');
-        conn.execute(
-            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'))",
-            rusqlite::params![codigo, nombre, precio_usd, stock],
-        ).ok();
+        let content = match std::fs::read_to_string(&file_path) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() { continue; }
+            let cols: Vec<&str> = line.split('\t').collect();
+            if cols.len() < 3 { continue; }
+            let (codigo, nombre, stock_str, precio_str) = match cols.len() {
+                7 => {
+                    let code = cols[0].trim();
+                    let name = cols[1].trim().trim_end_matches(',');
+                    let stock = cols[2].trim().trim_end_matches(',');
+                    let price = cols[5].trim().replace(',', ".");
+                    (Some(code.to_string()), name, stock, price)
+                }
+                6 => {
+                    let name = cols[0].trim().trim_end_matches(',');
+                    let stock = cols[1].trim().trim_end_matches(',');
+                    let price = cols[4].trim().replace(',', ".");
+                    (None, name, stock, price)
+                }
+                _ => {
+                    let name = cols[0].trim().trim_end_matches(',');
+                    let stock = cols[1].trim().trim_end_matches(',');
+                    let price = cols[2].trim().replace(',', ".");
+                    (None, name, stock, price)
+                }
+            };
+            let stock: i64 = match stock_str.parse() { Ok(s) => s, Err(_) => continue };
+            let precio_usd: f64 = match precio_str.parse() { Ok(p) => p, Err(_) => continue };
+            let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
+            let nombre = nombre.trim_end_matches("*UND*-").trim_end_matches(',');
+            conn.execute(
+                "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'))",
+                rusqlite::params![codigo, nombre, precio_usd, stock],
+            ).ok();
+        }
     }
 }
 
