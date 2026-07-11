@@ -11,22 +11,27 @@ mod products;
 mod sales;
 
 use db::AppState;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let conn = match db::init_db() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error al inicializar BD: {}", e);
-            std::process::exit(1);
-        }
-    };
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState {
-            db: std::sync::Mutex::new(conn),
-            current_user: std::sync::Mutex::new(None),
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .setup(|app| {
+            let conn = match db::init_db(&app.handle()) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Error al inicializar BD: {}", e);
+                    std::process::exit(1);
+                }
+            };
+            app.manage(AppState {
+                db: std::sync::Mutex::new(conn),
+                current_user: std::sync::Mutex::new(None),
+            });
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             auth::login,

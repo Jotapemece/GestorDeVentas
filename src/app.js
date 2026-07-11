@@ -970,27 +970,43 @@ async function deleteProduct() {
 
 async function exportProducts() {
   try {
-    const path = await invoke('export_products_xlsx', { tasa: tasaActual });
-    showToast('Exportado a: ' + path);
+    const b64 = await invoke('export_products_xlsx', { tasa: tasaActual });
+    const byteChars = atob(b64);
+    const byteNums = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([new Uint8Array(byteNums)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'productos_export.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exportado exitosamente');
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 function openImportModal() {
-  qs(SEL.importFilePath).value = 'productos';
-  qs(SEL.importModal).style.display = 'flex';
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.tsv,.txt,.csv';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    try {
+      const res = await invoke('import_products_from_file', { content: text });
+      showToast(res);
+      loadInventory();
+      renderProductSearch();
+      loadProductCache();
+    } catch (err) { showToast('Error: ' + err, 'error'); }
+  };
+  input.click();
 }
 
-function closeImportModal() { qs(SEL.importModal).style.display = 'none'; }
+function closeImportModal() {}
 
-async function confirmImport() {
-  const filePath = qs(SEL.importFilePath).value.trim() || 'productos';
-  try {
-    const res = await invoke('import_products_from_file', { filePath });
-    showToast(res);
-    closeImportModal(); loadInventory(); renderProductSearch();
-    loadProductCache();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-}
+async function confirmImport() {}
 
 /* ========== CREDITOS ========== */
 async function loadCreditos() {
@@ -1630,11 +1646,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  // Import modal
-  qs('#import-modal-close').addEventListener('click', closeImportModal);
-  qs('#import-cancel-btn').addEventListener('click', closeImportModal);
-  qs('#import-confirm-btn').addEventListener('click', confirmImport);
-
   // Product modal
   qs('#product-modal-close').addEventListener('click', closeProductModal);
   qs('#product-cancel-btn').addEventListener('click', closeProductModal);
@@ -1870,4 +1881,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     qs(SEL.rememberMe).checked = true;
     qs(SEL.loginPassword).focus();
   }
+
+  // Mobile lifecycle
+  window.addEventListener('tauri://focus', () => {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
+  window.addEventListener('tauri://blur', () => {});
 });

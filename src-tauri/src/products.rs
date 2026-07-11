@@ -1,8 +1,8 @@
 use crate::db::AppState;
 use crate::models::Producto;
+use base64::Engine;
 use rusqlite::params;
 use rust_xlsxwriter::*;
-use std::path::PathBuf;
 use tauri::State;
 
 const SQL_BASE_PRODUCTOS: &str =
@@ -277,41 +277,30 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
     sheet.set_column_width(3, 15).ok();
     sheet.set_column_width(4, 10).ok();
 
-    let mut export_path = std::env::current_exe()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .to_path_buf();
-    export_path.push("productos_export.xlsx");
+    let buffer = workbook.save_to_buffer()
+        .map_err(|e| format!("Error al exportar: {}", e))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&buffer);
 
-    match workbook.save(&export_path) {
-        Ok(_) => {
-            crate::audit::log_action(
-                &db,
-                &admin_name,
-                &format!(
-                    "Exportó catálogo a Excel ({})",
-                    export_path.display()
-                ),
-            )
-            .ok();
+    crate::audit::log_action(
+        &db,
+        &admin_name,
+        "Exportó catálogo a Excel",
+    )
+    .ok();
 
-            Ok(export_path.to_string_lossy().to_string())
-        }
-        Err(e) => Err(format!("Error al exportar: {}", e)),
-    }
+    Ok(b64)
 }
 
 #[tauri::command]
 pub fn import_products_from_file(
     state: State<AppState>,
-    file_path: String,
+    content: String,
 ) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
     crate::auth::require_admin(
         &state,
         &db,
-        &format!("Importó productos desde '{}'", file_path),
+        "Importó productos vía upload",
     )?;
     let current_username = state
         .current_user
@@ -320,8 +309,6 @@ pub fn import_products_from_file(
         .clone()
         .map(|u| u.username)
         .unwrap_or_default();
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| format!("Error al leer archivo '{}': {}", file_path, e))?;
 
     let mut count = 0;
     let mut errors: Vec<String> = Vec::new();

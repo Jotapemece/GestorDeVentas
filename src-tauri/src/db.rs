@@ -1,6 +1,7 @@
 use rusqlite::{Connection, params};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use tauri::AppHandle;
 
 const SQL_CREATE_TABLES: &str = "
     CREATE TABLE IF NOT EXISTS productos (
@@ -90,17 +91,24 @@ pub struct AppState {
     pub current_user: Mutex<Option<crate::models::Usuario>>,
 }
 
-fn get_db_path() -> PathBuf {
-    // Use compile-time manifest dir so the path is always the project root
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.pop(); // src-tauri/ -> project root
-    path.push("gestor_ventas.db");
-    // If DB exists in src-tauri/ (user placed it there), use that instead
-    let src_alt = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("gestor_ventas.db");
-    if src_alt.exists() {
-        return src_alt;
+fn get_db_path(_app_handle: &AppHandle) -> PathBuf {
+    #[cfg(target_os = "android")]
+    {
+        let app_data_dir = _app_handle.path().app_data_dir()
+            .expect("No se pudo obtener el directorio de datos de la aplicación");
+        return app_data_dir.join("gestor_ventas.db");
     }
-    path
+    #[cfg(not(target_os = "android"))]
+    {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.push("gestor_ventas.db");
+        let src_alt = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("gestor_ventas.db");
+        if src_alt.exists() {
+            return src_alt;
+        }
+        path
+    }
 }
 
 fn migrate_productos(conn: &Connection) {
@@ -121,8 +129,8 @@ fn migrate_productos(conn: &Connection) {
     }
 }
 
-pub fn init_db() -> Result<Connection, String> {
-    let db_path = get_db_path();
+pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
+    let db_path = get_db_path(app_handle);
     let conn = Connection::open(&db_path).map_err(|e| format!("Error al abrir BD: {}", e))?;
 
     conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
@@ -241,7 +249,7 @@ pub fn init_db() -> Result<Connection, String> {
         "UPDATE productos SET nombre = REPLACE(nombre, '*UND*-', '') WHERE nombre LIKE '%*UND*-%';"
     ).ok();
 
-    auto_import_products(&conn);
+    auto_import_products(&conn, app_handle);
     cleanup_old_history(&conn);
 
     Ok(conn)
@@ -303,20 +311,21 @@ fn insert_default_vendedor(conn: &Connection) {
     }
 }
 
-fn auto_import_products(conn: &Connection) {
+fn auto_import_products(conn: &Connection, app_handle: &AppHandle) {
+    #[cfg(target_os = "android")]
+    return;
+
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM productos", [], |row| row.get(0))
         .unwrap_or(0);
     if count > 0 {
         return;
     }
-    // Look for the productos file: next to DB, or at project root
-    let db_path = get_db_path();
+    let db_path = get_db_path(app_handle);
     let dir = db_path.parent().unwrap_or(std::path::Path::new("."));
     let file_path = if dir.join("productos").exists() {
         dir.join("productos")
     } else {
-        // Fallback: project root (one level up from src-tauri/)
         let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
         let fallback = project_root.join("productos");
         if !fallback.exists() { return; }
@@ -355,7 +364,6 @@ fn auto_import_products(conn: &Connection) {
         let stock: i64 = match stock_str.parse() { Ok(s) => s, Err(_) => continue };
         let precio_usd: f64 = match precio_str.parse() { Ok(p) => p, Err(_) => continue };
         let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
-        // Strip *UND*- suffix from imported names
         let nombre = nombre.trim_end_matches("*UND*-").trim_end_matches(',');
         conn.execute(
             "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'))",
