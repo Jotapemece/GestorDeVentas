@@ -1561,6 +1561,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (e.key === 'Enter') handleLogin();
   });
   qs(SEL.logoutBtn).addEventListener('click', handleLogout);
+  document.getElementById('mobile-logout-btn')?.addEventListener('click', handleLogout);
 
   // Navigation
   qsa('.nav-btn').forEach(btn => {
