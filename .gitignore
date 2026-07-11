@@ -9,3 +9,4 @@ gestor_ventas.db-shm
 gestor_ventas.db-wal
 *.apk
 combined.txt
+src-tauri/release-key.keystore

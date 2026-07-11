@@ -14,6 +14,14 @@ val tauriProperties = Properties().apply {
 }
 
 android {
+    signingConfigs {
+        create("release") {
+            storeFile = file("../../../release-key.keystore")
+            storePassword = "gestor2024"
+            keyAlias = "gestor-ventas"
+            keyPassword = "gestor2024"
+        }
+    }
     compileSdk = 37
     namespace = "com.gestor_ventas.app"
     defaultConfig {
@@ -37,6 +45,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
