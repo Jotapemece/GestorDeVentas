@@ -818,4 +818,144 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   padding: 8px 14px; margin-bottom: 14px; font-size: 0.8125rem;
 }
 
+/* BOTTOM TABS (mobile navigation) */
+.bottom-tabs {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--sidebar-bg);
+  border-top: 1px solid var(--border);
+  z-index: 999;
+  justify-content: space-around;
+  padding: 4px 0 env(safe-area-inset-bottom, 4px);
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+}
+.bottom-tabs .nav-btn {
+  flex-direction: column; gap: 2px; padding: 6px 4px;
+  font-size: 10px; text-align: center; border-radius: 6px;
+  min-width: 0; width: auto; flex: 1;
+}
+.bottom-tabs .nav-btn .nav-icon { font-size: 18px; }
+.bottom-tabs .nav-btn .nav-text { display: block; font-size: 9px; line-height: 1; }
+.bottom-tabs .nav-btn.active { background: var(--card); }
+
+/* MOBILE TOGGLE */
+#sales-toggle-btn { white-space: nowrap; }
+
+/* ===== MOBILE (≤768px) ===== */
+@media (max-width: 768px) {
+  /* Bottom tabs replaces sidebar */
+  .bottom-tabs { display: flex; }
+  #sidebar { display: none; }
+  #main-content { padding-bottom: 64px; }
+
+  /* Increase touch targets to 44px minimum */
+  input, select, button, .btn, .nav-btn, .payment-method-btn,
+  .abono-metodo-btn, .theme-btn, .dropdown-btn, .dropdown-menu button,
+  .mixto-row select, .mixto-row input {
+    min-height: 44px; font-size: 16px;
+  }
+  input, select { padding: 10px 12px; }
+  .btn { padding: 10px 16px; }
+  .btn-sm { padding: 8px 12px; font-size: 13px; min-height: 36px; }
+  .cart-qty-input { min-height: 36px; font-size: 16px; width: 60px; }
+
+  /* Sales: hide toggle on desktop, show on mobile */
+  .mobile-only { display: inline-flex !important; }
+
+  /* Sales body: show one panel at a time via toggle */
+  .sales-body { grid-template-columns: 1fr; }
+  .sales-left, .sales-center { display: flex !important; }
+  .sales-center { border-top: 1px solid var(--border); padding-top: 12px; }
+
+  /* Sales header: stack vertically */
+  .sales-header { flex-direction: column; height: auto; padding: 8px 12px; gap: 8px; }
+  .sales-header .search-box { max-width: 100%; width: 100%; }
+  .sales-header .search-box input { flex: 1; }
+  .sales-header .search-box .filter-select { min-width: 100px; }
+  .tasa-input-group { width: 100%; justify-content: flex-start; }
+  .tasa-input-group input { width: 100px; }
+
+  /* Tables: horizontal scroll on mobile */
+  .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table { font-size: 12px; }
+  .table th, .table td { white-space: nowrap; padding: 8px 10px; }
+  .table tbody tr:hover { background: transparent; }
+
+  /* Sales panels keep normal table layout */
+  .product-list-container, .cart-container { overflow-x: auto; }
+  .product-list-container .table td, .cart-container .table td { font-size: 12px; padding: 6px 8px; white-space: nowrap; }
+  .product-list-container .table th, .cart-container .table th { padding: 6px 8px; font-size: 11px; }
+
+  /* Modals: full-screen on mobile */
+  .modal-content { width: 100%; max-width: 100%; max-height: 100vh; border-radius: 0; height: 100%; }
+  .modal { align-items: flex-end; }
+  .modal-content { border-radius: 16px 16px 0 0; max-height: 92vh; }
+  .modal-lg { width: 100%; }
+  .modal-header { padding: 16px 18px; }
+  .modal-body { padding: 14px 18px; overflow-x: auto; }
+  .modal-footer { padding: 12px 18px; }
+
+  /* Payment: 2-col method grid */
+  .payment-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .payment-method-btn { padding: 10px 8px; font-size: 12px; }
+  .mixto-row { flex-wrap: wrap; gap: 4px; }
+  .mixto-row select { flex: 1; min-width: 80px; }
+  .mixto-input-group { flex: 1; min-width: 70px; }
+
+  /* Abono modal */
+  .abono-metodo-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+  .abono-metodo-btn { padding: 8px 6px; font-size: 11px; min-height: 36px; }
+
+  /* Config cards: tighter */
+  .config-card { padding: 14px; margin-bottom: 12px; }
+  .theme-selector { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+  .theme-btn { padding: 10px 8px; min-width: 0; gap: 2px; font-size: 11px; }
+
+  /* Summary cards: stack */
+  .summary-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .summary-card { padding: 12px; }
+  .summary-value { font-size: 18px; }
+
+  /* View headers: stack */
+  .view-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .view-header h2 { font-size: 17px; }
+  .inventory-actions { width: 100%; display: flex; gap: 6px; flex-wrap: wrap; }
+  .inventory-actions .btn { flex: 1; min-width: 0; font-size: 12px; padding: 8px 10px; }
+
+  /* Search/filter stack */
+  #view-inventory .search-box { flex-direction: column; align-items: stretch; }
+  #view-inventory .search-box input { max-width: 100%; }
+
+  /* Dropdown menu: full-width on mobile */
+  .dropdown-menu { position: fixed; left: 8px !important; right: 8px; top: auto !important; bottom: 80px; width: auto; }
+
+  /* Cashier actions: stack */
+  .cashier-actions { width: 100%; flex-wrap: wrap; }
+  .cashier-actions .btn { flex: 1; font-size: 12px; padding: 8px 10px; }
+
+  /* Inventory header: stack */
+  #view-inventory.active, #view-creditos.active, #view-cashier.active,
+  #view-audit.active, #view-config.active { padding: 12px; }
+
+  /* Categoria form: stack */
+  .categoria-form { flex-direction: column; align-items: stretch; }
+  .categoria-form input[type="color"] { width: 100% !important; height: 44px; }
+
+  /* Cart footer: compact */
+  .cart-footer { padding: 8px 12px; }
+  .cart-total { font-size: 14px; }
+  .cart-empty { padding: 24px 12px; }
+
+  /* Toast: center on mobile */
+  .toast { left: 16px; right: 16px; bottom: 80px; text-align: center; }
+}
+
+@media (max-width: 480px) {
+  .theme-selector { grid-template-columns: 1fr 1fr 1fr; }
+  .summary-cards { grid-template-columns: 1fr; }
+  .payment-methods { grid-template-columns: 1fr 1fr; }
+  .bottom-tabs .nav-btn .nav-text { font-size: 8px; }
+  .bottom-tabs .nav-btn .nav-icon { font-size: 16px; }
+}
+
 

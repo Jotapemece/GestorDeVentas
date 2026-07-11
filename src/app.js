@@ -1868,6 +1868,47 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
   }
 
+  // Sales toggle (mobile: switch between products/cart)
+  const salesToggleBtn = document.getElementById('sales-toggle-btn');
+  let salesPanelShowing = 'products';
+  if (salesToggleBtn) {
+    salesToggleBtn.addEventListener('click', function() {
+      const left = document.querySelector('.sales-left');
+      const center = document.querySelector('.sales-center');
+      const label = document.getElementById('sales-toggle-label');
+      if (salesPanelShowing === 'products') {
+        left.style.display = 'none';
+        center.style.display = 'flex';
+        salesPanelShowing = 'cart';
+        label.textContent = 'Productos';
+      } else {
+        left.style.display = '';
+        center.style.display = '';
+        salesPanelShowing = 'products';
+        label.textContent = 'Carrito';
+      }
+    });
+  }
+  window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) {
+      document.querySelectorAll('.sales-left, .sales-center').forEach(el => el.style.display = '');
+      if (salesToggleBtn) salesToggleBtn.style.display = 'none';
+    } else {
+      if (salesToggleBtn) salesToggleBtn.style.display = '';
+      if (salesPanelShowing === 'cart') {
+        document.querySelector('.sales-left').style.display = 'none';
+        document.querySelector('.sales-center').style.display = 'flex';
+      } else {
+        document.querySelector('.sales-left').style.display = '';
+        document.querySelector('.sales-center').style.display = '';
+      }
+    }
+  });
+  // Initial state for mobile
+  if (window.innerWidth <= 768) {
+    if (salesToggleBtn) salesToggleBtn.style.display = '';
+  }
+
   // Print receipt button
   qs(SEL.printReceiptBtn).addEventListener('click', printReceipt);
 

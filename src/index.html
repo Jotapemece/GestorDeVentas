@@ -87,6 +87,32 @@
         </div>
       </aside>
 
+      <nav id="bottom-tabs" class="bottom-tabs">
+        <button class="nav-btn active" data-view="sales">
+          <span class="nav-icon"><i class="nf nf-fa-shopping_cart"></i></span>
+          <span class="nav-text">Ventas</span>
+        </button>
+        <button class="nav-btn" data-view="inventory">
+          <span class="nav-icon"><i class="nf nf-fa-archive"></i></span>
+          <span class="nav-text">Inventario</span>
+        </button>
+        <button class="nav-btn" data-view="creditos">
+          <span class="nav-icon"><i class="nf nf-fa-credit_card"></i></span>
+          <span class="nav-text">Crédito</span>
+        </button>
+        <button class="nav-btn" data-view="cashier">
+          <span class="nav-icon"><i class="nf nf-fa-money"></i></span>
+          <span class="nav-text">Caja</span>
+        </button>
+        <button class="nav-btn" data-view="audit">
+          <span class="nav-icon"><i class="nf nf-fa-history"></i></span>
+          <span class="nav-text">Historial</span>
+        </button>
+        <button class="nav-btn admin-only" data-view="config">
+          <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
+          <span class="nav-text">Config.</span>
+        </button>
+      </nav>
       <main id="main-content">
         <section id="view-sales" class="view active">
           <div class="sales-header">
@@ -102,6 +128,9 @@
               <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal">
               <span id="tasa-warning" class="tasa-warning" style="display:none;" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
             </div>
+            <button id="sales-toggle-btn" class="btn btn-outline btn-sm mobile-only" title="Alternar entre productos y carrito" style="display:none;">
+              <i class="nf nf-fa-exchange_alt"></i> <span id="sales-toggle-label">Carrito</span>
+            </button>
           </div>
           <div class="sales-body">
             <div class="sales-panel sales-left">
