@@ -844,9 +844,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* ===== MOBILE (≤768px) ===== */
 @media (max-width: 768px) {
   /* Bottom tabs replaces sidebar */
-  .bottom-tabs { display: flex; }
+  .bottom-tabs { display: flex; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
   #sidebar { display: none; }
-  #main-content { padding-bottom: 64px; }
+  #main-content {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+  .login-card { margin-top: env(safe-area-inset-top, 0px); }
+  .toast { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
 
   /* Increase touch targets to 44px minimum */
   input, select, button, .btn, .nav-btn, .payment-method-btn,
