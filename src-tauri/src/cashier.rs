@@ -9,7 +9,6 @@ const SQL_COUNT_VENTAS_RANGE: &str =
     "SELECT COUNT(*) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
 const SQL_SUM_VENTAS_RANGE: &str =
     "SELECT COALESCE(SUM(total_usd), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
-const SQL_TASA: &str = "SELECT CAST(valor AS REAL) FROM configuracion WHERE clave = 'tasa_dolar'";
 const SQL_VENTAS_RANGE: &str = "
     SELECT metodo_pago, pago_detalle, total_usd, referencia_pago_movil
     FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
@@ -36,8 +35,6 @@ const SQL_INSERT_CIERRE: &str = "
     VALUES (?1, ?2, ?3, ?4, ?5)";
 const SQL_INSERT_CIERRE_DETALLE: &str =
     "INSERT INTO cierres_detalle (cierre_id, detalle_json) VALUES (?1, ?2)";
-const SQL_INSERT_HISTORIAL: &str =
-    "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)";
 const SQL_LIST_CIERRES: &str = "
     SELECT c.id, c.fecha_hora, u.username, c.total_ventas, c.total_usd, c.tasa_cierre
     FROM cierres_caja c
@@ -46,7 +43,6 @@ const SQL_LIST_CIERRES: &str = "
 const SQL_CIERRE_BY_ID: &str = "
     SELECT fecha_hora, usuario_id, total_ventas, total_usd, tasa_cierre
     FROM cierres_caja WHERE id = ?1";
-const SQL_USERNAME_BY_ID: &str = "SELECT username FROM usuarios WHERE id = ?1";
 const SQL_DETALLE_JSON: &str =
     "SELECT detalle_json FROM cierres_detalle WHERE cierre_id = ?1";
 const SQL_LIST_DIARIAS: &str = "
@@ -87,14 +83,14 @@ fn obtener_totales_del_dia(
         .unwrap_or(0.0);
 
     let tasa: f64 = db
-        .query_row(SQL_TASA, [], |row| row.get(0))
+        .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
         .unwrap_or(0.0);
 
     Ok((cnt, usd, tasa))
 }
 
 fn obtener_tasa(db: &rusqlite::Connection) -> f64 {
-    db.query_row(SQL_TASA, [], |row| row.get(0)).unwrap_or(0.0)
+    db.query_row(crate::constants::SQL_TASA, [], |row| row.get(0)).unwrap_or(0.0)
 }
 
 fn compute_report_data_range(
@@ -156,7 +152,7 @@ fn compute_report_data_range(
             referencias,
         })
         .collect();
-    por_metodo.sort_by(|a, b| b.total_usd.partial_cmp(&a.total_usd).unwrap());
+    por_metodo.sort_by(|a, b| b.total_usd.partial_cmp(&a.total_usd).unwrap_or(std::cmp::Ordering::Equal));
 
     let mut prod_stmt = db
         .prepare(SQL_PRODUCTOS_VENDIDOS)
@@ -258,14 +254,7 @@ pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
     db.execute(SQL_SET_CAJA, params!["true"])
         .map_err(|e| e.to_string())?;
 
-    let now = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
-    db.execute(
-        SQL_INSERT_HISTORIAL,
-        params![now, username, "Caja abierta"],
-    )
-    .ok();
+    crate::audit::log_action(&db, &username, "Caja abierta").ok();
 
     Ok("Caja abierta exitosamente".to_string())
 }
@@ -336,11 +325,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         "Cierre de caja - Ventas: {}, Total USD: ${:.2}, Total Bs.: Bs. {:.2}",
         total_ventas, total_usd, total_bs
     );
-    tx.execute(
-        SQL_INSERT_HISTORIAL,
-        params![now, username, accion],
-    )
-    .ok();
+    crate::audit::log_action(&*tx, &username, &accion).ok();
 
     tx.commit()
         .map_err(|e| format!("Error al confirmar cierre: {}", e))?;
@@ -422,7 +407,7 @@ pub fn get_cierre_detalle(
         .map_err(|_| "Cierre no encontrado".to_string())?;
 
     let username: String = db
-        .query_row(SQL_USERNAME_BY_ID, params![usuario_id], |row| row.get(0))
+        .query_row(crate::constants::SQL_USERNAME_BY_ID, params![usuario_id], |row| row.get(0))
         .unwrap_or_default();
 
     let total_bs = total_usd * tasa_cierre;
@@ -446,4 +431,29 @@ pub fn get_cierre_detalle(
         },
         detalle,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_siguiente_dia_normal() {
+        assert_eq!(siguiente_dia("2024-01-15"), "2024-01-16");
+    }
+
+    #[test]
+    fn test_siguiente_dia_fin_mes() {
+        assert_eq!(siguiente_dia("2024-01-31"), "2024-02-01");
+    }
+
+    #[test]
+    fn test_siguiente_dia_fin_anio() {
+        assert_eq!(siguiente_dia("2024-12-31"), "2025-01-01");
+    }
+
+    #[test]
+    fn test_siguiente_dia_invalido() {
+        assert_eq!(siguiente_dia("invalid"), constants::FECHA_MAXIMA);
+    }
 }

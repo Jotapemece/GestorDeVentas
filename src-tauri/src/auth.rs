@@ -6,8 +6,6 @@ use tauri::State;
 const SQL_LOGIN: &str = "SELECT id, username, rol FROM usuarios WHERE username = ?1 AND password = ?2";
 const SQL_INSERT_USUARIO: &str = "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)";
 const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol FROM usuarios ORDER BY username";
-const SQL_INSERT_HISTORIAL: &str =
-    "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)";
 
 pub fn hash_password(password: &str) -> String {
     let mut hasher = Sha256::new();
@@ -31,26 +29,9 @@ pub(crate) fn require_admin(
     let username = user.username;
     drop(current);
 
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    db.execute(SQL_INSERT_HISTORIAL, rusqlite::params![now, username, action])
-        .ok();
+    crate::audit::log_action(db, &username, action).ok();
 
     Ok(username)
-}
-
-fn check_admin(state: &State<AppState>) -> Result<(), String> {
-    let current = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?;
-    let is_admin = current
-        .clone()
-        .map(|u| u.rol == "admin")
-        .unwrap_or(false);
-    if !is_admin {
-        return Err("Solo administradores pueden realizar esta acción".to_string());
-    }
-    Ok(())
 }
 
 #[tauri::command]
@@ -99,12 +80,7 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                     }
                 }
             };
-            let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-            db2.execute(
-                SQL_INSERT_HISTORIAL,
-                rusqlite::params![now, user_clone.username, "Inicio de sesión"],
-            )
-            .ok();
+            crate::audit::log_action(&db2, &user_clone.username, "Inicio de sesión").ok();
 
             LoginResponse {
                 success: true,
@@ -134,12 +110,7 @@ pub fn logout(state: State<AppState>) -> bool {
             Ok(db) => db,
             Err(_) => return false,
         };
-        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        db.execute(
-            SQL_INSERT_HISTORIAL,
-            rusqlite::params![now, u.username, "Cierre de sesión"],
-        )
-        .ok();
+        crate::audit::log_action(&db, &u.username, "Cierre de sesión").ok();
     }
     true
 }
@@ -160,42 +131,24 @@ pub fn create_usuario(
     password: String,
     rol: String,
 ) -> Result<String, String> {
-    check_admin(&state)?;
-
-    let admin = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?
-        .clone()
-        .map(|u| u.username)
-        .unwrap_or_default();
-
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Creó usuario '{}' con rol '{}'", username, rol),
+    )?;
     let hashed = hash_password(&password);
 
     match db.execute(SQL_INSERT_USUARIO, rusqlite::params![username, hashed, rol]) {
-        Ok(_) => {
-            let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-            db.execute(
-                SQL_INSERT_HISTORIAL,
-                rusqlite::params![
-                    now,
-                    admin,
-                    format!("Creó usuario '{}' con rol '{}'", username, rol)
-                ],
-            )
-            .ok();
-            Ok("Usuario creado exitosamente".to_string())
-        }
+        Ok(_) => Ok("Usuario creado exitosamente".to_string()),
         Err(e) => Err(format!("Error al crear usuario: {}", e)),
     }
 }
 
 #[tauri::command]
 pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
-    check_admin(&state)?;
-
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(&state, &db, "Listó usuarios")?;
     let mut stmt = db
         .prepare(SQL_LIST_USUARIOS)
         .map_err(|e| e.to_string())?;
@@ -213,4 +166,17 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
         .collect();
 
     Ok(usuarios)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_password_deterministic() {
+        let a = hash_password("admin");
+        let b = hash_password("admin");
+        assert_eq!(a, b);
+        assert_ne!(a, hash_password("admin2"));
+    }
 }

@@ -35,9 +35,6 @@ const SQL_IMPORT_PRODUCTO: &str =
     "INSERT INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) \
      VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'))";
 
-const SQL_INSERT_HISTORIAL: &str =
-    "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)";
-
 #[tauri::command]
 pub fn list_products(
     state: State<AppState>,
@@ -289,17 +286,13 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
 
     match workbook.save(&export_path) {
         Ok(_) => {
-            let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-            db.execute(
-                SQL_INSERT_HISTORIAL,
-                params![
-                    now,
-                    admin_name,
-                    format!(
-                        "Exportó catálogo a Excel ({})",
-                        export_path.display()
-                    )
-                ],
+            crate::audit::log_action(
+                &db,
+                &admin_name,
+                &format!(
+                    "Exportó catálogo a Excel ({})",
+                    export_path.display()
+                ),
             )
             .ok();
 
@@ -320,6 +313,13 @@ pub fn import_products_from_file(
         &db,
         &format!("Importó productos desde '{}'", file_path),
     )?;
+    let current_username = state
+        .current_user
+        .lock()
+        .map_err(|e| format!("Error interno: {}", e))?
+        .clone()
+        .map(|u| u.username)
+        .unwrap_or_default();
     let content = std::fs::read_to_string(&file_path)
         .map_err(|e| format!("Error al leer archivo '{}': {}", file_path, e))?;
 
@@ -399,7 +399,6 @@ pub fn import_products_from_file(
         count += 1;
     }
 
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let error_summary = if errors.is_empty() {
         String::new()
     } else {
@@ -416,16 +415,13 @@ pub fn import_products_from_file(
         };
         format!(" Errores: {}{}", detail, suffix)
     };
-    db.execute(
-        SQL_INSERT_HISTORIAL,
-        params![
-            now,
-            "",
-            format!(
-                "Importó {} productos desde archivo.{}",
-                count, error_summary
-            )
-        ],
+    crate::audit::log_action(
+        &db,
+        &current_username,
+        &format!(
+            "Importó {} productos desde archivo.{}",
+            count, error_summary
+        ),
     )
     .ok();
 

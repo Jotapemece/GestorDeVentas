@@ -14,7 +14,13 @@ use db::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let conn = db::init_db();
+    let conn = match db::init_db() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error al inicializar BD: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

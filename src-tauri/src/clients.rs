@@ -36,8 +36,6 @@ const SQL_SALDO_DEUDA: &str = "SELECT saldo_deuda_usd FROM clientes WHERE id = ?
 const SQL_UPDATE_SALDO: &str = "UPDATE clientes SET saldo_deuda_usd = ?1 WHERE id = ?2";
 const SQL_REACTIVAR_CREDITO: &str =
     "UPDATE clientes SET credito_activo = 1 WHERE id = ?1 AND credito_activo = 0";
-const SQL_INSERT_HISTORIAL: &str =
-    "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)";
 
 #[tauri::command]
 pub fn list_clientes(state: State<AppState>) -> Result<Vec<Cliente>, String> {
@@ -242,19 +240,11 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
     db.execute(SQL_UPDATE_SALDO, params![nuevo_saldo, request.cliente_id])
         .map_err(|e| e.to_string())?;
 
-    let now = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
-
     let accion = format!(
         "Pago de deuda - Cliente #{} - Monto: ${:.2} - Método: {} - Saldo restante: ${:.2}",
         request.cliente_id, request.monto_usd, request.metodo_pago, nuevo_saldo
     );
-    db.execute(
-        SQL_INSERT_HISTORIAL,
-        params![now, username, accion],
-    )
-    .ok();
+    crate::audit::log_action(&db, &username, &accion).ok();
 
     if (nuevo_saldo - 0.0).abs() < constants::MONTO_TOLERANCIA {
         let _ = db.execute(SQL_REACTIVAR_CREDITO, params![request.cliente_id]);

@@ -14,6 +14,8 @@ const FONT_SIZE_MIN = 75;
 const FONT_SIZE_MAX = 150;
 const FONT_SIZE_DEFAULT = 100;
 const CHART_COLORS = ['#6C63AC', '#A8D5BA', '#F5B7B1', '#85C1E9', '#F9E79F', '#D7BDE2', '#A3E4D7', '#F5CBA7', '#AED6F1', '#ABEBC6'];
+const SOUND_ENABLED = '1';
+const SOUND_DISABLED = '0';
 
 /* ========== SELECTORS ========== */
 const SEL = {
@@ -167,7 +169,10 @@ function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
 function applyRoleUI() {
   const isAdmin = currentUser && currentUser.rol === 'admin';
-  document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+    if (!isAdmin) el.title = 'Solo administradores';
+  });
 }
 
 let audioCtx = null;
@@ -1754,7 +1759,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (soundToggle) {
     soundToggle.addEventListener('change', function() {
       soundEnabled = this.checked;
-      invoke('set_config_value', { key: 'sonido_habilitado', value: this.checked ? '1' : '0' }).catch(() => {});
+      invoke('set_config_value', { key: 'sonido_habilitado', value: this.checked ? SOUND_ENABLED : SOUND_DISABLED }).catch(() => {});
     });
   }
   if (soundVolumeRange) {
@@ -1815,7 +1820,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   try {
     const savedSound = await invoke('get_config_value', { key: 'sonido_habilitado' });
     if (savedSound !== null && savedSound !== undefined) {
-      soundEnabled = savedSound === '1' || savedSound === true;
+      soundEnabled = savedSound === SOUND_ENABLED || savedSound === true;
       if (soundToggle) soundToggle.checked = soundEnabled;
     }
     const savedVol = await invoke('get_config_value', { key: 'sonido_volumen' });

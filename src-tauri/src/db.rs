@@ -2,6 +2,89 @@ use rusqlite::{Connection, params};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+const SQL_CREATE_TABLES: &str = "
+    CREATE TABLE IF NOT EXISTS productos (
+        codigo TEXT PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        precio_usd REAL NOT NULL,
+        stock INTEGER NOT NULL DEFAULT 0,
+        stock_minimo INTEGER NOT NULL DEFAULT 0,
+        activo INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS configuracion (
+        clave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        rol TEXT NOT NULL CHECK(rol IN ('admin', 'vendedor'))
+    );
+
+    CREATE TABLE IF NOT EXISTS clientes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        credito_activo INTEGER NOT NULL DEFAULT 1 CHECK(credito_activo IN (0, 1)),
+        saldo_deuda_usd REAL NOT NULL DEFAULT 0.0
+    );
+
+    CREATE TABLE IF NOT EXISTS ventas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_hora TEXT NOT NULL,
+        usuario_id INTEGER NOT NULL,
+        metodo_pago TEXT NOT NULL,
+        referencia_pago_movil TEXT,
+        pago_detalle TEXT DEFAULT '',
+        cliente_id INTEGER,
+        total_usd REAL NOT NULL,
+        tasa_aplicada REAL NOT NULL,
+        FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+        FOREIGN KEY(cliente_id) REFERENCES clientes(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS detalles_ventas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        venta_id INTEGER NOT NULL,
+        producto_codigo TEXT NOT NULL,
+        cantidad INTEGER NOT NULL,
+        precio_usd_unitario REAL NOT NULL,
+        FOREIGN KEY(venta_id) REFERENCES ventas(id),
+        FOREIGN KEY(producto_codigo) REFERENCES productos(codigo)
+    );
+
+    CREATE TABLE IF NOT EXISTS historial_acciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_hora TEXT NOT NULL,
+        usuario TEXT NOT NULL,
+        accion TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cierres_caja (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_hora TEXT NOT NULL,
+        usuario_id INTEGER NOT NULL,
+        total_ventas INTEGER NOT NULL,
+        total_usd REAL NOT NULL,
+        tasa_cierre REAL NOT NULL DEFAULT 0,
+        FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS cierres_detalle (
+        cierre_id INTEGER PRIMARY KEY,
+        detalle_json TEXT NOT NULL,
+        FOREIGN KEY(cierre_id) REFERENCES cierres_caja(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha_hora);
+    CREATE INDEX IF NOT EXISTS idx_ventas_cliente ON ventas(cliente_id);
+    CREATE INDEX IF NOT EXISTS idx_detalles_venta ON detalles_ventas(venta_id);
+    CREATE INDEX IF NOT EXISTS idx_historial_fecha ON historial_acciones(fecha_hora);
+";
+
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub current_user: Mutex<Option<crate::models::Usuario>>,
@@ -32,104 +115,21 @@ fn migrate_productos(conn: &Connection) {
         .unwrap_or(false);
     if !has_column {
         conn.execute_batch("ALTER TABLE productos ADD COLUMN created_at TEXT DEFAULT '';")
-            .expect("Failed to migrate productos table");
+            .ok();
         conn.execute_batch("UPDATE productos SET created_at = datetime('now','localtime') WHERE created_at = '';")
             .ok();
     }
 }
 
-pub fn init_db() -> Connection {
+pub fn init_db() -> Result<Connection, String> {
     let db_path = get_db_path();
-    let conn = Connection::open(&db_path).expect("Failed to open database");
+    let conn = Connection::open(&db_path).map_err(|e| format!("Error al abrir BD: {}", e))?;
 
     conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
     conn.execute_batch("PRAGMA foreign_keys=ON;").ok();
 
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS productos (
-            codigo TEXT PRIMARY KEY,
-            nombre TEXT NOT NULL,
-            precio_usd REAL NOT NULL,
-            stock INTEGER NOT NULL DEFAULT 0,
-            stock_minimo INTEGER NOT NULL DEFAULT 0,
-            activo INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT DEFAULT (datetime('now','localtime'))
-        );
-
-        CREATE TABLE IF NOT EXISTS configuracion (
-            clave TEXT PRIMARY KEY,
-            valor TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            rol TEXT NOT NULL CHECK(rol IN ('admin', 'vendedor'))
-        );
-
-        CREATE TABLE IF NOT EXISTS clientes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            credito_activo INTEGER NOT NULL DEFAULT 1 CHECK(credito_activo IN (0, 1)),
-            saldo_deuda_usd REAL NOT NULL DEFAULT 0.0
-        );
-
-        CREATE TABLE IF NOT EXISTS ventas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha_hora TEXT NOT NULL,
-            usuario_id INTEGER NOT NULL,
-            metodo_pago TEXT NOT NULL,
-            referencia_pago_movil TEXT,
-            pago_detalle TEXT DEFAULT '',
-            cliente_id INTEGER,
-            total_usd REAL NOT NULL,
-            tasa_aplicada REAL NOT NULL,
-            FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-            FOREIGN KEY(cliente_id) REFERENCES clientes(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS detalles_ventas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            venta_id INTEGER NOT NULL,
-            producto_codigo TEXT NOT NULL,
-            cantidad INTEGER NOT NULL,
-            precio_usd_unitario REAL NOT NULL,
-            FOREIGN KEY(venta_id) REFERENCES ventas(id),
-            FOREIGN KEY(producto_codigo) REFERENCES productos(codigo)
-        );
-
-        CREATE TABLE IF NOT EXISTS historial_acciones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha_hora TEXT NOT NULL,
-            usuario TEXT NOT NULL,
-            accion TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS cierres_caja (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha_hora TEXT NOT NULL,
-            usuario_id INTEGER NOT NULL,
-            total_ventas INTEGER NOT NULL,
-            total_usd REAL NOT NULL,
-            tasa_cierre REAL NOT NULL DEFAULT 0,
-            FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS cierres_detalle (
-            cierre_id INTEGER PRIMARY KEY,
-            detalle_json TEXT NOT NULL,
-            FOREIGN KEY(cierre_id) REFERENCES cierres_caja(id)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha_hora);
-        CREATE INDEX IF NOT EXISTS idx_ventas_cliente ON ventas(cliente_id);
-        CREATE INDEX IF NOT EXISTS idx_detalles_venta ON detalles_ventas(venta_id);
-        CREATE INDEX IF NOT EXISTS idx_historial_fecha ON historial_acciones(fecha_hora);
-        ",
-    )
-    .expect("Failed to create tables");
+    conn.execute_batch(SQL_CREATE_TABLES)
+        .map_err(|e| format!("Error al crear tablas: {}", e))?;
 
     migrate_productos(&conn);
 
@@ -157,6 +157,8 @@ pub fn init_db() -> Connection {
     if !has_categoria_id {
         conn.execute_batch("ALTER TABLE productos ADD COLUMN categoria_id INTEGER REFERENCES categorias(id);").ok();
     }
+
+    conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria_id);").ok();
 
     // Migration: add pago_detalle column + remove CHECK constraint from ventas
     let ventas_sql: String = conn
@@ -186,7 +188,7 @@ pub fn init_db() -> Connection {
              ALTER TABLE ventas_new RENAME TO ventas;
              COMMIT;
              PRAGMA foreign_keys=ON;"
-        ).expect("Failed to migrate ventas table (remove CHECK constraint)");
+        ).map_err(|e| format!("Error al migrar tabla ventas: {}", e))?;
     } else {
         let has_pago_detalle: bool = conn
             .prepare("PRAGMA table_info(ventas)")
@@ -242,7 +244,7 @@ pub fn init_db() -> Connection {
     auto_import_products(&conn);
     cleanup_old_history(&conn);
 
-    conn
+    Ok(conn)
 }
 
 fn cleanup_old_history(conn: &Connection) {

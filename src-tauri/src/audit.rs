@@ -1,8 +1,25 @@
 use crate::constants;
 use crate::db::AppState;
 use crate::models::HistorialAccion;
+use chrono;
 use rusqlite::params;
 use tauri::State;
+
+pub(crate) const SQL_INSERT_HISTORIAL: &str =
+    "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)";
+
+pub(crate) fn log_action(
+    db: &rusqlite::Connection,
+    usuario: &str,
+    accion: &str,
+) -> Result<(), String> {
+    let now = chrono::Local::now()
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    db.execute(SQL_INSERT_HISTORIAL, rusqlite::params![now, usuario, accion])
+        .map_err(|e| format!("Error al registrar auditoría: {}", e))?;
+    Ok(())
+}
 
 const SQL_AUDIT_LOGS: &str =
     "SELECT id, fecha_hora, usuario, accion FROM historial_acciones ORDER BY id DESC LIMIT ?1 OFFSET ?2";

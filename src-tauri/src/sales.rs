@@ -12,10 +12,7 @@ const SQL_INSERT_DETALLE: &str =
     "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario) VALUES (?1, ?2, ?3, ?4)";
 const SQL_UPDATE_STOCK: &str = "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1";
 const SQL_PRODUCTO_PRECIO: &str = "SELECT precio_usd FROM productos WHERE codigo = ?1";
-const SQL_USERNAME_BY_ID: &str = "SELECT username FROM usuarios WHERE id = ?1";
 const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
-const SQL_INSERT_HISTORIAL: &str =
-    "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)";
 const SQL_LIST_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
            v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada
@@ -29,7 +26,6 @@ const SQL_GET_DETALLE: &str = "
     LEFT JOIN productos p ON dv.producto_codigo = p.codigo
     WHERE dv.venta_id = ?1
     ORDER BY dv.id ASC";
-const SQL_TASA: &str = "SELECT CAST(valor AS REAL) FROM configuracion WHERE clave = 'tasa_dolar'";
 const SQL_UPDATE_TASA: &str = "UPDATE configuracion SET valor = ?1 WHERE clave = 'tasa_dolar'";
 const SQL_UPSERT_TASA_UPDATED: &str =
     "INSERT INTO configuracion (clave, valor) VALUES ('tasa_updated_at', ?1) \
@@ -75,6 +71,10 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
 
     if request.productos.is_empty() {
         return Err("Debe haber al menos un producto en la venta".to_string());
+    }
+
+    if request.tasa <= 0.0 {
+        return Err("La tasa debe ser mayor a cero".to_string());
     }
 
     if request.metodo_pago == constants::METODO_PAGO_MOVIL
@@ -188,11 +188,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         request.metodo_pago,
         request.productos.len()
     );
-    tx.execute(
-        SQL_INSERT_HISTORIAL,
-        params![now, current_username, accion],
-    )
-    .ok();
+    crate::audit::log_action(&*tx, &current_username, &accion).ok();
 
     if request.metodo_pago == constants::METODO_CREDITO {
         if let Some(cliente_id) = request.cliente_id {
@@ -205,7 +201,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         .map_err(|e| format!("Error al confirmar transacción: {}", e))?;
 
     let username: String = db
-        .query_row(SQL_USERNAME_BY_ID, params![request.usuario_id], |row| {
+        .query_row(crate::constants::SQL_USERNAME_BY_ID, params![request.usuario_id], |row| {
             row.get(0)
         })
         .unwrap_or_default();
@@ -235,7 +231,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
 #[tauri::command]
 pub fn list_sales(state: State<AppState>, limit: Option<i64>) -> Result<Vec<Venta>, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    let lim = limit.unwrap_or(100);
+    let lim = limit.unwrap_or(constants::VENTAS_LIMIT_DEFAULT);
 
     let mut stmt = db.prepare(SQL_LIST_VENTAS).map_err(|e| e.to_string())?;
 
@@ -297,7 +293,7 @@ pub fn get_sale_detail(
 pub fn get_tasa(state: State<AppState>) -> Result<f64, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
     let tasa: f64 = db
-        .query_row(SQL_TASA, [], |row| row.get(0))
+        .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
         .unwrap_or(0.0);
     Ok(tasa)
 }
@@ -311,4 +307,76 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
     let _ = db.execute(SQL_UPDATE_TASA, params![tasa.to_string()]);
     let _ = db.execute(SQL_UPSERT_TASA_UPDATED, params![now]);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::PagoItem;
+
+    #[test]
+    fn test_validar_pago_detalle_exacto() {
+        let items = vec![PagoItem {
+            metodo: "efectivo_usd".into(),
+            monto_usd: 100.0,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validar_pago_detalle_desajuste() {
+        let items = vec![PagoItem {
+            metodo: "efectivo_usd".into(),
+            monto_usd: 90.0,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validar_pago_detalle_metodo_invalido() {
+        let items = vec![PagoItem {
+            metodo: "tarjeta".into(),
+            monto_usd: 100.0,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validar_pago_movil_ref_corta() {
+        let items = vec![PagoItem {
+            metodo: "pago_movil".into(),
+            monto_usd: 100.0,
+            referencia: Some("12".into()),
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validar_pago_movil_ref_ok() {
+        let items = vec![PagoItem {
+            metodo: "pago_movil".into(),
+            monto_usd: 100.0,
+            referencia: Some("1234".into()),
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validar_pago_monto_cero() {
+        let items = vec![PagoItem {
+            metodo: "efectivo_bs".into(),
+            monto_usd: 0.0,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_err());
+    }
 }

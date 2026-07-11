@@ -35,13 +35,5 @@ pub fn set_config_value(
 
 #[tauri::command]
 pub fn list_theme_names() -> Vec<String> {
-    vec![
-        "oscuro".to_string(),
-        "claro".to_string(),
-        "azul".to_string(),
-        "verde".to_string(),
-        "morado".to_string(),
-        "turquesa".to_string(),
-        "naranja".to_string(),
-    ]
+    crate::constants::TEMAS_DISPONIBLES.iter().map(|s| s.to_string()).collect()
 }

@@ -36,3 +36,12 @@ pub const AUDIT_LOG_DEFAULT_LIMIT: i64 = 50;
 
 // Defaults
 pub const CLIENTE_CREDITO_ACTIVO_POR_DEFECTO: bool = true;
+
+pub const VENTAS_LIMIT_DEFAULT: i64 = 100;
+
+pub const TEMAS_DISPONIBLES: &[&str] = &[
+    "oscuro", "claro", "azul", "verde", "morado", "turquesa", "naranja",
+];
+
+pub const SQL_USERNAME_BY_ID: &str = "SELECT username FROM usuarios WHERE id = ?1";
+pub const SQL_TASA: &str = "SELECT CAST(valor AS REAL) FROM configuracion WHERE clave = 'tasa_dolar'";
