@@ -1,5 +1,142 @@
 const invoke = window.__TAURI__.core.invoke;
 
+/* ========== CONSTANTS ========== */
+const TOAST_DURATION = 3000;
+const AUDIO = {
+  FREQ: { add: 880, remove: 440, success: [523, 659, 784], error: 200, cancel: [600, 200] },
+  DURATION: { add: 0.15, remove: 0.1, success: 0.4, error: 0.3, cancel: 0.25 },
+  VOLUME_BASE: 0.3,
+};
+const SEARCH_DEBOUNCE_MS = 200;
+const AUDIT_LIMIT_DEFAULT = 50;
+const PRINT_BTN_TIMEOUT_MS = 8000;
+const FONT_SIZE_MIN = 75;
+const FONT_SIZE_MAX = 150;
+const FONT_SIZE_DEFAULT = 100;
+const CHART_COLORS = ['#6C63AC', '#A8D5BA', '#F5B7B1', '#85C1E9', '#F9E79F', '#D7BDE2', '#A3E4D7', '#F5CBA7', '#AED6F1', '#ABEBC6'];
+
+/* ========== SELECTORS ========== */
+const SEL = {
+  toast: '#toast',
+  printFrame: '#print-frame',
+  printReceipt: '#print-receipt',
+  printReceiptBtn: '#print-receipt-btn',
+  loginScreen: '#login-screen',
+  loginUsername: '#login-username',
+  loginPassword: '#login-password',
+  loginError: '#login-error',
+  rememberMe: '#remember-me',
+  loginBtn: '#login-btn',
+  mainApp: '#main-app',
+  sidebarUser: '#sidebar-user',
+  logoutBtn: '#logout-btn',
+  tasaInput: '#tasa-input',
+  tasaWarning: '#tasa-warning',
+  productSearch: '#product-search',
+  productSearchBody: '#product-search-body',
+  productSearchTable: '#product-search-table',
+  salesCategoryFilter: '#sales-category-filter',
+  checkoutBtn: '#checkout-btn',
+  cancelSaleBtn: '#cancel-sale-btn',
+  cartBody: '#cart-body',
+  cartEmpty: '#cart-empty',
+  cartTotalUsd: '#cart-total-usd',
+  cartTotalBs: '#cart-total-bs',
+  paymentModal: '#payment-modal',
+  paymentTotalUsd: '#payment-total-usd',
+  paymentTotalBs: '#payment-total-bs',
+  paymentConfirmBtn: '#payment-confirm-btn',
+  referenciaInput: '#referencia-input',
+  clienteSelect: '#cliente-select',
+  mixtoItems: '#mixto-items',
+  mixtoError: '#mixto-error',
+  mixtoWarning: '#mixto-warning',
+  mixtoWarningText: '#mixto-warning-text',
+  mixtoAddRow: '#mixto-add-row',
+  referenciaGroup: '#referencia-group',
+  clienteGroup: '#cliente-group',
+  mixtoGroup: '#mixto-group',
+  inventorySearch: '#inventory-search',
+  inventoryCategoryFilter: '#inventory-category-filter',
+  inventoryBody: '#inventory-body',
+  inventoryTable: '#inventory-table',
+  inventoryAddBtn: '#inventory-add-btn',
+  inventoryExportBtn: '#inventory-export-btn',
+  inventoryImportBtn: '#inventory-import-btn',
+  productModal: '#product-modal',
+  productModalTitle: '#product-modal-title',
+  productSaveText: '#product-save-text',
+  productDeleteBtn: '#product-delete-btn',
+  productNombre: '#product-nombre',
+  productPrecio: '#product-precio',
+  productStock: '#product-stock',
+  productCategoria: '#product-categoria',
+  productDetailModal: '#product-detail-modal',
+  detailNombre: '#detail-nombre',
+  detailPrecio: '#detail-precio',
+  detailStock: '#detail-stock',
+  detailCategoria: '#detail-categoria',
+  detailCreated: '#detail-created',
+  importModal: '#import-modal',
+  importFilePath: '#import-file-path',
+  creditosBody: '#creditos-body',
+  creditoAddBtn: '#credito-add-btn',
+  clientModal: '#client-modal',
+  clientModalTitle: '#client-modal-title',
+  clientNombre: '#client-nombre',
+  debtDetailModal: '#debt-detail-modal',
+  debtDetailTitle: '#debt-detail-title',
+  debtDetailDebt: '#debt-detail-debt',
+  debtDetailList: '#debt-detail-list',
+  abonoModal: '#abono-modal',
+  abonoClienteNombre: '#abono-cliente-nombre',
+  abonoDeudaUsd: '#abono-deuda-usd',
+  abonoDeudaBs: '#abono-deuda-bs',
+  abonoMonto: '#abono-monto',
+  abonoSaldoRestante: '#abono-saldo-restante',
+  abonoReferencia: '#abono-referencia',
+  abonoReferenciaGroup: '#abono-referencia-group',
+  abonoMixtoGroup: '#abono-mixto-group',
+  abonoMixtoItems: '#abono-mixto-items',
+  abonoMixtoError: '#abono-mixto-error',
+  abonoMixtoWarning: '#abono-mixto-warning',
+  abonoMixtoWarningText: '#abono-mixto-warning-text',
+  abonoConfirmBtn: '#abono-confirm-btn',
+  dailyCount: '#daily-count',
+  dailyUsd: '#daily-usd',
+  dailyBs: '#daily-bs',
+  dailyTasa: '#daily-tasa',
+  dailySalesBody: '#daily-sales-body',
+  cajaStatusBar: '#caja-status-bar',
+  cajaStatusText: '#caja-status-text',
+  openCashierBtn: '#open-cashier-btn',
+  closeCashierBtn: '#close-cashier-btn',
+  closeCashierModal: '#close-cashier-modal',
+  closeSummary: '#close-summary',
+  closeReportModal: '#close-report-modal',
+  closeReportBody: '#close-report-body',
+  historialCierresBtn: '#historial-cierres-btn',
+  historialCierresModal: '#historial-cierres-modal',
+  historialCierresList: '#historial-cierres-list',
+  historialCierreDetalleModal: '#historial-cierre-detalle-modal',
+  historialCierreDetalleBody: '#historial-cierre-detalle-body',
+  auditBody: '#audit-body',
+  auditLoadMore: '#audit-load-more',
+  categoriaList: '#categoria-list',
+  categoriaNombreInput: '#categoria-nombre-input',
+  categoriaColorInput: '#categoria-color-input',
+  categoriaAddBtn: '#categoria-add-btn',
+  fontIncBtn: '#font-inc-btn',
+  fontDecBtn: '#font-dec-btn',
+  fontSizeDisplay: '#font-size-display',
+  fullscreenToggle: '#fullscreen-toggle',
+  soundToggle: '#sound-toggle',
+  soundVolume: '#sound-volume',
+  historialLimpiezaDias: '#historial-limpieza-dias',
+  historialLimpiezaSave: '#historial-limpieza-save',
+};
+
+/* ========== HELPERS ========== */
 let currentUser = null;
 let cart = [];
 let tasaActual = 0;
@@ -12,15 +149,15 @@ let lastCloseReportData = null;
 let soundEnabled = true;
 let soundVolume = 0.5;
 let auditOffset = 0;
-let auditLimit = 50;
+let auditLimit = AUDIT_LIMIT_DEFAULT;
 
 function showToast(msg, type = 'success') {
-  const t = document.getElementById('toast');
+  const t = qs(SEL.toast);
   t.textContent = msg;
   t.className = 'toast ' + type;
   t.style.display = 'block';
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.style.display = 'none'; }, 3000);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, TOAST_DURATION);
 }
 
 function qs(sel) { return document.querySelector(sel); }
@@ -47,14 +184,14 @@ function playSound(type) {
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    gain.gain.value = soundVolume * 0.3;
+    gain.gain.value = soundVolume * AUDIO.VOLUME_BASE;
     const now = ctx.currentTime;
     switch (type) {
-      case 'add': osc.frequency.setValueAtTime(880, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15); osc.start(now); osc.stop(now + 0.15); break;
-      case 'remove': osc.frequency.setValueAtTime(440, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1); osc.start(now); osc.stop(now + 0.1); break;
-      case 'success': osc.frequency.setValueAtTime(523, now); osc.frequency.setValueAtTime(659, now + 0.1); osc.frequency.setValueAtTime(784, now + 0.2); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4); osc.start(now); osc.stop(now + 0.4); break;
-      case 'error': osc.frequency.setValueAtTime(200, now); osc.type = 'sawtooth'; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3); osc.start(now); osc.stop(now + 0.3); break;
-      case 'cancel': osc.frequency.setValueAtTime(600, now); osc.frequency.linearRampToValueAtTime(200, now + 0.2); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25); osc.start(now); osc.stop(now + 0.25); break;
+      case 'add': osc.frequency.setValueAtTime(AUDIO.FREQ.add, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.add); osc.start(now); osc.stop(now + AUDIO.DURATION.add); break;
+      case 'remove': osc.frequency.setValueAtTime(AUDIO.FREQ.remove, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.remove); osc.start(now); osc.stop(now + AUDIO.DURATION.remove); break;
+      case 'success': osc.frequency.setValueAtTime(AUDIO.FREQ.success[0], now); osc.frequency.setValueAtTime(AUDIO.FREQ.success[1], now + 0.1); osc.frequency.setValueAtTime(AUDIO.FREQ.success[2], now + 0.2); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.success); osc.start(now); osc.stop(now + AUDIO.DURATION.success); break;
+      case 'error': osc.frequency.setValueAtTime(AUDIO.FREQ.error, now); osc.type = 'sawtooth'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.error); osc.start(now); osc.stop(now + AUDIO.DURATION.error); break;
+      case 'cancel': osc.frequency.setValueAtTime(AUDIO.FREQ.cancel[0], now); osc.frequency.linearRampToValueAtTime(AUDIO.FREQ.cancel[1], now + 0.2); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.cancel); osc.start(now); osc.stop(now + AUDIO.DURATION.cancel); break;
     }
   } catch(e) {}
 }
@@ -84,22 +221,22 @@ function showView(name) {
 
 /* ========== AUTH ========== */
 async function handleLogin() {
-  const username = document.getElementById('login-username').value.trim();
-  const password = document.getElementById('login-password').value;
-  const errEl = document.getElementById('login-error');
+  const username = qs(SEL.loginUsername).value.trim();
+  const password = qs(SEL.loginPassword).value;
+  const errEl = qs(SEL.loginError);
   if (!username || !password) { errEl.textContent = 'Complete todos los campos'; return; }
   try {
     const res = await invoke('login', { username, password });
     if (res.success) {
-      if (document.getElementById('remember-me').checked) {
+      if (qs(SEL.rememberMe).checked) {
         localStorage.setItem('recordar_usuario', username);
       } else {
         localStorage.removeItem('recordar_usuario');
       }
       currentUser = res.usuario;
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('main-app').style.display = 'flex';
-      document.getElementById('sidebar-user').textContent = currentUser.username + ' (' + currentUser.rol + ')';
+      qs(SEL.loginScreen).style.display = 'none';
+      qs(SEL.mainApp).style.display = 'flex';
+      qs(SEL.sidebarUser).textContent = currentUser.username + ' (' + currentUser.rol + ')';
       applyRoleUI();
       await loadTasa();
       await loadProductCache();
@@ -117,32 +254,40 @@ async function handleLogin() {
 
 async function handleLogout() {
   if (!confirm('\u00bfEst\u00e1 seguro de cerrar sesi\u00f3n?')) return;
-  await invoke('logout');
+  try {
+    await invoke('logout');
+  } catch (e) {
+    showToast('Error al cerrar sesi\u00f3n: ' + e, 'error');
+  }
   currentUser = null; cart = [];
-  document.getElementById('main-app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('login-password').value = '';
-  document.getElementById('login-error').textContent = '';
+  qs(SEL.mainApp).style.display = 'none';
+  qs(SEL.loginScreen).style.display = 'flex';
+  qs(SEL.loginPassword).value = '';
+  qs(SEL.loginError).textContent = '';
 }
 
 /* ========== TASA ========== */
 async function loadTasa() {
   try {
     tasaActual = await invoke('get_tasa');
-    document.getElementById('tasa-input').value = tasaActual;
+    qs(SEL.tasaInput).value = tasaActual;
     const updatedAt = await invoke('get_config_value', { key: 'tasa_updated_at' });
     const today = new Date().toISOString().slice(0,10);
-    const warn = document.getElementById('tasa-warning');
+    const warn = qs(SEL.tasaWarning);
     if (warn) warn.style.display = (!updatedAt || updatedAt !== today) ? 'inline' : 'none';
   } catch (e) { console.error(e); }
 }
 
 async function handleTasaChange() {
-  const val = parseFloat(document.getElementById('tasa-input').value);
+  const val = parseFloat(qs(SEL.tasaInput).value);
   if (!isNaN(val) && val > 0) {
     tasaActual = val;
-    await invoke('set_tasa', { tasa: tasaActual });
-    const warn = document.getElementById('tasa-warning');
+    try {
+      await invoke('set_tasa', { tasa: tasaActual });
+    } catch (e) {
+      showToast('Error al guardar la tasa', 'error');
+    }
+    const warn = qs(SEL.tasaWarning);
     if (warn) warn.style.display = 'none';
     updateCartTotals();
     renderProductSearch();
@@ -151,7 +296,6 @@ async function handleTasaChange() {
 }
 
 function refreshAllBsPrices() {
-  // Update inventory view Bs prices without re-fetching from backend
   document.querySelectorAll('.bs-price-cell').forEach(el => {
     const usd = parseFloat(el.dataset.usdPrice);
     if (!isNaN(usd)) el.textContent = formatBS(usd * tasaActual);
@@ -169,7 +313,7 @@ async function loadCategorias() {
 }
 
 function renderCategoriaConfig() {
-  const container = document.getElementById('categoria-list');
+  const container = qs(SEL.categoriaList);
   if (!container) return;
   if (categorias.length === 0) {
     container.innerHTML = '<p class="text-muted">No hay categor\u00edas definidas.</p>';
@@ -179,14 +323,14 @@ function renderCategoriaConfig() {
     '<div class="categoria-item">' +
       '<span class="categoria-color-swatch" style="background:' + c.color + '"></span>' +
       '<span class="categoria-name">' + c.nombre + '</span>' +
-      '<input type="color" value="' + c.color + '" onchange="updateCategoriaColor(' + c.id + ', this.value)" style="width:30px;height:26px;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer;">' +
-      '<button class="btn btn-outline btn-sm" onclick="deleteCategoria(' + c.id + ')"><i class="nf nf-fa-trash"></i></button>' +
+      '<input type="color" value="' + c.color + '" data-action="update-categoria-color" data-id="' + c.id + '" style="width:30px;height:26px;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer;">' +
+      '<button class="btn btn-outline btn-sm" data-action="delete-categoria" data-id="' + c.id + '"><i class="nf nf-fa-trash"></i></button>' +
     '</div>'
   ).join('');
 }
 
 function renderCategoriaSelect() {
-  const sel = document.getElementById('product-categoria');
+  const sel = qs(SEL.productCategoria);
   if (!sel) return;
   const val = sel.value;
   sel.innerHTML = '<option value="">Sin categor\u00eda</option>' +
@@ -195,9 +339,9 @@ function renderCategoriaSelect() {
 }
 
 function renderCategoriaFilter() {
-  const filters = ['inventory-category-filter', 'sales-category-filter'];
+  const filters = [SEL.inventoryCategoryFilter, SEL.salesCategoryFilter];
   filters.forEach(id => {
-    const sel = document.getElementById(id);
+    const sel = qs(id);
     if (!sel) return;
     const val = sel.value;
     sel.innerHTML = '<option value="">Todas</option>' +
@@ -207,13 +351,13 @@ function renderCategoriaFilter() {
 }
 
 async function addCategoria() {
-  const nombre = document.getElementById('categoria-nombre-input').value.trim();
-  const color = document.getElementById('categoria-color-input').value;
+  const nombre = qs(SEL.categoriaNombreInput).value.trim();
+  const color = qs(SEL.categoriaColorInput).value;
   if (!nombre) { showToast('Ingrese un nombre para la categor\u00eda', 'error'); return; }
   try {
     await invoke('create_categoria', { nombre, color });
     showToast('Categor\u00eda creada');
-    document.getElementById('categoria-nombre-input').value = '';
+    qs(SEL.categoriaNombreInput).value = '';
     await loadCategorias();
     loadInventory();
   } catch (e) { showToast('Error: ' + e, 'error'); }
@@ -249,13 +393,13 @@ let productSearchTimer = null;
 
 function handleProductSearch() {
   clearTimeout(productSearchTimer);
-  productSearchTimer = setTimeout(renderProductSearch, 200);
+  productSearchTimer = setTimeout(renderProductSearch, SEARCH_DEBOUNCE_MS);
 }
 
 function renderProductSearch() {
-  const query = document.getElementById('product-search').value.trim().toLowerCase();
-  const categoriaId = document.getElementById('sales-category-filter').value;
-  const tbody = document.getElementById('product-search-body');
+  const query = qs(SEL.productSearch).value.trim().toLowerCase();
+  const categoriaId = qs(SEL.salesCategoryFilter).value;
+  const tbody = qs(SEL.productSearchBody);
   tbody.innerHTML = '';
   if (!query && !categoriaId) return;
   let filtered = productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
@@ -265,7 +409,7 @@ function renderProductSearch() {
   const fragment = document.createDocumentFragment();
   filtered.forEach(p => {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td title="' + p.nombre.replace(/"/g, '&quot;') + '">' + p.nombre + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" onclick="addToCart(\'' + p.codigo + '\')">+</button></td>';
+    tr.innerHTML = '<td title="' + p.nombre.replace(/"/g, '&quot;') + '">' + p.nombre + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + p.codigo + '">+</button></td>';
     fragment.appendChild(tr);
   });
   tbody.appendChild(fragment);
@@ -290,7 +434,7 @@ function addToCart(codigo) {
     cart.push({ codigo, cantidad: 1, nombre: '', precio_usd: 0, stock: 0 });
     loadProductName(codigo);
   }
-  const cartBody = document.getElementById('cart-body');
+  const cartBody = qs(SEL.cartBody);
   cartBody.classList.remove('cart-add-highlight');
   void cartBody.offsetWidth;
   cartBody.classList.add('cart-add-highlight');
@@ -342,8 +486,8 @@ function clearCart() {
 }
 
 function renderCart() {
-  const tbody = document.getElementById('cart-body');
-  const empty = document.getElementById('cart-empty');
+  const tbody = qs(SEL.cartBody);
+  const empty = qs(SEL.cartEmpty);
   tbody.innerHTML = '';
   if (cart.length === 0) {
     empty.style.display = 'block';
@@ -355,7 +499,7 @@ function renderCart() {
     cart.forEach(item => {
       const tr = document.createElement('tr');
       const displayName = item.nombre || item.codigo;
-      tr.innerHTML = '<td title="' + displayName.replace(/"/g, '&quot;') + '">' + displayName + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" onfocus="this.select()" oninput="event.stopPropagation(); handleCartQtyInput(\'' + item.codigo + '\', this.value)"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); removeFromCart(\'' + item.codigo + '\')">\u00d7</button></td>';
+      tr.innerHTML = '<td title="' + displayName.replace(/"/g, '&quot;') + '">' + displayName + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + item.codigo + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + item.codigo + '">\u00d7</button></td>';
       fragment.appendChild(tr);
     });
     tbody.appendChild(fragment);
@@ -365,49 +509,49 @@ function renderCart() {
 
 function updateCartTotals() {
   const totalUSD = cart.reduce((sum, item) => sum + item.cantidad * item.precio_usd, 0);
-  document.getElementById('cart-total-usd').textContent = formatUSD(totalUSD);
-  document.getElementById('cart-total-bs').textContent = formatBS(totalUSD * tasaActual);
+  qs(SEL.cartTotalUsd).textContent = formatUSD(totalUSD);
+  qs(SEL.cartTotalBs).textContent = formatBS(totalUSD * tasaActual);
 }
 
 function updateCheckoutBtn() {
-  document.getElementById('checkout-btn').disabled = cart.length === 0;
+  qs(SEL.checkoutBtn).disabled = cart.length === 0;
 }
 
 /* ========== PAYMENT ========== */
 function openPaymentModal() {
   if (cart.length === 0) return;
   const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
-  document.getElementById('payment-total-usd').textContent = formatUSD(total);
-  document.getElementById('payment-total-bs').textContent = formatBS(total * tasaActual);
-  document.getElementById('payment-modal').style.display = 'flex';
-  document.getElementById('referencia-input').value = '';
-  document.getElementById('cliente-select').innerHTML = '<option value="">Seleccione...</option>';
-  document.getElementById('mixto-items').innerHTML = '';
-  document.getElementById('mixto-error').style.display = 'none';
+  qs(SEL.paymentTotalUsd).textContent = formatUSD(total);
+  qs(SEL.paymentTotalBs).textContent = formatBS(total * tasaActual);
+  qs(SEL.paymentModal).style.display = 'flex';
+  qs(SEL.referenciaInput).value = '';
+  qs(SEL.clienteSelect).innerHTML = '<option value="">Seleccione...</option>';
+  qs(SEL.mixtoItems).innerHTML = '';
+  qs(SEL.mixtoError).style.display = 'none';
   selectPaymentMethod('efectivo_bs');
   loadClientesForSelect();
 }
 
 function closePaymentModal() {
-  document.getElementById('payment-modal').style.display = 'none';
+  qs(SEL.paymentModal).style.display = 'none';
 }
 
 function showPrintButton(receiptData) {
   lastReceipt = receiptData;
-  document.getElementById('print-receipt').style.display = 'block';
-  setTimeout(() => { document.getElementById('print-receipt').style.display = 'none'; }, 8000);
+  qs(SEL.printReceipt).style.display = 'block';
+  setTimeout(() => { qs(SEL.printReceipt).style.display = 'none'; }, PRINT_BTN_TIMEOUT_MS);
 }
 
 const METODO_LABELS = {
   efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago',
-  punto: 'Punto', pago_movil: 'Pago Móvil', credito: 'Crédito', mixto: 'Mixto'
+  punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto'
 };
 
 function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
 
 function printReceipt() {
   if (!lastReceipt) return;
-  let iframe = document.getElementById('print-frame');
+  let iframe = qs(SEL.printFrame);
   if (!iframe) {
     iframe = document.createElement('iframe');
     iframe.id = 'print-frame';
@@ -438,16 +582,16 @@ function printReceipt() {
   doc.close();
   iframe.contentWindow.focus();
   iframe.contentWindow.print();
-  document.getElementById('print-receipt').style.display = 'none';
+  qs(SEL.printReceipt).style.display = 'none';
 }
 
 function selectPaymentMethod(method) {
   qsa('.payment-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === method));
-  document.getElementById('referencia-group').style.display = method === 'pago_movil' ? 'block' : 'none';
-  document.getElementById('cliente-group').style.display = method === 'credito' ? 'block' : 'none';
-  document.getElementById('mixto-group').style.display = method === 'mixto' ? 'block' : 'none';
+  qs(SEL.referenciaGroup).style.display = method === 'pago_movil' ? 'block' : 'none';
+  qs(SEL.clienteGroup).style.display = method === 'credito' ? 'block' : 'none';
+  qs(SEL.mixtoGroup).style.display = method === 'mixto' ? 'block' : 'none';
   if (method === 'mixto') {
-    if (!document.querySelector('#mixto-items .mixto-row')) addMixtoRow('mixto-items');
+    if (!qs(SEL.mixtoItems).querySelector('.mixto-row')) addMixtoRow('mixto-items');
     distributeMixto('mixto-items');
   }
 }
@@ -463,7 +607,7 @@ function addMixtoRow(containerId, autoDistribute) {
       '<option value="efectivo_bs">Efectivo Bs.</option>' +
       '<option value="biopago">Biopago</option>' +
       '<option value="punto">Punto</option>' +
-      '<option value="pago_movil">Pago Móvil</option>' +
+      '<option value="pago_movil">Pago M\u00f3vil</option>' +
     '</select>' +
     '<div class="mixto-input-group">' +
       '<span class="mixto-currency-label">$</span>' +
@@ -535,7 +679,7 @@ function distributeMixto(containerId) {
   if (!rows.length) return;
   const total = containerId === 'mixto-items'
     ? cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0)
-    : parseFloat(document.getElementById('abono-monto').value) || 0;
+    : parseFloat(qs(SEL.abonoMonto).value) || 0;
   if (total <= 0) return;
   const share = total / rows.length;
   function isBs(m) { return m === 'efectivo_bs' || m === 'biopago' || m === 'punto' || m === 'pago_movil'; }
@@ -589,12 +733,12 @@ function getMixtoData(containerId) {
 
 function updateMixtoWarning(containerId) {
   containerId = containerId || 'mixto-items';
-  const warningEl = document.getElementById(containerId === 'mixto-items' ? 'mixto-warning' : 'abono-mixto-warning');
-  const textEl = document.getElementById(containerId === 'mixto-items' ? 'mixto-warning-text' : 'abono-mixto-warning-text');
+  const warningEl = qs(containerId === 'mixto-items' ? SEL.mixtoWarning : SEL.abonoMixtoWarning);
+  const textEl = qs(containerId === 'mixto-items' ? SEL.mixtoWarningText : SEL.abonoMixtoWarningText);
   const items = getMixtoData(containerId);
   const total = containerId === 'mixto-items'
     ? cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0)
-    : parseFloat(document.getElementById('abono-monto').value) || 0;
+    : parseFloat(qs(SEL.abonoMonto).value) || 0;
   if (items.length === 0 || total <= 0) { warningEl.style.display = 'none'; return; }
   let suma = 0;
   for (const item of items) suma += item.monto_usd;
@@ -613,7 +757,7 @@ function updateMixtoWarning(containerId) {
 function validarMixto(items, totalEsperado, errorId) {
   const errEl = document.getElementById(errorId);
   if (items.length === 0) {
-    errEl.textContent = 'Agregue al menos un método de pago';
+    errEl.textContent = 'Agregue al menos un m\u00e9todo de pago';
     errEl.style.display = 'block';
     return false;
   }
@@ -625,7 +769,7 @@ function validarMixto(items, totalEsperado, errorId) {
       return false;
     }
     if (item.metodo === 'pago_movil' && (!item.referencia || item.referencia.length !== 4)) {
-      errEl.textContent = 'Pago móvil requiere referencia de 4 dígitos';
+      errEl.textContent = 'Pago m\u00f3vil requiere referencia de 4 d\u00edgitos';
       errEl.style.display = 'block';
       return false;
     }
@@ -643,7 +787,7 @@ function validarMixto(items, totalEsperado, errorId) {
 async function loadClientesForSelect() {
   try {
     const clientes = await invoke('list_clientes');
-    const sel = document.getElementById('cliente-select');
+    const sel = qs(SEL.clienteSelect);
     sel.innerHTML = '<option value="">Seleccione un cliente...</option>';
     clientes.filter(c => c.credito_activo).forEach(c => {
       const opt = document.createElement('option');
@@ -658,18 +802,18 @@ let processingPayment = false;
 async function confirmPayment() {
   if (processingPayment) return;
   processingPayment = true;
-  document.getElementById('payment-confirm-btn').disabled = true;
+  qs(SEL.paymentConfirmBtn).disabled = true;
   const methodBtn = qs('.payment-method-btn.active');
-  if (!methodBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingPayment = false; document.getElementById('payment-confirm-btn').disabled = false; return; }
+  if (!methodBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
   const metodo = methodBtn.dataset.method;
   let referencia = null, cliente_id = null, pago_detalle = null;
   if (metodo === 'pago_movil') {
-    referencia = document.getElementById('referencia-input').value.trim();
-    if (referencia.length !== 4) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingPayment = false; document.getElementById('payment-confirm-btn').disabled = false; return; }
+    referencia = qs(SEL.referenciaInput).value.trim();
+    if (referencia.length !== 4) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
   }
   if (metodo === 'credito') {
-    const sel = document.getElementById('cliente-select');
-    if (!sel.value) { showToast('Seleccione un cliente', 'error'); processingPayment = false; document.getElementById('payment-confirm-btn').disabled = false; return; }
+    const sel = qs(SEL.clienteSelect);
+    if (!sel.value) { showToast('Seleccione un cliente', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
     cliente_id = parseInt(sel.value);
   }
   const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
@@ -677,7 +821,7 @@ async function confirmPayment() {
     pago_detalle = getMixtoData('mixto-items');
     if (!validarMixto(pago_detalle, total, 'mixto-error')) {
       processingPayment = false;
-      document.getElementById('payment-confirm-btn').disabled = false;
+      qs(SEL.paymentConfirmBtn).disabled = false;
       return;
     }
   }
@@ -695,23 +839,23 @@ async function confirmPayment() {
     renderCart(); updateCheckoutBtn(); closePaymentModal();
   } catch (e) { showToast('Error: ' + e, 'error'); playSound('error'); }
   processingPayment = false;
-  document.getElementById('payment-confirm-btn').disabled = false;
+  qs(SEL.paymentConfirmBtn).disabled = false;
 }
 
 /* ========== INVENTORY ========== */
 async function loadInventory() {
-  const query = document.getElementById('inventory-search').value.trim();
-  const categoriaId = document.getElementById('inventory-category-filter').value;
+  const query = qs(SEL.inventorySearch).value.trim();
+  const categoriaId = qs(SEL.inventoryCategoryFilter).value;
   try {
     const products = await invoke('list_products', { search: query || null, categoriaId: categoriaId ? parseInt(categoriaId) : null });
-    const tbody = document.getElementById('inventory-body');
+    const tbody = qs(SEL.inventoryBody);
     tbody.innerHTML = '';
     const frag = document.createDocumentFragment();
     products.forEach(p => {
       const tr = document.createElement('tr');
       const catBadge = p.categoria_nombre ? '<span class="categoria-badge" style="background:' + (p.categoria_color || '#ccc') + '20;color:' + (p.categoria_color || '#666') + ';border:1px solid ' + (p.categoria_color || '#ccc') + ';border-radius:4px;padding:1px 6px;font-size:11px;">' + p.categoria_nombre + '</span>' : '';
-      const editBtn = (currentUser && currentUser.rol === 'admin') ? '<button onclick="editProduct(\'' + p.codigo + '\')">Editar</button>' : '';
-      tr.innerHTML = '<td>' + p.nombre + '</td><td>' + catBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" onclick="event.stopPropagation(); toggleDropdown(this)" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button onclick="showProductDetail(\'' + p.codigo + '\')">Detalles</button>' + editBtn + '</div></div></td>';
+      const editBtn = (currentUser && currentUser.rol === 'admin') ? '<button data-action="edit-product" data-codigo="' + p.codigo + '">Editar</button>' : '';
+      tr.innerHTML = '<td>' + p.nombre + '</td><td>' + catBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + p.codigo + '">Detalles</button>' + editBtn + '</div></div></td>';
       frag.appendChild(tr);
     });
     tbody.appendChild(frag);
@@ -742,58 +886,57 @@ function closeAllDropdowns() {
   qsa('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
 }
 
-// Close dropdowns on outside click
 document.addEventListener('click', closeAllDropdowns);
 
 function showProductDetail(codigo) {
   const p = productCache.find(x => x.codigo === codigo);
   if (!p) { showToast('Producto no encontrado', 'error'); return; }
-  document.getElementById('detail-nombre').textContent = p.nombre;
-  document.getElementById('detail-precio').textContent = formatUSD(p.precio_usd);
-  document.getElementById('detail-stock').textContent = p.stock;
-  document.getElementById('detail-categoria').textContent = p.categoria_nombre || 'Sin categor\u00eda';
-  document.getElementById('detail-created').textContent = p.created_at || 'No disponible';
-  document.getElementById('product-detail-modal').style.display = 'flex';
+  qs(SEL.detailNombre).textContent = p.nombre;
+  qs(SEL.detailPrecio).textContent = formatUSD(p.precio_usd);
+  qs(SEL.detailStock).textContent = p.stock;
+  qs(SEL.detailCategoria).textContent = p.categoria_nombre || 'Sin categor\u00eda';
+  qs(SEL.detailCreated).textContent = p.created_at || 'No disponible';
+  qs(SEL.productDetailModal).style.display = 'flex';
 }
 
 function closeProductDetail() {
-  document.getElementById('product-detail-modal').style.display = 'none';
+  qs(SEL.productDetailModal).style.display = 'none';
 }
 
 function openNewProductModal() {
   editingProduct = null;
-  document.getElementById('product-modal-title').textContent = 'Registrar Nuevo Producto';
-  document.getElementById('product-save-text').textContent = 'Registrar';
-  ['product-nombre','product-precio','product-stock'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('product-categoria').value = '';
-  document.getElementById('product-delete-btn').style.display = 'none';
-  document.getElementById('product-modal').style.display = 'flex';
+  qs(SEL.productModalTitle).textContent = 'Registrar Nuevo Producto';
+  qs(SEL.productSaveText).textContent = 'Registrar';
+  [SEL.productNombre, SEL.productPrecio, SEL.productStock].forEach(id => qs(id).value = '');
+  qs(SEL.productCategoria).value = '';
+  qs(SEL.productDeleteBtn).style.display = 'none';
+  qs(SEL.productModal).style.display = 'flex';
 }
 
 function editProduct(codigo) {
   editingProduct = codigo;
   const p = productCache.find(x => x.codigo === codigo);
   if (!p) { showToast('Producto no encontrado', 'error'); return; }
-  document.getElementById('product-modal-title').textContent = 'Editar Producto';
-  document.getElementById('product-save-text').textContent = 'Guardar';
-  document.getElementById('product-nombre').value = p.nombre;
-  document.getElementById('product-precio').value = p.precio_usd;
-  document.getElementById('product-stock').value = p.stock;
-  document.getElementById('product-categoria').value = p.categoria_id || '';
-  document.getElementById('product-delete-btn').style.display = 'inline-flex';
-  document.getElementById('product-modal').style.display = 'flex';
+  qs(SEL.productModalTitle).textContent = 'Editar Producto';
+  qs(SEL.productSaveText).textContent = 'Guardar';
+  qs(SEL.productNombre).value = p.nombre;
+  qs(SEL.productPrecio).value = p.precio_usd;
+  qs(SEL.productStock).value = p.stock;
+  qs(SEL.productCategoria).value = p.categoria_id || '';
+  qs(SEL.productDeleteBtn).style.display = 'inline-flex';
+  qs(SEL.productModal).style.display = 'flex';
 }
 
 function closeProductModal() {
-  document.getElementById('product-modal').style.display = 'none';
+  qs(SEL.productModal).style.display = 'none';
 }
 
 async function saveProduct() {
   const codigo = editingProduct || '';
-  const nombre = document.getElementById('product-nombre').value.trim();
-  const precio = parseFloat(document.getElementById('product-precio').value);
-  const stock = parseInt(document.getElementById('product-stock').value) || 0;
-  const catVal = document.getElementById('product-categoria').value;
+  const nombre = qs(SEL.productNombre).value.trim();
+  const precio = parseFloat(qs(SEL.productPrecio).value);
+  const stock = parseInt(qs(SEL.productStock).value) || 0;
+  const catVal = qs(SEL.productCategoria).value;
   const categoria_id = catVal ? parseInt(catVal) : null;
   if (!nombre || isNaN(precio) || precio < 0) { showToast('Complete todos los campos', 'error'); return; }
   try {
@@ -802,7 +945,7 @@ async function saveProduct() {
     } else {
       await invoke('create_product', { codigo, nombre, precioUsd: precio, stock, categoriaId: categoria_id });
     }
-    showToast(editingProduct ? 'Producto actualizado con éxito' : 'Producto registrado con éxito');
+    showToast(editingProduct ? 'Producto actualizado con \u00e9xito' : 'Producto registrado con \u00e9xito');
     closeProductModal(); loadInventory(); renderProductSearch();
     loadProductCache();
   } catch (e) {
@@ -828,14 +971,14 @@ async function exportProducts() {
 }
 
 function openImportModal() {
-  document.getElementById('import-file-path').value = 'productos';
-  document.getElementById('import-modal').style.display = 'flex';
+  qs(SEL.importFilePath).value = 'productos';
+  qs(SEL.importModal).style.display = 'flex';
 }
 
-function closeImportModal() { document.getElementById('import-modal').style.display = 'none'; }
+function closeImportModal() { qs(SEL.importModal).style.display = 'none'; }
 
 async function confirmImport() {
-  const filePath = document.getElementById('import-file-path').value.trim() || 'productos';
+  const filePath = qs(SEL.importFilePath).value.trim() || 'productos';
   try {
     const res = await invoke('import_products_from_file', { filePath });
     showToast(res);
@@ -848,12 +991,12 @@ async function confirmImport() {
 async function loadCreditos() {
   try {
     const clientes = await invoke('list_clientes');
-    const tbody = document.getElementById('creditos-body');
+    const tbody = qs(SEL.creditosBody);
     tbody.innerHTML = '';
     const frag = document.createDocumentFragment();
     clientes.forEach(c => {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + c.nombre + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td><button class="btn btn-sm btn-outline" onclick="openDebtDetail(' + c.id + ')">Ver Detalles</button> <button class="btn btn-sm btn-primary" onclick="openAbonoModal(' + c.id + ')">Abonar / Pagar</button></td>';
+      tr.innerHTML = '<td>' + c.nombre + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td><button class="btn btn-sm btn-outline" data-action="open-debt-detail" data-id="' + c.id + '">Ver Detalles</button> <button class="btn btn-sm btn-primary" data-action="open-abono" data-id="' + c.id + '">Abonar / Pagar</button></td>';
       frag.appendChild(tr);
     });
     tbody.appendChild(frag);
@@ -861,15 +1004,15 @@ async function loadCreditos() {
 }
 
 function openCreditoModal() {
-  document.getElementById('client-nombre').value = '';
-  document.getElementById('client-modal-title').textContent = 'Registrar Persona para Cr\u00e9dito';
-  document.getElementById('client-modal').style.display = 'flex';
+  qs(SEL.clientNombre).value = '';
+  qs(SEL.clientModalTitle).textContent = 'Registrar Persona para Cr\u00e9dito';
+  qs(SEL.clientModal).style.display = 'flex';
 }
 
-function closeClientModal() { document.getElementById('client-modal').style.display = 'none'; }
+function closeClientModal() { qs(SEL.clientModal).style.display = 'none'; }
 
 async function saveClient() {
-  const nombre = document.getElementById('client-nombre').value.trim();
+  const nombre = qs(SEL.clientNombre).value.trim();
   if (!nombre) { showToast('Ingrese el nombre', 'error'); return; }
   try {
     await invoke('create_cliente', { nombre });
@@ -882,9 +1025,9 @@ async function saveClient() {
 async function openDebtDetail(id) {
   try {
     const hist = await invoke('get_cliente_history', { clienteId: id });
-    document.getElementById('debt-detail-title').textContent = 'Deuda: ' + hist.cliente.nombre;
-    document.getElementById('debt-detail-debt').textContent = formatUSD(hist.total_deuda);
-    const container = document.getElementById('debt-detail-list');
+    qs(SEL.debtDetailTitle).textContent = 'Deuda: ' + hist.cliente.nombre;
+    qs(SEL.debtDetailDebt).textContent = formatUSD(hist.total_deuda);
+    const container = qs(SEL.debtDetailList);
     container.innerHTML = '';
     if (hist.ventas.length === 0) {
       container.innerHTML = '<p style="text-align:center;padding:20px;color:var(--text-light);">No hay ventas a cr\u00e9dito registradas.</p>';
@@ -900,28 +1043,27 @@ async function openDebtDetail(id) {
         container.appendChild(card);
       });
     }
-    document.getElementById('debt-detail-modal').style.display = 'flex';
+    qs(SEL.debtDetailModal).style.display = 'flex';
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 function closeDebtDetail() {
-  document.getElementById('debt-detail-modal').style.display = 'none';
+  qs(SEL.debtDetailModal).style.display = 'none';
 }
 
 /* ========== ABONO MODAL ========== */
-
 function openAbonoModal(id) {
   abonoClienteId = id;
-  document.getElementById('abono-monto').value = '';
-  document.getElementById('abono-referencia').value = '';
-  document.getElementById('abono-referencia-group').style.display = 'none';
-  document.getElementById('abono-mixto-group').style.display = 'none';
-  document.getElementById('abono-mixto-items').innerHTML = '';
-  document.getElementById('abono-mixto-error').style.display = 'none';
-  document.getElementById('abono-saldo-restante').textContent = 'Saldo Restante: $0.00';
+  qs(SEL.abonoMonto).value = '';
+  qs(SEL.abonoReferencia).value = '';
+  qs(SEL.abonoReferenciaGroup).style.display = 'none';
+  qs(SEL.abonoMixtoGroup).style.display = 'none';
+  qs(SEL.abonoMixtoItems).innerHTML = '';
+  qs(SEL.abonoMixtoError).style.display = 'none';
+  qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: $0.00';
   qsa('.abono-metodo-btn').forEach(b => b.classList.toggle('active', b.dataset.method === 'efectivo_bs'));
   loadAbonoClienteInfo(id);
-  document.getElementById('abono-modal').style.display = 'flex';
+  qs(SEL.abonoModal).style.display = 'flex';
 }
 
 async function loadAbonoClienteInfo(id) {
@@ -929,14 +1071,14 @@ async function loadAbonoClienteInfo(id) {
     const clientes = await invoke('list_clientes');
     const c = clientes.find(x => x.id === id);
     if (!c) return;
-    document.getElementById('abono-cliente-nombre').textContent = c.nombre;
-    document.getElementById('abono-deuda-usd').textContent = formatUSD(c.saldo_deuda_usd);
-    document.getElementById('abono-deuda-bs').textContent = formatBS(c.saldo_deuda_usd * tasaActual);
+    qs(SEL.abonoClienteNombre).textContent = c.nombre;
+    qs(SEL.abonoDeudaUsd).textContent = formatUSD(c.saldo_deuda_usd);
+    qs(SEL.abonoDeudaBs).textContent = formatBS(c.saldo_deuda_usd * tasaActual);
   } catch (e) {}
 }
 
 function closeAbonoModal() {
-  document.getElementById('abono-modal').style.display = 'none';
+  qs(SEL.abonoModal).style.display = 'none';
   abonoClienteId = null;
 }
 
@@ -944,42 +1086,42 @@ function selectAbonoMethod(btn) {
   qsa('.abono-metodo-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const method = btn.dataset.method;
-  document.getElementById('abono-referencia-group').style.display = method === 'pago_movil' ? 'block' : 'none';
-  document.getElementById('abono-mixto-group').style.display = method === 'mixto' ? 'block' : 'none';
+  qs(SEL.abonoReferenciaGroup).style.display = method === 'pago_movil' ? 'block' : 'none';
+  qs(SEL.abonoMixtoGroup).style.display = method === 'mixto' ? 'block' : 'none';
   if (method === 'mixto') {
-    if (!document.querySelector('#abono-mixto-items .mixto-row')) addMixtoRow('abono-mixto-items');
+    if (!qs(SEL.abonoMixtoItems).querySelector('.mixto-row')) addMixtoRow('abono-mixto-items');
     distributeMixto('abono-mixto-items');
   }
 }
 
 function updateAbonoSaldoRestante() {
-  const deudaTexto = document.getElementById('abono-deuda-usd').textContent;
+  const deudaTexto = qs(SEL.abonoDeudaUsd).textContent;
   const deuda = parseFloat(deudaTexto.replace(/[^0-9.-]/g, '')) || 0;
-  const monto = parseFloat(document.getElementById('abono-monto').value) || 0;
+  const monto = parseFloat(qs(SEL.abonoMonto).value) || 0;
   const restante = Math.max(0, deuda - monto);
-  document.getElementById('abono-saldo-restante').textContent = 'Saldo Restante: ' + formatUSD(restante);
+  qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: ' + formatUSD(restante);
 }
 
 let processingAbono = false;
 async function confirmAbono() {
   if (processingAbono) return;
   processingAbono = true;
-  document.getElementById('abono-confirm-btn').disabled = true;
-  const monto = parseFloat(document.getElementById('abono-monto').value);
-  if (isNaN(monto) || monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); processingAbono = false; document.getElementById('abono-confirm-btn').disabled = false; return; }
+  qs(SEL.abonoConfirmBtn).disabled = true;
+  const monto = parseFloat(qs(SEL.abonoMonto).value);
+  if (isNaN(monto) || monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
   const metodoBtn = qs('.abono-metodo-btn.active');
-  if (!metodoBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingAbono = false; document.getElementById('abono-confirm-btn').disabled = false; return; }
+  if (!metodoBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
   const metodo = metodoBtn.dataset.method;
   let referencia = null, pago_detalle = null;
   if (metodo === 'pago_movil' && metodo !== 'mixto') {
-    referencia = document.getElementById('abono-referencia').value.trim();
-    if (referencia.length !== 4) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingAbono = false; document.getElementById('abono-confirm-btn').disabled = false; return; }
+    referencia = qs(SEL.abonoReferencia).value.trim();
+    if (referencia.length !== 4) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
   }
   if (metodo === 'mixto') {
     pago_detalle = getMixtoData('abono-mixto-items');
     if (!validarMixto(pago_detalle, monto, 'abono-mixto-error')) {
       processingAbono = false;
-      document.getElementById('abono-confirm-btn').disabled = false;
+      qs(SEL.abonoConfirmBtn).disabled = false;
       return;
     }
   }
@@ -992,7 +1134,7 @@ async function confirmAbono() {
     loadCreditos();
   } catch (e) { showToast('Error: ' + e, 'error'); }
   processingAbono = false;
-  document.getElementById('abono-confirm-btn').disabled = false;
+  qs(SEL.abonoConfirmBtn).disabled = false;
 }
 
 /* ========== CASHIER ========== */
@@ -1002,12 +1144,12 @@ async function loadDailySummary() {
       invoke('get_daily_summary'),
       invoke('get_caja_abierta')
     ]);
-    document.getElementById('daily-count').textContent = summary.total_ventas;
-    document.getElementById('daily-usd').textContent = formatUSD(summary.total_usd);
-    document.getElementById('daily-bs').textContent = formatBS(summary.total_bs);
-    document.getElementById('daily-tasa').textContent = 'Bs. ' + summary.tasa_actual.toFixed(2).replace('.', ',');
+    qs(SEL.dailyCount).textContent = summary.total_ventas;
+    qs(SEL.dailyUsd).textContent = formatUSD(summary.total_usd);
+    qs(SEL.dailyBs).textContent = formatBS(summary.total_bs);
+    qs(SEL.dailyTasa).textContent = 'Bs. ' + summary.tasa_actual.toFixed(2).replace('.', ',');
 
-    const tbody = document.getElementById('daily-sales-body');
+    const tbody = qs(SEL.dailySalesBody);
     tbody.innerHTML = '';
     const frag = document.createDocumentFragment();
     summary.ventas.forEach(v => {
@@ -1021,10 +1163,10 @@ async function loadDailySummary() {
     });
     tbody.appendChild(frag);
 
-    const statusBar = document.getElementById('caja-status-bar');
-    const statusText = document.getElementById('caja-status-text');
-    const openBtn = document.getElementById('open-cashier-btn');
-    const closeBtn = document.getElementById('close-cashier-btn');
+    const statusBar = qs(SEL.cajaStatusBar);
+    const statusText = qs(SEL.cajaStatusText);
+    const openBtn = qs(SEL.openCashierBtn);
+    const closeBtn = qs(SEL.closeCashierBtn);
     if (cajaAbierta) {
       statusBar.className = 'caja-status abierta';
       statusText.innerHTML = '<i class="nf nf-fa-unlock"></i> Caja abierta';
@@ -1048,14 +1190,14 @@ async function handleOpenCashier() {
 }
 
 function openCloseCashier() {
-  const totalUSD = document.getElementById('daily-usd').textContent;
-  const totalBS = document.getElementById('daily-bs').textContent;
-  const count = document.getElementById('daily-count').textContent;
-  document.getElementById('close-summary').innerHTML = '<div>Ventas del d\u00eda: <strong>' + count + '</strong></div><div>Total USD: <strong>' + totalUSD + '</strong></div><div>Total Bs.: <strong>' + totalBS + '</strong></div>';
-  document.getElementById('close-cashier-modal').style.display = 'flex';
+  const totalUSD = qs(SEL.dailyUsd).textContent;
+  const totalBS = qs(SEL.dailyBs).textContent;
+  const count = qs(SEL.dailyCount).textContent;
+  qs(SEL.closeSummary).innerHTML = '<div>Ventas del d\u00eda: <strong>' + count + '</strong></div><div>Total USD: <strong>' + totalUSD + '</strong></div><div>Total Bs.: <strong>' + totalBS + '</strong></div>';
+  qs(SEL.closeCashierModal).style.display = 'flex';
 }
 
-function closeCloseCashier() { document.getElementById('close-cashier-modal').style.display = 'none'; }
+function closeCloseCashier() { qs(SEL.closeCashierModal).style.display = 'none'; }
 
 async function confirmCloseCashier() {
   try {
@@ -1099,18 +1241,16 @@ async function confirmCloseCashier() {
         html += '<p>' + c.nombre + ': ' + formatUSD(c.total_usd) + '</p>';
       });
     }
-    html += '<div style="margin-top:10px;"><button class="btn btn-primary" onclick="printCloseReport()">Exportar PDF</button></div>';
+    html += '<div style="margin-top:10px;"><button class="btn btn-primary" data-action="print-close-report">Exportar PDF</button></div>';
     html += '</div>';
-    document.getElementById('close-report-body').innerHTML = html;
-    document.getElementById('close-report-modal').style.display = 'flex';
+    qs(SEL.closeReportBody).innerHTML = html;
+    qs(SEL.closeReportModal).style.display = 'flex';
     lastCloseReportData = reportData;
     setTimeout(() => drawCloseChart(reportData), 100);
     showToast('Jornada cerrada exitosamente');
     loadDailySummary();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
-
-const CHART_COLORS = ['#6C63AC', '#A8D5BA', '#F5B7B1', '#85C1E9', '#F9E79F', '#D7BDE2', '#A3E4D7', '#F5CBA7', '#AED6F1', '#ABEBC6'];
 
 function drawPieChart(canvasId, data) {
   const canvas = document.getElementById(canvasId);
@@ -1162,7 +1302,7 @@ function drawCloseChart(data) { drawPieChart('close-pie-chart', data); }
 function printCloseReport() {
   const d = lastCloseReportData;
   if (!d) return;
-  let iframe = document.getElementById('print-frame');
+  let iframe = qs(SEL.printFrame);
   if (!iframe) {
     iframe = document.createElement('iframe');
     iframe.id = 'print-frame';
@@ -1218,36 +1358,36 @@ function printCloseReport() {
   iframe.contentWindow.print();
 }
 
-function closeReport() { document.getElementById('close-report-modal').style.display = 'none'; }
+function closeReport() { qs(SEL.closeReportModal).style.display = 'none'; }
 
 /* ========== HISTORIAL CIERRES ========== */
 async function openHistorialCierres() {
   try {
     const cierres = await invoke('list_cierres');
-    const container = document.getElementById('historial-cierres-list');
+    const container = qs(SEL.historialCierresList);
     if (!cierres.length) {
       container.innerHTML = '<p style="text-align:center;padding:20px;color:var(--text-light);">No hay cierres registrados</p>';
     } else {
       let html = '<table class="table compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
       cierres.forEach(c => {
-        html += '<tr><td>' + c.id + '</td><td>' + c.fecha_hora + '</td><td>' + c.username + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><button class="btn btn-sm btn-outline" onclick="showCierreDetalle(' + c.id + ')">Ver</button></td></tr>';
+        html += '<tr><td>' + c.id + '</td><td>' + c.fecha_hora + '</td><td>' + c.username + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><button class="btn btn-sm btn-outline" data-action="show-cierre-detalle" data-id="' + c.id + '">Ver</button></td></tr>';
       });
       html += '</table>';
       container.innerHTML = html;
     }
-    document.getElementById('historial-cierres-modal').style.display = 'flex';
+    qs(SEL.historialCierresModal).style.display = 'flex';
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 function closeHistorialCierres() {
-  document.getElementById('historial-cierres-modal').style.display = 'none';
+  qs(SEL.historialCierresModal).style.display = 'none';
 }
 
 async function showCierreDetalle(cierreId) {
   try {
     const detalle = await invoke('get_cierre_detalle', { cierreId });
-    document.getElementById('historial-cierre-detalle-modal').style.display = 'flex';
-    document.getElementById('historial-cierres-modal').style.display = 'none';
+    qs(SEL.historialCierreDetalleModal).style.display = 'flex';
+    qs(SEL.historialCierresModal).style.display = 'none';
     const d = detalle.detalle;
     const c = detalle.cierre;
     let html = '<div style="text-align:center;padding:8px 20px;">';
@@ -1285,7 +1425,7 @@ async function showCierreDetalle(cierreId) {
       });
     }
     html += '</div>';
-    document.getElementById('historial-cierre-detalle-body').innerHTML = html;
+    qs(SEL.historialCierreDetalleBody).innerHTML = html;
     setTimeout(() => drawHistorialChart(d), 100);
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
@@ -1293,7 +1433,7 @@ async function showCierreDetalle(cierreId) {
 function drawHistorialChart(data) { drawPieChart('historial-pie-chart', data); }
 
 function closeHistorialDetalle() {
-  document.getElementById('historial-cierre-detalle-modal').style.display = 'none';
+  qs(SEL.historialCierreDetalleModal).style.display = 'none';
 }
 
 /* ========== AUDIT ========== */
@@ -1305,7 +1445,7 @@ async function loadAudit() {
 async function loadAuditMore() {
   try {
     const logs = await invoke('get_audit_logs', { limit: auditLimit, offset: auditOffset });
-    const tbody = document.getElementById('audit-body');
+    const tbody = qs(SEL.auditBody);
     if (auditOffset === 0) tbody.innerHTML = '';
     const frag = document.createDocumentFragment();
     logs.forEach(log => {
@@ -1315,7 +1455,7 @@ async function loadAuditMore() {
     });
     tbody.appendChild(frag);
     auditOffset += logs.length;
-    document.getElementById('audit-load-more').style.display = logs.length < auditLimit ? 'none' : 'inline-flex';
+    qs(SEL.auditLoadMore).style.display = logs.length < auditLimit ? 'none' : 'inline-flex';
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
@@ -1366,21 +1506,21 @@ async function handleThemeClick(theme) {
 }
 
 /* ========== FONT SIZE ========== */
-let currentFontPct = 100;
+let currentFontPct = FONT_SIZE_DEFAULT;
 
 function applyFontSize(pct) {
-  currentFontPct = Math.max(75, Math.min(150, pct));
+  currentFontPct = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, pct));
   const px = (16 * currentFontPct / 100).toFixed(1);
   document.documentElement.style.fontSize = px + 'px';
-  document.getElementById('font-size-display').textContent = currentFontPct + '%';
+  qs(SEL.fontSizeDisplay).textContent = currentFontPct + '%';
 }
 
 async function loadFontSize() {
   try {
     const saved = await invoke('get_config_value', { key: 'font_size' });
-    const pct = parseInt(saved) || 100;
+    const pct = parseInt(saved) || FONT_SIZE_DEFAULT;
     applyFontSize(pct);
-  } catch (e) { applyFontSize(100); }
+  } catch (e) { applyFontSize(FONT_SIZE_DEFAULT); }
 }
 
 async function saveFontSize(pct) {
@@ -1391,88 +1531,173 @@ async function saveFontSize(pct) {
 
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
-  document.getElementById('login-btn').addEventListener('click', handleLogin);
-  document.getElementById('login-username').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('login-password').focus();
+  // Auth
+  qs(SEL.loginBtn).addEventListener('click', handleLogin);
+  qs(SEL.loginUsername).addEventListener('keydown', e => {
+    if (e.key === 'Enter') qs(SEL.loginPassword).focus();
   });
-  document.getElementById('login-password').addEventListener('keydown', e => {
+  qs(SEL.loginPassword).addEventListener('keydown', e => {
     if (e.key === 'Enter') handleLogin();
   });
-  document.getElementById('logout-btn').addEventListener('click', handleLogout);
+  qs(SEL.logoutBtn).addEventListener('click', handleLogout);
 
+  // Navigation
   qsa('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => showView(btn.dataset.view));
   });
 
-  document.getElementById('tasa-input').addEventListener('keydown', e => {
+  // Tasa
+  qs(SEL.tasaInput).addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       handleTasaChange();
       showToast('Precios actualizados', 'info');
     }
   });
-  document.getElementById('tasa-input').addEventListener('blur', handleTasaChange);
+  qs(SEL.tasaInput).addEventListener('blur', handleTasaChange);
 
-  document.getElementById('product-search').addEventListener('input', handleProductSearch);
-  document.getElementById('checkout-btn').addEventListener('click', openPaymentModal);
+  // Sales search
+  qs(SEL.productSearch).addEventListener('input', handleProductSearch);
+  qs(SEL.checkoutBtn).addEventListener('click', openPaymentModal);
+  qs(SEL.cancelSaleBtn).addEventListener('click', clearCart);
 
-  document.getElementById('payment-modal-close').addEventListener('click', closePaymentModal);
-  document.getElementById('payment-cancel-btn').addEventListener('click', closePaymentModal);
-  document.getElementById('mixto-add-row').addEventListener('click', function() { addMixtoRow('mixto-items'); });
-  document.getElementById('abono-mixto-add-row').addEventListener('click', function() { addMixtoRow('abono-mixto-items'); });
-  document.getElementById('payment-confirm-btn').addEventListener('click', confirmPayment);
+  // Event delegation: product search add-to-cart
+  qs(SEL.productSearchBody).addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="add-to-cart"]');
+    if (btn) addToCart(btn.dataset.codigo);
+  });
+
+  // Event delegation: cart qty input and remove
+  qs(SEL.cartBody).addEventListener('focusin', e => {
+    const input = e.target.closest('.cart-qty-input');
+    if (input) input.select();
+  });
+  qs(SEL.cartBody).addEventListener('input', e => {
+    const input = e.target.closest('.cart-qty-input');
+    if (input) handleCartQtyInput(input.dataset.codigo, input.value);
+  });
+  qs(SEL.cartBody).addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="remove-from-cart"]');
+    if (btn) {
+      e.stopPropagation();
+      removeFromCart(btn.dataset.codigo);
+    }
+  });
+
+  // Payment modal
+  qs('#payment-modal-close').addEventListener('click', closePaymentModal);
+  qs('#payment-cancel-btn').addEventListener('click', closePaymentModal);
+  qs(SEL.mixtoAddRow).addEventListener('click', function() { addMixtoRow('mixto-items'); });
+  qs('#abono-mixto-add-row').addEventListener('click', function() { addMixtoRow('abono-mixto-items'); });
+  qs(SEL.paymentConfirmBtn).addEventListener('click', confirmPayment);
   qsa('.payment-method-btn').forEach(btn => {
     btn.addEventListener('click', () => selectPaymentMethod(btn.dataset.method));
   });
 
+  // Inventory
   let inventoryTimer = null;
-  document.getElementById('inventory-search').addEventListener('input', () => {
+  qs(SEL.inventorySearch).addEventListener('input', () => {
     clearTimeout(inventoryTimer);
     inventoryTimer = setTimeout(loadInventory, 250);
   });
-  document.getElementById('inventory-category-filter').addEventListener('change', loadInventory);
-  document.getElementById('sales-category-filter').addEventListener('change', renderProductSearch);
-  document.getElementById('inventory-add-btn').addEventListener('click', openNewProductModal);
-  document.getElementById('inventory-export-btn').addEventListener('click', exportProducts);
-  document.getElementById('inventory-import-btn').addEventListener('click', openImportModal);
+  qs(SEL.inventoryCategoryFilter).addEventListener('change', loadInventory);
+  qs(SEL.salesCategoryFilter).addEventListener('change', renderProductSearch);
+  qs(SEL.inventoryAddBtn).addEventListener('click', openNewProductModal);
+  qs(SEL.inventoryExportBtn).addEventListener('click', exportProducts);
+  qs(SEL.inventoryImportBtn).addEventListener('click', openImportModal);
 
-  document.getElementById('import-modal-close').addEventListener('click', closeImportModal);
-  document.getElementById('import-cancel-btn').addEventListener('click', closeImportModal);
-  document.getElementById('import-confirm-btn').addEventListener('click', confirmImport);
+  // Event delegation: inventory dropdown and actions
+  qs(SEL.inventoryBody).addEventListener('click', e => {
+    const dropdownBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (dropdownBtn) {
+      e.stopPropagation();
+      toggleDropdown(dropdownBtn);
+      return;
+    }
+    const detailBtn = e.target.closest('[data-action="show-product-detail"]');
+    if (detailBtn) {
+      showProductDetail(detailBtn.dataset.codigo);
+      return;
+    }
+    const editBtn = e.target.closest('[data-action="edit-product"]');
+    if (editBtn) {
+      editProduct(editBtn.dataset.codigo);
+      return;
+    }
+  });
 
-  document.getElementById('product-modal-close').addEventListener('click', closeProductModal);
-  document.getElementById('product-cancel-btn').addEventListener('click', closeProductModal);
-  document.getElementById('product-save-btn').addEventListener('click', saveProduct);
-  document.getElementById('product-delete-btn').addEventListener('click', deleteProduct);
+  // Import modal
+  qs('#import-modal-close').addEventListener('click', closeImportModal);
+  qs('#import-cancel-btn').addEventListener('click', closeImportModal);
+  qs('#import-confirm-btn').addEventListener('click', confirmImport);
 
-  document.getElementById('product-detail-close').addEventListener('click', closeProductDetail);
-  document.getElementById('product-detail-ok-btn').addEventListener('click', closeProductDetail);
+  // Product modal
+  qs('#product-modal-close').addEventListener('click', closeProductModal);
+  qs('#product-cancel-btn').addEventListener('click', closeProductModal);
+  qs('#product-save-btn').addEventListener('click', saveProduct);
+  qs(SEL.productDeleteBtn).addEventListener('click', deleteProduct);
 
-  document.getElementById('credito-add-btn').addEventListener('click', openCreditoModal);
-  document.getElementById('client-modal-close').addEventListener('click', closeClientModal);
-  document.getElementById('client-cancel-btn').addEventListener('click', closeClientModal);
-  document.getElementById('client-save-btn').addEventListener('click', saveClient);
+  // Product detail modal
+  qs('#product-detail-close').addEventListener('click', closeProductDetail);
+  qs('#product-detail-ok-btn').addEventListener('click', closeProductDetail);
 
-  document.getElementById('open-cashier-btn').addEventListener('click', handleOpenCashier);
-  document.getElementById('close-cashier-btn').addEventListener('click', openCloseCashier);
-  document.getElementById('close-cashier-close').addEventListener('click', closeCloseCashier);
-  document.getElementById('close-cashier-cancel-btn').addEventListener('click', closeCloseCashier);
-  document.getElementById('close-cashier-confirm-btn').addEventListener('click', confirmCloseCashier);
-  document.getElementById('close-report-close').addEventListener('click', closeReport);
-  document.getElementById('close-report-ok-btn').addEventListener('click', closeReport);
+  // Creditos
+  qs(SEL.creditoAddBtn).addEventListener('click', openCreditoModal);
+  qs('#client-modal-close').addEventListener('click', closeClientModal);
+  qs('#client-cancel-btn').addEventListener('click', closeClientModal);
+  qs('#client-save-btn').addEventListener('click', saveClient);
 
-  document.getElementById('historial-cierres-btn').addEventListener('click', openHistorialCierres);
-  document.getElementById('historial-cierres-close').addEventListener('click', closeHistorialCierres);
-  document.getElementById('historial-cierres-ok-btn').addEventListener('click', closeHistorialCierres);
-  document.getElementById('historial-cierre-detalle-close').addEventListener('click', closeHistorialDetalle);
-  document.getElementById('historial-cierre-detalle-ok-btn').addEventListener('click', closeHistorialDetalle);
+  // Event delegation: creditos table
+  qs(SEL.creditosBody).addEventListener('click', e => {
+    const detailBtn = e.target.closest('[data-action="open-debt-detail"]');
+    if (detailBtn) {
+      openDebtDetail(parseInt(detailBtn.dataset.id));
+      return;
+    }
+    const abonoBtn = e.target.closest('[data-action="open-abono"]');
+    if (abonoBtn) {
+      openAbonoModal(parseInt(abonoBtn.dataset.id));
+      return;
+    }
+  });
 
-  document.getElementById('debt-detail-close').addEventListener('click', closeDebtDetail);
-  document.getElementById('debt-detail-ok-btn').addEventListener('click', closeDebtDetail);
+  // Cashier
+  qs(SEL.openCashierBtn).addEventListener('click', handleOpenCashier);
+  qs(SEL.closeCashierBtn).addEventListener('click', openCloseCashier);
+  qs('#close-cashier-close').addEventListener('click', closeCloseCashier);
+  qs('#close-cashier-cancel-btn').addEventListener('click', closeCloseCashier);
+  qs('#close-cashier-confirm-btn').addEventListener('click', confirmCloseCashier);
+  qs('#close-report-close').addEventListener('click', closeReport);
+  qs('#close-report-ok-btn').addEventListener('click', closeReport);
 
-  document.getElementById('abono-close').addEventListener('click', closeAbonoModal);
-  document.getElementById('abono-cancel-btn').addEventListener('click', closeAbonoModal);
-  document.getElementById('abono-confirm-btn').addEventListener('click', confirmAbono);
-  document.getElementById('abono-monto').addEventListener('input', function() {
+  // Event delegation: close report print button
+  qs(SEL.closeReportBody).addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="print-close-report"]');
+    if (btn) printCloseReport();
+  });
+
+  // Historial cierres
+  qs(SEL.historialCierresBtn).addEventListener('click', openHistorialCierres);
+  qs('#historial-cierres-close').addEventListener('click', closeHistorialCierres);
+  qs('#historial-cierres-ok-btn').addEventListener('click', closeHistorialCierres);
+
+  // Event delegation: historial cierres list
+  qs(SEL.historialCierresList).addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="show-cierre-detalle"]');
+    if (btn) showCierreDetalle(parseInt(btn.dataset.id));
+  });
+
+  qs('#historial-cierre-detalle-close').addEventListener('click', closeHistorialDetalle);
+  qs('#historial-cierre-detalle-ok-btn').addEventListener('click', closeHistorialDetalle);
+
+  // Debt detail
+  qs('#debt-detail-close').addEventListener('click', closeDebtDetail);
+  qs('#debt-detail-ok-btn').addEventListener('click', closeDebtDetail);
+
+  // Abono modal
+  qs('#abono-close').addEventListener('click', closeAbonoModal);
+  qs('#abono-cancel-btn').addEventListener('click', closeAbonoModal);
+  qs(SEL.abonoConfirmBtn).addEventListener('click', confirmAbono);
+  qs(SEL.abonoMonto).addEventListener('input', function() {
     updateAbonoSaldoRestante();
     if (qs('.abono-metodo-btn.active')?.dataset.method === 'mixto') distributeMixto('abono-mixto-items');
   });
@@ -1480,10 +1705,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     btn.addEventListener('click', () => selectAbonoMethod(btn));
   });
 
+  // Theme buttons
   qsa('.theme-btn').forEach(btn => {
     btn.addEventListener('click', () => handleThemeClick(btn.dataset.theme));
   });
 
+  // Modal backdrop click
   qsa('.modal').forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
@@ -1501,8 +1728,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       case 'F6': e.preventDefault(); showView('config'); break;
       case 'F8':
         e.preventDefault();
-        if (viewId === 'view-sales') document.getElementById('product-search').focus();
-        else if (viewId === 'view-inventory') document.getElementById('inventory-search').focus();
+        if (viewId === 'view-sales') qs(SEL.productSearch).focus();
+        else if (viewId === 'view-inventory') qs(SEL.inventorySearch).focus();
         break;
       case 'F12':
         e.preventDefault();
@@ -1522,8 +1749,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   // Sound config
-  const soundToggle = document.getElementById('sound-toggle');
-  const soundVolumeRange = document.getElementById('sound-volume');
+  const soundToggle = qs(SEL.soundToggle);
+  const soundVolumeRange = qs(SEL.soundVolume);
   if (soundToggle) {
     soundToggle.addEventListener('change', function() {
       soundEnabled = this.checked;
@@ -1538,7 +1765,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Fullscreen toggle
-  const fullscreenToggle = document.getElementById('fullscreen-toggle');
+  const fullscreenToggle = qs(SEL.fullscreenToggle);
   if (fullscreenToggle) {
     fullscreenToggle.addEventListener('change', function() {
       toggleFullscreen();
@@ -1549,17 +1776,27 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Category management
-  const categoriaAddBtn = document.getElementById('categoria-add-btn');
+  const categoriaAddBtn = qs(SEL.categoriaAddBtn);
   if (categoriaAddBtn) {
     categoriaAddBtn.addEventListener('click', addCategoria);
-    document.getElementById('categoria-nombre-input').addEventListener('keydown', function(e) {
+    qs(SEL.categoriaNombreInput).addEventListener('keydown', function(e) {
       if (e.key === 'Enter') addCategoria();
     });
   }
 
+  // Event delegation: categoria list
+  qs(SEL.categoriaList).addEventListener('change', e => {
+    const input = e.target.closest('[data-action="update-categoria-color"]');
+    if (input) updateCategoriaColor(parseInt(input.dataset.id), input.value);
+  });
+  qs(SEL.categoriaList).addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="delete-categoria"]');
+    if (btn) deleteCategoria(parseInt(btn.dataset.id));
+  });
+
   // Font size controls
-  const fontIncBtn = document.getElementById('font-inc-btn');
-  const fontDecBtn = document.getElementById('font-dec-btn');
+  const fontIncBtn = qs(SEL.fontIncBtn);
+  const fontDecBtn = qs(SEL.fontDecBtn);
   if (fontIncBtn) {
     fontIncBtn.addEventListener('click', function() {
       applyFontSize(currentFontPct + 5);
@@ -1597,13 +1834,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Load history cleanup config
   try {
     const days = await invoke('get_config_value', { key: 'historial_limpieza_dias' });
-    const input = document.getElementById('historial-limpieza-dias');
+    const input = qs(SEL.historialLimpiezaDias);
     if (input) input.value = parseInt(days) || 0;
   } catch (e) {}
-  const histSaveBtn = document.getElementById('historial-limpieza-save');
+  const histSaveBtn = qs(SEL.historialLimpiezaSave);
   if (histSaveBtn) {
     histSaveBtn.addEventListener('click', async () => {
-      const input = document.getElementById('historial-limpieza-dias');
+      const input = qs(SEL.historialLimpiezaDias);
       let val = parseInt(input.value);
       if (isNaN(val) || val < 0) val = 0;
       if (val > 365) val = 365;
@@ -1615,15 +1852,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
   }
 
+  // Print receipt button
+  qs(SEL.printReceiptBtn).addEventListener('click', printReceipt);
+
+  // Audit load more
+  qs(SEL.auditLoadMore).addEventListener('click', loadAuditMore);
+
   // Restore remembered username
   const savedUser = localStorage.getItem('recordar_usuario');
   if (savedUser) {
-    document.getElementById('login-username').value = savedUser;
-    document.getElementById('remember-me').checked = true;
-    document.getElementById('login-password').focus();
+    qs(SEL.loginUsername).value = savedUser;
+    qs(SEL.rememberMe).checked = true;
+    qs(SEL.loginPassword).focus();
   }
-
-
 });
-
-

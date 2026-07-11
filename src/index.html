@@ -144,7 +144,7 @@
                 </div>
                 <div class="cart-actions">
                   <button id="checkout-btn" class="btn btn-primary" disabled>Cobrar</button>
-                  <button id="cancel-sale-btn" class="btn btn-cancel" onclick="clearCart()" title="Cancelar venta">&times;</button>
+                  <button id="cancel-sale-btn" class="btn btn-cancel" title="Cancelar venta">&times;</button>
                 </div>
               </div>
             </div>
@@ -267,7 +267,7 @@
               </thead>
               <tbody id="audit-body"></tbody>
             </table>
-            <div style="text-align:center;padding:12px;"><button id="audit-load-more" class="btn btn-outline" onclick="loadAuditMore()" style="display:none;">Cargar m&aacute;s</button></div>
+            <div style="text-align:center;padding:12px;"><button id="audit-load-more" class="btn btn-outline" style="display:none;">Cargar m&aacute;s</button></div>
           </div>
         </section>
 
@@ -635,7 +635,7 @@
   </div>
 
   <div id="print-receipt" style="display:none;position:fixed;bottom:80px;right:24px;z-index:2001;">
-    <button class="btn btn-primary" onclick="printReceipt()"><i class="nf nf-fa-print" style="margin-right:6px;"></i> Imprimir Recibo</button>
+    <button id="print-receipt-btn" class="btn btn-primary"><i class="nf nf-fa-print" style="margin-right:6px;"></i> Imprimir Recibo</button>
   </div>
 
   <div id="toast" class="toast" style="display:none;"></div>
