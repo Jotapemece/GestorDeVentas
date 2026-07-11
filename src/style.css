@@ -864,7 +864,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
   /* Sales body: show one panel at a time via toggle */
   .sales-body { grid-template-columns: 1fr; }
-  .sales-left, .sales-center { display: flex !important; }
+  .sales-left, .sales-center { display: flex; }
   .sales-center { border-top: 1px solid var(--border); padding-top: 12px; }
 
   /* Sales header: stack vertically */
