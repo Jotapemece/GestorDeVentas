@@ -872,13 +872,16 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .sales-left, .sales-center { display: flex; }
   .sales-center { border-top: 1px solid var(--border); padding-top: 12px; }
 
-  /* Sales header: stack vertically */
-  .sales-header { flex-direction: column; height: auto; padding: 8px 12px; gap: 8px; }
-  .sales-header .search-box { max-width: 100%; width: 100%; }
-  .sales-header .search-box input { flex: 1; }
-  .sales-header .search-box .filter-select { min-width: 100px; }
-  .tasa-input-group { width: 100%; justify-content: flex-start; }
-  .tasa-input-group input { width: 100px; }
+  /* Sales header: 2 rows on mobile */
+  .sales-header { flex-direction: row; flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 6px; }
+  .sales-header .search-box { max-width: 100%; flex: 1; min-width: 0; order: 1; }
+  .sales-header .search-box input { flex: 1; min-width: 0; }
+  .sales-header .search-box .filter-select { min-width: 80px; width: auto; flex-shrink: 0; }
+  .tasa-input-group { order: 2; margin-left: auto; flex-shrink: 0; }
+  .tasa-input-group label { font-size: 12px; white-space: nowrap; }
+  .tasa-input-group input { width: 80px; font-size: 14px; padding: 6px 8px; min-height: 36px; }
+  .tasa-warning { font-size: 14px; }
+  #sales-toggle-btn { order: 3; width: 100%; margin-top: 2px; }
 
   /* Tables: horizontal scroll on mobile */
   .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
