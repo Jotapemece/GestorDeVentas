@@ -4,6 +4,7 @@ mod cashier;
 mod categorias;
 mod clients;
 mod config;
+mod constants;
 mod db;
 mod models;
 mod products;

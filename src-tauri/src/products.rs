@@ -5,24 +5,38 @@ use rust_xlsxwriter::*;
 use std::path::PathBuf;
 use tauri::State;
 
-pub(crate) fn require_admin(state: &State<AppState>, db: &rusqlite::Connection, action: &str) -> Result<String, String> {
-    let current = state.current_user.lock().map_err(|e| format!("Error interno: {}", e))?;
-    let user = current.clone().ok_or("No autenticado")?;
-    if user.rol != "admin" {
-        return Err("Solo administradores pueden realizar esta acción".to_string());
-    }
-    let username = user.username;
-    drop(current);
+const SQL_BASE_PRODUCTOS: &str =
+    "SELECT p.codigo, p.nombre, p.precio_usd, p.stock, COALESCE(p.stock_minimo,0), \
+     COALESCE(p.created_at,''), p.categoria_id, c.nombre, c.color \
+     FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id WHERE p.activo = 1";
 
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    db.execute(
-        "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)",
-        params![now, username, action],
-    )
-    .ok();
+const SQL_NEXT_CODIGO: &str =
+    "SELECT COALESCE(MAX(CAST(SUBSTR(codigo, 2) AS INTEGER)), 0) + 1 \
+     FROM productos WHERE activo = 1 AND codigo GLOB 'P[0-9]*'";
 
-    Ok(username)
-}
+const SQL_UPDATE_REACTIVATE: &str =
+    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, stock = ?3, \
+     categoria_id = ?4 WHERE codigo = ?5";
+
+const SQL_INSERT_PRODUCTO: &str =
+    "INSERT INTO productos (codigo, nombre, precio_usd, stock, categoria_id, created_at) \
+     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime')) ON CONFLICT(codigo) DO NOTHING";
+
+const SQL_UPDATE_PRODUCTO: &str =
+    "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock = ?3, categoria_id = ?4 WHERE codigo = ?5";
+
+const SQL_HAS_SALES: &str = "SELECT COUNT(*) > 0 FROM detalles_ventas WHERE producto_codigo = ?1";
+
+const SQL_SOFT_DELETE: &str = "UPDATE productos SET activo = 0, stock = 0 WHERE codigo = ?1";
+
+const SQL_DELETE_PRODUCTO: &str = "DELETE FROM productos WHERE codigo = ?1";
+
+const SQL_IMPORT_PRODUCTO: &str =
+    "INSERT INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) \
+     VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'))";
+
+const SQL_INSERT_HISTORIAL: &str =
+    "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)";
 
 #[tauri::command]
 pub fn list_products(
@@ -30,26 +44,34 @@ pub fn list_products(
     search: Option<String>,
     categoria_id: Option<i64>,
 ) -> Result<Vec<Producto>, String> {
-    let db = state.db.lock().unwrap();
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
 
-    let base_select = "SELECT p.codigo, p.nombre, p.precio_usd, p.stock, COALESCE(p.stock_minimo,0), COALESCE(p.created_at,''), p.categoria_id, c.nombre, c.color FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id WHERE p.activo = 1";
     let has_query = search.as_ref().is_some_and(|s| !s.is_empty());
 
     let (sql, _param_count): (String, usize) = match (has_query, categoria_id) {
         (true, Some(_cat)) => (
-            format!("{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) AND p.categoria_id = ?2 ORDER BY p.nombre ASC", base_select),
+            format!(
+                "{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) AND p.categoria_id = ?2 ORDER BY p.nombre ASC",
+                SQL_BASE_PRODUCTOS
+            ),
             2,
         ),
         (true, None) => (
-            format!("{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) ORDER BY p.nombre ASC", base_select),
+            format!(
+                "{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) ORDER BY p.nombre ASC",
+                SQL_BASE_PRODUCTOS
+            ),
             1,
         ),
         (false, Some(_cat)) => (
-            format!("{} AND p.categoria_id = ?1 ORDER BY p.nombre ASC", base_select),
+            format!(
+                "{} AND p.categoria_id = ?1 ORDER BY p.nombre ASC",
+                SQL_BASE_PRODUCTOS
+            ),
             1,
         ),
         (false, None) => (
-            format!("{} ORDER BY p.nombre ASC", base_select),
+            format!("{} ORDER BY p.nombre ASC", SQL_BASE_PRODUCTOS),
             0,
         ),
     };
@@ -69,7 +91,8 @@ pub fn list_products(
         (false, Some(cat)) => params_vec.push(Box::new(cat)),
         (false, None) => {}
     }
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+        params_vec.iter().map(|p| p.as_ref()).collect();
 
     let products: Vec<Producto> = stmt
         .query_map(params_refs.as_slice(), |row| {
@@ -101,25 +124,28 @@ pub fn create_product(
     stock: i64,
     categoria_id: Option<i64>,
 ) -> Result<String, String> {
-    let db = state.db.lock().unwrap();
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
     let codigo = if codigo.is_empty() {
         let next_id: i64 = db
-            .query_row("SELECT COALESCE(MAX(CAST(SUBSTR(codigo, 2) AS INTEGER)), 0) + 1 FROM productos WHERE activo = 1 AND codigo GLOB 'P[0-9]*'", [], |row| row.get(0))
+            .query_row(SQL_NEXT_CODIGO, [], |row| row.get(0))
             .unwrap_or(1);
         format!("P{:04}", next_id)
     } else {
         codigo
     };
-    require_admin(&state, &db, &format!("Creó producto '{}' (Código: {})", nombre, codigo))?;
-    // If a soft-deleted product exists with this code, reactivate it
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Creó producto '{}' (Código: {})", nombre, codigo),
+    )?;
     db.execute(
-        "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, stock = ?3, categoria_id = ?4 WHERE codigo = ?5",
+        SQL_UPDATE_REACTIVATE,
         params![nombre, precio_usd, stock, categoria_id, codigo],
     )
     .ok();
 
     match db.execute(
-        "INSERT INTO productos (codigo, nombre, precio_usd, stock, categoria_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime')) ON CONFLICT(codigo) DO NOTHING",
+        SQL_INSERT_PRODUCTO,
         params![codigo, nombre, precio_usd, stock, categoria_id],
     ) {
         Ok(_) => Ok("Producto creado exitosamente".to_string()),
@@ -136,11 +162,15 @@ pub fn update_product(
     stock: i64,
     categoria_id: Option<i64>,
 ) -> Result<String, String> {
-    let db = state.db.lock().unwrap();
-    require_admin(&state, &db, &format!("Actualizó producto '{}'", codigo))?;
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Actualizó producto '{}'", codigo),
+    )?;
 
     match db.execute(
-        "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock = ?3, categoria_id = ?4 WHERE codigo = ?5",
+        SQL_UPDATE_PRODUCTO,
         params![nombre, precio_usd, stock, categoria_id, codigo],
     ) {
         Ok(_) => Ok("Producto actualizado exitosamente".to_string()),
@@ -150,29 +180,23 @@ pub fn update_product(
 
 #[tauri::command]
 pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, String> {
-    let db = state.db.lock().unwrap();
-    require_admin(&state, &db, &format!("Eliminó producto código '{}'", codigo))?;
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Eliminó producto código '{}'", codigo),
+    )?;
 
-    // Check if product has sales history
     let has_sales: bool = db
-        .query_row(
-            "SELECT COUNT(*) > 0 FROM detalles_ventas WHERE producto_codigo = ?1",
-            params![codigo],
-            |row| row.get(0),
-        )
+        .query_row(SQL_HAS_SALES, params![codigo], |row| row.get(0))
         .unwrap_or(false);
 
     if has_sales {
-        // Soft delete: deactivate so historical reports remain intact
-        db.execute(
-            "UPDATE productos SET activo = 0, stock = 0 WHERE codigo = ?1",
-            params![codigo],
-        )
-        .map_err(|e| e.to_string())?;
+        db.execute(SQL_SOFT_DELETE, params![codigo])
+            .map_err(|e| e.to_string())?;
         Ok("Producto desactivado (tiene historial de ventas). Stock puesto a 0.".to_string())
     } else {
-        // No sales history → physically delete
-        match db.execute("DELETE FROM productos WHERE codigo = ?1", params![codigo]) {
+        match db.execute(SQL_DELETE_PRODUCTO, params![codigo]) {
             Ok(_) => Ok("Producto eliminado exitosamente".to_string()),
             Err(e) => Err(format!("Error al eliminar producto: {}", e)),
         }
@@ -181,14 +205,19 @@ pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, 
 
 #[tauri::command]
 pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String, String> {
-    let db = state.db.lock().unwrap();
-    let current = state.current_user.lock().unwrap().clone();
-    let admin_name = current.as_ref().map(|u| u.username.clone()).unwrap_or_default();
-    drop(current);
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let current = state
+        .current_user
+        .lock()
+        .map_err(|e| format!("Error interno: {}", e))?
+        .clone();
+    let admin_name = current
+        .as_ref()
+        .map(|u| u.username.clone())
+        .unwrap_or_default();
 
-    let mut stmt = db
-        .prepare("SELECT p.codigo, p.nombre, p.precio_usd, p.stock, COALESCE(p.stock_minimo,0), COALESCE(p.created_at,''), p.categoria_id, c.nombre, c.color FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id WHERE p.activo = 1 ORDER BY p.nombre ASC")
-        .map_err(|e| e.to_string())?;
+    let full_sql = format!("{} ORDER BY p.nombre ASC", SQL_BASE_PRODUCTOS);
+    let mut stmt = db.prepare(&full_sql).map_err(|e| e.to_string())?;
 
     let products: Vec<Producto> = stmt
         .query_map([], |row| {
@@ -218,7 +247,13 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
         .set_background_color(Color::RGB(0xE8D5F5))
         .set_border(FormatBorder::Thin);
 
-    let headers = ["Código", "Nombre", "Precio USD ($)", "Precio Bs.", "Stock"];
+    let headers = [
+        "Código",
+        "Nombre",
+        "Precio USD ($)",
+        "Precio Bs.",
+        "Stock",
+    ];
     for (col, header) in headers.iter().enumerate() {
         sheet.write_string_with_format(0, col as u16, *header, &header_format).ok();
     }
@@ -230,8 +265,12 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
         let r = (row + 1) as u32;
         sheet.write_string(r, 0, &product.codigo).ok();
         sheet.write_string(r, 1, &product.nombre).ok();
-        sheet.write_number_with_format(r, 2, product.precio_usd, &number_format).ok();
-        sheet.write_number_with_format(r, 3, product.precio_usd * tasa, &bs_format).ok();
+        sheet
+            .write_number_with_format(r, 2, product.precio_usd, &number_format)
+            .ok();
+        sheet
+            .write_number_with_format(r, 3, product.precio_usd * tasa, &bs_format)
+            .ok();
         sheet.write_number(r, 4, product.stock as f64).ok();
     }
 
@@ -252,8 +291,15 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
         Ok(_) => {
             let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
             db.execute(
-                "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)",
-                params![now, admin_name, format!("Exportó catálogo a Excel ({})", export_path.display())],
+                SQL_INSERT_HISTORIAL,
+                params![
+                    now,
+                    admin_name,
+                    format!(
+                        "Exportó catálogo a Excel ({})",
+                        export_path.display()
+                    )
+                ],
             )
             .ok();
 
@@ -264,9 +310,16 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
 }
 
 #[tauri::command]
-pub fn import_products_from_file(state: State<AppState>, file_path: String) -> Result<String, String> {
-    let db = state.db.lock().unwrap();
-    require_admin(&state, &db, &format!("Importó productos desde '{}'", file_path))?;
+pub fn import_products_from_file(
+    state: State<AppState>,
+    file_path: String,
+) -> Result<String, String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Importó productos desde '{}'", file_path),
+    )?;
     let content = std::fs::read_to_string(&file_path)
         .map_err(|e| format!("Error al leer archivo '{}': {}", file_path, e))?;
 
@@ -281,7 +334,11 @@ pub fn import_products_from_file(state: State<AppState>, file_path: String) -> R
 
         let cols: Vec<&str> = line.split('\t').collect();
         if cols.len() < 3 {
-            errors.push(format!("Línea {}: columnas insuficientes ({})", line_no + 1, cols.len()));
+            errors.push(format!(
+                "Línea {}: columnas insuficientes ({})",
+                line_no + 1,
+                cols.len()
+            ));
             continue;
         }
 
@@ -309,17 +366,31 @@ pub fn import_products_from_file(state: State<AppState>, file_path: String) -> R
 
         let stock: i64 = match stock_str.parse() {
             Ok(s) => s,
-            Err(_) => { errors.push(format!("Línea {}: stock inválido '{}'", line_no + 1, stock_str)); continue; }
+            Err(_) => {
+                errors.push(format!(
+                    "Línea {}: stock inválido '{}'",
+                    line_no + 1,
+                    stock_str
+                ));
+                continue;
+            }
         };
         let precio_usd: f64 = match precio_str.parse() {
             Ok(p) => p,
-            Err(_) => { errors.push(format!("Línea {}: precio inválido '{}'", line_no + 1, precio_str)); continue; }
+            Err(_) => {
+                errors.push(format!(
+                    "Línea {}: precio inválido '{}'",
+                    line_no + 1,
+                    precio_str
+                ));
+                continue;
+            }
         };
 
         let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
 
         if let Err(e) = db.execute(
-        "INSERT INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'))",
+            SQL_IMPORT_PRODUCTO,
             params![codigo, nombre, precio_usd, stock],
         ) {
             errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e));
@@ -332,21 +403,55 @@ pub fn import_products_from_file(state: State<AppState>, file_path: String) -> R
     let error_summary = if errors.is_empty() {
         String::new()
     } else {
-        let detail = errors.iter().take(5).cloned().collect::<Vec<_>>().join("; ");
-        let suffix = if errors.len() > 5 { format!("... y {} más", errors.len() - 5) } else { String::new() };
+        let detail = errors
+            .iter()
+            .take(5)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("; ");
+        let suffix = if errors.len() > 5 {
+            format!("... y {} más", errors.len() - 5)
+        } else {
+            String::new()
+        };
         format!(" Errores: {}{}", detail, suffix)
     };
     db.execute(
-        "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)",
-        params![now, "", format!("Importó {} productos desde archivo.{}", count, error_summary)],
+        SQL_INSERT_HISTORIAL,
+        params![
+            now,
+            "",
+            format!(
+                "Importó {} productos desde archivo.{}",
+                count, error_summary
+            )
+        ],
     )
     .ok();
 
     if errors.is_empty() {
-        Ok(format!("Importados {} productos sin errores.", count))
+        Ok(format!(
+            "Importados {} productos sin errores.",
+            count
+        ))
     } else {
-        let detail = errors.iter().take(10).cloned().collect::<Vec<_>>().join("\n");
-        let suffix = if errors.len() > 10 { format!("\n... y {} más", errors.len() - 10) } else { String::new() };
-        Ok(format!("Importados {} productos.\nErrores ({}):\n{}{}", count, errors.len(), detail, suffix))
+        let detail = errors
+            .iter()
+            .take(10)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        let suffix = if errors.len() > 10 {
+            format!("\n... y {} más", errors.len() - 10)
+        } else {
+            String::new()
+        };
+        Ok(format!(
+            "Importados {} productos.\nErrores ({}):\n{}{}",
+            count,
+            errors.len(),
+            detail,
+            suffix
+        ))
     }
 }
