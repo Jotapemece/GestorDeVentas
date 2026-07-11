@@ -1,11 +1,1 @@
-node_modules/
-src-tauri/target/
-src-tauri/gen/android/build/
-src-tauri/gen/android/app/build/
-src-tauri/gen/android/.gradle/
-src-tauri/gen/android/local.properties
-gestor_ventas.db
-gestor_ventas.db-shm
-gestor_ventas.db-wal
-*.apk
-combined.txt
+Nothing should be ignored in this case, as only markdown files (.md) were added and no build artifacts, dependencies, or temporary files are present in the changes.
