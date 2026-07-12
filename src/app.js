@@ -1008,6 +1008,33 @@ function closeImportModal() {}
 
 async function confirmImport() {}
 
+async function importProductsFromDb() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.db,.sqlite,.sqlite3';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const b64 = btoa(binary);
+      const res = await invoke('import_products_from_db', { content: b64 });
+      showToast(res);
+      await loadProductCache();
+      loadInventory();
+      renderProductSearch();
+    } catch (err) {
+      showToast('Error: ' + err, 'error');
+    }
+  };
+  input.click();
+}
+
 /* ========== CREDITOS ========== */
 async function loadCreditos() {
   try {
@@ -1626,6 +1653,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.inventoryAddBtn).addEventListener('click', openNewProductModal);
   qs(SEL.inventoryExportBtn).addEventListener('click', exportProducts);
   qs(SEL.inventoryImportBtn).addEventListener('click', openImportModal);
+  document.getElementById('inventory-import-db-btn')?.addEventListener('click', importProductsFromDb);
 
   // Event delegation: inventory dropdown and actions
   qs(SEL.inventoryBody).addEventListener('click', e => {

@@ -301,7 +301,8 @@ fn insert_default_vendedor(conn: &Connection) {
     }
 }
 
-fn auto_import_products(_conn: &Connection, _app_handle: &AppHandle) {
+#[allow(unused_variables)]
+fn auto_import_products(conn: &Connection, app_handle: &AppHandle) {
     #[cfg(not(target_os = "android"))]
     {
         let count: i64 = conn

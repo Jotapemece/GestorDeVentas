@@ -927,8 +927,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   /* View headers: stack */
   .view-header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .view-header h2 { font-size: 17px; }
-  .inventory-actions { width: 100%; display: flex; gap: 6px; flex-wrap: wrap; }
-  .inventory-actions .btn { flex: 1; min-width: 0; font-size: 12px; padding: 8px 10px; }
+  .inventory-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .inventory-actions .btn { font-size: 11px; padding: 8px 6px; min-height: 36px; }
 
   /* Search/filter stack */
   #view-inventory .search-box { flex-direction: column; align-items: stretch; }

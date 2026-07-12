@@ -62,6 +62,7 @@ pub fn run() {
             audit::get_audit_logs,
             audit::get_cierres,
             products::import_products_from_file,
+            products::import_products_from_db,
             cashier::abrir_caja,
             cashier::get_caja_abierta,
             config::get_config_value,

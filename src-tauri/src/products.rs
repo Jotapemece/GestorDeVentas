@@ -191,13 +191,100 @@ pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, 
     if has_sales {
         db.execute(SQL_SOFT_DELETE, params![codigo])
             .map_err(|e| e.to_string())?;
-        Ok("Producto desactivado (tiene historial de ventas). Stock puesto a 0.".to_string())
-    } else {
-        match db.execute(SQL_DELETE_PRODUCTO, params![codigo]) {
-            Ok(_) => Ok("Producto eliminado exitosamente".to_string()),
-            Err(e) => Err(format!("Error al eliminar producto: {}", e)),
+        return Ok("Producto desactivado (tiene historial de ventas). Stock puesto a 0.".to_string());
+    }
+    match db.execute(SQL_DELETE_PRODUCTO, params![codigo]) {
+        Ok(_) => Ok("Producto eliminado exitosamente".to_string()),
+        Err(e) => Err(format!("Error al eliminar producto: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub fn import_products_from_db(
+    state: State<AppState>,
+    content: String,
+) -> Result<String, String> {
+    use std::io::Write;
+
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(&state, &db, "Importó productos desde archivo DB")?;
+
+    let current_username = state
+        .current_user
+        .lock()
+        .map_err(|e| format!("Error interno: {}", e))?
+        .clone()
+        .map(|u| u.username)
+        .unwrap_or_default();
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&content)
+        .map_err(|e| format!("Error decodificando archivo: {}", e))?;
+
+    let mut temp = std::env::temp_dir();
+    temp.push("import_gestor.db");
+    let mut f = std::fs::File::create(&temp).map_err(|e| format!("Error creando temporal: {}", e))?;
+    f.write_all(&bytes).map_err(|e| format!("Error escribiendo temporal: {}", e))?;
+    drop(f);
+
+    let import_conn = rusqlite::Connection::open(&temp)
+        .map_err(|e| format!("Error abriendo base de datos importada: {}", e))?;
+
+    let mut stmt = import_conn
+        .prepare("SELECT codigo, nombre, precio_usd, stock, COALESCE(stock_minimo, 0), COALESCE(categoria_id, 0) FROM productos WHERE activo = 1 OR activo IS NULL")
+        .map_err(|e| format!("Error leyendo productos: {}", e))?;
+
+    let products: Vec<(String, String, f64, i64, i64, i64)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })
+        .map_err(|e| format!("Error iterando productos: {}", e))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    drop(stmt);
+    drop(import_conn);
+    let _ = std::fs::remove_file(&temp);
+
+    if products.is_empty() {
+        return Err("No se encontraron productos en el archivo".to_string());
+    }
+
+    let mut imported = 0;
+    for (codigo, nombre, precio_usd, stock, stock_minimo, categoria_id) in &products {
+        let cat: Option<i64> = if *categoria_id > 0 { Some(*categoria_id) } else { None };
+        match db.execute(
+            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, categoria_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now','localtime'))",
+            params![codigo, nombre, precio_usd, stock, stock_minimo, cat],
+        ) {
+            Ok(n) => {
+                if n > 0 {
+                    imported += 1;
+                }
+            }
+            Err(_) => {}
         }
     }
+
+    crate::audit::log_action(
+        &db,
+        &current_username,
+        &format!("Importó {} productos desde archivo DB ({})", imported, products.len()),
+    )
+    .ok();
+
+    let skipped = products.len() - imported;
+    Ok(format!(
+        "Importados {} productos ({} ya existían).",
+        imported, skipped
+    ))
 }
 
 #[tauri::command]
