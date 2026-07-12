@@ -6,6 +6,7 @@ mod clients;
 mod config;
 mod constants;
 mod db;
+mod migrations;
 mod models;
 mod products;
 mod sales;
@@ -30,44 +31,53 @@ pub fn run() {
             app.manage(AppState {
                 db: std::sync::Mutex::new(conn),
                 current_user: std::sync::Mutex::new(None),
+                login_attempts: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // Auth
             auth::login,
             auth::logout,
             auth::get_current_user,
             auth::create_usuario,
             auth::list_usuarios,
+            // Products
             products::list_products,
             products::create_product,
             products::update_product,
             products::delete_product,
             products::export_products_xlsx,
+            products::import_products_from_file,
+            products::import_products_from_db,
+            // Sales
             sales::create_sale,
             sales::list_sales,
             sales::get_sale_detail,
             sales::get_tasa,
             sales::set_tasa,
+            // Clients
             clients::list_clientes,
             clients::create_cliente,
             clients::toggle_cliente_credito,
             clients::get_cliente_history,
             clients::pay_debt,
+            // Cashier
             cashier::get_daily_summary,
             cashier::close_cashier,
             cashier::get_close_report_data,
             cashier::list_cierres,
             cashier::get_cierre_detalle,
-            audit::get_audit_logs,
-            audit::get_cierres,
-            products::import_products_from_file,
-            products::import_products_from_db,
             cashier::abrir_caja,
             cashier::get_caja_abierta,
+            // Audit
+            audit::get_audit_logs,
+            audit::get_cierres,
+            // Config
             config::get_config_value,
             config::set_config_value,
             config::list_theme_names,
+            // Categorias
             categorias::list_categorias,
             categorias::create_categoria,
             categorias::update_categoria,

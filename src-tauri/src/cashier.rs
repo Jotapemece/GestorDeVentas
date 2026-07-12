@@ -74,17 +74,17 @@ fn obtener_totales_del_dia(
         .query_row(SQL_COUNT_VENTAS_RANGE, params![today, tomorrow], |row| {
             row.get(0)
         })
-        .unwrap_or(0);
+        .map_err(|e| format!("Error al contar ventas del día: {}", e))?;
 
     let usd: f64 = db
         .query_row(SQL_SUM_VENTAS_RANGE, params![today, tomorrow], |row| {
             row.get(0)
         })
-        .unwrap_or(0.0);
+        .map_err(|e| format!("Error al sumar ventas del día: {}", e))?;
 
     let tasa: f64 = db
         .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
-        .unwrap_or(0.0);
+        .map_err(|e| format!("Error al obtener tasa del día: {}", e))?;
 
     Ok((cnt, usd, tasa))
 }

@@ -105,7 +105,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         .map_err(|e| format!("Error interno: {}", e))?
         .clone()
         .map(|u| u.username)
-        .unwrap_or_default();
+        .ok_or_else(|| "No hay usuario autenticado".to_string())?;
     let mut total_usd = 0.0;
 
     let tx = db

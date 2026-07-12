@@ -1,6 +1,7 @@
 use crate::db::AppState;
 use crate::models::*;
 use sha2::{Digest, Sha256};
+use std::time::Instant;
 use tauri::State;
 
 const SQL_LOGIN: &str = "SELECT id, username, rol FROM usuarios WHERE username = ?1 AND password = ?2";
@@ -13,11 +14,7 @@ pub fn hash_password(password: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
-pub(crate) fn require_admin(
-    state: &State<AppState>,
-    db: &rusqlite::Connection,
-    action: &str,
-) -> Result<String, String> {
+pub(crate) fn check_admin_role(state: &State<AppState>) -> Result<String, String> {
     let current = state
         .current_user
         .lock()
@@ -26,16 +23,49 @@ pub(crate) fn require_admin(
     if user.rol != "admin" {
         return Err("Solo administradores pueden realizar esta acción".to_string());
     }
-    let username = user.username;
-    drop(current);
+    Ok(user.username)
+}
 
+pub(crate) fn require_admin(
+    state: &State<AppState>,
+    db: &rusqlite::Connection,
+    action: &str,
+) -> Result<String, String> {
+    let username = check_admin_role(state)?;
     crate::audit::log_action(db, &username, action).ok();
-
     Ok(username)
 }
 
 #[tauri::command]
 pub fn login(state: State<AppState>, username: String, password: String) -> LoginResponse {
+    {
+        let mut attempts = match state.login_attempts.lock() {
+            Ok(a) => a,
+            Err(_) => {
+                return LoginResponse {
+                    success: false,
+                    message: "Error interno".to_string(),
+                    usuario: None,
+                }
+            }
+        };
+        if let Some(&(count, until)) = attempts.get(&username) {
+            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
+                return LoginResponse {
+                    success: false,
+                    message: format!(
+                        "Demasiados intentos. Intente de nuevo en {} segundos.",
+                        until.duration_since(Instant::now()).as_secs()
+                    ),
+                    usuario: None,
+                };
+            }
+            if Instant::now() >= until {
+                attempts.remove(&username);
+            }
+        }
+    }
+
     let db = match state.db.lock() {
         Ok(db) => db,
         Err(_) => {
@@ -48,6 +78,7 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
     };
     let hashed = hash_password(&password);
 
+    let username_clone = username.clone();
     match db.query_row(SQL_LOGIN, rusqlite::params![username, hashed], |row| {
         Ok(Usuario {
             id: row.get(0)?,
@@ -57,6 +88,9 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
     }) {
         Ok(usuario) => {
             let user_clone = usuario.clone();
+            if let Ok(mut attempts) = state.login_attempts.lock() {
+                attempts.remove(&username_clone);
+            }
             drop(db);
             let mut current = match state.current_user.lock() {
                 Ok(c) => c,
@@ -88,10 +122,19 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                 usuario: Some(user_clone),
             }
         }
-        Err(_) => LoginResponse {
-            success: false,
-            message: "Credenciales inválidas".to_string(),
-            usuario: None,
+        Err(_) => {
+            if let Ok(mut attempts) = state.login_attempts.lock() {
+                let entry = attempts.entry(username_clone.clone()).or_insert((0, Instant::now()));
+                entry.0 += 1;
+                if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                    entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
+                }
+            }
+            LoginResponse {
+                success: false,
+                message: "Credenciales inválidas".to_string(),
+                usuario: None,
+            }
         },
     }
 }

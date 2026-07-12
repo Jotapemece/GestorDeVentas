@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <div id="main-app" style="display:none;">
+    <div id="main-app" class="hidden">
       <aside id="sidebar">
           <div class="sidebar-header">
             <div class="sidebar-logo">
@@ -112,7 +112,7 @@
           <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
           <span class="nav-text">Config.</span>
         </button>
-        <button id="mobile-logout-btn" class="nav-btn" style="color:var(--danger-dark);">
+        <button id="mobile-logout-btn" class="nav-btn danger-text">
           <span class="nav-icon"><i class="nf nf-fa-sign_out"></i></span>
           <span class="nav-text">Salir</span>
         </button>
@@ -121,18 +121,18 @@
         <section id="view-sales" class="view active">
           <div class="sales-header">
             <div class="search-box">
-              <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo...">
+              <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo..." aria-label="Buscar producto">
               <select id="sales-category-filter" class="filter-select" title="Filtrar por categor&iacute;a">
                 <option value="">Todas</option>
               </select>
             </div>
             <div class="tasa-input-group">
-              <i class="nf nf-fa-dollar" style="font-size:16px;color:var(--text-light);"></i>
+              <i class="nf nf-fa-dollar tasa-icon"></i>
               <label>Tasa Bs./$:</label>
               <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal">
-              <span id="tasa-warning" class="tasa-warning" style="display:none;" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
+              <span id="tasa-warning" class="tasa-warning hidden" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
             </div>
-            <button id="sales-toggle-btn" class="btn btn-outline btn-sm mobile-only" title="Alternar entre productos y carrito" style="display:none;">
+            <button id="sales-toggle-btn" class="btn btn-outline btn-sm mobile-only hidden" title="Alternar entre productos y carrito">
               <i class="nf nf-fa-exchange_alt"></i> <span id="sales-toggle-label">Carrito</span>
             </button>
           </div>
@@ -195,8 +195,8 @@
               <button id="inventory-add-btn" class="btn btn-add admin-only"><i class="nf nf-fa-plus"></i> Agregar Producto</button>
             </div>
           </div>
-          <div class="search-box" style="display:flex;gap:8px;align-items:center;">
-            <input type="text" id="inventory-search" placeholder="Buscar en inventario..." style="max-width:320px;">
+          <div class="search-box flex-row">
+            <input type="text" id="inventory-search" placeholder="Buscar en inventario..." class="inventory-search-input" aria-label="Buscar en inventario">
             <select id="inventory-category-filter" class="filter-select" title="Filtrar por categor&iacute;a">
               <option value="">Todas</option>
             </select>
@@ -241,8 +241,8 @@
           <div class="view-header">
             <h2><i class="nf nf-fa-money"></i> M&oacute;dulo de Caja</h2>
             <div class="cashier-actions">
-              <button id="open-cashier-btn" class="btn btn-accent" style="display:none;"><i class="nf nf-fa-unlock"></i> Abrir Caja</button>
-              <button id="close-cashier-btn" class="btn btn-danger" style="display:none;"><i class="nf nf-fa-lock"></i> Cerrar Jornada</button>
+              <button id="open-cashier-btn" class="btn btn-accent hidden"><i class="nf nf-fa-unlock"></i> Abrir Caja</button>
+              <button id="close-cashier-btn" class="btn btn-danger hidden"><i class="nf nf-fa-lock"></i> Cerrar Jornada</button>
               <button id="historial-cierres-btn" class="btn btn-outline"><i class="nf nf-fa-history"></i> Cierres anteriores</button>
             </div>
           </div>
@@ -301,7 +301,7 @@
               </thead>
               <tbody id="audit-body"></tbody>
             </table>
-            <div style="text-align:center;padding:12px;"><button id="audit-load-more" class="btn btn-outline" style="display:none;">Cargar m&aacute;s</button></div>
+            <div class="audit-load-more"><button id="audit-load-more" class="btn btn-outline hidden">Cargar m&aacute;s</button></div>
           </div>
         </section>
 
@@ -357,16 +357,16 @@
           <div class="config-card">
             <h3><i class="nf nf-fa-music"></i> Sonidos</h3>
             <label><input type="checkbox" id="sound-toggle" checked> Habilitar sonidos</label>
-            <div style="margin-top:8px"><label>Volumen: <input type="range" id="sound-volume" min="0" max="100" value="50"></label></div>
+            <div class="config-inline-margin"><label>Volumen: <input type="range" id="sound-volume" min="0" max="100" value="50"></label></div>
           </div>
           <div class="config-card admin-only">
             <h3><i class="nf nf-fa-tags"></i> Categor&iacute;as</h3>
             <div class="categoria-list" id="categoria-list">
               <p class="text-muted">Cargando...</p>
             </div>
-            <div class="categoria-form" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <input type="text" id="categoria-nombre-input" placeholder="Nombre de categor&iacute;a" style="flex:1;min-width:140px;">
-              <input type="color" id="categoria-color-input" value="#CCCCCC" style="width:40px;height:36px;padding:2px;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;">
+            <div class="categoria-form">
+              <input type="text" id="categoria-nombre-input" placeholder="Nombre de categor&iacute;a">
+              <input type="color" id="categoria-color-input" value="#CCCCCC">
               <button id="categoria-add-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-plus"></i> Agregar</button>
             </div>
           </div>
@@ -374,12 +374,12 @@
             <h3><i class="nf nf-fa-eraser"></i> Limpieza autom&aacute;tica del historial</h3>
             <div class="config-info">
               <p>Eliminar registros del historial despu&eacute;s de:</p>
-              <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-                <input type="number" id="historial-limpieza-dias" min="1" max="365" value="0" style="width:70px;">
+              <div class="historial-limpieza-row">
+                <input type="number" id="historial-limpieza-dias" min="1" max="365" value="0">
                 <span>d&iacute;as (0 = desactivado)</span>
                 <button id="historial-limpieza-save" class="btn btn-primary btn-sm">Guardar</button>
               </div>
-              <p class="text-muted" style="margin-top:4px;font-size:12px;">M&iacute;nimo 1 d&iacute;a, m&aacute;ximo 365 d&iacute;as</p>
+              <p class="text-muted text-sm">M&iacute;nimo 1 d&iacute;a, m&aacute;ximo 365 d&iacute;as</p>
             </div>
           </div>
           <div class="config-card">
@@ -396,7 +396,7 @@
     </div>
   </div>
 
-  <div id="payment-modal" class="modal" style="display:none;">
+  <div id="payment-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Procesar Pago</h3>
@@ -423,20 +423,20 @@
             <button class="payment-method-btn" data-method="mixto">Mixto</button>
           </div>
         </div>
-        <div class="form-group" id="referencia-group" style="display:none;">
+        <div class="form-group hidden" id="referencia-group">
           <label>&Uacute;ltimos 4 d&iacute;gitos de referencia</label>
           <input type="text" id="referencia-input" maxlength="4" placeholder="0000">
         </div>
-        <div class="form-group" id="cliente-group" style="display:none;">
+        <div class="form-group hidden" id="cliente-group">
           <label>Seleccionar Cliente</label>
           <select id="cliente-select"></select>
         </div>
-        <div class="form-group" id="mixto-group" style="display:none;">
+        <div class="form-group hidden" id="mixto-group">
           <label>Desglose de pago</label>
           <div id="mixto-items"></div>
-          <button id="mixto-add-row" class="btn btn-sm btn-outline" style="margin-top:4px;">+ Agregar m&eacute;todo</button>
-          <div id="mixto-warning" class="mixto-warning" style="display:none;"><span class="warning-icon">&#9888;</span> <span id="mixto-warning-text"></span></div>
-          <div id="mixto-error" class="field-error" style="display:none;"></div>
+          <button id="mixto-add-row" class="btn btn-sm btn-outline mixto-add-row">+ Agregar m&eacute;todo</button>
+          <div id="mixto-warning" class="mixto-warning hidden"><span class="warning-icon">&#9888;</span> <span id="mixto-warning-text"></span></div>
+          <div id="mixto-error" class="field-error hidden"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -446,7 +446,7 @@
     </div>
   </div>
 
-  <div id="product-modal" class="modal" style="display:none;">
+  <div id="product-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="product-modal-title">Registrar Nuevo Producto</h3>
@@ -473,14 +473,14 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button id="product-delete-btn" class="btn btn-danger" style="display:none;"><i class="nf nf-fa-trash"></i> Eliminar</button>
+        <button id="product-delete-btn" class="btn btn-danger hidden"><i class="nf nf-fa-trash"></i> Eliminar</button>
         <button id="product-cancel-btn" class="btn btn-outline">Cancelar</button>
         <button id="product-save-btn" class="btn btn-primary"><span id="product-save-text">Registrar</span></button>
       </div>
     </div>
   </div>
 
-  <div id="product-detail-modal" class="modal" style="display:none;">
+  <div id="product-detail-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Detalle del Producto</h3>
@@ -501,7 +501,7 @@
     </div>
   </div>
 
-  <div id="client-modal" class="modal" style="display:none;">
+  <div id="client-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="client-modal-title">Nuevo Cliente</h3>
@@ -520,7 +520,7 @@
     </div>
   </div>
 
-  <div id="debt-detail-modal" class="modal" style="display:none;">
+  <div id="debt-detail-modal" class="modal hidden">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3 id="debt-detail-title">Detalle de Deuda</h3>
@@ -538,7 +538,7 @@
     </div>
   </div>
 
-  <div id="abono-modal" class="modal" style="display:none;">
+  <div id="abono-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="abono-title">Registrar Abono</h3>
@@ -565,16 +565,16 @@
               <button class="btn btn-sm abono-metodo-btn" data-method="biopago">Biopago</button>
               <button class="btn btn-sm abono-metodo-btn" data-method="mixto">Mixto</button>
             </div>
-            <div class="abono-referencia-group" id="abono-referencia-group" style="display:none;">
+            <div class="abono-referencia-group hidden" id="abono-referencia-group">
               <label>Referencia (4 &uacute;ltimos d&iacute;gitos)</label>
               <input type="text" id="abono-referencia" maxlength="4" placeholder="0000">
             </div>
-            <div id="abono-mixto-group" style="display:none;margin-top:6px;">
+            <div id="abono-mixto-group" class="hidden abono-mixto-group">
               <label>Desglose de pago</label>
               <div id="abono-mixto-items"></div>
-              <button id="abono-mixto-add-row" class="btn btn-sm btn-outline" style="margin-top:4px;">+ Agregar m&eacute;todo</button>
-              <div id="abono-mixto-warning" class="mixto-warning" style="display:none;"><span class="warning-icon">&#9888;</span> <span id="abono-mixto-warning-text"></span></div>
-              <div id="abono-mixto-error" class="field-error" style="display:none;"></div>
+              <button id="abono-mixto-add-row" class="btn btn-sm btn-outline mixto-add-row">+ Agregar m&eacute;todo</button>
+              <div id="abono-mixto-warning" class="mixto-warning hidden"><span class="warning-icon">&#9888;</span> <span id="abono-mixto-warning-text"></span></div>
+              <div id="abono-mixto-error" class="field-error hidden"></div>
             </div>
           </div>
         </div>
@@ -586,7 +586,7 @@
     </div>
   </div>
 
-  <div id="close-cashier-modal" class="modal" style="display:none;">
+  <div id="close-cashier-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Confirmar Cierre de Jornada</h3>
@@ -604,7 +604,7 @@
     </div>
   </div>
 
-  <div id="close-report-modal" class="modal" style="display:none;">
+  <div id="close-report-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-file_text"></i> Reporte de Cierre</h3>
@@ -617,7 +617,7 @@
     </div>
   </div>
 
-  <div id="historial-cierres-modal" class="modal" style="display:none;">
+  <div id="historial-cierres-modal" class="modal hidden">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-history"></i> Historial de Cierres</h3>
@@ -633,7 +633,7 @@
   </div>
 
   <!-- Modal para detalle de cierre histórico -->
-  <div id="historial-cierre-detalle-modal" class="modal" style="display:none;">
+  <div id="historial-cierre-detalle-modal" class="modal hidden">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3 id="historial-cierre-detalle-title"><i class="nf nf-fa-file_text"></i> Detalle del Cierre</h3>
@@ -646,7 +646,7 @@
     </div>
   </div>
 
-  <div id="import-modal" class="modal" style="display:none;">
+  <div id="import-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-upload"></i> Importar Productos</h3>
@@ -668,11 +668,11 @@
     </div>
   </div>
 
-  <div id="print-receipt" style="display:none;position:fixed;bottom:80px;right:24px;z-index:2001;">
-    <button id="print-receipt-btn" class="btn btn-primary"><i class="nf nf-fa-print" style="margin-right:6px;"></i> Imprimir Recibo</button>
+  <div id="print-receipt" class="hidden">
+    <button id="print-receipt-btn" class="btn btn-primary"><i class="nf nf-fa-print print-icon"></i> Imprimir Recibo</button>
   </div>
 
-  <div id="toast" class="toast" style="display:none;"></div>
+  <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>
 </body>

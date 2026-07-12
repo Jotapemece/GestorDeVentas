@@ -1,7 +1,13 @@
 use rusqlite::{Connection, params};
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Instant;
 use tauri::{AppHandle, Manager};
+
+const DEFAULT_PATH: &str = ".";
+pub const LOGIN_MAX_ATTEMPTS: i32 = 5;
+pub const LOGIN_BLOCK_SECS: u64 = 300;
 
 const SQL_CREATE_TABLES: &str = "
     CREATE TABLE IF NOT EXISTS productos (
@@ -84,6 +90,7 @@ const SQL_CREATE_TABLES: &str = "
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub current_user: Mutex<Option<crate::models::Usuario>>,
+    pub login_attempts: Mutex<HashMap<String, (i32, Instant)>>,
 }
 
 fn get_db_path(app_handle: &AppHandle) -> PathBuf {
@@ -107,24 +114,6 @@ fn get_db_path(app_handle: &AppHandle) -> PathBuf {
     }
 }
 
-fn migrate_productos(conn: &Connection) {
-    let has_column: bool = conn
-        .prepare("PRAGMA table_info(productos)")
-        .ok()
-        .and_then(|mut stmt| {
-            stmt.query_map([], |row| row.get::<_, String>(1))
-                .ok()
-                .map(|rows| rows.filter_map(|r| r.ok()).any(|name| name == "created_at"))
-        })
-        .unwrap_or(false);
-    if !has_column {
-        conn.execute_batch("ALTER TABLE productos ADD COLUMN created_at TEXT DEFAULT '';")
-            .ok();
-        conn.execute_batch("UPDATE productos SET created_at = datetime('now','localtime') WHERE created_at = '';")
-            .ok();
-    }
-}
-
 pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     let db_path = get_db_path(app_handle);
     let conn = Connection::open(&db_path).map_err(|e| format!("Error al abrir BD: {}", e))?;
@@ -135,109 +124,11 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     conn.execute_batch(SQL_CREATE_TABLES)
         .map_err(|e| format!("Error al crear tablas: {}", e))?;
 
-    migrate_productos(&conn);
-
-    conn.execute_batch("ALTER TABLE productos ADD COLUMN stock_minimo INTEGER NOT NULL DEFAULT 0;").ok();
-
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS categorias (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL UNIQUE,
-            color TEXT NOT NULL DEFAULT '#CCCCCC'
-        );"
-    ).ok();
-
-    let has_categoria_id: bool = conn
-        .prepare("PRAGMA table_info(productos)")
-        .ok()
-        .and_then(|mut stmt| {
-            stmt.query_map([], |row| row.get::<_, String>(1))
-                .ok()
-                .map(|rows| rows.filter_map(|r| r.ok()).any(|name| name == "categoria_id"))
-        })
-        .unwrap_or(false);
-    if !has_categoria_id {
-        conn.execute_batch("ALTER TABLE productos ADD COLUMN categoria_id INTEGER REFERENCES categorias(id);").ok();
-    }
-
-    conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria_id);").ok();
-
-    let ventas_sql: String = conn
-        .query_row("SELECT sql FROM sqlite_master WHERE type='table' AND name='ventas'", [], |row| row.get(0))
-        .unwrap_or_default();
-    let has_old_check = ventas_sql.contains("CHECK(metodo_pago IN ('biopago', 'punto', 'pago_movil', 'efectivo', 'credito'))");
-
-    if has_old_check {
-        conn.execute_batch(
-            "PRAGMA foreign_keys=OFF;
-             BEGIN TRANSACTION;
-             CREATE TABLE ventas_new (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 fecha_hora TEXT NOT NULL,
-                 usuario_id INTEGER NOT NULL,
-                 metodo_pago TEXT NOT NULL,
-                 referencia_pago_movil TEXT,
-                 pago_detalle TEXT DEFAULT '',
-                 cliente_id INTEGER,
-                 total_usd REAL NOT NULL,
-                 tasa_aplicada REAL NOT NULL,
-                 FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-                 FOREIGN KEY(cliente_id) REFERENCES clientes(id)
-             );
-             INSERT INTO ventas_new SELECT id, fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, COALESCE(pago_detalle, ''), cliente_id, total_usd, tasa_aplicada FROM ventas;
-             DROP TABLE ventas;
-             ALTER TABLE ventas_new RENAME TO ventas;
-             COMMIT;
-             PRAGMA foreign_keys=ON;"
-        ).map_err(|e| format!("Error al migrar tabla ventas: {}", e))?;
-    } else {
-        let has_pago_detalle: bool = conn
-            .prepare("PRAGMA table_info(ventas)")
-            .ok()
-            .and_then(|mut stmt| {
-                stmt.query_map([], |row| row.get::<_, String>(1))
-                    .ok()
-                    .map(|rows| rows.filter_map(|r| r.ok()).any(|name| name == "pago_detalle"))
-            })
-            .unwrap_or(false);
-        if !has_pago_detalle {
-            conn.execute_batch("ALTER TABLE ventas ADD COLUMN pago_detalle TEXT DEFAULT '';").ok();
-        }
-    }
-
-    let has_activo: bool = conn
-        .prepare("PRAGMA table_info(productos)")
-        .ok()
-        .and_then(|mut stmt| {
-            stmt.query_map([], |row| row.get::<_, String>(1))
-                .ok()
-                .map(|rows| rows.filter_map(|r| r.ok()).any(|name| name == "activo"))
-        })
-        .unwrap_or(false);
-    if !has_activo {
-        conn.execute_batch("ALTER TABLE productos ADD COLUMN activo INTEGER NOT NULL DEFAULT 1;").ok();
-    }
-
-    let has_tasa_cierre: bool = conn
-        .prepare("PRAGMA table_info(cierres_caja)")
-        .ok()
-        .and_then(|mut stmt| {
-            stmt.query_map([], |row| row.get::<_, String>(1))
-                .ok()
-                .map(|rows| rows.filter_map(|r| r.ok()).any(|name| name == "tasa_cierre"))
-        })
-        .unwrap_or(false);
-    if !has_tasa_cierre {
-        conn.execute_batch("ALTER TABLE cierres_caja ADD COLUMN tasa_cierre REAL NOT NULL DEFAULT 0;").ok();
-    }
+    crate::migrations::run_migrations(&conn);
 
     insert_default_admin(&conn);
     insert_default_vendedor(&conn);
     insert_default_config(&conn);
-
-    conn.execute_batch(
-        "UPDATE productos SET nombre = REPLACE(nombre, '*UND*-', '') WHERE nombre LIKE '%*UND*-%';"
-    ).ok();
 
     auto_import_products(&conn, app_handle);
     cleanup_old_history(&conn);
@@ -252,7 +143,7 @@ fn cleanup_old_history(conn: &Connection) {
             [],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .unwrap_or_else(|e| { eprintln!("Error leyendo historial_limpieza_dias: {}", e); 0 });
     if dias <= 0 {
         return;
     }
@@ -268,7 +159,7 @@ fn cleanup_old_history(conn: &Connection) {
 fn insert_default_admin(conn: &Connection) {
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM usuarios", [], |row| row.get(0))
-        .unwrap_or(0);
+        .unwrap_or_else(|e| { eprintln!("Error contando usuarios (admin): {}", e); 0 });
 
     if count == 0 {
         let admin_pw = crate::auth::hash_password("admin");
@@ -290,7 +181,7 @@ fn insert_default_admin(conn: &Connection) {
 fn insert_default_vendedor(conn: &Connection) {
     let exists: bool = conn
         .query_row("SELECT COUNT(*) > 0 FROM usuarios WHERE username = 'vendedor'", [], |row| row.get(0))
-        .unwrap_or(false);
+        .unwrap_or_else(|e| { eprintln!("Error verificando vendedor por defecto: {}", e); false });
     if !exists {
         let pw = crate::auth::hash_password("1234");
         conn.execute(
@@ -307,16 +198,16 @@ fn auto_import_products(conn: &Connection, app_handle: &AppHandle) {
     {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM productos", [], |row| row.get(0))
-            .unwrap_or(0);
+            .unwrap_or_else(|e| { eprintln!("Error contando productos (auto_import): {}", e); 0 });
         if count > 0 {
             return;
         }
         let db_path = get_db_path(app_handle);
-        let dir = db_path.parent().unwrap_or(std::path::Path::new("."));
+        let dir = db_path.parent().unwrap_or(Path::new(DEFAULT_PATH));
         let file_path = if dir.join("productos").exists() {
             dir.join("productos")
         } else {
-            let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+            let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap_or(Path::new(DEFAULT_PATH)).to_path_buf();
             let fallback = project_root.join("productos");
             if !fallback.exists() { return; }
             fallback

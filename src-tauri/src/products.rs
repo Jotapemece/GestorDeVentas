@@ -76,38 +76,31 @@ pub fn list_products(
     let q = search.unwrap_or_default();
     let pattern = format!("%{}%", q);
 
+    let map_row = |row: &rusqlite::Row| -> rusqlite::Result<Producto> {
+        Ok(Producto {
+            codigo: row.get(0)?,
+            nombre: row.get(1)?,
+            precio_usd: row.get(2)?,
+            stock: row.get(3)?,
+            stock_minimo: row.get(4)?,
+            created_at: row.get(5)?,
+            categoria_id: row.get(6)?,
+            categoria_nombre: row.get(7)?,
+            categoria_color: row.get(8)?,
+        })
+    };
+
     let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
 
-    let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-    match (has_query, categoria_id) {
-        (true, Some(cat)) => {
-            params_vec.push(Box::new(pattern));
-            params_vec.push(Box::new(cat));
-        }
-        (true, None) => params_vec.push(Box::new(pattern)),
-        (false, Some(cat)) => params_vec.push(Box::new(cat)),
-        (false, None) => {}
+    let products: Vec<Producto> = match (has_query, categoria_id) {
+        (true, Some(cat)) => stmt.query_map(rusqlite::params![pattern, cat], map_row),
+        (true, None) => stmt.query_map(rusqlite::params![pattern], map_row),
+        (false, Some(cat)) => stmt.query_map(rusqlite::params![cat], map_row),
+        (false, None) => stmt.query_map([], map_row),
     }
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-        params_vec.iter().map(|p| p.as_ref()).collect();
-
-    let products: Vec<Producto> = stmt
-        .query_map(params_refs.as_slice(), |row| {
-            Ok(Producto {
-                codigo: row.get(0)?,
-                nombre: row.get(1)?,
-                precio_usd: row.get(2)?,
-                stock: row.get(3)?,
-                stock_minimo: row.get(4)?,
-                created_at: row.get(5)?,
-                categoria_id: row.get(6)?,
-                categoria_nombre: row.get(7)?,
-                categoria_color: row.get(8)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+    .map_err(|e| e.to_string())?
+    .filter_map(|r| r.ok())
+    .collect();
 
     Ok(products)
 }
@@ -125,7 +118,7 @@ pub fn create_product(
     let codigo = if codigo.is_empty() {
         let next_id: i64 = db
             .query_row(SQL_NEXT_CODIGO, [], |row| row.get(0))
-            .unwrap_or(1);
+            .map_err(|e| format!("Error al generar código de producto: {}", e))?;
         format!("P{:04}", next_id)
     } else {
         codigo

@@ -21,6 +21,12 @@ html { font-size: 16px; }
   --sidebar-width: 220px;
 }
 
+/* Utility classes */
+.hidden { display: none; }
+.flex-row { display: flex; gap: 8px; align-items: center; }
+.flex-wrap { flex-wrap: wrap; }
+.text-center { text-align: center; }
+
 [data-theme="oscuro"] {
   --bg: #1A1A2E;
   --sidebar-bg: #16213E;
@@ -565,6 +571,33 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .mixto-warning { background: rgba(var(--danger-rgb), 0.15); border: 1px solid rgba(var(--danger-rgb), 0.4); border-radius: 6px; padding: 4px 8px; margin-top: 4px; font-size: 12px; color: var(--text); display: flex; align-items: center; gap: 6px; }
 .warning-icon { font-size: 16px; color: #cc6600; }
 .payment-total { display: flex; justify-content: space-between; padding: 12px; background: var(--hover); border-radius: 8px; margin-bottom: 16px; font-weight: 700; font-size: 18px; }
+
+/* Floating print button */
+#print-receipt { position: fixed; bottom: 80px; right: 24px; z-index: 2001; }
+
+/* Misc utility classes */
+.danger-text { color: var(--danger-dark); }
+.tasa-icon { font-size: 16px; color: var(--text-light); }
+.inventory-search-input { max-width: 320px; }
+.config-inline-margin { margin-top: 8px; }
+.text-sm { font-size: 12px; }
+.mixto-add-row { margin-top: 4px; }
+.abono-mixto-group { margin-top: 6px; }
+.print-icon { margin-right: 6px; }
+.empty-state { text-align: center; padding: 20px; color: var(--text-light); }
+.close-report-content { text-align: center; padding: 8px 20px; }
+.close-report-icon { font-size: 32px; margin-bottom: 6px; }
+.close-report-actions { margin-top: 10px; }
+.close-report-hr { margin: 8px 0; }
+.chart-canvas { margin: 4px auto; display: block; max-width: 100%; }
+
+/* Config inline form layouts */
+.categoria-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.categoria-form input[type="color"] { width: 40px; height: 36px; padding: 2px; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
+.categoria-form input[type="text"] { flex: 1; min-width: 140px; }
+.historial-limpieza-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.historial-limpieza-row input[type="number"] { width: 70px; }
+.audit-load-more { text-align: center; padding: 12px; }
 
 /* TOAST */
 .toast {

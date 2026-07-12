@@ -3,10 +3,23 @@ const invoke = window.__TAURI__.core.invoke;
 /* ========== CONSTANTS ========== */
 const TOAST_DURATION = 3000;
 const AUDIO = {
-  FREQ: { add: 880, remove: 440, success: [523, 659, 784], error: 200, cancel: [600, 200] },
-  DURATION: { add: 0.15, remove: 0.1, success: 0.4, error: 0.3, cancel: 0.25 },
+  FREQ: {
+    ADD_NOTE: 880,
+    REMOVE_NOTE: 440,
+    SUCCESS_NOTES: [523, 659, 784],
+    ERROR_NOTE: 200,
+    CANCEL_NOTES: [600, 200],
+  },
+  DURATION_SEC: {
+    ADD: 0.15,
+    REMOVE: 0.1,
+    SUCCESS: 0.4,
+    ERROR: 0.3,
+    CANCEL: 0.25,
+  },
   VOLUME_BASE: 0.3,
 };
+const FREQ_CANCEL_DOWN = 0.2;
 const SEARCH_DEBOUNCE_MS = 200;
 const AUDIT_LIMIT_DEFAULT = 50;
 const PRINT_BTN_TIMEOUT_MS = 8000;
@@ -14,15 +27,29 @@ const FONT_SIZE_MIN = 75;
 const FONT_SIZE_MAX = 150;
 const FONT_SIZE_DEFAULT = 100;
 const CHART_COLORS = ['#6C63AC', '#A8D5BA', '#F5B7B1', '#85C1E9', '#F9E79F', '#D7BDE2', '#A3E4D7', '#F5CBA7', '#AED6F1', '#ABEBC6'];
+const CANVAS_WIDTH = 260;
+const CANVAS_HEIGHT = 200;
+const CHART_CENTER_X = 90;
+const CHART_CENTER_Y = 100;
+const CHART_RADIUS = 72;
+const LEGEND_X = 175;
+const LEGEND_Y_START = 10;
+const LEGEND_LINE_HEIGHT = 18;
+const PRINT_WIDTH = 700;
+const PRINT_HEIGHT = 500;
+const PRINT_FRAME_CSS = 'position:fixed;top:-9999px;left:-9999px;width:' + PRINT_WIDTH + 'px;height:' + PRINT_HEIGHT + 'px;border:none;';
 const SOUND_ENABLED = '1';
 const SOUND_DISABLED = '0';
 
 /* ========== SELECTORS ========== */
 const SEL = {
+  // --- Toast & Print ---
   toast: '#toast',
   printFrame: '#print-frame',
   printReceipt: '#print-receipt',
   printReceiptBtn: '#print-receipt-btn',
+
+  // --- Login ---
   loginScreen: '#login-screen',
   loginUsername: '#login-username',
   loginPassword: '#login-password',
@@ -32,6 +59,8 @@ const SEL = {
   mainApp: '#main-app',
   sidebarUser: '#sidebar-user',
   logoutBtn: '#logout-btn',
+
+  // --- Sales (POS) ---
   tasaInput: '#tasa-input',
   tasaWarning: '#tasa-warning',
   productSearch: '#product-search',
@@ -44,6 +73,8 @@ const SEL = {
   cartEmpty: '#cart-empty',
   cartTotalUsd: '#cart-total-usd',
   cartTotalBs: '#cart-total-bs',
+
+  // --- Payment Modal ---
   paymentModal: '#payment-modal',
   paymentTotalUsd: '#payment-total-usd',
   paymentTotalBs: '#payment-total-bs',
@@ -58,6 +89,8 @@ const SEL = {
   referenciaGroup: '#referencia-group',
   clienteGroup: '#cliente-group',
   mixtoGroup: '#mixto-group',
+
+  // --- Inventory ---
   inventorySearch: '#inventory-search',
   inventoryCategoryFilter: '#inventory-category-filter',
   inventoryBody: '#inventory-body',
@@ -81,6 +114,8 @@ const SEL = {
   detailCreated: '#detail-created',
   importModal: '#import-modal',
   importFilePath: '#import-file-path',
+
+  // --- Creditos / Clientes ---
   creditosBody: '#creditos-body',
   creditoAddBtn: '#credito-add-btn',
   clientModal: '#client-modal',
@@ -104,6 +139,8 @@ const SEL = {
   abonoMixtoWarning: '#abono-mixto-warning',
   abonoMixtoWarningText: '#abono-mixto-warning-text',
   abonoConfirmBtn: '#abono-confirm-btn',
+
+  // --- Cashier ---
   dailyCount: '#daily-count',
   dailyUsd: '#daily-usd',
   dailyBs: '#daily-bs',
@@ -122,8 +159,12 @@ const SEL = {
   historialCierresList: '#historial-cierres-list',
   historialCierreDetalleModal: '#historial-cierre-detalle-modal',
   historialCierreDetalleBody: '#historial-cierre-detalle-body',
+
+  // --- Audit ---
   auditBody: '#audit-body',
   auditLoadMore: '#audit-load-more',
+
+  // --- Settings ---
   categoriaList: '#categoria-list',
   categoriaNombreInput: '#categoria-nombre-input',
   categoriaColorInput: '#categoria-color-input',
@@ -139,6 +180,52 @@ const SEL = {
 };
 
 /* ========== HELPERS ========== */
+function escapeHtml(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function createProductRow(p) {
+  const name = escapeHtml(p.nombre);
+  return '<td title="' + name + '">' + p.nombre + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + p.codigo + '">+</button></td>';
+}
+function createCartRow(item) {
+  const displayName = item.nombre || item.codigo;
+  const name = escapeHtml(displayName);
+  return '<td title="' + name + '">' + displayName + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + item.codigo + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + item.codigo + '">\u00d7</button></td>';
+}
+function createInventoryRow(p, editBtn) {
+  const catBadge = p.categoria_nombre ? '<span class="categoria-badge" style="background:' + (p.categoria_color || '#CCCCCC') + '">' + p.categoria_nombre + '</span>' : '';
+  return '<td>' + p.nombre + '</td><td>' + catBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + p.codigo + '">Detalles</button>' + editBtn + '</div></div></td>';
+}
+function createClientRow(c) {
+  return '<td>' + c.nombre + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td><button class="btn btn-sm btn-outline" data-action="open-debt-detail" data-id="' + c.id + '">Ver Detalles</button> <button class="btn btn-sm btn-primary" data-action="open-abono" data-id="' + c.id + '">Abonar / Pagar</button></td>';
+}
+function createAuditRow(log) {
+  return '<td>' + log.id + '</td><td>' + log.fecha_hora + '</td><td>' + log.usuario + '</td><td>' + log.accion + '</td>';
+}
+function createDailySaleRow(v, metodoLabel) {
+  return '<td>' + v.id + '</td><td>' + v.fecha_hora.split(' ')[1] + '</td><td>' + v.username + '</td><td>' + metodoLabel + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td>';
+}
+function createCategoryOption(c, selected) {
+  const sel = selected && selected == c.id ? ' selected' : '';
+  return '<option value="' + c.id + '"' + sel + '>' + escapeHtml(c.nombre) + '</option>';
+}
+function createCategoryListHtml(categorias) {
+  if (!categorias || categorias.length === 0) return '<p class="text-muted">No hay categor\u00edas definidas.</p>';
+  return categorias.map(c =>
+    '<div class="categoria-item">' +
+      '<span class="categoria-color-swatch" style="background:' + c.color + '"></span>' +
+      '<span class="categoria-name">' + escapeHtml(c.nombre) + '</span>' +
+      '<input type="color" value="' + c.color + '" data-action="update-categoria-color" data-id="' + c.id + '" style="width:30px;height:26px;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer;">' +
+      '<button class="btn btn-outline btn-sm" data-action="delete-categoria" data-id="' + c.id + '"><i class="nf nf-fa-trash"></i></button>' +
+    '</div>'
+  ).join('');
+}
+function createDebtSaleCard(v, prodHtml) {
+  return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
+}
+
+const TPL_RECEIPT_STYLE = 'body{font-family:monospace;font-size:12px;padding:16px;text-align:center}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{padding:4px 0;text-align:left}th{border-bottom:1px solid #000}.total{font-weight:700;font-size:14px;margin-top:8px}';
+const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
+
 let currentUser = null;
 let cart = [];
 let tasaActual = 0;
@@ -153,17 +240,52 @@ let soundVolume = 0.5;
 let auditOffset = 0;
 let auditLimit = AUDIT_LIMIT_DEFAULT;
 
+function hideToast(toastEl) {
+  toastEl.style.display = 'none';
+}
+
 function showToast(msg, type = 'success') {
   const t = qs(SEL.toast);
   t.textContent = msg;
   t.className = 'toast ' + type;
   t.style.display = 'block';
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.style.display = 'none'; }, TOAST_DURATION);
+  t._timer = setTimeout(() => hideToast(t), TOAST_DURATION);
+  t.onclick = () => { clearTimeout(t._timer); hideToast(t); };
 }
 
 function qs(sel) { return document.querySelector(sel); }
 function qsa(sel) { return document.querySelectorAll(sel); }
+
+/* Focus trap for modals */
+let activeModal = null;
+function trapFocus(modalEl) {
+  activeModal = modalEl;
+  const focusable = modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (focusable.length) focusable[0].focus();
+}
+function releaseFocus() { activeModal = null; }
+document.querySelectorAll('.modal').forEach(modal => {
+  const obs = new MutationObserver(() => {
+    if (modal.style.display === 'flex') trapFocus(modal);
+    else if (modal.style.display === 'none' && activeModal === modal) releaseFocus();
+  });
+  obs.observe(modal, { attributes: true, attributeFilter: ['style'] });
+});
+document.addEventListener('keydown', (e) => {
+  if (!activeModal) return;
+  if (e.key === 'Escape') {
+    const closeBtn = activeModal.querySelector('.modal-close, [data-action="close-modal"]');
+    if (closeBtn) closeBtn.click();
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const focusable = activeModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (!focusable.length) return;
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
@@ -192,13 +314,13 @@ function playSound(type) {
     gain.gain.value = soundVolume * AUDIO.VOLUME_BASE;
     const now = ctx.currentTime;
     switch (type) {
-      case 'add': osc.frequency.setValueAtTime(AUDIO.FREQ.add, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.add); osc.start(now); osc.stop(now + AUDIO.DURATION.add); break;
-      case 'remove': osc.frequency.setValueAtTime(AUDIO.FREQ.remove, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.remove); osc.start(now); osc.stop(now + AUDIO.DURATION.remove); break;
-      case 'success': osc.frequency.setValueAtTime(AUDIO.FREQ.success[0], now); osc.frequency.setValueAtTime(AUDIO.FREQ.success[1], now + 0.1); osc.frequency.setValueAtTime(AUDIO.FREQ.success[2], now + 0.2); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.success); osc.start(now); osc.stop(now + AUDIO.DURATION.success); break;
-      case 'error': osc.frequency.setValueAtTime(AUDIO.FREQ.error, now); osc.type = 'sawtooth'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.error); osc.start(now); osc.stop(now + AUDIO.DURATION.error); break;
-      case 'cancel': osc.frequency.setValueAtTime(AUDIO.FREQ.cancel[0], now); osc.frequency.linearRampToValueAtTime(AUDIO.FREQ.cancel[1], now + 0.2); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION.cancel); osc.start(now); osc.stop(now + AUDIO.DURATION.cancel); break;
+      case 'add': osc.frequency.setValueAtTime(AUDIO.FREQ.ADD_NOTE, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.ADD); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.ADD); break;
+      case 'remove': osc.frequency.setValueAtTime(AUDIO.FREQ.REMOVE_NOTE, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.REMOVE); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.REMOVE); break;
+      case 'success': osc.frequency.setValueAtTime(AUDIO.FREQ.SUCCESS_NOTES[0], now); osc.frequency.setValueAtTime(AUDIO.FREQ.SUCCESS_NOTES[1], now + AUDIO.DURATION_SEC.SUCCESS / 4); osc.frequency.setValueAtTime(AUDIO.FREQ.SUCCESS_NOTES[2], now + AUDIO.DURATION_SEC.SUCCESS / 2); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.SUCCESS); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.SUCCESS); break;
+      case 'error': osc.frequency.setValueAtTime(AUDIO.FREQ.ERROR_NOTE, now); osc.type = 'sawtooth'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.ERROR); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.ERROR); break;
+      case 'cancel': osc.frequency.setValueAtTime(AUDIO.FREQ.CANCEL_NOTES[0], now); osc.frequency.linearRampToValueAtTime(AUDIO.FREQ.CANCEL_NOTES[1], now + FREQ_CANCEL_DOWN); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.CANCEL); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.CANCEL); break;
     }
-  } catch(e) {}
+  } catch(e) { console.error('Error en audio:', e); }
 }
 
 function toggleFullscreen() {
@@ -209,10 +331,14 @@ function toggleFullscreen() {
   }
 }
 
+function getViewEl(name) {
+  return document.getElementById('view-' + name);
+}
+
 function showView(name) {
   qsa('.view').forEach(v => v.classList.remove('active'));
   qsa('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('view-' + name).classList.add('active');
+  getViewEl(name).classList.add('active');
   qs(`.nav-btn[data-view="${name}"]`).classList.add('active');
   const loaders = {
     inventory: loadInventory,
@@ -320,18 +446,7 @@ async function loadCategorias() {
 function renderCategoriaConfig() {
   const container = qs(SEL.categoriaList);
   if (!container) return;
-  if (categorias.length === 0) {
-    container.innerHTML = '<p class="text-muted">No hay categor\u00edas definidas.</p>';
-    return;
-  }
-  container.innerHTML = categorias.map(c =>
-    '<div class="categoria-item">' +
-      '<span class="categoria-color-swatch" style="background:' + c.color + '"></span>' +
-      '<span class="categoria-name">' + c.nombre + '</span>' +
-      '<input type="color" value="' + c.color + '" data-action="update-categoria-color" data-id="' + c.id + '" style="width:30px;height:26px;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer;">' +
-      '<button class="btn btn-outline btn-sm" data-action="delete-categoria" data-id="' + c.id + '"><i class="nf nf-fa-trash"></i></button>' +
-    '</div>'
-  ).join('');
+  container.innerHTML = createCategoryListHtml(categorias);
 }
 
 function renderCategoriaSelect() {
@@ -339,7 +454,7 @@ function renderCategoriaSelect() {
   if (!sel) return;
   const val = sel.value;
   sel.innerHTML = '<option value="">Sin categor\u00eda</option>' +
-    categorias.map(c => '<option value="' + c.id + '">' + c.nombre + '</option>').join('');
+    categorias.map(c => createCategoryOption(c)).join('');
   sel.value = val;
 }
 
@@ -350,7 +465,7 @@ function renderCategoriaFilter() {
     if (!sel) return;
     const val = sel.value;
     sel.innerHTML = '<option value="">Todas</option>' +
-      categorias.map(c => '<option value="' + c.id + '">' + c.nombre + '</option>').join('');
+      categorias.map(c => createCategoryOption(c)).join('');
     sel.value = val;
   });
 }
@@ -401,20 +516,25 @@ function handleProductSearch() {
   productSearchTimer = setTimeout(renderProductSearch, SEARCH_DEBOUNCE_MS);
 }
 
+function filterProducts(query, categoriaId) {
+  if (!query && !categoriaId) return [];
+  let filtered = productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
+  if (categoriaId) {
+    filtered = filtered.filter(p => p.categoria_id === parseInt(categoriaId));
+  }
+  return filtered;
+}
+
 function renderProductSearch() {
   const query = qs(SEL.productSearch).value.trim().toLowerCase();
   const categoriaId = qs(SEL.salesCategoryFilter).value;
   const tbody = qs(SEL.productSearchBody);
   tbody.innerHTML = '';
-  if (!query && !categoriaId) return;
-  let filtered = productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
-  if (categoriaId) {
-    filtered = filtered.filter(p => p.categoria_id === parseInt(categoriaId));
-  }
+  const filtered = filterProducts(query, categoriaId);
   const fragment = document.createDocumentFragment();
   filtered.forEach(p => {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td title="' + p.nombre.replace(/"/g, '&quot;') + '">' + p.nombre + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + p.codigo + '">+</button></td>';
+    tr.innerHTML = createProductRow(p);
     fragment.appendChild(tr);
   });
   tbody.appendChild(fragment);
@@ -504,7 +624,7 @@ function renderCart() {
     cart.forEach(item => {
       const tr = document.createElement('tr');
       const displayName = item.nombre || item.codigo;
-      tr.innerHTML = '<td title="' + displayName.replace(/"/g, '&quot;') + '">' + displayName + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + item.codigo + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + item.codigo + '">\u00d7</button></td>';
+      tr.innerHTML = createCartRow(item);
       fragment.appendChild(tr);
     });
     tbody.appendChild(fragment);
@@ -565,7 +685,7 @@ function printReceipt() {
   }
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open();
-  doc.write('<html><head><meta charset="utf-8"><title>Recibo</title><style>body{font-family:monospace;font-size:12px;padding:16px;text-align:center}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{padding:4px 0;text-align:left}th{border-bottom:1px solid #000}.total{font-weight:700;font-size:14px;margin-top:8px}</style></head><body>');
+  doc.write('<html><head><meta charset="utf-8"><title>Recibo</title><style>' + TPL_RECEIPT_STYLE + '</style></head><body>');
   doc.write('<h2>Gestor de Ventas</h2>');
   doc.write('<p>' + new Date().toLocaleString() + '</p>');
   doc.write('<hr>');
@@ -860,7 +980,7 @@ async function loadInventory() {
       const tr = document.createElement('tr');
       const catBadge = p.categoria_nombre ? '<span class="categoria-badge" style="background:' + (p.categoria_color || '#ccc') + '20;color:' + (p.categoria_color || '#666') + ';border:1px solid ' + (p.categoria_color || '#ccc') + ';border-radius:4px;padding:1px 6px;font-size:11px;">' + p.categoria_nombre + '</span>' : '';
       const editBtn = (currentUser && currentUser.rol === 'admin') ? '<button data-action="edit-product" data-codigo="' + p.codigo + '">Editar</button>' : '';
-      tr.innerHTML = '<td>' + p.nombre + '</td><td>' + catBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + p.codigo + '">Detalles</button>' + editBtn + '</div></div></td>';
+      tr.innerHTML = createInventoryRow(p, editBtn);
       frag.appendChild(tr);
     });
     tbody.appendChild(frag);
@@ -1044,7 +1164,7 @@ async function loadCreditos() {
     const frag = document.createDocumentFragment();
     clientes.forEach(c => {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + c.nombre + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td><button class="btn btn-sm btn-outline" data-action="open-debt-detail" data-id="' + c.id + '">Ver Detalles</button> <button class="btn btn-sm btn-primary" data-action="open-abono" data-id="' + c.id + '">Abonar / Pagar</button></td>';
+      tr.innerHTML = createClientRow(c);
       frag.appendChild(tr);
     });
     tbody.appendChild(frag);
@@ -1078,7 +1198,7 @@ async function openDebtDetail(id) {
     const container = qs(SEL.debtDetailList);
     container.innerHTML = '';
     if (hist.ventas.length === 0) {
-      container.innerHTML = '<p style="text-align:center;padding:20px;color:var(--text-light);">No hay ventas a cr\u00e9dito registradas.</p>';
+      container.innerHTML = '<p class="empty-state">No hay ventas a cr\u00e9dito registradas.</p>';
     } else {
       hist.ventas.forEach(v => {
         const card = document.createElement('div');
@@ -1087,7 +1207,7 @@ async function openDebtDetail(id) {
         v.productos.forEach(p => {
           prodHtml += '<div class="debt-prod"><span>' + p.producto_nombre + '</span><span>x' + p.cantidad + ' <strong>' + formatUSD(p.subtotal_usd) + '</strong></span></div>';
         });
-        card.innerHTML = '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
+        card.innerHTML = createDebtSaleCard(v, prodHtml);
         container.appendChild(card);
       });
     }
@@ -1206,7 +1326,7 @@ async function loadDailySummary() {
       if (v.metodo_pago === 'pago_movil' && v.referencia_pago_movil) {
         metodoLabel += ' (' + v.referencia_pago_movil + ')';
       }
-      tr.innerHTML = '<td>' + v.id + '</td><td>' + v.fecha_hora.split(' ')[1] + '</td><td>' + v.username + '</td><td>' + metodoLabel + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td>';
+      tr.innerHTML = createDailySaleRow(v, metodoLabel);
       frag.appendChild(tr);
     });
     tbody.appendChild(frag);
@@ -1254,18 +1374,18 @@ async function confirmCloseCashier() {
       invoke('get_close_report_data')
     ]);
     closeCloseCashier();
-    let html = '<div style="text-align:center;padding:8px 20px;">';
-    html += '<div style="font-size:32px;margin-bottom:6px;"><i class="nf nf-fa-file_text"></i></div>';
+    let html = '<div class="close-report-content">';
+    html += '<div class="close-report-icon"><i class="nf nf-fa-file_text"></i></div>';
     html += '<h3>Reporte de Cierre de Jornada</h3>';
     html += '<p><strong>Fecha:</strong> ' + report.fecha_cierre + '</p>';
     html += '<p><strong>Usuario:</strong> ' + report.usuario + '</p>';
-    html += '<hr style="margin:8px 0;">';
+    html += '<hr class="close-report-hr">';
     html += '<p><strong>Ventas realizadas:</strong> ' + reportData.total_ventas + '</p>';
     html += '<p><strong>Total USD:</strong> ' + formatUSD(reportData.total_usd) + '</p>';
     html += '<p><strong>Total Bs.:</strong> ' + formatBS(reportData.total_bs) + '</p>';
     if (reportData.por_metodo && reportData.por_metodo.length) {
-      html += '<hr style="margin:8px 0;"><h4>Totales por M\u00e9todo de Pago</h4>';
-      html += '<canvas id="close-pie-chart" width="260" height="200" style="margin:4px auto;display:block;max-width:100%;"></canvas>';
+      html += '<hr class="close-report-hr"><h4>Totales por M\u00e9todo de Pago</h4>';
+      html += '<canvas id="close-pie-chart" class="chart-canvas" width="' + CANVAS_WIDTH + '" height="' + CANVAS_HEIGHT + '"></canvas>';
       reportData.por_metodo.forEach(m => {
         const label = formatMetodoLabel(m.metodo);
         let refStr = '';
@@ -1276,7 +1396,7 @@ async function confirmCloseCashier() {
       });
     }
     if (reportData.productos_vendidos && reportData.productos_vendidos.length) {
-      html += '<hr style="margin:8px 0;"><h4>Productos Vendidos</h4>';
+      html += '<hr class="close-report-hr"><h4>Productos Vendidos</h4>';
       html += '<table class="compact-table"><tr><th>Producto</th><th>Cant</th><th>Total</th></tr>';
       reportData.productos_vendidos.forEach(p => {
         html += '<tr><td>' + p.nombre + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>';
@@ -1284,12 +1404,12 @@ async function confirmCloseCashier() {
       html += '</table>';
     }
     if (reportData.clientes_credito && reportData.clientes_credito.length) {
-      html += '<hr style="margin:8px 0;"><h4>Clientes a Cr\u00e9dito</h4>';
+      html += '<hr class="close-report-hr"><h4>Clientes a Cr\u00e9dito</h4>';
       reportData.clientes_credito.forEach(c => {
         html += '<p>' + c.nombre + ': ' + formatUSD(c.total_usd) + '</p>';
       });
     }
-    html += '<div style="margin-top:10px;"><button class="btn btn-primary" data-action="print-close-report">Exportar PDF</button></div>';
+    html += '<div class="close-report-actions"><button class="btn btn-primary" data-action="print-close-report">Exportar PDF</button></div>';
     html += '</div>';
     qs(SEL.closeReportBody).innerHTML = html;
     qs(SEL.closeReportModal).style.display = 'flex';
@@ -1305,7 +1425,7 @@ function drawPieChart(canvasId, data) {
   if (!canvas || !data.por_metodo || !data.por_metodo.length) return;
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
-  const cx = 90, cy = 100, r = 72;
+  const cx = CHART_CENTER_X, cy = CHART_CENTER_Y, r = CHART_RADIUS;
   ctx.clearRect(0, 0, w, h);
   const total = data.por_metodo.reduce((s, m) => s + m.total_usd, 0);
   if (total <= 0) return;
@@ -1331,9 +1451,9 @@ function drawPieChart(canvasId, data) {
     }
     startAngle += slice;
   });
-  let ly = 10;
+  let ly = LEGEND_Y_START;
   data.por_metodo.forEach((m, i) => {
-    const lx = 175;
+    const lx = LEGEND_X;
     ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
     ctx.fillRect(lx, ly, 10, 10);
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#333';
@@ -1341,7 +1461,7 @@ function drawPieChart(canvasId, data) {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(formatMetodoLabel(m.metodo) + ' ' + formatUSD(m.total_usd), lx + 14, ly);
-    ly += 18;
+    ly += LEGEND_LINE_HEIGHT;
   });
 }
 
@@ -1354,20 +1474,12 @@ function printCloseReport() {
   if (!iframe) {
     iframe = document.createElement('iframe');
     iframe.id = 'print-frame';
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:700px;height:500px;border:none;';
+    iframe.style.cssText = PRINT_FRAME_CSS;
     document.body.appendChild(iframe);
   }
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open();
-  doc.write('<html><head><meta charset="utf-8"><title>Reporte de Cierre</title><style>');
-  doc.write('body{font-family:monospace;font-size:12px;padding:24px}');
-  doc.write('h2{text-align:center;margin-bottom:4px}');
-  doc.write('h4{margin:12px 0 4px;border-bottom:1px solid #000}');
-  doc.write('table{width:100%;border-collapse:collapse;margin:4px 0}');
-  doc.write('th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}');
-  doc.write('th{border-bottom:2px solid #000}');
-  doc.write('.total{font-weight:700;text-align:right;margin-top:4px}');
-  doc.write('</style></head><body>');
+  doc.write('<html><head><meta charset="utf-8"><title>Reporte de Cierre</title><style>' + TPL_CLOSE_REPORT_STYLE + '</style></head><body>');
   doc.write('<h2>Gestor de Ventas</h2>');
   doc.write('<p style="text-align:center;">Reporte de Cierre de Jornada</p>');
   doc.write('<p style="text-align:center;">' + d.fecha_cierre + '</p>');
@@ -1414,7 +1526,7 @@ async function openHistorialCierres() {
     const cierres = await invoke('list_cierres');
     const container = qs(SEL.historialCierresList);
     if (!cierres.length) {
-      container.innerHTML = '<p style="text-align:center;padding:20px;color:var(--text-light);">No hay cierres registrados</p>';
+      container.innerHTML = '<p class="empty-state">No hay cierres registrados</p>';
     } else {
       let html = '<table class="table compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
       cierres.forEach(c => {
@@ -1449,7 +1561,7 @@ async function showCierreDetalle(cierreId) {
     html += '<p><strong>Total Bs.:</strong> ' + formatBS(d.total_bs) + '</p>';
     if (d.por_metodo && d.por_metodo.length) {
       html += '<hr style="margin:8px 0;"><h4>Totales por M\u00e9todo de Pago</h4>';
-      html += '<canvas id="historial-pie-chart" width="260" height="200" style="margin:4px auto;display:block;max-width:100%;"></canvas>';
+      html += '<canvas id="historial-pie-chart" width="' + CANVAS_WIDTH + '" height="' + CANVAS_HEIGHT + '" style="margin:4px auto;display:block;max-width:100%;"></canvas>';
       d.por_metodo.forEach(m => {
         let label = formatMetodoLabel(m.metodo);
         if (m.referencias && m.referencias.length) {
@@ -1498,7 +1610,7 @@ async function loadAuditMore() {
     const frag = document.createDocumentFragment();
     logs.forEach(log => {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + log.id + '</td><td>' + log.fecha_hora + '</td><td>' + log.usuario + '</td><td>' + log.accion + '</td>';
+      tr.innerHTML = createAuditRow(log);
       frag.appendChild(tr);
     });
     tbody.appendChild(frag);
@@ -1799,13 +1911,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (soundToggle) {
     soundToggle.addEventListener('change', function() {
       soundEnabled = this.checked;
-      invoke('set_config_value', { key: 'sonido_habilitado', value: this.checked ? SOUND_ENABLED : SOUND_DISABLED }).catch(() => {});
+      invoke('set_config_value', { key: 'sonido_habilitado', value: this.checked ? SOUND_ENABLED : SOUND_DISABLED }).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
     });
   }
   if (soundVolumeRange) {
     soundVolumeRange.addEventListener('input', function() {
       soundVolume = parseInt(this.value) / 100;
-      invoke('set_config_value', { key: 'sonido_volumen', value: String(this.value) }).catch(() => {});
+      invoke('set_config_value', { key: 'sonido_volumen', value: String(this.value) }).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
     });
   }
 
