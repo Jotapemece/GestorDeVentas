@@ -1,13 +1,3 @@
-node_modules/
-src-tauri/target/
-src-tauri/gen/android/build/
-src-tauri/gen/android/app/build/
-src-tauri/gen/android/.gradle/
-src-tauri/gen/android/local.properties
-gestor_ventas.db
-gestor_ventas.db-shm
-gestor_ventas.db-wal
-*.apk
-combined.txt
-src-tauri/release-key.keystore
-src-tauri/gen/android/.idea/
+Nothing should be ignored in this case, as the changes only include markdown files (.md) which are source/config files. No build artifacts, dependencies, or temporary files are present in the change list.
+
+Therefore, the output is empty.
