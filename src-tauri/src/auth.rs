@@ -103,19 +103,6 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                 }
             };
             *current = Some(usuario);
-
-            let db2 = match state.db.lock() {
-                Ok(db) => db,
-                Err(_) => {
-                    return LoginResponse {
-                        success: false,
-                        message: "Error interno".to_string(),
-                        usuario: Some(user_clone),
-                    }
-                }
-            };
-            crate::audit::log_action(&db2, &user_clone.username, "Inicio de sesión").ok();
-
             LoginResponse {
                 success: true,
                 message: "Inicio de sesión exitoso".to_string(),
@@ -145,16 +132,7 @@ pub fn logout(state: State<AppState>) -> bool {
         Ok(c) => c,
         Err(_) => return false,
     };
-    let user = current.take();
-    drop(current);
-
-    if let Some(u) = user {
-        let db = match state.db.lock() {
-            Ok(db) => db,
-            Err(_) => return false,
-        };
-        crate::audit::log_action(&db, &u.username, "Cierre de sesión").ok();
-    }
+    *current = None;
     true
 }
 

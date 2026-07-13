@@ -7,6 +7,19 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="fa-local.css">
+  <script>
+    try {
+      (function(){var t={
+        oscuro:{'--bg':'#2A2533','--card':'#3D364A','--primary':'#6C5C7A','--primary-dark':'#544666','--primary-rgb':'108, 92, 122','--accent':'#4A7C65','--accent-dark':'#3A6651','--accent-rgb':'74, 124, 101','--danger-rgb':'107, 46, 42','--overlay':'rgba(0,0,0,0.6)','--toast-bg':'#1F1A2E','--shadow':'0 2px 12px rgba(0,0,0,0.3)','--hover':'#352F44','--border':'#4A4460','--text':'#E0D8E8','--text-light':'#A098B8','--sidebar-bg':'#1F1A2E','--sidebar-text':'#C8C0D8','--sidebar-text-rgb':'200,192,216'},
+        claro:{'--bg':'#FAFAFA','--card':'#FFFFFF','--primary':'#6C8EBF','--primary-dark':'#5070A0','--primary-rgb':'108,142,191','--accent':'#6BAF8D','--accent-dark':'#4A8F6D','--accent-rgb':'107,175,141','--danger-rgb':'217,115,115','--overlay':'rgba(0,0,0,0.15)','--toast-bg':'#333333','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#F5F5F5','--border':'#DDDDDD','--text':'#333333','--text-light':'#777777','--sidebar-bg':'#F0F0F0','--sidebar-text':'#333333','--sidebar-text-rgb':'51,51,51'},
+        azul:{'--bg':'#EDF2F7','--card':'#FFFFFF','--primary':'#7B9EBF','--primary-dark':'#5A7D9E','--primary-rgb':'123,158,191','--accent':'#8FC1B5','--accent-dark':'#6DA89A','--accent-rgb':'143,193,181','--danger-rgb':'232,160,160','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#2C5282','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#E2E8F0','--border':'#CBD5E0','--text':'#2D3748','--text-light':'#718096','--sidebar-bg':'#2C5282','--sidebar-text':'#EBF4FF','--sidebar-text-rgb':'235,244,255'},
+        verde:{'--bg':'#F0F7F0','--card':'#FFFFFF','--primary':'#8FBC8F','--primary-dark':'#6B9B6B','--primary-rgb':'143,188,143','--accent':'#A8D5BA','--accent-dark':'#7FBF8F','--accent-rgb':'168,213,186','--danger-rgb':'232,160,160','--overlay':'rgba(0,0,0,0.15)','--toast-bg':'#2F4F2F','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#E2EFE2','--border':'#C8DCC8','--text':'#2D3748','--text-light':'#718096','--sidebar-bg':'#2F4F2F','--sidebar-text':'#F0FFF0','--sidebar-text-rgb':'240,255,240'},
+        morado:{'--bg':'#F5F0FA','--card':'#FFFFFF','--primary':'#B39DDB','--primary-dark':'#9575CD','--primary-rgb':'179,157,219','--accent':'#CE93D8','--accent-dark':'#AB47BC','--accent-rgb':'206,147,216','--danger-rgb':'232,160,160','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#4A148C','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#EDE7F6','--border':'#D1C4E9','--text':'#2D3748','--text-light':'#718096','--sidebar-bg':'#4A148C','--sidebar-text':'#F3E5F5','--sidebar-text-rgb':'243,229,245'},
+        turquesa:{'--bg':'#E6F7F5','--card':'#F5FFFE','--primary':'#4DB8AC','--primary-dark':'#3A9A8E','--primary-rgb':'77,184,172','--accent':'#80D0C4','--accent-dark':'#60B8AA','--accent-rgb':'128,208,196','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#1A4A44','--shadow':'0 2px 12px rgba(26,74,68,0.08)','--hover':'#E8F5F2','--border':'#C0E0DA','--text':'#1A4A44','--text-light':'#5A7A74','--sidebar-bg':'#B0E0D6','--sidebar-text':'#1A4A44','--sidebar-text-rgb':'26,74,68'},
+        naranja:{'--bg':'#FDF0E8','--card':'#FFF8F0','--primary':'#D47A4A','--primary-dark':'#C06030','--primary-rgb':'212,122,74','--accent':'#E8A060','--accent-dark':'#D48540','--accent-rgb':'232,160,96','--danger-rgb':'217,112,80','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#5C2A0A','--shadow':'0 2px 12px rgba(74,42,16,0.08)','--hover':'#F8EDE0','--border':'#E8D0B8','--text':'#4A2A10','--text-light':'#8A6A4A','--sidebar-bg':'#F0C8A8','--sidebar-text':'#5C2A0A','--sidebar-text-rgb':'92,42,10'}
+      },saved=localStorage.getItem('tema'),theme=t[saved]||t.claro;Object.keys(theme).forEach(function(k){document.documentElement.style.setProperty(k,theme[k])});}());
+    } catch (e) {}
+  </script>
 </head>
 <body class="compact">
   <div id="app">
@@ -32,9 +45,14 @@
           <label for="login-username">Usuario</label>
           <input type="text" id="login-username" name="username" placeholder="Nombre de usuario" autocomplete="off" autofocus>
         </div>
-        <div class="form-group">
+        <div class="form-group password-group">
           <label for="login-password">Contraseña</label>
-          <input type="password" id="login-password" name="password" placeholder="Contraseña">
+          <div class="password-wrapper">
+            <input type="password" id="login-password" name="password" placeholder="Contraseña">
+            <button type="button" id="toggle-password" class="password-toggle" aria-label="Mostrar contraseña">
+              <i class="nf nf-fa-eye"></i>
+            </button>
+          </div>
         </div>
         <div class="form-group remember-row">
           <label class="remember-label">
@@ -120,11 +138,8 @@
       <main id="main-content">
         <section id="view-sales" class="view active">
           <div class="sales-header">
-            <div class="search-box">
+            <div class="sales-header-left">
               <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo..." aria-label="Buscar producto">
-              <select id="sales-category-filter" class="filter-select" title="Filtrar por categor&iacute;a">
-                <option value="">Todas</option>
-              </select>
             </div>
             <div class="tasa-input-group">
               <i class="nf nf-fa-dollar tasa-icon"></i>
@@ -132,9 +147,6 @@
               <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal">
               <span id="tasa-warning" class="tasa-warning hidden" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
             </div>
-            <button id="sales-toggle-btn" class="btn btn-outline btn-sm mobile-only hidden" title="Alternar entre productos y carrito">
-              <i class="nf nf-fa-exchange_alt"></i> <span id="sales-toggle-label">Carrito</span>
-            </button>
           </div>
           <div class="sales-body">
             <div class="sales-panel sales-left">
@@ -190,28 +202,23 @@
             <h2><i class="nf nf-fa-archive"></i> Inventario de Productos</h2>
             <div class="inventory-actions">
               <button id="inventory-import-btn" class="btn btn-outline admin-only"><i class="nf nf-fa-upload"></i> Importar TSV</button>
-              <button id="inventory-import-db-btn" class="btn btn-outline admin-only"><i class="nf nf-fa-database"></i> Importar DB</button>
               <button id="inventory-export-btn" class="btn btn-accent"><i class="nf nf-fa-download"></i> Exportar</button>
               <button id="inventory-add-btn" class="btn btn-add admin-only"><i class="nf nf-fa-plus"></i> Agregar Producto</button>
             </div>
           </div>
           <div class="search-box flex-row">
             <input type="text" id="inventory-search" placeholder="Buscar en inventario..." class="inventory-search-input" aria-label="Buscar en inventario">
-            <select id="inventory-category-filter" class="filter-select" title="Filtrar por categor&iacute;a">
-              <option value="">Todas</option>
-            </select>
           </div>
           <div class="table-container">
             <table class="table" id="inventory-table">
               <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Categor&iacute;a</th>
-                  <th>Precio ($)</th>
-                  <th>Precio (Bs.)</th>
-                  <th>Stock</th>
-                  <th>Acciones</th>
-                </tr>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Precio ($)</th>
+                    <th>Precio (Bs.)</th>
+                    <th>Stock</th>
+                    <th>Acciones</th>
+                  </tr>
               </thead>
               <tbody id="inventory-body"></tbody>
             </table>
@@ -359,17 +366,6 @@
             <label><input type="checkbox" id="sound-toggle" checked> Habilitar sonidos</label>
             <div class="config-inline-margin"><label>Volumen: <input type="range" id="sound-volume" min="0" max="100" value="50"></label></div>
           </div>
-          <div class="config-card admin-only">
-            <h3><i class="nf nf-fa-tags"></i> Categor&iacute;as</h3>
-            <div class="categoria-list" id="categoria-list">
-              <p class="text-muted">Cargando...</p>
-            </div>
-            <div class="categoria-form">
-              <input type="text" id="categoria-nombre-input" placeholder="Nombre de categor&iacute;a">
-              <input type="color" id="categoria-color-input" value="#CCCCCC">
-              <button id="categoria-add-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-plus"></i> Agregar</button>
-            </div>
-          </div>
           <div class="config-card">
             <h3><i class="nf nf-fa-eraser"></i> Limpieza autom&aacute;tica del historial</h3>
             <div class="config-info">
@@ -465,12 +461,6 @@
           <label>Stock</label>
           <input type="number" id="product-stock" step="1" min="0" placeholder="0">
         </div>
-        <div class="form-group">
-          <label>Categor&iacute;a</label>
-          <select id="product-categoria" class="form-select">
-            <option value="">Sin categor&iacute;a</option>
-          </select>
-        </div>
       </div>
       <div class="modal-footer">
         <button id="product-delete-btn" class="btn btn-danger hidden"><i class="nf nf-fa-trash"></i> Eliminar</button>
@@ -491,7 +481,6 @@
           <div class="detail-field"><span class="detail-label">Nombre</span><span class="detail-value" id="detail-nombre"></span></div>
           <div class="detail-field"><span class="detail-label">Precio ($)</span><span class="detail-value" id="detail-precio"></span></div>
           <div class="detail-field"><span class="detail-label">Stock</span><span class="detail-value" id="detail-stock"></span></div>
-          <div class="detail-field"><span class="detail-label">Categor&iacute;a</span><span class="detail-value" id="detail-categoria"></span></div>
           <div class="detail-field"><span class="detail-label">Fecha de Creaci&oacute;n</span><span class="detail-value" id="detail-created"></span></div>
         </div>
       </div>
@@ -666,10 +655,6 @@
         <button id="import-confirm-btn" class="btn btn-primary"><i class="nf nf-fa-upload"></i> Importar</button>
       </div>
     </div>
-  </div>
-
-  <div id="print-receipt" class="hidden">
-    <button id="print-receipt-btn" class="btn btn-primary"><i class="nf nf-fa-print print-icon"></i> Imprimir Recibo</button>
   </div>
 
   <div id="toast" class="toast hidden"></div>

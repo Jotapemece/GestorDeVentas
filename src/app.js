@@ -22,10 +22,34 @@ const AUDIO = {
 const FREQ_CANCEL_DOWN = 0.2;
 const SEARCH_DEBOUNCE_MS = 200;
 const AUDIT_LIMIT_DEFAULT = 50;
-const PRINT_BTN_TIMEOUT_MS = 8000;
+// const PRINT_BTN_TIMEOUT_MS removed
 const FONT_SIZE_MIN = 75;
 const FONT_SIZE_MAX = 150;
 const FONT_SIZE_DEFAULT = 100;
+
+// Constantes frontend → debe coincidir con src-tauri/src/constants.rs
+//   AUDIT_LIMIT_DEFAULT ↔ AUDIT_LOG_DEFAULT_LIMIT
+// Config keys (db::configuracion.clave) y métodos de pago
+const CFG_TASA_DOLAR = 'tasa_dolar';
+const CFG_TASA_UPDATED_AT = 'tasa_updated_at';
+const CFG_CAJA_ABIERTA = 'caja_abierta';
+const CFG_TEMA = 'tema';
+const CFG_FONT_SIZE = 'font_size';
+const CFG_SONIDO_HABILITADO = 'sonido_habilitado';
+const CFG_SONIDO_VOLUMEN = 'sonido_volumen';
+const CFG_HISTORIAL_LIMPIEZA_DIAS = 'historial_limpieza_dias';
+
+// Payment method keys (deben coincidir con constants.rs)
+const METODO_PAGO = {
+  EFECTIVO_BS: 'efectivo_bs',
+  EFECTIVO_USD: 'efectivo_usd',
+  BIOPAGO: 'biopago',
+  PUNTO: 'punto',
+  PAGO_MOVIL: 'pago_movil',
+  CREDITO: 'credito',
+  MIXTO: 'mixto',
+};
+
 const CHART_COLORS = ['#6C63AC', '#A8D5BA', '#F5B7B1', '#85C1E9', '#F9E79F', '#D7BDE2', '#A3E4D7', '#F5CBA7', '#AED6F1', '#ABEBC6'];
 const CANVAS_WIDTH = 260;
 const CANVAS_HEIGHT = 200;
@@ -46,8 +70,7 @@ const SEL = {
   // --- Toast & Print ---
   toast: '#toast',
   printFrame: '#print-frame',
-  printReceipt: '#print-receipt',
-  printReceiptBtn: '#print-receipt-btn',
+
 
   // --- Login ---
   loginScreen: '#login-screen',
@@ -66,7 +89,6 @@ const SEL = {
   productSearch: '#product-search',
   productSearchBody: '#product-search-body',
   productSearchTable: '#product-search-table',
-  salesCategoryFilter: '#sales-category-filter',
   checkoutBtn: '#checkout-btn',
   cancelSaleBtn: '#cancel-sale-btn',
   cartBody: '#cart-body',
@@ -92,7 +114,6 @@ const SEL = {
 
   // --- Inventory ---
   inventorySearch: '#inventory-search',
-  inventoryCategoryFilter: '#inventory-category-filter',
   inventoryBody: '#inventory-body',
   inventoryTable: '#inventory-table',
   inventoryAddBtn: '#inventory-add-btn',
@@ -105,12 +126,10 @@ const SEL = {
   productNombre: '#product-nombre',
   productPrecio: '#product-precio',
   productStock: '#product-stock',
-  productCategoria: '#product-categoria',
   productDetailModal: '#product-detail-modal',
   detailNombre: '#detail-nombre',
   detailPrecio: '#detail-precio',
   detailStock: '#detail-stock',
-  detailCategoria: '#detail-categoria',
   detailCreated: '#detail-created',
   importModal: '#import-modal',
   importFilePath: '#import-file-path',
@@ -165,10 +184,6 @@ const SEL = {
   auditLoadMore: '#audit-load-more',
 
   // --- Settings ---
-  categoriaList: '#categoria-list',
-  categoriaNombreInput: '#categoria-nombre-input',
-  categoriaColorInput: '#categoria-color-input',
-  categoriaAddBtn: '#categoria-add-btn',
   fontIncBtn: '#font-inc-btn',
   fontDecBtn: '#font-dec-btn',
   fontSizeDisplay: '#font-size-display',
@@ -192,8 +207,7 @@ function createCartRow(item) {
   return '<td title="' + name + '">' + displayName + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + item.codigo + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + item.codigo + '">\u00d7</button></td>';
 }
 function createInventoryRow(p, editBtn) {
-  const catBadge = p.categoria_nombre ? '<span class="categoria-badge" style="background:' + (p.categoria_color || '#CCCCCC') + '">' + p.categoria_nombre + '</span>' : '';
-  return '<td>' + p.nombre + '</td><td>' + catBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + p.codigo + '">Detalles</button>' + editBtn + '</div></div></td>';
+  return '<td>' + p.nombre + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + p.codigo + '">Detalles</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
   return '<td>' + c.nombre + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td><button class="btn btn-sm btn-outline" data-action="open-debt-detail" data-id="' + c.id + '">Ver Detalles</button> <button class="btn btn-sm btn-primary" data-action="open-abono" data-id="' + c.id + '">Abonar / Pagar</button></td>';
@@ -204,26 +218,11 @@ function createAuditRow(log) {
 function createDailySaleRow(v, metodoLabel) {
   return '<td>' + v.id + '</td><td>' + v.fecha_hora.split(' ')[1] + '</td><td>' + v.username + '</td><td>' + metodoLabel + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td>';
 }
-function createCategoryOption(c, selected) {
-  const sel = selected && selected == c.id ? ' selected' : '';
-  return '<option value="' + c.id + '"' + sel + '>' + escapeHtml(c.nombre) + '</option>';
-}
-function createCategoryListHtml(categorias) {
-  if (!categorias || categorias.length === 0) return '<p class="text-muted">No hay categor\u00edas definidas.</p>';
-  return categorias.map(c =>
-    '<div class="categoria-item">' +
-      '<span class="categoria-color-swatch" style="background:' + c.color + '"></span>' +
-      '<span class="categoria-name">' + escapeHtml(c.nombre) + '</span>' +
-      '<input type="color" value="' + c.color + '" data-action="update-categoria-color" data-id="' + c.id + '" style="width:30px;height:26px;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer;">' +
-      '<button class="btn btn-outline btn-sm" data-action="delete-categoria" data-id="' + c.id + '"><i class="nf nf-fa-trash"></i></button>' +
-    '</div>'
-  ).join('');
-}
 function createDebtSaleCard(v, prodHtml) {
   return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
 }
 
-const TPL_RECEIPT_STYLE = 'body{font-family:monospace;font-size:12px;padding:16px;text-align:center}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{padding:4px 0;text-align:left}th{border-bottom:1px solid #000}.total{font-weight:700;font-size:14px;margin-top:8px}';
+
 const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
 
 let currentUser = null;
@@ -231,10 +230,10 @@ let cart = [];
 let tasaActual = 0;
 let editingProduct = null;
 let abonoClienteId = null;
-let categorias = [];
 let productCache = [];
-let lastReceipt = null;
+
 let lastCloseReportData = null;
+let lastViewName = 'sales';
 let soundEnabled = true;
 let soundVolume = 0.5;
 let auditOffset = 0;
@@ -256,6 +255,15 @@ function showToast(msg, type = 'success') {
 
 function qs(sel) { return document.querySelector(sel); }
 function qsa(sel) { return document.querySelectorAll(sel); }
+
+/* ========== MODAL HELPERS ========== */
+function showModal(el) {
+  qsa('.modal').forEach(m => { if (m !== el) m.classList.add('hidden'); });
+  el.classList.remove('hidden');
+}
+function closeModal(el) {
+  el.classList.add('hidden');
+}
 
 /* Focus trap for modals */
 let activeModal = null;
@@ -320,7 +328,7 @@ function playSound(type) {
       case 'error': osc.frequency.setValueAtTime(AUDIO.FREQ.ERROR_NOTE, now); osc.type = 'sawtooth'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.ERROR); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.ERROR); break;
       case 'cancel': osc.frequency.setValueAtTime(AUDIO.FREQ.CANCEL_NOTES[0], now); osc.frequency.linearRampToValueAtTime(AUDIO.FREQ.CANCEL_NOTES[1], now + FREQ_CANCEL_DOWN); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.CANCEL); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.CANCEL); break;
     }
-  } catch(e) { console.error('Error en audio:', e); }
+  } catch(e) { showToast('Error en audio', 'error'); }
 }
 
 function toggleFullscreen() {
@@ -336,6 +344,7 @@ function getViewEl(name) {
 }
 
 function showView(name) {
+  lastViewName = name;
   qsa('.view').forEach(v => v.classList.remove('active'));
   qsa('.nav-btn').forEach(b => b.classList.remove('active'));
   getViewEl(name).classList.add('active');
@@ -371,10 +380,11 @@ async function handleLogin() {
       applyRoleUI();
       await loadTasa();
       await loadProductCache();
-      await loadCategorias();
-      showView('sales');
-      renderProductSearch();
-      renderCart();
+      showView(lastViewName);
+      if (lastViewName === 'sales') {
+        renderProductSearch();
+        renderCart();
+      }
     } else {
       errEl.textContent = res.message;
     }
@@ -402,11 +412,11 @@ async function loadTasa() {
   try {
     tasaActual = await invoke('get_tasa');
     qs(SEL.tasaInput).value = tasaActual;
-    const updatedAt = await invoke('get_config_value', { key: 'tasa_updated_at' });
+    const updatedAt = await invoke('get_config_value', { key: CFG_TASA_UPDATED_AT });
     const today = new Date().toISOString().slice(0,10);
     const warn = qs(SEL.tasaWarning);
     if (warn) warn.style.display = (!updatedAt || updatedAt !== today) ? 'inline' : 'none';
-  } catch (e) { console.error(e); }
+  } catch (e) { showToast('Error al cargar tasa', 'error'); }
 }
 
 async function handleTasaChange() {
@@ -433,78 +443,9 @@ function refreshAllBsPrices() {
   });
 }
 
-/* ========== CATEGORIAS ========== */
-async function loadCategorias() {
-  try {
-    categorias = await invoke('list_categorias');
-  } catch (e) { categorias = []; }
-  renderCategoriaConfig();
-  renderCategoriaSelect();
-  renderCategoriaFilter();
-}
-
-function renderCategoriaConfig() {
-  const container = qs(SEL.categoriaList);
-  if (!container) return;
-  container.innerHTML = createCategoryListHtml(categorias);
-}
-
-function renderCategoriaSelect() {
-  const sel = qs(SEL.productCategoria);
-  if (!sel) return;
-  const val = sel.value;
-  sel.innerHTML = '<option value="">Sin categor\u00eda</option>' +
-    categorias.map(c => createCategoryOption(c)).join('');
-  sel.value = val;
-}
-
-function renderCategoriaFilter() {
-  const filters = [SEL.inventoryCategoryFilter, SEL.salesCategoryFilter];
-  filters.forEach(id => {
-    const sel = qs(id);
-    if (!sel) return;
-    const val = sel.value;
-    sel.innerHTML = '<option value="">Todas</option>' +
-      categorias.map(c => createCategoryOption(c)).join('');
-    sel.value = val;
-  });
-}
-
-async function addCategoria() {
-  const nombre = qs(SEL.categoriaNombreInput).value.trim();
-  const color = qs(SEL.categoriaColorInput).value;
-  if (!nombre) { showToast('Ingrese un nombre para la categor\u00eda', 'error'); return; }
-  try {
-    await invoke('create_categoria', { nombre, color });
-    showToast('Categor\u00eda creada');
-    qs(SEL.categoriaNombreInput).value = '';
-    await loadCategorias();
-    loadInventory();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-}
-
-async function updateCategoriaColor(id, color) {
-  const cat = categorias.find(c => c.id === id);
-  if (!cat) return;
-  try {
-    await invoke('update_categoria', { id, nombre: cat.nombre, color });
-    await loadCategorias();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-}
-
-async function deleteCategoria(id) {
-  if (!confirm('\u00bfEliminar esta categor\u00eda?')) return;
-  try {
-    await invoke('delete_categoria', { id });
-    showToast('Categor\u00eda eliminada');
-    await loadCategorias();
-    loadInventory();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-}
-
 async function loadProductCache() {
   try {
-    productCache = await invoke('list_products', { search: null, categoriaId: null });
+    productCache = await invoke('list_products', { search: null });
   } catch (e) { showToast('Error al cargar productos', 'error'); }
 }
 
@@ -516,21 +457,16 @@ function handleProductSearch() {
   productSearchTimer = setTimeout(renderProductSearch, SEARCH_DEBOUNCE_MS);
 }
 
-function filterProducts(query, categoriaId) {
-  if (!query && !categoriaId) return [];
-  let filtered = productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
-  if (categoriaId) {
-    filtered = filtered.filter(p => p.categoria_id === parseInt(categoriaId));
-  }
-  return filtered;
+function filterProducts(query) {
+  if (!query) return [];
+  return productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
 }
 
 function renderProductSearch() {
   const query = qs(SEL.productSearch).value.trim().toLowerCase();
-  const categoriaId = qs(SEL.salesCategoryFilter).value;
   const tbody = qs(SEL.productSearchBody);
   tbody.innerHTML = '';
-  const filtered = filterProducts(query, categoriaId);
+  const filtered = filterProducts(query);
   const fragment = document.createDocumentFragment();
   filtered.forEach(p => {
     const tr = document.createElement('tr');
@@ -648,7 +584,7 @@ function openPaymentModal() {
   const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
   qs(SEL.paymentTotalUsd).textContent = formatUSD(total);
   qs(SEL.paymentTotalBs).textContent = formatBS(total * tasaActual);
-  qs(SEL.paymentModal).style.display = 'flex';
+  showModal(qs(SEL.paymentModal));
   qs(SEL.referenciaInput).value = '';
   qs(SEL.clienteSelect).innerHTML = '<option value="">Seleccione...</option>';
   qs(SEL.mixtoItems).innerHTML = '';
@@ -658,13 +594,7 @@ function openPaymentModal() {
 }
 
 function closePaymentModal() {
-  qs(SEL.paymentModal).style.display = 'none';
-}
-
-function showPrintButton(receiptData) {
-  lastReceipt = receiptData;
-  qs(SEL.printReceipt).style.display = 'block';
-  setTimeout(() => { qs(SEL.printReceipt).style.display = 'none'; }, PRINT_BTN_TIMEOUT_MS);
+  closeModal(qs(SEL.paymentModal));
 }
 
 const METODO_LABELS = {
@@ -673,42 +603,6 @@ const METODO_LABELS = {
 };
 
 function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
-
-function printReceipt() {
-  if (!lastReceipt) return;
-  let iframe = qs(SEL.printFrame);
-  if (!iframe) {
-    iframe = document.createElement('iframe');
-    iframe.id = 'print-frame';
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:280px;height:400px;border:none;';
-    document.body.appendChild(iframe);
-  }
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open();
-  doc.write('<html><head><meta charset="utf-8"><title>Recibo</title><style>' + TPL_RECEIPT_STYLE + '</style></head><body>');
-  doc.write('<h2>Gestor de Ventas</h2>');
-  doc.write('<p>' + new Date().toLocaleString() + '</p>');
-  doc.write('<hr>');
-  doc.write('<table><tr><th>Producto</th><th>Cant</th><th>Precio</th></tr>');
-  lastReceipt.productos.forEach(p => {
-    doc.write('<tr><td>' + p.nombre + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.subtotal) + '</td></tr>');
-  });
-  doc.write('</table><hr>');
-  doc.write('<div class="total">Total: ' + formatUSD(lastReceipt.total) + '</div>');
-  if (lastReceipt.pagoDetalle && lastReceipt.pagoDetalle.length) {
-    doc.write('<div>Desglose:</div>');
-    lastReceipt.pagoDetalle.forEach(p => {
-      doc.write('<div>' + formatMetodoLabel(p.metodo) + ': ' + formatUSD(p.monto_usd) + '</div>');
-    });
-  } else {
-    doc.write('<div>M\u00e9todo: ' + formatMetodoLabel(lastReceipt.metodo) + '</div>');
-  }
-  doc.write('</body></html>');
-  doc.close();
-  iframe.contentWindow.focus();
-  iframe.contentWindow.print();
-  qs(SEL.printReceipt).style.display = 'none';
-}
 
 function selectPaymentMethod(method) {
   qsa('.payment-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === method));
@@ -920,7 +814,7 @@ async function loadClientesForSelect() {
       opt.textContent = c.nombre + ' (Deuda: ' + formatUSD(c.saldo_deuda_usd) + ')';
       sel.appendChild(opt);
     });
-  } catch (e) { console.error(e); }
+  } catch (e) { showToast('Error al cargar clientes', 'error'); }
 }
 
 let processingPayment = false;
@@ -957,8 +851,6 @@ async function confirmPayment() {
     });
     playSound('success');
     showToast('Venta #' + venta.id + ' registrada - ' + formatUSD(venta.total_usd));
-    lastReceipt = { total: venta.total_usd, metodo: metodo, pagoDetalle: pago_detalle, productos: cart.map(i => ({ nombre: i.nombre, cantidad: i.cantidad, subtotal: i.cantidad * i.precio_usd })) };
-    showPrintButton(lastReceipt);
     cart = [];
     await loadProductCache();
     renderCart(); updateCheckoutBtn(); closePaymentModal();
@@ -970,15 +862,13 @@ async function confirmPayment() {
 /* ========== INVENTORY ========== */
 async function loadInventory() {
   const query = qs(SEL.inventorySearch).value.trim();
-  const categoriaId = qs(SEL.inventoryCategoryFilter).value;
   try {
-    const products = await invoke('list_products', { search: query || null, categoriaId: categoriaId ? parseInt(categoriaId) : null });
+    const products = await invoke('list_products', { search: query || null });
     const tbody = qs(SEL.inventoryBody);
     tbody.innerHTML = '';
     const frag = document.createDocumentFragment();
     products.forEach(p => {
       const tr = document.createElement('tr');
-      const catBadge = p.categoria_nombre ? '<span class="categoria-badge" style="background:' + (p.categoria_color || '#ccc') + '20;color:' + (p.categoria_color || '#666') + ';border:1px solid ' + (p.categoria_color || '#ccc') + ';border-radius:4px;padding:1px 6px;font-size:11px;">' + p.categoria_nombre + '</span>' : '';
       const editBtn = (currentUser && currentUser.rol === 'admin') ? '<button data-action="edit-product" data-codigo="' + p.codigo + '">Editar</button>' : '';
       tr.innerHTML = createInventoryRow(p, editBtn);
       frag.appendChild(tr);
@@ -1019,13 +909,12 @@ function showProductDetail(codigo) {
   qs(SEL.detailNombre).textContent = p.nombre;
   qs(SEL.detailPrecio).textContent = formatUSD(p.precio_usd);
   qs(SEL.detailStock).textContent = p.stock;
-  qs(SEL.detailCategoria).textContent = p.categoria_nombre || 'Sin categor\u00eda';
   qs(SEL.detailCreated).textContent = p.created_at || 'No disponible';
-  qs(SEL.productDetailModal).style.display = 'flex';
+  showModal(qs(SEL.productDetailModal));
 }
 
 function closeProductDetail() {
-  qs(SEL.productDetailModal).style.display = 'none';
+  closeModal(qs(SEL.productDetailModal));
 }
 
 function openNewProductModal() {
@@ -1033,9 +922,8 @@ function openNewProductModal() {
   qs(SEL.productModalTitle).textContent = 'Registrar Nuevo Producto';
   qs(SEL.productSaveText).textContent = 'Registrar';
   [SEL.productNombre, SEL.productPrecio, SEL.productStock].forEach(id => qs(id).value = '');
-  qs(SEL.productCategoria).value = '';
   qs(SEL.productDeleteBtn).style.display = 'none';
-  qs(SEL.productModal).style.display = 'flex';
+  showModal(qs(SEL.productModal));
 }
 
 function editProduct(codigo) {
@@ -1047,13 +935,12 @@ function editProduct(codigo) {
   qs(SEL.productNombre).value = p.nombre;
   qs(SEL.productPrecio).value = p.precio_usd;
   qs(SEL.productStock).value = p.stock;
-  qs(SEL.productCategoria).value = p.categoria_id || '';
   qs(SEL.productDeleteBtn).style.display = 'inline-flex';
-  qs(SEL.productModal).style.display = 'flex';
+  showModal(qs(SEL.productModal));
 }
 
 function closeProductModal() {
-  qs(SEL.productModal).style.display = 'none';
+  closeModal(qs(SEL.productModal));
 }
 
 async function saveProduct() {
@@ -1061,14 +948,12 @@ async function saveProduct() {
   const nombre = qs(SEL.productNombre).value.trim();
   const precio = parseFloat(qs(SEL.productPrecio).value);
   const stock = parseInt(qs(SEL.productStock).value) || 0;
-  const catVal = qs(SEL.productCategoria).value;
-  const categoria_id = catVal ? parseInt(catVal) : null;
   if (!nombre || isNaN(precio) || precio < 0) { showToast('Complete todos los campos', 'error'); return; }
   try {
     if (editingProduct) {
-      await invoke('update_product', { codigo, nombre, precioUsd: precio, stock, categoriaId: categoria_id });
+      await invoke('update_product', { codigo, nombre, precioUsd: precio, stock });
     } else {
-      await invoke('create_product', { codigo, nombre, precioUsd: precio, stock, categoriaId: categoria_id });
+      await invoke('create_product', { codigo, nombre, precioUsd: precio, stock });
     }
     showToast(editingProduct ? 'Producto actualizado con \u00e9xito' : 'Producto registrado con \u00e9xito');
     closeProductModal(); loadInventory(); renderProductSearch();
@@ -1124,36 +1009,7 @@ function openImportModal() {
   input.click();
 }
 
-function closeImportModal() {}
 
-async function confirmImport() {}
-
-async function importProductsFromDb() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.db,.sqlite,.sqlite3';
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const buf = await file.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const b64 = btoa(binary);
-      const res = await invoke('import_products_from_db', { content: b64 });
-      showToast(res);
-      await loadProductCache();
-      loadInventory();
-      renderProductSearch();
-    } catch (err) {
-      showToast('Error: ' + err, 'error');
-    }
-  };
-  input.click();
-}
 
 /* ========== CREDITOS ========== */
 async function loadCreditos() {
@@ -1174,10 +1030,10 @@ async function loadCreditos() {
 function openCreditoModal() {
   qs(SEL.clientNombre).value = '';
   qs(SEL.clientModalTitle).textContent = 'Registrar Persona para Cr\u00e9dito';
-  qs(SEL.clientModal).style.display = 'flex';
+  showModal(qs(SEL.clientModal));
 }
 
-function closeClientModal() { qs(SEL.clientModal).style.display = 'none'; }
+function closeClientModal() { closeModal(qs(SEL.clientModal)); }
 
 async function saveClient() {
   const nombre = qs(SEL.clientNombre).value.trim();
@@ -1211,12 +1067,12 @@ async function openDebtDetail(id) {
         container.appendChild(card);
       });
     }
-    qs(SEL.debtDetailModal).style.display = 'flex';
+    showModal(qs(SEL.debtDetailModal));
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 function closeDebtDetail() {
-  qs(SEL.debtDetailModal).style.display = 'none';
+  closeModal(qs(SEL.debtDetailModal));
 }
 
 /* ========== ABONO MODAL ========== */
@@ -1231,7 +1087,7 @@ function openAbonoModal(id) {
   qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: $0.00';
   qsa('.abono-metodo-btn').forEach(b => b.classList.toggle('active', b.dataset.method === 'efectivo_bs'));
   loadAbonoClienteInfo(id);
-  qs(SEL.abonoModal).style.display = 'flex';
+  showModal(qs(SEL.abonoModal));
 }
 
 async function loadAbonoClienteInfo(id) {
@@ -1246,7 +1102,7 @@ async function loadAbonoClienteInfo(id) {
 }
 
 function closeAbonoModal() {
-  qs(SEL.abonoModal).style.display = 'none';
+  closeModal(qs(SEL.abonoModal));
   abonoClienteId = null;
 }
 
@@ -1362,10 +1218,10 @@ function openCloseCashier() {
   const totalBS = qs(SEL.dailyBs).textContent;
   const count = qs(SEL.dailyCount).textContent;
   qs(SEL.closeSummary).innerHTML = '<div>Ventas del d\u00eda: <strong>' + count + '</strong></div><div>Total USD: <strong>' + totalUSD + '</strong></div><div>Total Bs.: <strong>' + totalBS + '</strong></div>';
-  qs(SEL.closeCashierModal).style.display = 'flex';
+  showModal(qs(SEL.closeCashierModal));
 }
 
-function closeCloseCashier() { qs(SEL.closeCashierModal).style.display = 'none'; }
+function closeCloseCashier() { closeModal(qs(SEL.closeCashierModal)); }
 
 async function confirmCloseCashier() {
   try {
@@ -1412,7 +1268,7 @@ async function confirmCloseCashier() {
     html += '<div class="close-report-actions"><button class="btn btn-primary" data-action="print-close-report">Exportar PDF</button></div>';
     html += '</div>';
     qs(SEL.closeReportBody).innerHTML = html;
-    qs(SEL.closeReportModal).style.display = 'flex';
+    showModal(qs(SEL.closeReportModal));
     lastCloseReportData = reportData;
     setTimeout(() => drawCloseChart(reportData), 100);
     showToast('Jornada cerrada exitosamente');
@@ -1518,7 +1374,7 @@ function printCloseReport() {
   iframe.contentWindow.print();
 }
 
-function closeReport() { qs(SEL.closeReportModal).style.display = 'none'; }
+function closeReport() { closeModal(qs(SEL.closeReportModal)); }
 
 /* ========== HISTORIAL CIERRES ========== */
 async function openHistorialCierres() {
@@ -1535,19 +1391,19 @@ async function openHistorialCierres() {
       html += '</table>';
       container.innerHTML = html;
     }
-    qs(SEL.historialCierresModal).style.display = 'flex';
+    showModal(qs(SEL.historialCierresModal));
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 function closeHistorialCierres() {
-  qs(SEL.historialCierresModal).style.display = 'none';
+  closeModal(qs(SEL.historialCierresModal));
 }
 
 async function showCierreDetalle(cierreId) {
   try {
     const detalle = await invoke('get_cierre_detalle', { cierreId });
-    qs(SEL.historialCierreDetalleModal).style.display = 'flex';
-    qs(SEL.historialCierresModal).style.display = 'none';
+    showModal(qs(SEL.historialCierreDetalleModal));
+    closeModal(qs(SEL.historialCierresModal));
     const d = detalle.detalle;
     const c = detalle.cierre;
     let html = '<div style="text-align:center;padding:8px 20px;">';
@@ -1593,7 +1449,7 @@ async function showCierreDetalle(cierreId) {
 function drawHistorialChart(data) { drawPieChart('historial-pie-chart', data); }
 
 function closeHistorialDetalle() {
-  qs(SEL.historialCierreDetalleModal).style.display = 'none';
+  closeModal(qs(SEL.historialCierreDetalleModal));
 }
 
 /* ========== AUDIT ========== */
@@ -1622,11 +1478,11 @@ async function loadAuditMore() {
 /* ========== CONFIG ========== */
 async function loadThemeConfig() {
   try {
-    const currentTheme = await invoke('get_config_value', { key: 'tema' });
-    const theme = currentTheme || 'pastel';
+    const currentTheme = await invoke('get_config_value', { key: CFG_TEMA });
+    const theme = currentTheme || 'claro';
     applyTheme(theme);
     qsa('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
-  } catch (e) { console.error(e); }
+  } catch (e) { showToast('Error al cargar tema', 'error'); }
 }
 
 const themes = {
@@ -1651,6 +1507,7 @@ function applyTheme(theme) {
     Object.entries(t).forEach(([key, val]) => {
       document.documentElement.style.setProperty(key, val);
     });
+    try { localStorage.setItem('tema', theme); } catch (e) {}
   } else {
     prevThemeKeys = null;
   }
@@ -1660,7 +1517,7 @@ async function handleThemeClick(theme) {
   applyTheme(theme);
   qsa('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
   try {
-    await invoke('set_config_value', { key: 'tema', value: theme });
+    await invoke('set_config_value', { key: CFG_TEMA, value: theme });
     showToast('Tema cambiado a ' + theme);
   } catch (e) { showToast('Error al guardar tema', 'error'); }
 }
@@ -1677,7 +1534,7 @@ function applyFontSize(pct) {
 
 async function loadFontSize() {
   try {
-    const saved = await invoke('get_config_value', { key: 'font_size' });
+    const saved = await invoke('get_config_value', { key: CFG_FONT_SIZE });
     const pct = parseInt(saved) || FONT_SIZE_DEFAULT;
     applyFontSize(pct);
   } catch (e) { applyFontSize(FONT_SIZE_DEFAULT); }
@@ -1685,7 +1542,7 @@ async function loadFontSize() {
 
 async function saveFontSize(pct) {
   try {
-    await invoke('set_config_value', { key: 'font_size', value: String(pct) });
+    await invoke('set_config_value', { key: CFG_FONT_SIZE, value: String(pct) });
   } catch (e) {}
 }
 
@@ -1698,6 +1555,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   qs(SEL.loginPassword).addEventListener('keydown', e => {
     if (e.key === 'Enter') handleLogin();
+  });
+  document.getElementById('toggle-password')?.addEventListener('click', function() {
+    const input = qs(SEL.loginPassword);
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    this.innerHTML = isPassword ? '<i class="nf nf-fa-eye_slash"></i>' : '<i class="nf nf-fa-eye"></i>';
+    this.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
   });
   qs(SEL.logoutBtn).addEventListener('click', handleLogout);
   document.getElementById('mobile-logout-btn')?.addEventListener('click', handleLogout);
@@ -1760,12 +1624,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     clearTimeout(inventoryTimer);
     inventoryTimer = setTimeout(loadInventory, 250);
   });
-  qs(SEL.inventoryCategoryFilter).addEventListener('change', loadInventory);
-  qs(SEL.salesCategoryFilter).addEventListener('change', renderProductSearch);
   qs(SEL.inventoryAddBtn).addEventListener('click', openNewProductModal);
   qs(SEL.inventoryExportBtn).addEventListener('click', exportProducts);
   qs(SEL.inventoryImportBtn).addEventListener('click', openImportModal);
-  document.getElementById('inventory-import-db-btn')?.addEventListener('click', importProductsFromDb);
+  // removed: importProductsFromDb button
 
   // Event delegation: inventory dropdown and actions
   qs(SEL.inventoryBody).addEventListener('click', e => {
@@ -1869,7 +1731,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Modal backdrop click
   qsa('.modal').forEach(m => {
-    m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
+    m.addEventListener('click', e => { if (e.target === m) closeModal(m); });
   });
 
   // Keyboard shortcuts
@@ -1894,9 +1756,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         break;
       case 'Escape':
         e.preventDefault();
-        qsa('.modal').forEach(m => {
-          if (m.style.display !== 'none' && m.style.display !== '') m.style.display = 'none';
-        });
+        qsa('.modal').forEach(m => closeModal(m));
         break;
     }
     if (e.ctrlKey && e.key === 'n') {
@@ -1911,13 +1771,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (soundToggle) {
     soundToggle.addEventListener('change', function() {
       soundEnabled = this.checked;
-      invoke('set_config_value', { key: 'sonido_habilitado', value: this.checked ? SOUND_ENABLED : SOUND_DISABLED }).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
+      invoke('set_config_value', { key: CFG_SONIDO_HABILITADO, value: this.checked ? SOUND_ENABLED : SOUND_DISABLED }).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
     });
   }
   if (soundVolumeRange) {
     soundVolumeRange.addEventListener('input', function() {
       soundVolume = parseInt(this.value) / 100;
-      invoke('set_config_value', { key: 'sonido_volumen', value: String(this.value) }).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
+      invoke('set_config_value', { key: CFG_SONIDO_VOLUMEN, value: String(this.value) }).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
     });
   }
 
@@ -1931,25 +1791,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       fullscreenToggle.checked = !!document.fullscreenElement;
     });
   }
-
-  // Category management
-  const categoriaAddBtn = qs(SEL.categoriaAddBtn);
-  if (categoriaAddBtn) {
-    categoriaAddBtn.addEventListener('click', addCategoria);
-    qs(SEL.categoriaNombreInput).addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') addCategoria();
-    });
-  }
-
-  // Event delegation: categoria list
-  qs(SEL.categoriaList).addEventListener('change', e => {
-    const input = e.target.closest('[data-action="update-categoria-color"]');
-    if (input) updateCategoriaColor(parseInt(input.dataset.id), input.value);
-  });
-  qs(SEL.categoriaList).addEventListener('click', e => {
-    const btn = e.target.closest('[data-action="delete-categoria"]');
-    if (btn) deleteCategoria(parseInt(btn.dataset.id));
-  });
 
   // Font size controls
   const fontIncBtn = qs(SEL.fontIncBtn);
@@ -1970,12 +1811,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Load saved sound config
   try {
-    const savedSound = await invoke('get_config_value', { key: 'sonido_habilitado' });
+    const savedSound = await invoke('get_config_value', { key: CFG_SONIDO_HABILITADO });
     if (savedSound !== null && savedSound !== undefined) {
       soundEnabled = savedSound === SOUND_ENABLED || savedSound === true;
       if (soundToggle) soundToggle.checked = soundEnabled;
     }
-    const savedVol = await invoke('get_config_value', { key: 'sonido_volumen' });
+    const savedVol = await invoke('get_config_value', { key: CFG_SONIDO_VOLUMEN });
     if (savedVol !== null && savedVol !== undefined) {
       soundVolume = parseInt(savedVol) / 100 || 0.5;
       if (soundVolumeRange) soundVolumeRange.value = soundVolume * 100;
@@ -1984,13 +1825,13 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Load saved theme on startup
   try {
-    const savedTheme = await invoke('get_config_value', { key: 'tema' });
+    const savedTheme = await invoke('get_config_value', { key: CFG_TEMA });
     if (savedTheme) applyTheme(savedTheme);
   } catch (e) {}
 
   // Load history cleanup config
   try {
-    const days = await invoke('get_config_value', { key: 'historial_limpieza_dias' });
+    const days = await invoke('get_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS });
     const input = qs(SEL.historialLimpiezaDias);
     if (input) input.value = parseInt(days) || 0;
   } catch (e) {}
@@ -2003,55 +1844,18 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (val > 365) val = 365;
       input.value = val;
       try {
-        await invoke('set_config_value', { key: 'historial_limpieza_dias', value: String(val) });
+        await invoke('set_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS, value: String(val) });
         showToast('Configuraci\u00f3n guardada');
       } catch (e) { showToast('Error: ' + e, 'error'); }
     });
   }
 
-  // Sales toggle (mobile: switch between products/cart)
-  const salesToggleBtn = document.getElementById('sales-toggle-btn');
-  let salesPanelShowing = 'products';
-  if (salesToggleBtn) {
-    salesToggleBtn.addEventListener('click', function() {
-      const left = document.querySelector('.sales-left');
-      const center = document.querySelector('.sales-center');
-      const label = document.getElementById('sales-toggle-label');
-      if (salesPanelShowing === 'products') {
-        left.style.display = 'none';
-        center.style.display = 'flex';
-        salesPanelShowing = 'cart';
-        label.textContent = 'Productos';
-      } else {
-        left.style.display = '';
-        center.style.display = '';
-        salesPanelShowing = 'products';
-        label.textContent = 'Carrito';
-      }
-    });
-  }
+  // Ensure sales panels are visible on desktop
   window.addEventListener('resize', function() {
     if (window.innerWidth > 768) {
       document.querySelectorAll('.sales-left, .sales-center').forEach(el => el.style.display = '');
-      if (salesToggleBtn) salesToggleBtn.style.display = 'none';
-    } else {
-      if (salesToggleBtn) salesToggleBtn.style.display = '';
-      if (salesPanelShowing === 'cart') {
-        document.querySelector('.sales-left').style.display = 'none';
-        document.querySelector('.sales-center').style.display = 'flex';
-      } else {
-        document.querySelector('.sales-left').style.display = '';
-        document.querySelector('.sales-center').style.display = '';
-      }
     }
   });
-  // Initial state for mobile
-  if (window.innerWidth <= 768) {
-    if (salesToggleBtn) salesToggleBtn.style.display = '';
-  }
-
-  // Print receipt button
-  qs(SEL.printReceiptBtn).addEventListener('click', printReceipt);
 
   // Audit load more
   qs(SEL.auditLoadMore).addEventListener('click', loadAuditMore);

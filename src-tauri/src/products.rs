@@ -7,23 +7,23 @@ use tauri::State;
 
 const SQL_BASE_PRODUCTOS: &str =
     "SELECT p.codigo, p.nombre, p.precio_usd, p.stock, COALESCE(p.stock_minimo,0), \
-     COALESCE(p.created_at,''), p.categoria_id, c.nombre, c.color \
-     FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id WHERE p.activo = 1";
+     COALESCE(p.created_at,'') \
+     FROM productos p WHERE p.activo = 1";
 
 const SQL_NEXT_CODIGO: &str =
     "SELECT COALESCE(MAX(CAST(SUBSTR(codigo, 2) AS INTEGER)), 0) + 1 \
      FROM productos WHERE activo = 1 AND codigo GLOB 'P[0-9]*'";
 
 const SQL_UPDATE_REACTIVATE: &str =
-    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, stock = ?3, \
-     categoria_id = ?4 WHERE codigo = ?5";
+    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, stock = ?3 \
+     WHERE codigo = ?4";
 
 const SQL_INSERT_PRODUCTO: &str =
-    "INSERT INTO productos (codigo, nombre, precio_usd, stock, categoria_id, created_at) \
-     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime')) ON CONFLICT(codigo) DO NOTHING";
+    "INSERT INTO productos (codigo, nombre, precio_usd, stock, created_at) \
+     VALUES (?1, ?2, ?3, ?4, datetime('now','localtime')) ON CONFLICT(codigo) DO NOTHING";
 
 const SQL_UPDATE_PRODUCTO: &str =
-    "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock = ?3, categoria_id = ?4 WHERE codigo = ?5";
+    "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock = ?3 WHERE codigo = ?4";
 
 const SQL_HAS_SALES: &str = "SELECT COUNT(*) > 0 FROM detalles_ventas WHERE producto_codigo = ?1";
 
@@ -39,38 +39,18 @@ const SQL_IMPORT_PRODUCTO: &str =
 pub fn list_products(
     state: State<AppState>,
     search: Option<String>,
-    categoria_id: Option<i64>,
 ) -> Result<Vec<Producto>, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
 
     let has_query = search.as_ref().is_some_and(|s| !s.is_empty());
 
-    let (sql, _param_count): (String, usize) = match (has_query, categoria_id) {
-        (true, Some(_cat)) => (
-            format!(
-                "{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) AND p.categoria_id = ?2 ORDER BY p.nombre ASC",
-                SQL_BASE_PRODUCTOS
-            ),
-            2,
-        ),
-        (true, None) => (
-            format!(
-                "{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) ORDER BY p.nombre ASC",
-                SQL_BASE_PRODUCTOS
-            ),
-            1,
-        ),
-        (false, Some(_cat)) => (
-            format!(
-                "{} AND p.categoria_id = ?1 ORDER BY p.nombre ASC",
-                SQL_BASE_PRODUCTOS
-            ),
-            1,
-        ),
-        (false, None) => (
-            format!("{} ORDER BY p.nombre ASC", SQL_BASE_PRODUCTOS),
-            0,
-        ),
+    let sql = if has_query {
+        format!(
+            "{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) ORDER BY p.nombre ASC",
+            SQL_BASE_PRODUCTOS
+        )
+    } else {
+        format!("{} ORDER BY p.nombre ASC", SQL_BASE_PRODUCTOS)
     };
 
     let q = search.unwrap_or_default();
@@ -84,19 +64,15 @@ pub fn list_products(
             stock: row.get(3)?,
             stock_minimo: row.get(4)?,
             created_at: row.get(5)?,
-            categoria_id: row.get(6)?,
-            categoria_nombre: row.get(7)?,
-            categoria_color: row.get(8)?,
         })
     };
 
     let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
 
-    let products: Vec<Producto> = match (has_query, categoria_id) {
-        (true, Some(cat)) => stmt.query_map(rusqlite::params![pattern, cat], map_row),
-        (true, None) => stmt.query_map(rusqlite::params![pattern], map_row),
-        (false, Some(cat)) => stmt.query_map(rusqlite::params![cat], map_row),
-        (false, None) => stmt.query_map([], map_row),
+    let products: Vec<Producto> = if has_query {
+        stmt.query_map(rusqlite::params![pattern], map_row)
+    } else {
+        stmt.query_map([], map_row)
     }
     .map_err(|e| e.to_string())?
     .filter_map(|r| r.ok())
@@ -112,7 +88,6 @@ pub fn create_product(
     nombre: String,
     precio_usd: f64,
     stock: i64,
-    categoria_id: Option<i64>,
 ) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
     let codigo = if codigo.is_empty() {
@@ -130,13 +105,13 @@ pub fn create_product(
     )?;
     db.execute(
         SQL_UPDATE_REACTIVATE,
-        params![nombre, precio_usd, stock, categoria_id, codigo],
+        params![nombre, precio_usd, stock, codigo],
     )
     .ok();
 
     match db.execute(
         SQL_INSERT_PRODUCTO,
-        params![codigo, nombre, precio_usd, stock, categoria_id],
+        params![codigo, nombre, precio_usd, stock],
     ) {
         Ok(_) => Ok("Producto creado exitosamente".to_string()),
         Err(e) => Err(format!("Error al crear producto: {}", e)),
@@ -150,7 +125,6 @@ pub fn update_product(
     nombre: String,
     precio_usd: f64,
     stock: i64,
-    categoria_id: Option<i64>,
 ) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
     crate::auth::require_admin(
@@ -161,7 +135,7 @@ pub fn update_product(
 
     match db.execute(
         SQL_UPDATE_PRODUCTO,
-        params![nombre, precio_usd, stock, categoria_id, codigo],
+        params![nombre, precio_usd, stock, codigo],
     ) {
         Ok(_) => Ok("Producto actualizado exitosamente".to_string()),
         Err(e) => Err(format!("Error al actualizar producto: {}", e)),
@@ -179,7 +153,7 @@ pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, 
 
     let has_sales: bool = db
         .query_row(SQL_HAS_SALES, params![codigo], |row| row.get(0))
-        .unwrap_or(false);
+        .map_err(|e| format!("Error al verificar ventas del producto: {}", e))?;
 
     if has_sales {
         db.execute(SQL_SOFT_DELETE, params![codigo])
@@ -202,14 +176,6 @@ pub fn import_products_from_db(
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
     crate::auth::require_admin(&state, &db, "Importó productos desde archivo DB")?;
 
-    let current_username = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?
-        .clone()
-        .map(|u| u.username)
-        .unwrap_or_default();
-
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&content)
         .map_err(|e| format!("Error decodificando archivo: {}", e))?;
@@ -224,10 +190,10 @@ pub fn import_products_from_db(
         .map_err(|e| format!("Error abriendo base de datos importada: {}", e))?;
 
     let mut stmt = import_conn
-        .prepare("SELECT codigo, nombre, precio_usd, stock, COALESCE(stock_minimo, 0), COALESCE(categoria_id, 0) FROM productos WHERE activo = 1 OR activo IS NULL")
+        .prepare("SELECT codigo, nombre, precio_usd, stock, COALESCE(stock_minimo, 0) FROM productos WHERE activo = 1 OR activo IS NULL")
         .map_err(|e| format!("Error leyendo productos: {}", e))?;
 
-    let products: Vec<(String, String, f64, i64, i64, i64)> = stmt
+    let products: Vec<(String, String, f64, i64, i64)> = stmt
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -235,7 +201,6 @@ pub fn import_products_from_db(
                 row.get::<_, f64>(2)?,
                 row.get::<_, i64>(3)?,
                 row.get::<_, i64>(4)?,
-                row.get::<_, i64>(5)?,
             ))
         })
         .map_err(|e| format!("Error iterando productos: {}", e))?
@@ -251,11 +216,10 @@ pub fn import_products_from_db(
     }
 
     let mut imported = 0;
-    for (codigo, nombre, precio_usd, stock, stock_minimo, categoria_id) in &products {
-        let cat: Option<i64> = if *categoria_id > 0 { Some(*categoria_id) } else { None };
+    for (codigo, nombre, precio_usd, stock, stock_minimo) in &products {
         match db.execute(
-            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, categoria_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now','localtime'))",
-            params![codigo, nombre, precio_usd, stock, stock_minimo, cat],
+            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'))",
+            params![codigo, nombre, precio_usd, stock, stock_minimo],
         ) {
             Ok(n) => {
                 if n > 0 {
@@ -265,13 +229,6 @@ pub fn import_products_from_db(
             Err(_) => {}
         }
     }
-
-    crate::audit::log_action(
-        &db,
-        &current_username,
-        &format!("Importó {} productos desde archivo DB ({})", imported, products.len()),
-    )
-    .ok();
 
     let skipped = products.len() - imported;
     Ok(format!(
@@ -283,15 +240,6 @@ pub fn import_products_from_db(
 #[tauri::command]
 pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    let current = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?
-        .clone();
-    let admin_name = current
-        .as_ref()
-        .map(|u| u.username.clone())
-        .unwrap_or_default();
 
     let full_sql = format!("{} ORDER BY p.nombre ASC", SQL_BASE_PRODUCTOS);
     let mut stmt = db.prepare(&full_sql).map_err(|e| e.to_string())?;
@@ -305,9 +253,6 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
                 stock: row.get(3)?,
                 stock_minimo: row.get(4)?,
                 created_at: row.get(5)?,
-                categoria_id: row.get(6)?,
-                categoria_nombre: row.get(7)?,
-                categoria_color: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -361,13 +306,6 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
         .map_err(|e| format!("Error al exportar: {}", e))?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&buffer);
 
-    crate::audit::log_action(
-        &db,
-        &admin_name,
-        "Exportó catálogo a Excel",
-    )
-    .ok();
-
     Ok(b64)
 }
 
@@ -382,13 +320,6 @@ pub fn import_products_from_file(
         &db,
         "Importó productos vía upload",
     )?;
-    let current_username = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?
-        .clone()
-        .map(|u| u.username)
-        .unwrap_or_default();
 
     let mut count = 0;
     let mut errors: Vec<String> = Vec::new();
@@ -465,32 +396,6 @@ pub fn import_products_from_file(
         }
         count += 1;
     }
-
-    let error_summary = if errors.is_empty() {
-        String::new()
-    } else {
-        let detail = errors
-            .iter()
-            .take(5)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("; ");
-        let suffix = if errors.len() > 5 {
-            format!("... y {} más", errors.len() - 5)
-        } else {
-            String::new()
-        };
-        format!(" Errores: {}{}", detail, suffix)
-    };
-    crate::audit::log_action(
-        &db,
-        &current_username,
-        &format!(
-            "Importó {} productos desde archivo.{}",
-            count, error_summary
-        ),
-    )
-    .ok();
 
     if errors.is_empty() {
         Ok(format!(

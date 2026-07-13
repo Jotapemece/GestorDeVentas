@@ -17,18 +17,18 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("../../../release-key.keystore")
-            storePassword = "gestor2024"
-            keyAlias = "gestor-ventas"
-            keyPassword = "gestor2024"
+            storePassword = System.getenv("STORE_PASSWORD") ?: "gestor2024"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "gestor-ventas"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "gestor2024"
         }
     }
-    compileSdk = 37
+    compileSdk = 36
     namespace = "com.gestor_ventas.app"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.gestor_ventas.app"
         minSdk = 24
-        targetSdk = 37
+        targetSdk = 34
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }

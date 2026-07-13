@@ -8,16 +8,6 @@ pub struct Producto {
     pub stock: i64,
     pub stock_minimo: i64,
     pub created_at: String,
-    pub categoria_id: Option<i64>,
-    pub categoria_nombre: Option<String>,
-    pub categoria_color: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Categoria {
-    pub id: i64,
-    pub nombre: String,
-    pub color: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

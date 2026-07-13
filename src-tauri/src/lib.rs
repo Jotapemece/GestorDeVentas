@@ -1,7 +1,6 @@
 mod auth;
 mod audit;
 mod cashier;
-mod categorias;
 mod clients;
 mod config;
 mod constants;
@@ -77,11 +76,6 @@ pub fn run() {
             config::get_config_value,
             config::set_config_value,
             config::list_theme_names,
-            // Categorias
-            categorias::list_categorias,
-            categorias::create_categoria,
-            categorias::update_categoria,
-            categorias::delete_categoria,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

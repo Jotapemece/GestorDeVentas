@@ -292,10 +292,7 @@ pub fn get_sale_detail(
 #[tauri::command]
 pub fn get_tasa(state: State<AppState>) -> Result<f64, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    let tasa: f64 = db
-        .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
-        .unwrap_or(0.0);
-    Ok(tasa)
+    crate::db::get_tasa_from_db(&db)
 }
 
 #[tauri::command]

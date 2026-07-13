@@ -271,3 +271,8 @@ fn insert_default_config(conn: &Connection) {
     )
     .ok();
 }
+
+pub fn get_tasa_from_db(db: &Connection) -> Result<f64, String> {
+    db.query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
+        .map_err(|e| format!("Error al obtener tasa de cambio: {}", e))
+}

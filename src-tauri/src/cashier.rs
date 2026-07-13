@@ -24,7 +24,7 @@ const SQL_CLIENTES_CREDITO: &str = "
     SELECT c.nombre, COALESCE(SUM(v.total_usd), 0)
     FROM clientes c
     JOIN ventas v ON v.cliente_id = c.id
-    WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.metodo_pago = 'credito'
+    WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.metodo_pago = ?3
     GROUP BY c.id
     ORDER BY c.nombre";
 const SQL_CAJA_ABIERTA: &str =
@@ -90,7 +90,7 @@ fn obtener_totales_del_dia(
 }
 
 fn obtener_tasa(db: &rusqlite::Connection) -> f64 {
-    db.query_row(crate::constants::SQL_TASA, [], |row| row.get(0)).unwrap_or(0.0)
+    crate::db::get_tasa_from_db(db).unwrap_or(0.0)
 }
 
 fn compute_report_data_range(
@@ -135,7 +135,7 @@ fn compute_report_data_range(
                 .entry(metodo.clone())
                 .or_insert((0.0, Vec::new()));
             entry.0 += monto;
-            if metodo == "pago_movil" {
+            if metodo == constants::METODO_PAGO_MOVIL {
                 if let Some(ref r) = ref_movil {
                     if !entry.1.contains(r) {
                         entry.1.push(r.clone());
@@ -175,7 +175,7 @@ fn compute_report_data_range(
         .map_err(|e| e.to_string())?;
 
     let clientes_credito: Vec<ClienteCreditoReporte> = cli_stmt
-        .query_map(params![start, end], |row| {
+        .query_map(params![start, end, constants::METODO_CREDITO], |row| {
             Ok(ClienteCreditoReporte {
                 nombre: row.get(0)?,
                 total_usd: row.get(1)?,
