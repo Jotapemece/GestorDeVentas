@@ -43,3 +43,10 @@
 .nf-fa-print::before { content: "\f02f"; }
 .nf-fa-display::before { content: "\f108"; }
 .nf-fa-music::before { content: "\f001"; }
+.nf-fa-eye::before { content: "\f06e"; }
+.nf-fa-eye_slash::before { content: "\f070"; }
+.nf-fa-dollar::before { content: "\f155"; }
+.nf-fa-exclamation_triangle::before { content: "\f071"; }
+.nf-fa-text_height::before { content: "\f034"; }
+.nf-fa-eraser::before { content: "\f12d"; }
+.nf-fa-tags::before { content: "\f02c"; }
