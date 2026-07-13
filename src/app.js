@@ -50,6 +50,14 @@ const METODO_PAGO = {
   MIXTO: 'mixto',
 };
 
+const ICON = {
+  UNLOCK: '<i class="nf nf-fa-unlock"></i>',
+  LOCK: '<i class="nf nf-fa-lock"></i>',
+  FILE_TEXT: '<i class="nf nf-fa-file_text"></i>',
+  EYE: '<i class="nf nf-fa-eye"></i>',
+  EYE_SLASH: '<i class="nf nf-fa-eye_slash"></i>',
+};
+
 const CHART_COLORS = ['#6C63AC', '#A8D5BA', '#F5B7B1', '#85C1E9', '#F9E79F', '#D7BDE2', '#A3E4D7', '#F5CBA7', '#AED6F1', '#ABEBC6'];
 const CANVAS_WIDTH = 260;
 const CANVAS_HEIGHT = 200;
@@ -1193,12 +1201,12 @@ async function loadDailySummary() {
     const closeBtn = qs(SEL.closeCashierBtn);
     if (cajaAbierta) {
       statusBar.className = 'caja-status abierta';
-      statusText.innerHTML = '<i class="nf nf-fa-unlock"></i> Caja abierta';
+      statusText.innerHTML = ICON.UNLOCK + ' Caja abierta';
       openBtn.style.display = 'none';
       closeBtn.style.display = 'inline-flex';
     } else {
       statusBar.className = 'caja-status cerrada';
-      statusText.innerHTML = '<i class="nf nf-fa-lock"></i> Caja cerrada';
+      statusText.innerHTML = ICON.LOCK + ' Caja cerrada';
       openBtn.style.display = 'inline-flex';
       closeBtn.style.display = 'none';
     }
@@ -1231,7 +1239,7 @@ async function confirmCloseCashier() {
     ]);
     closeCloseCashier();
     let html = '<div class="close-report-content">';
-    html += '<div class="close-report-icon"><i class="nf nf-fa-file_text"></i></div>';
+    html += '<div class="close-report-icon">' + ICON.FILE_TEXT + '</div>';
     html += '<h3>Reporte de Cierre de Jornada</h3>';
     html += '<p><strong>Fecha:</strong> ' + report.fecha_cierre + '</p>';
     html += '<p><strong>Usuario:</strong> ' + report.usuario + '</p>';
@@ -1407,7 +1415,7 @@ async function showCierreDetalle(cierreId) {
     const d = detalle.detalle;
     const c = detalle.cierre;
     let html = '<div style="text-align:center;padding:8px 20px;">';
-    html += '<div style="font-size:28px;margin-bottom:4px;"><i class="nf nf-fa-file_text"></i></div>';
+    html += '<div style="font-size:28px;margin-bottom:4px;">' + ICON.FILE_TEXT + '</div>';
     html += '<h3>Reporte de Cierre #' + c.id + '</h3>';
     html += '<p><strong>Fecha:</strong> ' + c.fecha_hora + '</p>';
     html += '<p><strong>Usuario:</strong> ' + c.username + '</p>';
@@ -1560,7 +1568,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const input = qs(SEL.loginPassword);
     const isPassword = input.type === 'password';
     input.type = isPassword ? 'text' : 'password';
-    this.innerHTML = isPassword ? '<i class="nf nf-fa-eye_slash"></i>' : '<i class="nf nf-fa-eye"></i>';
+    this.innerHTML = isPassword ? ICON.EYE_SLASH : ICON.EYE;
     this.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
   });
   qs(SEL.logoutBtn).addEventListener('click', handleLogout);

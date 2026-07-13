@@ -1,5 +1,83 @@
 use rusqlite::Connection;
 
+pub const SQL_CREATE_TABLES: &str = "
+    CREATE TABLE IF NOT EXISTS productos (
+        codigo TEXT PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        precio_usd REAL NOT NULL,
+        stock INTEGER NOT NULL DEFAULT 0,
+        stock_minimo INTEGER NOT NULL DEFAULT 0,
+        activo INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS configuracion (
+        clave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        rol TEXT NOT NULL CHECK(rol IN ('admin', 'vendedor'))
+    );
+
+    CREATE TABLE IF NOT EXISTS clientes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        credito_activo INTEGER NOT NULL DEFAULT 1 CHECK(credito_activo IN (0, 1)),
+        saldo_deuda_usd REAL NOT NULL DEFAULT 0.0
+    );
+
+    CREATE TABLE IF NOT EXISTS ventas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_hora TEXT NOT NULL,
+        usuario_id INTEGER NOT NULL,
+        metodo_pago TEXT NOT NULL,
+        referencia_pago_movil TEXT,
+        pago_detalle TEXT DEFAULT '',
+        cliente_id INTEGER,
+        total_usd REAL NOT NULL,
+        tasa_aplicada REAL NOT NULL,
+        FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+        FOREIGN KEY(cliente_id) REFERENCES clientes(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS detalles_ventas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        venta_id INTEGER NOT NULL,
+        producto_codigo TEXT NOT NULL,
+        cantidad INTEGER NOT NULL,
+        precio_usd_unitario REAL NOT NULL,
+        FOREIGN KEY(venta_id) REFERENCES ventas(id),
+        FOREIGN KEY(producto_codigo) REFERENCES productos(codigo)
+    );
+
+    CREATE TABLE IF NOT EXISTS historial_acciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_hora TEXT NOT NULL,
+        usuario TEXT NOT NULL,
+        accion TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cierres_caja (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_hora TEXT NOT NULL,
+        usuario_id INTEGER NOT NULL,
+        total_ventas INTEGER NOT NULL,
+        total_usd REAL NOT NULL,
+        tasa_cierre REAL NOT NULL DEFAULT 0,
+        FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS cierres_detalle (
+        cierre_id INTEGER PRIMARY KEY,
+        detalle_json TEXT NOT NULL,
+        FOREIGN KEY(cierre_id) REFERENCES cierres_caja(id)
+    );
+";
+
 const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("001_add_created_at_productos", add_created_at_productos),
     ("002_add_stock_minimo_productos", add_stock_minimo_productos),

@@ -10,10 +10,11 @@ const SQL_UPSERT_CONFIG: &str =
 #[tauri::command]
 pub fn get_config_value(state: State<AppState>, key: String) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    let val: String = db
-        .query_row(SQL_GET_CONFIG, params![key], |row| row.get(0))
-        .unwrap_or_default();
-    Ok(val)
+    match db.query_row(SQL_GET_CONFIG, params![key], |row| row.get::<_, String>(0)) {
+        Ok(val) => Ok(val),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(String::new()),
+        Err(e) => Err(format!("Error al leer configuración '{}': {}", key, e)),
+    }
 }
 
 #[tauri::command]
