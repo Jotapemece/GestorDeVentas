@@ -80,3 +80,12 @@ pub fn get_cierres(
 
     Ok(cierres)
 }
+
+#[tauri::command]
+pub fn clear_audit(state: State<AppState>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    db.execute("DELETE FROM historial_acciones", [])
+        .map_err(|e| format!("Error al limpiar auditoría: {}", e))?;
+    log_action(&db, "sistema", "Historial de auditoría limpiado")?;
+    Ok(())
+}

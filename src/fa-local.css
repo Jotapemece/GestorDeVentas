@@ -50,3 +50,7 @@
 .nf-fa-text_height::before { content: "\f034"; }
 .nf-fa-eraser::before { content: "\f12d"; }
 .nf-fa-tags::before { content: "\f02c"; }
+.nf-fa-spinner::before { content: "\f110"; }
+.nf-fa-search::before { content: "\f002"; }
+.nf-fa-receipt::before { content: "\f543"; }
+.nf-fa-check_circle::before { content: "\f058"; }

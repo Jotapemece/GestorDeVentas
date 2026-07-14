@@ -14,23 +14,23 @@ val tauriProperties = Properties().apply {
 }
 
 android {
-    signingConfigs {
-        create("release") {
-            storeFile = file("../../../release-key.keystore")
-            storePassword = System.getenv("STORE_PASSWORD") ?: "gestor2024"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "gestor-ventas"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "gestor2024"
-        }
-    }
     compileSdk = 36
-    namespace = "com.gestor_ventas.app"
+    namespace = "com.inarimarket.app"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.gestor_ventas.app"
+        applicationId = "com.inarimarket.app"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        create("release") {
+            storeFile = file("../../../inarimarket.keystore")
+            storePassword = "inarimarket"
+            keyAlias = "inarimarket"
+            keyPassword = "inarimarket"
+        }
     }
     buildTypes {
         getByName("debug") {

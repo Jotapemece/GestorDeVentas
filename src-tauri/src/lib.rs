@@ -20,11 +20,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            #[cfg(target_os = "android")]
+            {
+                use tauri::Manager;
+                let data_dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("/data/data/com.inarimarket.app"));
+                std::fs::create_dir_all(&data_dir).ok();
+            }
             let conn = match db::init_db(&app.handle()) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("Error al inicializar BD: {}", e);
-                    std::process::exit(1);
+                    return Err(e.into());
                 }
             };
             app.manage(AppState {
@@ -72,6 +78,7 @@ pub fn run() {
             // Audit
             audit::get_audit_logs,
             audit::get_cierres,
+            audit::clear_audit,
             // Config
             config::get_config_value,
             config::set_config_value,

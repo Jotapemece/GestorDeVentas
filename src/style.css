@@ -509,6 +509,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .table thead { background: var(--hover); }
 .table th { padding: 12px 16px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); border-bottom: 2px solid var(--border); }
 .table td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.table td:has(.empty-state) { text-align: center; }
+.table tbody tr:nth-child(even) { background: rgba(var(--sidebar-text-rgb), 0.04); }
 .table tbody tr:hover { background: var(--hover); }
 /* DROPDOWN (three-dots menu) */
 .dropdown { position: relative; display: inline-block; }
@@ -606,15 +608,34 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .mixto-add-row { margin-top: 4px; }
 .abono-mixto-group { margin-top: 6px; }
 .print-icon { margin-right: 6px; }
-.empty-state { text-align: center; padding: 20px; color: var(--text-light); }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); width: 100%; }
+.empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; display: block; }
+.empty-state .empty-text { font-size: 14px; font-weight: 500; }
+.empty-state .empty-sub { font-size: 12px; margin-top: 4px; opacity: 0.7; }
 .close-report-content { text-align: center; padding: 8px 20px; }
 .close-report-icon { font-size: 32px; margin-bottom: 6px; }
 .close-report-actions { margin-top: 10px; }
 .close-report-hr { margin: 8px 0; }
 .chart-canvas { margin: 4px auto; display: block; max-width: 100%; }
 
+/* LOADING SPINNER */
+.loading-spinner { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--text-light); }
+.loading-spinner .spinner-icon { font-size: 32px; animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* CART BADGE */
+.cart-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 10px; background: var(--primary); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 1;
+  margin-left: auto;
+}
+
 .historial-limpieza-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .historial-limpieza-row input[type="number"] { width: 70px; }
+.historial-limpieza-info { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.audit-actions { display: flex; gap: 8px; align-items: center; }
 .audit-load-more { text-align: center; padding: 12px; }
 
 /* TOAST */
@@ -629,6 +650,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .toast.error { background: var(--danger-dark); }
 .toast.info { background: var(--primary-dark); }
 @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.toast.fade-out { animation: slideOut 0.3s ease forwards; }
+@keyframes slideOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(20px); opacity: 0; } }
 
 /* CLIENT */
 .client-info-bar { background: var(--hover); padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 16px; }
@@ -908,6 +931,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .btn-sm { padding: 8px 12px; font-size: 13px; min-height: 36px; }
   .cart-qty-input { min-height: 36px; font-size: 16px; width: 60px; }
 
+  /* Hide fullscreen toggle on mobile (always fullscreen) */
+  .config-fullscreen { display: none; }
+
   /* Sales: hide toggle on desktop, show on mobile */
   .mobile-only { display: inline-flex !important; }
 
@@ -998,8 +1024,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .theme-selector { grid-template-columns: 1fr 1fr 1fr; }
   .summary-cards { grid-template-columns: 1fr; }
   .payment-methods { grid-template-columns: 1fr 1fr; }
-  .bottom-tabs .nav-btn .nav-text { font-size: 8px; }
-  .bottom-tabs .nav-btn .nav-icon { font-size: 16px; }
+  .bottom-tabs .nav-btn .nav-text { display: none; }
+  .bottom-tabs .nav-btn .nav-icon { font-size: 22px; }
+  .bottom-tabs .nav-btn { gap: 0; padding: 8px 4px; }
 }
 
 

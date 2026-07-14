@@ -1,9 +1,11 @@
 use rusqlite::{Connection, params};
 use std::collections::HashMap;
+#[allow(unused_imports)]
+use tauri::Manager;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 const DEFAULT_PATH: &str = ".";
 pub const LOGIN_MAX_ATTEMPTS: i32 = 5;
@@ -15,11 +17,11 @@ pub struct AppState {
     pub login_attempts: Mutex<HashMap<String, (i32, Instant)>>,
 }
 
-fn get_db_path(app_handle: &AppHandle) -> PathBuf {
+fn get_db_path(_app_handle: &AppHandle) -> PathBuf {
     #[cfg(target_os = "android")]
     {
-        let data_dir = app_handle.path().app_data_dir()
-            .unwrap_or_else(|_| PathBuf::from("/data/data/com.gestor-ventas.app/databases"));
+        let data_dir = _app_handle.path().app_data_dir()
+            .unwrap_or_else(|_| PathBuf::from("/data/data/com.inarimarket.app"));
         return data_dir.join("gestor_ventas.db");
     }
 
@@ -38,6 +40,9 @@ fn get_db_path(app_handle: &AppHandle) -> PathBuf {
 
 pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     let db_path = get_db_path(app_handle);
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Error al crear directorio BD: {}", e))?;
+    }
     let conn = Connection::open(&db_path).map_err(|e| format!("Error al abrir BD: {}", e))?;
 
     conn.execute_batch("PRAGMA journal_mode=WAL;").ok();

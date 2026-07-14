@@ -4,22 +4,21 @@ const invoke = window.__TAURI__.core.invoke;
 const TOAST_DURATION = 3000;
 const AUDIO = {
   FREQ: {
-    ADD_NOTE: 880,
-    REMOVE_NOTE: 440,
-    SUCCESS_NOTES: [523, 659, 784],
-    ERROR_NOTE: 200,
-    CANCEL_NOTES: [600, 200],
+    ADD: 880,
+    REMOVE: 440,
+    SUCCESS: [523, 659, 784, 1047],
+    ERROR: 180,
+    CANCEL: [660, 330],
   },
   DURATION_SEC: {
-    ADD: 0.15,
-    REMOVE: 0.1,
-    SUCCESS: 0.4,
-    ERROR: 0.3,
-    CANCEL: 0.25,
+    ADD: 0.12,
+    REMOVE: 0.08,
+    SUCCESS: 0.5,
+    ERROR: 0.25,
+    CANCEL: 0.2,
   },
   VOLUME_BASE: 0.3,
 };
-const FREQ_CANCEL_DOWN = 0.2;
 const SEARCH_DEBOUNCE_MS = 200;
 const AUDIT_LIMIT_DEFAULT = 50;
 // const PRINT_BTN_TIMEOUT_MS removed
@@ -251,11 +250,19 @@ function hideToast(toastEl) {
   toastEl.style.display = 'none';
 }
 
+function hideToast(el) {
+  if (el._closing) return;
+  el._closing = true;
+  el.classList.add('fade-out');
+  setTimeout(() => { el.classList.add('hidden'); el.classList.remove('fade-out'); el._closing = false; }, 300);
+}
+
 function showToast(msg, type = 'success') {
   const t = qs(SEL.toast);
   t.textContent = msg;
   t.className = 'toast ' + type;
-  t.style.display = 'block';
+  t.classList.remove('hidden', 'fade-out');
+  t._closing = false;
   clearTimeout(t._timer);
   t._timer = setTimeout(() => hideToast(t), TOAST_DURATION);
   t.onclick = () => { clearTimeout(t._timer); hideToast(t); };
@@ -263,6 +270,32 @@ function showToast(msg, type = 'success') {
 
 function qs(sel) { return document.querySelector(sel); }
 function qsa(sel) { return document.querySelectorAll(sel); }
+
+/* ========== CONFIRM MODAL ========== */
+function confirmModal(msg, title, okText) {
+  return new Promise(resolve => {
+    const modal = qs('#confirm-modal');
+    qs('#confirm-title').textContent = title || 'Confirmar';
+    qs('#confirm-message').textContent = msg;
+    const okBtn = qs('#confirm-ok-btn');
+    okBtn.textContent = okText || 'Confirmar';
+    okBtn.onclick = () => { closeModal(modal); resolve(true); };
+    qs('#confirm-cancel-btn').onclick = () => { closeModal(modal); resolve(false); };
+    qs('#confirm-close').onclick = () => { closeModal(modal); resolve(false); };
+    modal.addEventListener('click', function handler(e) {
+      if (e.target === modal) { closeModal(modal); resolve(false); modal.removeEventListener('click', handler); }
+    });
+    showModal(modal);
+  });
+}
+
+/* ========== LOADING / EMPTY STATES ========== */
+function showLoading(el) {
+  el.innerHTML = '<div class="loading-spinner"><i class="nf nf-fa-spinner spinner-icon"></i></div>';
+}
+function emptyState(icon, text, sub) {
+  return '<div class="empty-state"><span class="empty-icon">' + icon + '</span><div class="empty-text">' + text + '</div>' + (sub ? '<div class="empty-sub">' + sub + '</div>' : '') + '</div>';
+}
 
 /* ========== MODAL HELPERS ========== */
 function showModal(el) {
@@ -319,22 +352,56 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+function playNote(ctx, freq, startTime, duration, type, vol) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, startTime);
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(vol, startTime + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+function updateHistoryCleanupStatus(days) {
+  const el = qs('#historial-limpieza-status');
+  if (!el) return;
+  if (days > 0) {
+    el.innerHTML = '<i class="nf nf-fa-check_circle" style="color:var(--success)"></i> Limpieza cada ' + days + ' d&iacute;a(s)';
+  } else {
+    el.innerHTML = '<i class="nf nf-fa-info_circle" style="color:var(--text-muted)"></i> Limpieza autom&aacute;tica desactivada';
+  }
+}
+
 function playSound(type) {
   if (!soundEnabled) return;
   try {
     const ctx = getAudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    gain.gain.value = soundVolume * AUDIO.VOLUME_BASE;
+    const vol = soundVolume * AUDIO.VOLUME_BASE;
     const now = ctx.currentTime;
     switch (type) {
-      case 'add': osc.frequency.setValueAtTime(AUDIO.FREQ.ADD_NOTE, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.ADD); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.ADD); break;
-      case 'remove': osc.frequency.setValueAtTime(AUDIO.FREQ.REMOVE_NOTE, now); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.REMOVE); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.REMOVE); break;
-      case 'success': osc.frequency.setValueAtTime(AUDIO.FREQ.SUCCESS_NOTES[0], now); osc.frequency.setValueAtTime(AUDIO.FREQ.SUCCESS_NOTES[1], now + AUDIO.DURATION_SEC.SUCCESS / 4); osc.frequency.setValueAtTime(AUDIO.FREQ.SUCCESS_NOTES[2], now + AUDIO.DURATION_SEC.SUCCESS / 2); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.SUCCESS); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.SUCCESS); break;
-      case 'error': osc.frequency.setValueAtTime(AUDIO.FREQ.ERROR_NOTE, now); osc.type = 'sawtooth'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.ERROR); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.ERROR); break;
-      case 'cancel': osc.frequency.setValueAtTime(AUDIO.FREQ.CANCEL_NOTES[0], now); osc.frequency.linearRampToValueAtTime(AUDIO.FREQ.CANCEL_NOTES[1], now + FREQ_CANCEL_DOWN); osc.type = 'sine'; gain.gain.exponentialRampToValueAtTime(0.001, now + AUDIO.DURATION_SEC.CANCEL); osc.start(now); osc.stop(now + AUDIO.DURATION_SEC.CANCEL); break;
+      case 'add':
+        playNote(ctx, AUDIO.FREQ.ADD, now, AUDIO.DURATION_SEC.ADD, 'sine', vol);
+        break;
+      case 'remove':
+        playNote(ctx, AUDIO.FREQ.REMOVE, now, AUDIO.DURATION_SEC.REMOVE, 'sine', vol);
+        break;
+      case 'success':
+        AUDIO.FREQ.SUCCESS.forEach((f, i) => {
+          playNote(ctx, f, now + i * 0.08, 0.25, 'sine', vol * (1 - i * 0.15));
+        });
+        break;
+      case 'error':
+        playNote(ctx, AUDIO.FREQ.ERROR, now, AUDIO.DURATION_SEC.ERROR, 'sawtooth', vol * 0.7);
+        playNote(ctx, AUDIO.FREQ.ERROR * 0.5, now + 0.05, AUDIO.DURATION_SEC.ERROR * 0.8, 'square', vol * 0.3);
+        break;
+      case 'cancel':
+        playNote(ctx, AUDIO.FREQ.CANCEL[0], now, AUDIO.DURATION_SEC.CANCEL, 'sine', vol);
+        playNote(ctx, AUDIO.FREQ.CANCEL[1], now + 0.06, AUDIO.DURATION_SEC.CANCEL * 0.8, 'sine', vol * 0.6);
+        break;
     }
   } catch(e) { showToast('Error en audio', 'error'); }
 }
@@ -402,7 +469,8 @@ async function handleLogin() {
 }
 
 async function handleLogout() {
-  if (!confirm('\u00bfEst\u00e1 seguro de cerrar sesi\u00f3n?')) return;
+  const ok = await confirmModal('\u00bfEst\u00e1 seguro de cerrar sesi\u00f3n?', 'Cerrar Sesi\u00f3n', 'Salir');
+  if (!ok) return;
   try {
     await invoke('logout');
   } catch (e) {
@@ -475,6 +543,16 @@ function renderProductSearch() {
   const tbody = qs(SEL.productSearchBody);
   tbody.innerHTML = '';
   const filtered = filterProducts(query);
+  if (filtered.length === 0) {
+    if (!query && productCache.length > 0) {
+      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-search"></i>', 'No se muestran productos actualmente', 'Escriba en la barra de b\u00fasqueda para encontrar productos') + '</td></tr>';
+    } else if (productCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario') + '</td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda') + '</td></tr>';
+    }
+    return;
+  }
   const fragment = document.createDocumentFragment();
   filtered.forEach(p => {
     const tr = document.createElement('tr');
@@ -554,14 +632,24 @@ function clearCart() {
   showToast('Venta cancelada', 'info');
 }
 
+function updateCartBadge() {
+  const badge = qs('#cart-badge');
+  if (!badge) return;
+  if (cart.length === 0) { badge.classList.add('hidden'); return; }
+  badge.classList.remove('hidden');
+  badge.textContent = cart.length;
+}
+
 function renderCart() {
   const tbody = qs(SEL.cartBody);
   const empty = qs(SEL.cartEmpty);
   tbody.innerHTML = '';
   if (cart.length === 0) {
+    empty.innerHTML = emptyState('<i class="nf nf-fa-shopping_cart"></i>', 'El carrito est\u00e1 vac\u00edo', 'Agregue productos desde la lista');
     empty.style.display = 'block';
     document.querySelector('.sales-body').classList.add('cart-hidden');
   } else {
+    empty.innerHTML = '';
     empty.style.display = 'none';
     document.querySelector('.sales-body').classList.remove('cart-hidden');
     const fragment = document.createDocumentFragment();
@@ -574,6 +662,7 @@ function renderCart() {
     tbody.appendChild(fragment);
   }
   updateCartTotals();
+  updateCartBadge();
 }
 
 function updateCartTotals() {
@@ -870,10 +959,15 @@ async function confirmPayment() {
 /* ========== INVENTORY ========== */
 async function loadInventory() {
   const query = qs(SEL.inventorySearch).value.trim();
+  const tbody = qs(SEL.inventoryBody);
+  showLoading(tbody);
   try {
     const products = await invoke('list_products', { search: query || null });
-    const tbody = qs(SEL.inventoryBody);
     tbody.innerHTML = '';
+    if (products.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-archive"></i>', query ? 'Sin resultados' : 'No hay productos', query ? 'Pruebe con otro t\u00e9rmino de b\u00fasqueda' : 'Agregue productos desde el bot\u00f3n superior') + '</td></tr>';
+      return;
+    }
     const frag = document.createDocumentFragment();
     products.forEach(p => {
       const tr = document.createElement('tr');
@@ -964,6 +1058,7 @@ async function saveProduct() {
       await invoke('create_product', { codigo, nombre, precioUsd: precio, stock });
     }
     showToast(editingProduct ? 'Producto actualizado con \u00e9xito' : 'Producto registrado con \u00e9xito');
+    playSound('success');
     closeProductModal(); loadInventory(); renderProductSearch();
     loadProductCache();
   } catch (e) {
@@ -973,10 +1068,12 @@ async function saveProduct() {
 
 async function deleteProduct() {
   if (!editingProduct) return;
-  if (!confirm('\u00bfEliminar producto ' + editingProduct + '?')) return;
+  const ok = await confirmModal('\u00bfEliminar producto ' + editingProduct + '?', 'Eliminar Producto', 'Eliminar');
+  if (!ok) return;
   try {
     await invoke('delete_product', { codigo: editingProduct });
     showToast('Producto eliminado');
+    playSound('remove');
     closeProductModal(); loadInventory(); renderProductSearch();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
@@ -1021,10 +1118,15 @@ function openImportModal() {
 
 /* ========== CREDITOS ========== */
 async function loadCreditos() {
+  const tbody = qs(SEL.creditosBody);
+  showLoading(tbody);
   try {
     const clientes = await invoke('list_clientes');
-    const tbody = qs(SEL.creditosBody);
     tbody.innerHTML = '';
+    if (clientes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3">' + emptyState('<i class="nf nf-fa-credit_card"></i>', 'No hay clientes registrados', 'Registre personas para otorgar cr\u00e9dito') + '</td></tr>';
+      return;
+    }
     const frag = document.createDocumentFragment();
     clientes.forEach(c => {
       const tr = document.createElement('tr');
@@ -1183,17 +1285,21 @@ async function loadDailySummary() {
 
     const tbody = qs(SEL.dailySalesBody);
     tbody.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    summary.ventas.forEach(v => {
-      const tr = document.createElement('tr');
-      let metodoLabel = formatMetodoLabel(v.metodo_pago);
-      if (v.metodo_pago === 'pago_movil' && v.referencia_pago_movil) {
-        metodoLabel += ' (' + v.referencia_pago_movil + ')';
-      }
-      tr.innerHTML = createDailySaleRow(v, metodoLabel);
-      frag.appendChild(tr);
-    });
-    tbody.appendChild(frag);
+    if (summary.ventas.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6">' + emptyState('<i class="nf nf-fa-receipt"></i>', 'Sin ventas hoy', 'Las ventas del d\u00eda aparecer\u00e1n aqu\u00ed') + '</td></tr>';
+    } else {
+      const frag = document.createDocumentFragment();
+      summary.ventas.forEach(v => {
+        const tr = document.createElement('tr');
+        let metodoLabel = formatMetodoLabel(v.metodo_pago);
+        if (v.metodo_pago === 'pago_movil' && v.referencia_pago_movil) {
+          metodoLabel += ' (' + v.referencia_pago_movil + ')';
+        }
+        tr.innerHTML = createDailySaleRow(v, metodoLabel);
+        frag.appendChild(tr);
+      });
+      tbody.appendChild(frag);
+    }
 
     const statusBar = qs(SEL.cajaStatusBar);
     const statusText = qs(SEL.cajaStatusText);
@@ -1216,6 +1322,7 @@ async function loadDailySummary() {
 async function handleOpenCashier() {
   try {
     const res = await invoke('abrir_caja');
+    playSound('success');
     showToast(res);
     loadDailySummary();
   } catch (e) { showToast('Error: ' + e, 'error'); }
@@ -1279,6 +1386,7 @@ async function confirmCloseCashier() {
     showModal(qs(SEL.closeReportModal));
     lastCloseReportData = reportData;
     setTimeout(() => drawCloseChart(reportData), 100);
+    playSound('success');
     showToast('Jornada cerrada exitosamente');
     loadDailySummary();
   } catch (e) { showToast('Error: ' + e, 'error'); }
@@ -1463,6 +1571,8 @@ function closeHistorialDetalle() {
 /* ========== AUDIT ========== */
 async function loadAudit() {
   auditOffset = 0;
+  const tbody = qs(SEL.auditBody);
+  showLoading(tbody);
   await loadAuditMore();
 }
 
@@ -1471,6 +1581,11 @@ async function loadAuditMore() {
     const logs = await invoke('get_audit_logs', { limit: auditLimit, offset: auditOffset });
     const tbody = qs(SEL.auditBody);
     if (auditOffset === 0) tbody.innerHTML = '';
+    if (logs.length === 0 && auditOffset === 0) {
+      tbody.innerHTML = '<tr><td colspan="4">' + emptyState('<i class="nf nf-fa-history"></i>', 'No hay registros de auditor\u00eda', 'Las acciones del sistema aparecer\u00e1n aqu\u00ed') + '</td></tr>';
+      qs(SEL.auditLoadMore).style.display = 'none';
+      return;
+    }
     const frag = document.createDocumentFragment();
     logs.forEach(log => {
       const tr = document.createElement('tr');
@@ -1841,7 +1956,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   try {
     const days = await invoke('get_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS });
     const input = qs(SEL.historialLimpiezaDias);
-    if (input) input.value = parseInt(days) || 0;
+    if (input) {
+      input.value = parseInt(days) || 0;
+      updateHistoryCleanupStatus(parseInt(days) || 0);
+    }
   } catch (e) {}
   const histSaveBtn = qs(SEL.historialLimpiezaSave);
   if (histSaveBtn) {
@@ -1853,9 +1971,27 @@ document.addEventListener('DOMContentLoaded', async function() {
       input.value = val;
       try {
         await invoke('set_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS, value: String(val) });
+        updateHistoryCleanupStatus(val);
         showToast('Configuraci\u00f3n guardada');
       } catch (e) { showToast('Error: ' + e, 'error'); }
     });
+  }
+
+  // Manual clear history buttons
+  for (const btn of [qs('#audit-clear-btn'), qs('#audit-clear-config-btn')]) {
+    if (btn) {
+      btn.addEventListener('click', async () => {
+        const ok = await confirmModal('\u00bfEliminar todo el historial de auditor\u00eda? Esta acci\u00f3n no se puede deshacer.', 'Limpiar Historial', 'Eliminar todo');
+        if (!ok) return;
+        try {
+          await invoke('clear_audit');
+          showToast('Historial eliminado');
+          playSound('remove');
+          qs(SEL.auditBody).innerHTML = emptyState('<i class="nf nf-fa-history"></i>', 'Historial vac\u00edo', 'No hay registros de auditor\u00eda');
+          qs(SEL.auditLoadMore).classList.add('hidden');
+        } catch (e) { showToast('Error: ' + e, 'error'); }
+      });
+    }
   }
 
   // Ensure sales panels are visible on desktop

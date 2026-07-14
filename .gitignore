@@ -10,4 +10,5 @@ gestor_ventas.db-wal
 *.apk
 combined.txt
 src-tauri/release-key.keystore
+src-tauri/inarimarket.keystore
 src-tauri/gen/android/.idea/

@@ -24,10 +24,9 @@ pub fn set_config_value(
     value: String,
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    crate::auth::require_admin(
+    crate::auth::require_admin_no_log(
         &state,
         &db,
-        &format!("Config: {} = {}", key, value),
     )?;
     db.execute(SQL_UPSERT_CONFIG, params![key, value])
         .map_err(|e| e.to_string())?;
