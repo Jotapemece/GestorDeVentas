@@ -15,22 +15,14 @@ val tauriProperties = Properties().apply {
 
 android {
     compileSdk = 36
-    namespace = "com.inarimarket.app"
+    namespace = "com.gestor_ventas.app"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.inarimarket.app"
+        applicationId = "com.gestor_ventas.app"
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
-    }
-    signingConfigs {
-        create("release") {
-            storeFile = file("../../../inarimarket.keystore")
-            storePassword = "inarimarket"
-            keyAlias = "inarimarket"
-            keyPassword = "inarimarket"
-        }
     }
     buildTypes {
         getByName("debug") {
@@ -45,7 +37,6 @@ android {
             }
         }
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

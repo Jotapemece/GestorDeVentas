@@ -25,12 +25,12 @@ pub fn run() {
     {
         let _ = std::io::Write::write(
             &mut std::io::stderr(),
-            b"*** InariMarket: run() ENTRY ***\n",
+            b"*** GestorVentas: run() ENTRY ***\n",
         );
         android_logger::init_once(
             android_logger::Config::default()
                 .with_max_level(log::LevelFilter::Info)
-                .with_tag("InariMarket"),
+                .with_tag("GestorVentas"),
         );
         log::info!("run: android_logger initialized");
     }
@@ -38,14 +38,14 @@ pub fn run() {
     {
         let _ = std::io::Write::write(
             &mut std::io::stderr(),
-            b"*** InariMarket: run() ENTRY (desktop) ***\n",
+            b"*** GestorVentas: run() ENTRY (desktop) ***\n",
         );
     }
 
     // Write errors to stderr even after logger init, in case logger doesn't flush
     std::io::Write::write(
         &mut std::io::stderr(),
-        b"*** InariMarket: before tauri builder ***\n",
+        b"*** GestorVentas: before tauri builder ***\n",
     )
     .ok();
 
@@ -65,7 +65,7 @@ pub fn run() {
                     }
                     Err(e) => {
                         eprintln!("setup: app_data_dir() fallo: {:?}, usando fallback", e);
-                        std::path::PathBuf::from("/data/data/com.inarimarket.app")
+                        std::path::PathBuf::from("/data/data/com.gestor_ventas.app")
                     }
                 };
                 std::fs::create_dir_all(&data_dir).ok();

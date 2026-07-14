@@ -4,7 +4,7 @@
 }
 
 # Keep all Tauri-generated classes used via JNI/reflection
--keep class com.inarimarket.app.** { *; }
+-keep class com.gestor_ventas.app.** { *; }
 
 # Keep Tauri plugin classes loaded at runtime
 -keep class app.tauri.** { *; }
