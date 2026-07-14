@@ -21,7 +21,7 @@ fn get_db_path(_app_handle: &AppHandle) -> PathBuf {
     #[cfg(target_os = "android")]
     {
         let data_dir = _app_handle.path().app_data_dir()
-            .unwrap_or_else(|_| PathBuf::from("/data/data/com.gestor_ventas.app"));
+            .unwrap_or_else(|_| PathBuf::from("/data/data/com.gestorventas.app"));
         return data_dir.join("gestor_ventas.db");
     }
 

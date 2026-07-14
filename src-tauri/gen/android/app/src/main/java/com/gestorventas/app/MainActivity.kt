@@ -1,4 +1,4 @@
-package com.gestor_ventas.app
+package com.gestorventas.app
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

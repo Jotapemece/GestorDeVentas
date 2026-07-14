@@ -65,7 +65,7 @@ pub fn run() {
                     }
                     Err(e) => {
                         eprintln!("setup: app_data_dir() fallo: {:?}, usando fallback", e);
-                        std::path::PathBuf::from("/data/data/com.gestor_ventas.app")
+                        std::path::PathBuf::from("/data/data/com.gestorventas.app")
                     }
                 };
                 std::fs::create_dir_all(&data_dir).ok();
