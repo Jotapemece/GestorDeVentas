@@ -15,28 +15,56 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Panic hook que escribe a stderr (visible en logcat en Android)
+    std::panic::set_hook(Box::new(|info| {
+        let msg = format!("*** PANIC: {}\n", info);
+        let _ = std::io::Write::write(&mut std::io::stderr(), msg.as_bytes());
+    }));
+
     #[cfg(target_os = "android")]
-    android_logger::init_once(
-        android_logger::Config::default()
-            .with_max_level(log::LevelFilter::Info)
-            .with_tag("InariMarket"),
-    );
+    {
+        let _ = std::io::Write::write(
+            &mut std::io::stderr(),
+            b"*** InariMarket: run() ENTRY ***\n",
+        );
+        android_logger::init_once(
+            android_logger::Config::default()
+                .with_max_level(log::LevelFilter::Info)
+                .with_tag("InariMarket"),
+        );
+        log::info!("run: android_logger initialized");
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = std::io::Write::write(
+            &mut std::io::stderr(),
+            b"*** InariMarket: run() ENTRY (desktop) ***\n",
+        );
+    }
+
+    // Write errors to stderr even after logger init, in case logger doesn't flush
+    std::io::Write::write(
+        &mut std::io::stderr(),
+        b"*** InariMarket: before tauri builder ***\n",
+    )
+    .ok();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            log::info!("setup: iniciando...");
+            eprintln!("setup: iniciando...");
             #[cfg(target_os = "android")]
             {
                 use tauri::Manager;
                 let data_dir = match app.path().app_data_dir() {
                     Ok(d) => {
-                        log::info!("setup: app_data_dir = {:?}", d);
+                        eprintln!("setup: app_data_dir = {:?}", d);
                         d
                     }
                     Err(e) => {
-                        log::warn!("setup: app_data_dir() fallo: {:?}, usando fallback", e);
+                        eprintln!("setup: app_data_dir() fallo: {:?}, usando fallback", e);
                         std::path::PathBuf::from("/data/data/com.inarimarket.app")
                     }
                 };
@@ -44,11 +72,11 @@ pub fn run() {
             }
             let conn = match db::init_db(&app.handle()) {
                 Ok(c) => {
-                    log::info!("setup: BD inicializada correctamente");
+                    eprintln!("setup: BD inicializada correctamente");
                     c
                 }
                 Err(e) => {
-                    log::error!("Error al inicializar BD: {}", e);
+                    eprintln!("Error al inicializar BD: {}", e);
                     return Err(e.into());
                 }
             };
