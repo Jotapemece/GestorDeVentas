@@ -15,21 +15,40 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "android")]
+    android_logger::init_once(
+        android_logger::Config::default()
+            .with_max_level(log::LevelFilter::Info)
+            .with_tag("InariMarket"),
+    );
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            log::info!("setup: iniciando...");
             #[cfg(target_os = "android")]
             {
                 use tauri::Manager;
-                let data_dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("/data/data/com.inarimarket.app"));
+                let data_dir = match app.path().app_data_dir() {
+                    Ok(d) => {
+                        log::info!("setup: app_data_dir = {:?}", d);
+                        d
+                    }
+                    Err(e) => {
+                        log::warn!("setup: app_data_dir() fallo: {:?}, usando fallback", e);
+                        std::path::PathBuf::from("/data/data/com.inarimarket.app")
+                    }
+                };
                 std::fs::create_dir_all(&data_dir).ok();
             }
             let conn = match db::init_db(&app.handle()) {
-                Ok(c) => c,
+                Ok(c) => {
+                    log::info!("setup: BD inicializada correctamente");
+                    c
+                }
                 Err(e) => {
-                    eprintln!("Error al inicializar BD: {}", e);
+                    log::error!("Error al inicializar BD: {}", e);
                     return Err(e.into());
                 }
             };

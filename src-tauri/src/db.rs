@@ -40,16 +40,30 @@ fn get_db_path(_app_handle: &AppHandle) -> PathBuf {
 
 pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     let db_path = get_db_path(app_handle);
+    log::info!("init_db: path = {:?}", db_path);
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Error al crear directorio BD: {}", e))?;
+        std::fs::create_dir_all(parent).map_err(|e| {
+            let msg = format!("Error al crear directorio BD: {}", e);
+            log::error!("{}", msg);
+            msg
+        })?;
     }
-    let conn = Connection::open(&db_path).map_err(|e| format!("Error al abrir BD: {}", e))?;
+    let conn = Connection::open(&db_path).map_err(|e| {
+        let msg = format!("Error al abrir BD: {}", e);
+        log::error!("{}", msg);
+        msg
+    })?;
 
+    log::info!("BD abierta correctamente en {:?}", db_path);
     conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
     conn.execute_batch("PRAGMA foreign_keys=ON;").ok();
 
     conn.execute_batch(crate::migrations::SQL_CREATE_TABLES)
-        .map_err(|e| format!("Error al crear tablas: {}", e))?;
+        .map_err(|e| {
+            let msg = format!("Error al crear tablas: {}", e);
+            log::error!("{}", msg);
+            msg
+        })?;
 
     crate::migrations::run_migrations(&conn);
 
@@ -60,6 +74,7 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     auto_import_products(&conn, app_handle);
     cleanup_old_history(&conn);
 
+    log::info!("init_db: OK");
     Ok(conn)
 }
 
