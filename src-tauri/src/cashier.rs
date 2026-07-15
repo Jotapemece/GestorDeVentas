@@ -335,7 +335,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         total_ventas,
         total_usd,
         total_bs,
-        usuario: username.to_string(),
+        usuario: username,
         tasa_cierre: tasa,
     })
 }

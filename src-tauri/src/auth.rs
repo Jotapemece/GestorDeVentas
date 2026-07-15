@@ -32,17 +32,8 @@ pub(crate) fn require_admin(
     action: &str,
 ) -> Result<String, String> {
     let username = check_admin_role(state)?;
-    if !action.is_empty() {
-        crate::audit::log_action(db, &username, action).ok();
-    }
+    crate::audit::log_action(db, &username, action).ok();
     Ok(username)
-}
-
-pub(crate) fn require_admin_no_log(
-    state: &State<AppState>,
-    db: &rusqlite::Connection,
-) -> Result<String, String> {
-    require_admin(state, db, "")
 }
 
 #[tauri::command]
