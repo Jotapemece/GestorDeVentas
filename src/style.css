@@ -915,7 +915,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   #sidebar { display: none; }
   #main-content {
     padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   }
   .login-card { margin-top: env(safe-area-inset-top, 0px); }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
@@ -1024,9 +1024,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .theme-selector { grid-template-columns: 1fr 1fr 1fr; }
   .summary-cards { grid-template-columns: 1fr; }
   .payment-methods { grid-template-columns: 1fr 1fr; }
-  .bottom-tabs .nav-btn .nav-text { display: none; }
-  .bottom-tabs .nav-btn .nav-icon { font-size: 22px; }
-  .bottom-tabs .nav-btn { gap: 0; padding: 8px 4px; }
+  .bottom-tabs .nav-btn .nav-text { display: block; font-size: 8px; }
+  .bottom-tabs .nav-btn .nav-icon { font-size: 18px; }
+  .bottom-tabs .nav-btn { gap: 1px; padding: 4px 2px; }
+  #main-content { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
 }
 
 
