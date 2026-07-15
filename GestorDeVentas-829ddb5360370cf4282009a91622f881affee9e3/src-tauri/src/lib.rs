@@ -1,6 +1,7 @@
 mod auth;
 mod audit;
 mod cashier;
+mod categorias;
 mod clients;
 mod config;
 mod constants;
@@ -15,47 +16,16 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Panic hook que escribe a stderr (visible en logcat en Android)
-    std::panic::set_hook(Box::new(|info| {
-        let msg = format!("*** PANIC: {}\n", info);
-        let _ = std::io::Write::write(&mut std::io::stderr(), msg.as_bytes());
-    }));
-
-    let _ = std::io::Write::write(
-        &mut std::io::stderr(),
-        b"*** GestorVentas: run() ENTRY ***\n",
-    )
-    .ok();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            eprintln!("setup: iniciando...");
-            #[cfg(target_os = "android")]
-            {
-                use tauri::Manager;
-                let data_dir = match app.path().app_data_dir() {
-                    Ok(d) => {
-                        eprintln!("setup: app_data_dir = {:?}", d);
-                        d
-                    }
-                    Err(e) => {
-                        eprintln!("setup: app_data_dir() fallo: {:?}, usando fallback", e);
-                        std::path::PathBuf::from("/data/data/com.gestorventas.app")
-                    }
-                };
-                std::fs::create_dir_all(&data_dir).ok();
-            }
             let conn = match db::init_db(&app.handle()) {
-                Ok(c) => {
-                    eprintln!("setup: BD inicializada correctamente");
-                    c
-                }
+                Ok(c) => c,
                 Err(e) => {
                     eprintln!("Error al inicializar BD: {}", e);
-                    return Err(e.into());
+                    std::process::exit(1);
                 }
             };
             app.manage(AppState {
@@ -103,11 +73,15 @@ pub fn run() {
             // Audit
             audit::get_audit_logs,
             audit::get_cierres,
-            audit::clear_audit,
             // Config
             config::get_config_value,
             config::set_config_value,
             config::list_theme_names,
+            // Categorias
+            categorias::list_categorias,
+            categorias::create_categoria,
+            categorias::update_categoria,
+            categorias::delete_categoria,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
