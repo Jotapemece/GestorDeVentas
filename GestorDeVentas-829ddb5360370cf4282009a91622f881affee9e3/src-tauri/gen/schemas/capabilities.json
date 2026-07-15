@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Permisos por defecto para la aplicación","local":true,"windows":["main"],"permissions":["core:default","opener:default"]}}
