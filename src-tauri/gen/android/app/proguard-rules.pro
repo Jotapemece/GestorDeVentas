@@ -1,27 +1,21 @@
-# Keep all classes with native methods (JNI bridge from Rust)
--keepclasseswithmembernames class * {
-    native <methods>;
-}
+# Add project specific ProGuard rules here.
+# You can control the set of applied configuration files using the
+# proguardFiles setting in build.gradle.
+#
+# For more details, see
+#   http://developer.android.com/guide/developing/tools/proguard.html
 
-# Keep all Tauri-generated classes used via JNI/reflection
--keep class com.gestorventas.app.** { *; }
+# If your project uses WebView with JS, uncomment the following
+# and specify the fully qualified class name to the JavaScript interface
+# class:
+#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
+#   public *;
+#}
 
-# Keep Tauri plugin classes loaded at runtime
--keep class app.tauri.** { *; }
+# Uncomment this to preserve the line number information for
+# debugging stack traces.
+#-keepattributes SourceFile,LineNumberTable
 
-# Keep Lifecycle/Activity classes used by Tauri
--keep class androidx.lifecycle.** { *; }
--keep class androidx.activity.** { *; }
-
-# Keep AndroidX WebKit used by Tauri WebView
--keep class androidx.webkit.** { *; }
-
-# Keep Material theme attributes used by the activity theme
--keep class com.google.android.material.** { *; }
-
-# Keep ConstraintLayout used by activity_main.xml
--keep class androidx.constraintlayout.** { *; }
-
-# Preserve line numbers for crash stack traces
--keepattributes SourceFile,LineNumberTable
--renamesourcefileattribute SourceFile
+# If you keep the line number information, uncomment this to
+# hide the original source file name.
+#-renamesourcefileattribute SourceFile
