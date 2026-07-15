@@ -14,23 +14,23 @@ val tauriProperties = Properties().apply {
 }
 
 android {
+    signingConfigs {
+        create("release") {
+            storeFile = file("../../../release-key.keystore")
+            storePassword = "gestor2024"
+            keyAlias = "gestor-ventas"
+            keyPassword = "gestor2024"
+        }
+    }
     compileSdk = 37
-    namespace = "com.gestorventas.app"
+    namespace = "com.gestor_ventas.app"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.gestorventas.app"
+        applicationId = "com.gestor_ventas.app"
         minSdk = 24
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
-    }
-    signingConfigs {
-        create("release") {
-            storeFile = file("../../../gestorventas.keystore")
-            storePassword = "gestorventas"
-            keyAlias = "gestorventas"
-            keyPassword = "gestorventas"
-        }
     }
     buildTypes {
         getByName("debug") {
@@ -67,7 +67,6 @@ rust {
 }
 
 dependencies {
-    implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
