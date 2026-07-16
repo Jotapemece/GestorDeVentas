@@ -39,6 +39,7 @@ pub struct Venta {
     pub total_usd: f64,
     pub tasa_aplicada: f64,
     pub total_bs: f64,
+    pub anulada: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -175,6 +176,34 @@ pub struct ClienteHistory {
     pub cliente: Cliente,
     pub ventas: Vec<VentaDetallada>,
     pub total_deuda: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ChangePasswordRequest {
+    pub old_password: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SalesReportFilter {
+    pub start_date: String,
+    pub end_date: String,
+    pub producto_codigo: Option<String>,
+    pub username: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SalesReportItem {
+    pub venta: Venta,
+    pub productos: Vec<DetalleVenta>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SalesReportResult {
+    pub total_ventas: i64,
+    pub total_usd: f64,
+    pub total_bs: f64,
+    pub ventas: Vec<SalesReportItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

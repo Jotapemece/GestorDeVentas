@@ -6,27 +6,27 @@ use std::collections::HashMap;
 use tauri::State;
 
 const SQL_COUNT_VENTAS_RANGE: &str =
-    "SELECT COUNT(*) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
+    "SELECT COUNT(*) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
 const SQL_SUM_VENTAS_RANGE: &str =
-    "SELECT COALESCE(SUM(total_usd), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
+    "SELECT COALESCE(SUM(total_usd), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
 const SQL_SUM_BS_RANGE: &str =
-    "SELECT COALESCE(SUM(total_bs), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
+    "SELECT COALESCE(SUM(total_bs), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
 const SQL_VENTAS_RANGE: &str = "
     SELECT metodo_pago, pago_detalle, total_usd, referencia_pago_movil
-    FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
+    FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
 const SQL_PRODUCTOS_VENDIDOS: &str = "
     SELECT p.nombre, SUM(dv.cantidad), SUM(dv.cantidad * dv.precio_usd_unitario)
     FROM detalles_ventas dv
     JOIN productos p ON dv.producto_codigo = p.codigo
     JOIN ventas v ON dv.venta_id = v.id
-    WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2
+    WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.anulada = 0
     GROUP BY p.nombre
     ORDER BY SUM(dv.cantidad * dv.precio_usd_unitario) DESC";
 const SQL_CLIENTES_CREDITO: &str = "
     SELECT c.nombre, COALESCE(SUM(v.total_usd), 0)
     FROM clientes c
     JOIN ventas v ON v.cliente_id = c.id
-    WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.metodo_pago = ?3
+    WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.metodo_pago = ?3 AND v.anulada = 0
     GROUP BY c.id
     ORDER BY c.nombre";
 const SQL_CAJA_ABIERTA: &str =
@@ -49,14 +49,14 @@ const SQL_DETALLE_JSON: &str =
     "SELECT detalle_json FROM cierres_detalle WHERE cierre_id = ?1";
 const SQL_LIST_DIARIAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs
+           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada
     FROM ventas v
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id
     WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2
     ORDER BY v.id DESC";
 
-fn siguiente_dia(fecha: &str) -> String {
+pub(crate) fn siguiente_dia(fecha: &str) -> String {
     let parsed = chrono::NaiveDate::parse_from_str(fecha, "%Y-%m-%d").ok();
     match parsed {
         Some(d) => {
@@ -233,6 +233,7 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
                 total_usd: row.get(9)?,
                 tasa_aplicada: row.get(10)?,
                 total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
+                anulada: { let a: i64 = row.get(12)?; a != 0 },
             })
         })
         .map_err(|e| e.to_string())?

@@ -231,12 +231,23 @@ function createAuditRow(log) {
   return '<td>' + log.id + '</td><td>' + escapeHtml(log.fecha_hora) + '</td><td>' + escapeHtml(log.usuario) + '</td><td>' + escapeHtml(log.accion) + '</td>';
 }
 function createDailySaleRow(v, metodoLabel) {
-  return '<td>' + v.id + '</td><td>' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td>' + escapeHtml(v.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td>';
+  const voidBtn = v.anulada ? '<span class="text-muted">Anulada</span>' : '<button class="btn btn-sm btn-danger void-sale-btn" data-id="' + v.id + '"><i class="nf nf-fa-ban"></i></button>';
+  return '<td>' + v.id + '</td><td>' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td>' + escapeHtml(v.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td><td>' + voidBtn + '</td>';
 }
 function createDebtSaleCard(v, prodHtml) {
   return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
 }
 
+function createUserRow(u) {
+  return '<td>' + escapeHtml(u.username) + '</td><td>' + escapeHtml(u.rol) + '</td><td><button class="btn btn-sm btn-danger delete-user-btn" data-id="' + u.id + '" ' + (u.username === 'admin' ? 'disabled title="No se puede eliminar"' : '') + '><i class="nf nf-fa-trash"></i></button></td>';
+}
+
+function createReportRow(v) {
+  const metodoLabel = formatMetodoLabel(v.venta.metodo_pago);
+  const prodCount = v.productos ? v.productos.length : 0;
+  const badge = v.venta.anulada ? ' <span class="text-muted">(Anulada)</span>' : '';
+  return '<td>' + v.venta.id + '</td><td>' + escapeHtml(v.venta.fecha_hora) + '</td><td>' + escapeHtml(v.venta.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + prodCount + '</td><td>' + formatUSD(v.venta.total_usd) + '</td><td>' + formatBS(v.venta.total_bs) + badge + '</td>';
+}
 
 const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
 
@@ -459,6 +470,7 @@ function showView(name) {
     creditos: loadCreditos,
     cashier: loadDailySummary,
     audit: loadAudit,
+    reports: () => { loadUserList(); setDefaultReportDates(); },
     config: loadThemeConfig,
   };
   if (loaders[name]) loaders[name]();
@@ -1764,6 +1776,118 @@ async function saveFontSize(pct) {
   } catch (e) {}
 }
 
+/* ========== USER MANAGEMENT ========== */
+async function loadUserList() {
+  try {
+    const users = await invoke('list_usuarios');
+    const tbody = document.getElementById('user-list-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (!users || users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3">' + emptyState('<i class="nf nf-fa-users"></i>', 'Sin usuarios', '') + '</td></tr>';
+    } else {
+      const frag = document.createDocumentFragment();
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = createUserRow(u);
+        frag.appendChild(tr);
+      });
+      tbody.appendChild(frag);
+    }
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+async function handleCreateUser() {
+  const name = document.getElementById('new-user-name').value.trim();
+  const password = document.getElementById('new-user-password').value;
+  const rol = document.getElementById('new-user-rol').value;
+  if (!name || !password) { showToast('Complete todos los campos', 'error'); return; }
+  if (password.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
+  try {
+    await invoke('create_usuario', { username: name, password, rol });
+    showToast('Usuario creado exitosamente');
+    document.getElementById('new-user-name').value = '';
+    document.getElementById('new-user-password').value = '';
+    loadUserList();
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+/* ========== CHANGE PASSWORD ========== */
+async function handleChangePassword() {
+  const old = document.getElementById('change-pwd-old').value;
+  const newPwd = document.getElementById('change-pwd-new').value;
+  const confirm = document.getElementById('change-pwd-confirm').value;
+  if (!old || !newPwd || !confirm) { showToast('Complete todos los campos', 'error'); return; }
+  if (newPwd !== confirm) { showToast('Las contrase\u00f1as nuevas no coinciden', 'error'); return; }
+  if (newPwd.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
+  try {
+    await invoke('change_password', { request: { old_password: old, new_password: newPwd } });
+    showToast('Contrase\u00f1a cambiada exitosamente');
+    document.getElementById('change-pwd-old').value = '';
+    document.getElementById('change-pwd-new').value = '';
+    document.getElementById('change-pwd-confirm').value = '';
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+/* ========== REPORTS ========== */
+async function loadReports() {
+  const startDate = document.getElementById('report-start-date').value;
+  const endDate = document.getElementById('report-end-date').value;
+  if (!startDate || !endDate) { showToast('Seleccione fecha de inicio y fin', 'error'); return; }
+  const searchBtn = document.getElementById('report-search-btn');
+  const btnHtml = searchBtn.innerHTML;
+  try {
+    showLoading(searchBtn);
+    const filter = {
+      start_date: startDate + ' 00:00:00',
+      end_date: endDate + ' 23:59:59',
+      producto_codigo: document.getElementById('report-product-filter').value.trim() || null,
+      username: document.getElementById('report-vendor-filter').value.trim() || null,
+    };
+    const result = await invoke('get_sales_report', { filter });
+    document.getElementById('report-total-count').textContent = result.total_ventas;
+    document.getElementById('report-total-usd').textContent = formatUSD(result.total_usd);
+    document.getElementById('report-total-bs').textContent = formatBS(result.total_bs);
+
+    const tbody = document.getElementById('report-sales-body');
+    tbody.innerHTML = '';
+    if (!result.ventas || result.ventas.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7">' + emptyState('<i class="nf nf-fa-bar_chart"></i>', 'Sin ventas en el per\u00edodo', '') + '</td></tr>';
+    } else {
+      const frag = document.createDocumentFragment();
+      result.ventas.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = createReportRow(item);
+        frag.appendChild(tr);
+      });
+      tbody.appendChild(frag);
+    }
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+  finally { searchBtn.innerHTML = btnHtml; }
+}
+
+/* ========== VOID SALE ========== */
+async function handleVoidSale(ventaId) {
+  const ok = await confirmModal('\u00bfEst\u00e1 seguro de anular la venta #' + ventaId + '? Se devolver\u00e1 el stock al inventario.', 'Anular Venta', 'S\u00ed, anular');
+  if (!ok) return;
+  try {
+    const msg = await invoke('void_sale', { ventaId });
+    showToast(msg);
+    playSound('remove');
+    if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
+    if (qs('#view-reports')?.classList.contains('active')) loadReports();
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+/* ========== SET TODAY ON REPORT DATES ========== */
+function setDefaultReportDates() {
+  const today = new Date().toISOString().split('T')[0];
+  const startInput = document.getElementById('report-start-date');
+  const endInput = document.getElementById('report-end-date');
+  if (startInput && !startInput.value) startInput.value = today;
+  if (endInput && !endInput.value) endInput.value = today;
+}
+
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
   // Auth
@@ -1955,6 +2079,52 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (btn) printCloseReport();
   });
 
+  /* ========== USER MANAGEMENT ========== */
+  const createUserBtn = document.getElementById('create-user-btn');
+  if (createUserBtn) createUserBtn.addEventListener('click', handleCreateUser);
+  document.addEventListener('click', function(e) {
+    const delBtn = e.target.closest('.delete-user-btn');
+    if (delBtn) {
+      const id = parseInt(delBtn.dataset.id);
+      confirmModal('\u00bfEliminar este usuario?', 'Eliminar Usuario', 'Eliminar').then(ok => {
+        if (!ok) return;
+        invoke('delete_usuario', { usuarioId: id }).then(msg => { showToast(msg); loadUserList(); }).catch(e => showToast('Error: ' + e, 'error'));
+      });
+    }
+  });
+
+  /* ========== CHANGE PASSWORD ========== */
+  const changePwdBtn = document.getElementById('change-pwd-btn');
+  if (changePwdBtn) changePwdBtn.addEventListener('click', handleChangePassword);
+
+  /* ========== REPORTS ========== */
+  const reportSearchBtn = document.getElementById('report-search-btn');
+  if (reportSearchBtn) reportSearchBtn.addEventListener('click', loadReports);
+  ['report-start-date', 'report-end-date'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', setDefaultReportDates);
+  });
+
+  /* ========== VOID SALE (delegation on daily sales table) ========== */
+  document.getElementById('daily-sales-body').addEventListener('click', function(e) {
+    const btn = e.target.closest('.void-sale-btn');
+    if (btn) handleVoidSale(parseInt(btn.dataset.id));
+  });
+
+  /* ========== VIEW-SPECIFIC LOAD ========== */
+  // Reports: set default dates on show
+  const origShowView = showView;
+  const reportsView = document.getElementById('view-reports');
+  if (reportsView) {
+    const observer = new MutationObserver(function() {
+      if (reportsView.classList.contains('active')) {
+        loadUserList();
+        setDefaultReportDates();
+      }
+    });
+    observer.observe(reportsView, { attributes: true, attributeFilter: ['class'] });
+  }
+
   // Historial cierres
   qs(SEL.historialCierresBtn).addEventListener('click', openHistorialCierres);
   qs('#historial-cierres-close').addEventListener('click', closeHistorialCierres);
@@ -2005,7 +2175,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       case 'F3': e.preventDefault(); showView('creditos'); break;
       case 'F4': e.preventDefault(); showView('cashier'); break;
       case 'F5': e.preventDefault(); showView('audit'); break;
-      case 'F6': e.preventDefault(); showView('config'); break;
+      case 'F6': e.preventDefault(); showView('reports'); break;
+      case 'F7': e.preventDefault(); showView('config'); break;
       case 'F8':
         e.preventDefault();
         if (viewId === 'view-sales') qs(SEL.productSearch).focus();

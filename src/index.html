@@ -94,6 +94,10 @@
             <span class="nav-icon"><i class="nf nf-fa-history"></i></span>
             <span class="nav-text">Historial</span>
           </button>
+          <button class="nav-btn" data-view="reports">
+            <span class="nav-icon"><i class="nf nf-fa-bar_chart"></i></span>
+            <span class="nav-text">Reportes</span>
+          </button>
           <button class="nav-btn admin-only" data-view="config">
             <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
             <span class="nav-text">Config.</span>
@@ -125,6 +129,10 @@
         <button class="nav-btn" data-view="audit">
           <span class="nav-icon"><i class="nf nf-fa-history"></i></span>
           <span class="nav-text">Historial</span>
+        </button>
+        <button class="nav-btn" data-view="reports">
+          <span class="nav-icon"><i class="nf nf-fa-bar_chart"></i></span>
+          <span class="nav-text">Reportes</span>
         </button>
         <button class="nav-btn admin-only" data-view="config">
           <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
@@ -285,6 +293,7 @@
                   <th>M&eacute;todo Pago</th>
                   <th>Total ($)</th>
                   <th>Total (Bs.)</th>
+                  <th>Acci&oacute;n</th>
                 </tr>
               </thead>
               <tbody id="daily-sales-body"></tbody>
@@ -312,6 +321,63 @@
               <tbody id="audit-body"></tbody>
             </table>
             <div class="audit-load-more"><button id="audit-load-more" class="btn btn-outline hidden">Cargar m&aacute;s</button></div>
+          </div>
+        </section>
+
+        <section id="view-reports" class="view">
+          <div class="view-header">
+            <h2><i class="nf nf-fa-bar_chart"></i> Reportes</h2>
+          </div>
+          <div class="reports-filters">
+            <div class="reports-filter-row">
+              <div class="form-group">
+                <label>Desde</label>
+                <input type="date" id="report-start-date">
+              </div>
+              <div class="form-group">
+                <label>Hasta</label>
+                <input type="date" id="report-end-date">
+              </div>
+              <div class="form-group">
+                <label>Producto</label>
+                <input type="text" id="report-product-filter" placeholder="C&oacute;digo del producto">
+              </div>
+              <div class="form-group">
+                <label>Vendedor</label>
+                <input type="text" id="report-vendor-filter" placeholder="Nombre de usuario">
+              </div>
+              <button id="report-search-btn" class="btn btn-primary"><i class="nf nf-fa-search"></i> Buscar</button>
+            </div>
+          </div>
+          <div class="report-summary-cards">
+            <div class="summary-card">
+              <div class="summary-label">Ventas</div>
+              <div class="summary-value" id="report-total-count">0</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Total USD</div>
+              <div class="summary-value" id="report-total-usd">$0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Total Bs.</div>
+              <div class="summary-value" id="report-total-bs">Bs. 0,00</div>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="table" id="report-sales-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Fecha</th>
+                  <th>Usuario</th>
+                  <th>M&eacute;todo</th>
+                  <th>Productos</th>
+                  <th>Total ($)</th>
+                  <th>Total (Bs.)</th>
+                </tr>
+              </thead>
+              <tbody id="report-sales-body"></tbody>
+            </table>
           </div>
         </section>
 
@@ -421,6 +487,36 @@
                 <span class="text-muted text-sm" id="historial-limpieza-status"></span>
                 <button id="audit-clear-config-btn" class="btn btn-sm btn-danger"><i class="nf nf-fa-trash"></i> Limpiar ahora</button>
               </div>
+            </div>
+          </div>
+          <div class="config-card admin-only" id="user-management-card">
+            <h3><i class="nf nf-fa-users"></i> Gesti&oacute;n de Usuarios</h3>
+            <div class="config-row">
+              <span class="config-label">Nuevo usuario</span>
+            </div>
+            <div class="user-form-row">
+              <input type="text" id="new-user-name" placeholder="Nombre de usuario" class="form-input">
+              <input type="password" id="new-user-password" placeholder="Contrase&ntilde;a" class="form-input">
+              <select id="new-user-rol" class="form-input">
+                <option value="vendedor">Vendedor</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button id="create-user-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-plus"></i> Crear</button>
+            </div>
+            <div class="table-container" style="margin-top:12px">
+              <table class="table compact-table">
+                <thead><tr><th>Usuario</th><th>Rol</th><th>Acci&oacute;n</th></tr></thead>
+                <tbody id="user-list-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="config-card">
+            <h3><i class="nf nf-fa-lock"></i> Cambiar Contrase&ntilde;a</h3>
+            <div class="user-form-row">
+              <input type="password" id="change-pwd-old" placeholder="Contrase&ntilde;a actual" class="form-input">
+              <input type="password" id="change-pwd-new" placeholder="Nueva contrase&ntilde;a" class="form-input">
+              <input type="password" id="change-pwd-confirm" placeholder="Confirmar" class="form-input">
+              <button id="change-pwd-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Cambiar</button>
             </div>
           </div>
           <div class="config-card">

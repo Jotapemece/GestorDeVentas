@@ -92,6 +92,7 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("009_clean_und_prefix", clean_und_prefix),
     ("010_add_total_bs_ventas", add_total_bs_ventas),
     ("011_add_total_bs_cierres", add_total_bs_cierres),
+    ("012_add_anulada_ventas", add_anulada_ventas),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -228,6 +229,12 @@ fn add_total_bs_cierres(conn: &Connection) {
         conn.execute_batch(
             "UPDATE cierres_caja SET total_bs = ROUND(total_usd * tasa_cierre, 2);"
         ).ok();
+    }
+}
+
+fn add_anulada_ventas(conn: &Connection) {
+    if !column_exists(conn, "ventas", "anulada") {
+        conn.execute_batch("ALTER TABLE ventas ADD COLUMN anulada INTEGER NOT NULL DEFAULT 0;").ok();
     }
 }
 

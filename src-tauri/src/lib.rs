@@ -42,6 +42,8 @@ pub fn run() {
             auth::get_current_user,
             auth::create_usuario,
             auth::list_usuarios,
+            auth::delete_usuario,
+            auth::change_password,
             // Products
             products::list_products,
             products::create_product,
@@ -56,6 +58,8 @@ pub fn run() {
             sales::get_sale_detail,
             sales::get_tasa,
             sales::set_tasa,
+            sales::void_sale,
+            sales::get_sales_report,
             // Clients
             clients::list_clientes,
             clients::create_cliente,

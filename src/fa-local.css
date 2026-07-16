@@ -57,3 +57,8 @@
 .nf-fa-refresh::before { content: "\f021"; }
 .nf-fa-cloud_download::before { content: "\f0ed"; }
 .nf-fa-pencil::before { content: "\f303"; }
+.nf-fa-ban::before { content: "\f05e"; }
+.nf-fa-save::before { content: "\f0c7"; }
+.nf-fa-keyboard::before { content: "\f11c"; }
+.nf-fa-calculator::before { content: "\f1ec"; }
+.nf-fa-circle::before { content: "\f111"; }

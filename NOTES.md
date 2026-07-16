@@ -406,3 +406,38 @@ Se añadió la columna `total_bs` a las tablas `ventas` y `cierres_caja` para al
 ### Archivos modificados
 - `src/index.html` — estructura de config reescrita con `.config-row` y `.toggle-switch`
 - `src/style.css` — nuevo `.config-row`, `.config-label`, `.toggle-switch`/`.toggle-slider`; eliminado `.config-inline-margin`; compact variants
+
+---
+
+## 2026-07-16 — Items 3-6: Gestión usuarios, cambio contraseña, reportes, devoluciones
+
+### Item 3 — UI de gestión de usuarios (admin)
+- **Backend**: `delete_usuario` command en `auth.rs` (protege usuario 'admin' de eliminación)
+- **Frontend**: Nueva tarjeta en Config con formulario para crear usuario (nombre, password, rol) + tabla de usuarios con botón eliminar
+- Solo visible para admins (class `admin-only`)
+
+### Item 4 — Cambio de contraseña
+- **Backend**: `change_password` command en `auth.rs` — valida contraseña actual antes de actualizar, usa SHA-256
+- **Frontend**: Nueva tarjeta en Config con inputs: contraseña actual, nueva, confirmar
+
+### Item 5 — Reportes por período
+- **Backend**: `get_sales_report` command en `sales.rs` — filtra por rango de fechas, código de producto opcional, nombre de vendedor opcional. Excluye ventas anuladas. Retorna resumen (total ventas, USD, Bs.) + detalle por venta con productos.
+- **Frontend**: Nueva vista `view-reports` con filtros (desde/hasta, producto, vendedor), tarjetas de resumen, tabla de ventas. Accesible desde sidebar/bottom-tabs y F6.
+- **DB**: Queries de `cashier.rs` actualizadas para excluir `anulada = 1`
+
+### Item 6 — Devoluciones/notas de crédito (anular venta)
+- **Backend**: Migración 012 (`add_anulada_ventas`) añade columna `anulada INTEGER DEFAULT 0` a `ventas`. `void_sale` command en `sales.rs`: restaura stock, revierte deuda de crédito, marca como anulada.
+- **Frontend**: Botón 🚫 en columna de acciones de ventas del día (daily sales). Confirmación modal antes de anular.
+- **Modelo**: `Venta` struct actualizado con campo `anulada: bool`
+
+### Archivos modificados
+- `src-tauri/src/migrations.rs` — migración 012
+- `src-tauri/src/models.rs` — `anulada` en `Venta`; `ChangePasswordRequest`, `SalesReportFilter`, `SalesReportItem`, `SalesReportResult`
+- `src-tauri/src/auth.rs` — `delete_usuario`, `change_password`
+- `src-tauri/src/sales.rs` — `void_sale`, `get_sales_report`; `anulada` en queries; `siguiente_dia` es pub(crate)
+- `src-tauri/src/cashier.rs` — queries excluyen `anulada = 1`; `anulada` en mapping; `siguiente_dia` es pub(crate)
+- `src-tauri/src/lib.rs` — nuevos comandos registrados
+- `src/index.html` — vista `view-reports`; cards gestión usuarios + cambio contraseña en config; columna acciones en daily sales; nav buttons
+- `src/app.js` — `loadUserList`, `handleCreateUser`, `handleChangePassword`, `loadReports`, `handleVoidSale`, `createUserRow`, `createReportRow`; event listeners; keyboard shortcuts
+- `src/style.css` — `.user-form-row`, `.reports-filters`, `.report-summary-cards`, `.report-summary-cards`; compact variants; `#view-reports` en view selectors
+- `src/fa-local.css` — iconos `ban`, `save`, `keyboard`, `calculator`, `circle`

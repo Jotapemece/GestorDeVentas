@@ -1,5 +1,6 @@
 use crate::db::AppState;
 use crate::models::*;
+use rusqlite::params;
 use sha2::{Digest, Sha256};
 use std::time::Instant;
 use tauri::State;
@@ -7,6 +8,8 @@ use tauri::State;
 const SQL_LOGIN: &str = "SELECT id, username, rol FROM usuarios WHERE username = ?1 AND password = ?2";
 const SQL_INSERT_USUARIO: &str = "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)";
 const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol FROM usuarios ORDER BY username";
+const SQL_DELETE_USUARIO: &str = "DELETE FROM usuarios WHERE id = ?1 AND username != 'admin'";
+const SQL_CHANGE_PASSWORD: &str = "UPDATE usuarios SET password = ?1 WHERE id = ?2 AND password = ?3";
 
 pub fn hash_password(password: &str) -> String {
     let mut hasher = Sha256::new();
@@ -187,6 +190,48 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
         .collect();
 
     Ok(usuarios)
+}
+
+#[tauri::command]
+pub fn delete_usuario(state: State<AppState>, usuario_id: i64) -> Result<String, String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let admin_user = crate::auth::require_admin(&state, &db, &format!("Eliminó usuario id={}", usuario_id))?;
+    if admin_user.is_empty() { return Err("No autenticado".to_string()); }
+    let affected = db
+        .execute(SQL_DELETE_USUARIO, params![usuario_id])
+        .map_err(|e| format!("Error al eliminar usuario: {}", e))?;
+    if affected == 0 {
+        Err("No se puede eliminar: usuario no encontrado o es 'admin'".to_string())
+    } else {
+        Ok("Usuario eliminado exitosamente".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn change_password(
+    state: State<AppState>,
+    request: ChangePasswordRequest,
+) -> Result<String, String> {
+    let db = state.db.lock().map_err(|_| format!("Error interno"))?;
+    let user = state
+        .current_user
+        .lock()
+        .map_err(|_| format!("Error interno"))?
+        .clone()
+        .ok_or("No autenticado")?;
+
+    let old_hashed = hash_password(&request.old_password);
+    let new_hashed = hash_password(&request.new_password);
+
+    let affected = db
+        .execute(SQL_CHANGE_PASSWORD, params![new_hashed, user.id, old_hashed])
+        .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
+
+    if affected == 0 {
+        Err("La contraseña actual no es correcta".to_string())
+    } else {
+        Ok("Contraseña cambiada exitosamente".to_string())
+    }
 }
 
 #[cfg(test)]

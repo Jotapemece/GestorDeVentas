@@ -15,7 +15,7 @@ const SQL_PRODUCTO_PRECIO: &str = "SELECT precio_usd FROM productos WHERE codigo
 const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
 const SQL_LIST_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs
+           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada
     FROM ventas v
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id
@@ -230,6 +230,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         total_usd,
         tasa_aplicada: request.tasa,
         total_bs,
+        anulada: false,
     })
 }
 
@@ -255,6 +256,7 @@ pub fn list_sales(state: State<AppState>, limit: Option<i64>) -> Result<Vec<Vent
                 total_usd: row.get(9)?,
                 tasa_aplicada: row.get(10)?,
                 total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
+                anulada: { let a: i64 = row.get(12)?; a != 0 },
             })
         })
         .map_err(|e| e.to_string())?
@@ -312,6 +314,196 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
     let _ = db.execute(SQL_UPDATE_TASA, params![tasa.to_string()]);
     let _ = db.execute(SQL_UPSERT_TASA_UPDATED, params![now]);
     Ok(())
+}
+
+#[tauri::command]
+pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String> {
+    let mut db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let current_username = state
+        .current_user
+        .lock()
+        .map_err(|e| format!("Error interno: {}", e))?
+        .clone()
+        .map(|u| u.username)
+        .ok_or_else(|| "No autenticado".to_string())?;
+
+    let (metodo, cliente_id): (String, Option<i64>) = db
+        .query_row(
+            "SELECT metodo_pago, cliente_id FROM ventas WHERE id = ?1 AND anulada = 0",
+            params![venta_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|_| "Venta no encontrada o ya anulada".to_string())?;
+
+    let tx = db.transaction().map_err(|e| e.to_string())?;
+
+    // Restore stock
+    let mut stmt = tx
+        .prepare("SELECT producto_codigo, cantidad FROM detalles_ventas WHERE venta_id = ?1")
+        .map_err(|e| e.to_string())?;
+    let mapped = stmt
+        .query_map(params![venta_id], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(String, i64)> = mapped.filter_map(|r| r.ok()).collect();
+    drop(stmt);
+    for (codigo, cantidad) in &rows {
+        tx.execute(
+            "UPDATE productos SET stock = stock + ?1 WHERE codigo = ?2",
+            params![cantidad, codigo],
+        )
+        .map_err(|e| format!("Error al restaurar stock: {}", e))?;
+    }
+
+    // Revert credit debt if applicable
+    if metodo == constants::METODO_CREDITO {
+        if let Some(cliente_id) = cliente_id {
+            let total: f64 = tx
+                .query_row("SELECT total_usd FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
+                .unwrap_or(0.0);
+            tx.execute(
+                "UPDATE clientes SET saldo_deuda_usd = MAX(0, saldo_deuda_usd - ?1) WHERE id = ?2",
+                params![total, cliente_id],
+            )
+            .ok();
+        }
+    }
+
+    // Mark as voided
+    tx.execute(
+        "UPDATE ventas SET anulada = 1 WHERE id = ?1",
+        params![venta_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    crate::audit::log_action(&*tx, &current_username, &format!("Anuló venta #{}", venta_id)).ok();
+
+    tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
+
+    Ok(format!("Venta #{} anulada exitosamente. {} producto(s) restaurado(s).", venta_id, rows.len()))
+}
+
+#[tauri::command]
+pub fn get_sales_report(
+    state: State<AppState>,
+    filter: SalesReportFilter,
+) -> Result<SalesReportResult, String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+
+    let mut where_clauses = vec![
+        "v.fecha_hora >= ?1".to_string(),
+        "v.fecha_hora < ?2".to_string(),
+        "v.anulada = 0".to_string(),
+    ];
+    let has_producto = filter.producto_codigo.as_ref().map_or(false, |c| !c.is_empty());
+    let has_username = filter.username.as_ref().map_or(false, |u| !u.is_empty());
+    if has_producto {
+        where_clauses.push("v.id IN (SELECT venta_id FROM detalles_ventas WHERE producto_codigo = ?3)".to_string());
+    }
+    if has_username {
+        where_clauses.push(format!("v.usuario_id IN (SELECT id FROM usuarios WHERE username = ?{})", if has_producto { 4 } else { 3 }));
+    }
+
+    let end = crate::cashier::siguiente_dia(&filter.end_date);
+    let sql = format!(
+        "SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
+                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada
+         FROM ventas v
+         LEFT JOIN usuarios u ON v.usuario_id = u.id
+         LEFT JOIN clientes c ON v.cliente_id = c.id
+         WHERE {}
+         ORDER BY v.id DESC",
+        where_clauses.join(" AND ")
+    );
+
+    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+
+    // Build params dynamically
+    let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+        Box::new(filter.start_date.clone()),
+        Box::new(end.clone()),
+    ];
+    if let Some(ref codigo) = filter.producto_codigo {
+        if !codigo.is_empty() {
+            params_vec.push(Box::new(codigo.clone()));
+        }
+    }
+    if let Some(ref username) = filter.username {
+        if !username.is_empty() {
+            params_vec.push(Box::new(username.clone()));
+        }
+    }
+
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+    let ventas: Vec<Venta> = stmt
+        .query_map(params_refs.as_slice(), |row| {
+            Ok(Venta {
+                id: row.get(0)?,
+                fecha_hora: row.get(1)?,
+                usuario_id: row.get(2)?,
+                username: row.get(3)?,
+                metodo_pago: row.get(4)?,
+                referencia_pago_movil: row.get(5)?,
+                pago_detalle: row.get(6)?,
+                cliente_id: row.get(7)?,
+                cliente_nombre: row.get(8)?,
+                total_usd: row.get(9)?,
+                tasa_aplicada: row.get(10)?,
+                total_bs: {
+                    let bs: f64 = row.get(11)?;
+                    if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? }
+                },
+                anulada: { let a: i64 = row.get(12)?; a != 0 },
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let total_ventas = ventas.len() as i64;
+    let total_usd: f64 = ventas.iter().map(|v| v.total_usd).sum();
+    let total_bs: f64 = ventas.iter().map(|v| v.total_bs).sum();
+
+    // Load details for each sale
+    let mut items = Vec::new();
+    let detail_sql = "SELECT dv.id, dv.venta_id, dv.producto_codigo, p.nombre, dv.cantidad, dv.precio_usd_unitario
+                      FROM detalles_ventas dv
+                      LEFT JOIN productos p ON dv.producto_codigo = p.codigo
+                      WHERE dv.venta_id = ?1
+                      ORDER BY dv.id ASC";
+    let mut detail_stmt = db.prepare(detail_sql).map_err(|e| e.to_string())?;
+    for v in ventas {
+        let productos: Vec<DetalleVenta> = detail_stmt
+            .query_map(params![v.id], |row| {
+                let cantidad: i64 = row.get(4)?;
+                let precio: f64 = row.get(5)?;
+                Ok(DetalleVenta {
+                    id: row.get(0)?,
+                    venta_id: row.get(1)?,
+                    producto_codigo: row.get(2)?,
+                    producto_nombre: row.get(3)?,
+                    cantidad,
+                    precio_usd_unitario: precio,
+                    subtotal_usd: cantidad as f64 * precio,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        items.push(SalesReportItem {
+            venta: v,
+            productos,
+        });
+    }
+
+    Ok(SalesReportResult {
+        total_ventas,
+        total_usd,
+        total_bs,
+        ventas: items,
+    })
 }
 
 #[cfg(test)]
