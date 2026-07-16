@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 use tauri::AppHandle;
-#[allow(unused_imports)]
+#[cfg(target_os = "android")]
 use tauri::Manager;
 
 const DEFAULT_PATH: &str = ".";

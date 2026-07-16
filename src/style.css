@@ -230,12 +230,6 @@ button:focus-visible,
   padding: 10px 14px; font-size: 14px;
   border: 1.5px solid var(--border); height: 40px;
 }
-.sales-header-left .filter-select {
-  width: 100%; box-sizing: border-box;
-  height: 34px; padding: 4px 10px; font-size: 13px; border-radius: 8px;
-  border: 1.5px solid var(--border); background: var(--card); color: var(--text); cursor: pointer;
-}
-
 .sales-body {
   flex: 1; min-height: 0; min-width: 0;
   display: grid;
@@ -292,13 +286,6 @@ button:focus-visible,
 
 .search-box { display: flex; align-items: center; gap: 8px; }
 .search-box input { flex: 1; min-width: 0; }
-
-
-
-.filter-select {
-  width: auto; min-width: 130px; padding: 6px 10px; font-size: 13px;
-  border-radius: 6px; height: 34px;
-}
 
 .tasa-input-group {
   display: flex; align-items: center; gap: 8px;
@@ -520,7 +507,6 @@ button:focus-visible,
 .text-sm { font-size: 12px; }
 .mixto-add-row { margin-top: 4px; }
 .abono-mixto-group { margin-top: 6px; }
-.print-icon { margin-right: 6px; }
 .empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); width: 100%; }
 .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; display: block; }
 .empty-state .empty-text { font-size: 14px; font-weight: 500; }
@@ -561,7 +547,6 @@ button:focus-visible,
 }
 .toast.success { background: var(--accent-dark); }
 .toast.error { background: var(--danger-dark); }
-.toast.info { background: var(--primary-dark); }
 @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .toast.fade-out { animation: slideOut 0.3s ease forwards; }
 @keyframes slideOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(20px); opacity: 0; } }
@@ -657,12 +642,6 @@ button:focus-visible,
 }
 .compact .sales-header-left input {
   padding: 6px 10px; font-size: 0.8125rem; height: 32px;
-}
-.compact .sales-header-left .filter-select {
-  height: 30px; padding: 2px 8px; font-size: 0.75rem;
-}
-.compact .filter-select {
-  padding: 4px 8px; font-size: 0.75rem; height: 30px; min-width: 110px;
 }
 .compact .tasa-input-group input {
   padding: 5px 8px; height: 32px; width: 90px; font-size: 0.8125rem;
@@ -788,9 +767,6 @@ button:focus-visible,
 .compact .form-group label {
   font-size: 0.75rem; margin-bottom: 4px;
 }
-.compact .form-row {
-  gap: 8px;
-}
 .compact input:not([type="checkbox"]):not([type="range"]),
 .compact select {
   padding: 7px 10px; font-size: 0.8125rem;
@@ -847,9 +823,6 @@ button:focus-visible,
 
   /* Hide fullscreen toggle on mobile (always fullscreen) */
   .config-fullscreen { display: none; }
-
-  /* Sales: hide toggle on desktop, show on mobile */
-  .mobile-only { display: inline-flex !important; }
 
   /* Sales body: show one panel at a time via toggle */
   .sales-body { grid-template-columns: 1fr; }
