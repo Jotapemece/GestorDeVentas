@@ -246,10 +246,6 @@ let soundVolume = 0.5;
 let auditOffset = 0;
 let auditLimit = AUDIT_LIMIT_DEFAULT;
 
-function hideToast(toastEl) {
-  toastEl.style.display = 'none';
-}
-
 function hideToast(el) {
   if (el._closing) return;
   el._closing = true;
@@ -476,7 +472,7 @@ async function handleLogout() {
   } catch (e) {
     showToast('Error al cerrar sesi\u00f3n: ' + e, 'error');
   }
-  currentUser = null; cart = [];
+  currentUser = null; cart = []; lastCloseReportData = null;
   qs(SEL.mainApp).style.display = 'none';
   qs(SEL.loginScreen).style.display = 'flex';
   qs(SEL.loginPassword).value = '';
@@ -1385,7 +1381,7 @@ async function confirmCloseCashier() {
     qs(SEL.closeReportBody).innerHTML = html;
     showModal(qs(SEL.closeReportModal));
     lastCloseReportData = reportData;
-    setTimeout(() => drawCloseChart(reportData), 100);
+    requestAnimationFrame(() => drawCloseChart(reportData));
     playSound('success');
     showToast('Jornada cerrada exitosamente');
     loadDailySummary();
@@ -1399,6 +1395,8 @@ function drawPieChart(canvasId, data) {
   const w = canvas.width, h = canvas.height;
   const cx = CHART_CENTER_X, cy = CHART_CENTER_Y, r = CHART_RADIUS;
   ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#fff';
+  ctx.fillRect(0, 0, w, h);
   const total = data.por_metodo.reduce((s, m) => s + m.total_usd, 0);
   if (total <= 0) return;
   let startAngle = -Math.PI / 2;
@@ -1558,7 +1556,7 @@ async function showCierreDetalle(cierreId) {
     }
     html += '</div>';
     qs(SEL.historialCierreDetalleBody).innerHTML = html;
-    setTimeout(() => drawHistorialChart(d), 100);
+    requestAnimationFrame(() => drawHistorialChart(d));
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 

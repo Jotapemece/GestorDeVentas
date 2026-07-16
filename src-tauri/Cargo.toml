@@ -9,6 +9,13 @@ edition = "2021"
 name = "gestor_ventas_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
