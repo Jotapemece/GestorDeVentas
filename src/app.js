@@ -301,6 +301,13 @@ function confirmModal(msg, title, okText) {
 function showLoading(el) {
   el.innerHTML = '<div class="loading-spinner"><i class="nf nf-fa-spinner spinner-icon"></i></div>';
 }
+function showLoadingModal(text) {
+  qs('#loading-text').textContent = text || 'Cargando...';
+  qs('#loading-modal').classList.remove('hidden');
+}
+function hideLoadingModal() {
+  qs('#loading-modal').classList.add('hidden');
+}
 function emptyState(icon, text, sub) {
   return '<div class="empty-state"><span class="empty-icon">' + icon + '</span><div class="empty-text">' + text + '</div>' + (sub ? '<div class="empty-sub">' + sub + '</div>' : '') + '</div>';
 }
@@ -541,6 +548,7 @@ async function handleTasaChange() {
 async function fetchTasaBcv() {
   const btn = document.getElementById('tasa-fetch-btn');
   btn.classList.add('loading');
+  showLoadingModal('Buscando tasa del BCV...');
   try {
     const rate = await invoke('fetch_tasa_bcv');
     tasaActual = rate;
@@ -556,6 +564,7 @@ async function fetchTasaBcv() {
     showToast('Error al obtener tasa: ' + e, 'error');
   } finally {
     btn.classList.remove('loading');
+    hideLoadingModal();
   }
 }
 

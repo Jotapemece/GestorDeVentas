@@ -303,7 +303,6 @@ button:focus-visible,
 .tasa-input-group {
   display: flex; align-items: center; gap: 8px;
 }
-.tasa-input-group label { font-weight: 600; font-size: 13px; white-space: nowrap; color: var(--text); }
 .tasa-input-group input { width: 130px; padding: 8px 12px; height: 40px; }
 .tasa-warning { font-size: 18px; color: var(--danger-dark); cursor: pointer; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
@@ -469,6 +468,22 @@ button:focus-visible,
 .modal-body { padding: 20px 24px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border); }
 
+/* LOADING OVERLAY */
+.loading-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--overlay); display: flex; align-items: center;
+  justify-content: center; z-index: 9999;
+}
+.loading-overlay.hidden { display: none !important; }
+.loading-modal {
+  background: var(--card); border-radius: 16px; padding: 32px 40px;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+.loading-spinner-large { font-size: 36px; color: var(--primary); }
+.loading-spinner-large .spinner-icon { animation: spin 0.8s linear infinite; }
+.loading-modal p { font-size: 16px; color: var(--text); font-weight: 500; text-align: center; }
+
 /* FORM */
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px; }
@@ -498,7 +513,7 @@ button:focus-visible,
 
 /* Misc utility classes */
 .danger-text { color: var(--danger-dark); }
-.tasa-icon { font-size: 16px; color: var(--text-light); }
+
 .inventory-search-input { max-width: 320px; }
 .config-inline-margin { margin-top: 8px; }
 .text-sm { font-size: 12px; }
@@ -844,7 +859,6 @@ button:focus-visible,
   .sales-header { flex-direction: row; flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 6px; }
   .sales-header-left { flex: 1; min-width: 0; order: 1; }
   .tasa-input-group { order: 2; margin-left: auto; flex-shrink: 0; }
-  .tasa-input-group label { font-size: 12px; white-space: nowrap; }
   .tasa-input-group input { width: 80px; font-size: 14px; padding: 6px 8px; min-height: 44px; }
   .tasa-warning { font-size: 14px; }
   .tasa-fetch-btn { min-height: 44px; font-size: 16px; }
