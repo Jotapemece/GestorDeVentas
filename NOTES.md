@@ -277,3 +277,68 @@ Se integró un botón 🔄 al lado del input de tasa que al presionarlo consulta
 - `src/fa-local.css` — iconos refresh y cloud_download
 - `src/style.css` — estilos del botón
 - `NOTES.md` — esta entrada
+
+---
+
+## 2026-07-16 — Mejoras: validaciones, XSS, coma automática, vuelto, edición clientes
+
+### Cambios realizados (10 items)
+
+#### Item 2 — Validación de tasa (>0)
+- **Backend** (`sales.rs`): `set_tasa` rechaza valores ≤ 0 con error
+- **Frontend** (`app.js`): `handleTasaChange` valida > 0, restaura valor anterior y muestra toast si inválido
+
+#### Item 3 — Confirmación al cancelar venta
+- (`app.js`): El botón × del carrito ahora muestra `confirmModal` antes de limpiar el carrito
+
+#### Item 4 — XSS eliminado en 6 funciones render
+- (`app.js`): `createProductRow`, `createCartRow`, `createInventoryRow`, `createClientRow`, `createAuditRow`, `createDailySaleRow` ahora usan `escapeHtml()` en todos los datos de usuario. También se escapaban `codigo` en data-atributos.
+
+#### Item 6 — Spinner al confirmar pago + finally block
+- (`app.js`): El botón "Confirmar Pago" muestra "Procesando..." y se bloquea. Se agregó bloque `finally` para resetear el flag `processingPayment` incluso si hay error fuera del try.
+- (`style.css`): Clase `.btn.loading` con opacidad y pointer-events: none
+
+#### Item 7 — Coma automática en input de precio
+- **Constante**: `CFG_COMA_AUTOMATICA`
+- **Función `parsePrecio(s)`**: reemplaza coma por punto antes de parsear
+- **Función `applyComaAutomatica(input)`**: toma solo dígitos, divide entre 100, formatea con coma (ej: "150" → "1,50")
+- **Toggle en Config**: activa/desactiva el comportamiento
+- **Input type**: cambia entre `text` (coma activa) y `number` (inactiva)
+- **Edit product**: muestra el precio formateado con coma si está activo
+
+#### Item 9 — Vuelto para pagos en efectivo
+- (`index.html`): Nuevo grupo `#cambio-group` con input "Monto recibido" y `#cambio-resultado` con el vuelto
+- (`app.js`): Se muestra solo para métodos `efectivo_bs`/`efectivo_usd`. Calcula la diferencia y la muestra.
+- Toggle "Calcular vuelto en efectivo" en Config (ON por defecto). Cuando OFF, no se muestra el vuelto aunque se pueda ingresar el monto.
+
+#### Item 11 — escapeHtml escapa &
+- (`app.js`): `escapeHtml` ahora reemplaza `&` por `&amp;` antes de los otros caracteres
+
+#### Item 12 — playSound catch no muestra toast
+- (`app.js`): Si el audio falla, solo desactiva `soundEnabled = false` sin mostrar toast (evita loop de errores)
+
+#### Item 13 — Timeout en API BCV
+- (`tasa_bcv.rs`): Se agregó `AgentBuilder` con `timeout_connect(10s)` y `timeout_read(10s)`, más User-Agent header
+
+#### Item 15 — Editar y eliminar clientes (solo admin)
+- **Backend** (`clients.rs`): `update_cliente(id, nombre)` y `delete_cliente(id)` con validación (nombre no vacío, solo si deuda=0)
+- **Frontend** (`app.js`):
+  - Botón ✏️ para editar nombre (reusa modal de cliente)
+  - Botón 🗑️ para eliminar (solo si deuda=0, con confirmación)
+  - Variable `editingClienteId` para distinguir crear/editar
+- **Icono**: `nf-fa-pencil` (\f303) en `fa-local.css`
+
+#### Extras — Redondeo efectivo Bs. y toggle vuelto
+- Toggle "Redondear pago en efectivo Bs." en Config: cuando activo, el total Bs. se redondea a entero (`Math.round`) solo para pagos en efectivo Bs.
+- Función `totalBsRedondeado(totalUsd)`: aplica el redondeo si está activo
+
+### Archivos modificados (commits `7983545` + `dd65e56`)
+- `src-tauri/src/sales.rs` — validación tasa > 0
+- `src-tauri/src/tasa_bcv.rs` — timeout + User-Agent
+- `src-tauri/src/clients.rs` — update_cliente, delete_cliente
+- `src-tauri/src/lib.rs` — registro de comandos
+- `src/app.js` — ~220 líneas cambiadas (escapeHtml, XSS, validación, confirm cancel, spinner, coma auto, vuelto, playSound, edit/delete clientes, toggles)
+- `src/fa-local.css` — icono pencil
+- `src/index.html` — cambio group, toggles config
+- `src/style.css` — .btn.loading, cambio-resultado, mobile
+- `NOTES.md` — esta entrada
