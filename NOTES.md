@@ -197,6 +197,8 @@ npm run build:portable -- --target x86_64-pc-windows-gnu
 
 El `.exe` queda en `src-tauri/target/<target>/release/gestor-ventas.exe`. Solo hay que copiarlo a cualquier carpeta y ejecutarlo.
 
+> Nota: si `tauri build` falla igualmente en el paso de empaquetado, el `.exe` ya está compilado en `target/` antes de que el bundler intente ejecutarse. Puedes ignorar el error y tomar el `.exe` de ahí.
+
 **Requisito en la PC destino:** WebView2 Runtime. En Windows 10/11 suele venir instalado. Si no:
 - Descargar e instalar el [Evergreen WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (una sola vez, funciona para cualquier app que lo use)
 - O el instalador NSIS ya lo descarga automáticamente (modo `embedBootstrapper`)

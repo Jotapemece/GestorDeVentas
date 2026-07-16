@@ -7,7 +7,7 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
-    "build:portable": "tauri build --bundles none",
+    "build:portable": "tauri build --config '{\"bundle\":{\"active\":false}}'",
     "build:android": "tauri android build"
   },
   "devDependencies": {
