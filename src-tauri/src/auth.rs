@@ -200,4 +200,28 @@ mod tests {
         assert_eq!(a, b);
         assert_ne!(a, hash_password("admin2"));
     }
+
+    #[test]
+    fn test_hash_password_empty() {
+        let a = hash_password("");
+        let b = hash_password("");
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 64);
+    }
+
+    #[test]
+    fn test_hash_password_long() {
+        let long = "a".repeat(1000);
+        let a = hash_password(&long);
+        let b = hash_password(&long);
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 64);
+    }
+
+    #[test]
+    fn test_hash_password_different_lengths() {
+        let a = hash_password("abc");
+        let b = hash_password("abcd");
+        assert_ne!(a, b);
+    }
 }

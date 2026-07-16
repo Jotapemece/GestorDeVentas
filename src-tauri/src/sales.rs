@@ -384,4 +384,70 @@ mod tests {
         let result = validar_pago_detalle(&items, 100.0);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_validar_pago_movil_ref_none() {
+        let items = vec![PagoItem {
+            metodo: "pago_movil".into(),
+            monto_usd: 100.0,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validar_pago_multiples_items_exactos() {
+        let items = vec![
+            PagoItem { metodo: "efectivo_usd".into(), monto_usd: 50.0, referencia: None },
+            PagoItem { metodo: "efectivo_bs".into(), monto_usd: 30.0, referencia: None },
+            PagoItem { metodo: "biopago".into(), monto_usd: 20.0, referencia: None },
+        ];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validar_pago_tolerancia_limite_inferior() {
+        let items = vec![PagoItem {
+            metodo: "efectivo_usd".into(),
+            monto_usd: 99.99,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validar_pago_tolerancia_limite_superior() {
+        let items = vec![PagoItem {
+            metodo: "efectivo_usd".into(),
+            monto_usd: 100.02,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 100.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validar_pago_detalle_metodos_efectivo_bs_usd() {
+        let items = vec![PagoItem {
+            metodo: "efectivo_bs".into(),
+            monto_usd: 50.0,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 50.0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validar_pago_detalle_metodo_punto() {
+        let items = vec![PagoItem {
+            metodo: "punto".into(),
+            monto_usd: 75.5,
+            referencia: None,
+        }];
+        let result = validar_pago_detalle(&items, 75.5);
+        assert!(result.is_ok());
+    }
 }

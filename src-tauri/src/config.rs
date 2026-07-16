@@ -38,3 +38,28 @@ pub fn set_config_value(
 pub fn list_theme_names() -> Vec<String> {
     crate::constants::TEMAS_DISPONIBLES.iter().map(|s| s.to_string()).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_theme_names_count() {
+        let names = list_theme_names();
+        assert_eq!(names.len(), 7);
+    }
+
+    #[test]
+    fn test_list_theme_names_first_is_oscuro() {
+        let names = list_theme_names();
+        assert_eq!(names[0], "oscuro");
+    }
+
+    #[test]
+    fn test_list_theme_names_all_strings() {
+        let names = list_theme_names();
+        for name in &names {
+            assert!(!name.is_empty());
+        }
+    }
+}
