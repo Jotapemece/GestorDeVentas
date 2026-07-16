@@ -354,9 +354,27 @@
           </div>
           <div class="config-card">
             <h3><i class="nf nf-fa-edit"></i> Entrada de datos</h3>
-            <label><input type="checkbox" id="coma-automatica-toggle"> Coma autom&aacute;tica (desplaza decimales al escribir precios)</label>
-            <div class="config-inline-margin"><label><input type="checkbox" id="calcular-vuelto-toggle" checked> Calcular vuelto en efectivo</label></div>
-            <div class="config-inline-margin"><label><input type="checkbox" id="redondeo-bs-toggle"> Redondear pago en efectivo Bs. (sin decimales)</label></div>
+            <div class="config-row">
+              <span class="config-label"><i class="nf nf-fa-keyboard"></i> Coma autom&aacute;tica</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="coma-automatica-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="config-row">
+              <span class="config-label"><i class="nf nf-fa-calculator"></i> Calcular vuelto en efectivo</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="calcular-vuelto-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="config-row">
+              <span class="config-label"><i class="nf nf-fa-circle"></i> Redondear pago en efectivo Bs.</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="redondeo-bs-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
           </div>
           <div class="config-card">
             <h3><i class="nf nf-fa-text_height"></i> Tama&ntilde;o de fuente</h3>
@@ -368,12 +386,27 @@
           </div>
           <div class="config-card config-fullscreen">
             <h3><i class="nf nf-fa-display"></i> Pantalla completa</h3>
-            <label><input type="checkbox" id="fullscreen-toggle"> Pantalla completa</label>
+            <div class="config-row">
+              <span class="config-label">Pantalla completa</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="fullscreen-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
           </div>
           <div class="config-card">
             <h3><i class="nf nf-fa-music"></i> Sonidos</h3>
-            <label><input type="checkbox" id="sound-toggle" checked> Habilitar sonidos</label>
-            <div class="config-inline-margin"><label>Volumen: <input type="range" id="sound-volume" min="0" max="100" value="50"></label></div>
+            <div class="config-row">
+              <span class="config-label">Habilitar sonidos</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="sound-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="config-row">
+              <span class="config-label">Volumen</span>
+              <input type="range" id="sound-volume" min="0" max="100" value="50">
+            </div>
           </div>
           <div class="config-card">
             <h3><i class="nf nf-fa-eraser"></i> Limpieza del historial</h3>

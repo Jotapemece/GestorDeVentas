@@ -391,3 +391,18 @@ Se añadió la columna `total_bs` a las tablas `ventas` y `cierres_caja` para al
 - `src/index.html` — eliminado `<label>`, agregado `<div id="loading-modal">`
 - `src/style.css` — eliminados estilos de `.tasa-input-group label` y `.tasa-icon` (restaurado luego); agregados `.loading-overlay`, `.loading-modal`, `.loading-spinner-large`
 - `src/app.js` — nuevas funciones `showLoadingModal`/`hideLoadingModal`; `fetchTasaBcv` las usa
+
+---
+
+## 2026-07-16 — Config UI rediseñada: toggle switches, rows con iconos
+
+### Cambios
+1. **Checkboxes reemplazados por toggle switches** estilizados con CSS (`.toggle-switch`/`.toggle-slider`), más modernos y táctiles.
+2. **Cada opción en su propia fila** (`.config-row`) con `display: flex; justify-content: space-between` para alinear label a la izquierda y toggle a la derecha. Las filas se separan con `border-top`.
+3. **Iconos en las opciones de Entrada de datos**: `nf-fa-keyboard` (coma automática), `nf-fa-calculator` (calcular vuelto), `nf-fa-circle` (redondear Bs.).
+4. **Consistencia**: todas las tarjetas de config ahora usan la misma estructura de filas.
+5. **Compact mode**: escalan correctamente los toggles y labels.
+
+### Archivos modificados
+- `src/index.html` — estructura de config reescrita con `.config-row` y `.toggle-switch`
+- `src/style.css` — nuevo `.config-row`, `.config-label`, `.toggle-switch`/`.toggle-slider`; eliminado `.config-inline-margin`; compact variants

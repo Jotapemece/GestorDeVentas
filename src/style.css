@@ -503,7 +503,28 @@ button:focus-visible,
 .danger-text { color: var(--danger-dark); }
 
 .inventory-search-input { max-width: 320px; }
-.config-inline-margin { margin-top: 8px; }
+.config-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; min-height: 44px;
+}
+.config-row + .config-row { border-top: 1px solid var(--border); }
+.config-label { font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+/* Toggle switch */
+.toggle-switch {
+  position: relative; display: inline-block; width: 44px; height: 24px;
+  flex-shrink: 0;
+}
+.toggle-switch input { display: none; }
+.toggle-slider {
+  position: absolute; inset: 0; cursor: pointer;
+  background: var(--border); border-radius: 24px; transition: 0.2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute; width: 20px; height: 20px;
+  left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.2s;
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
 .text-sm { font-size: 12px; }
 .mixto-add-row { margin-top: 4px; }
 .abono-mixto-group { margin-top: 6px; }
@@ -740,9 +761,12 @@ button:focus-visible,
 }
 .font-size-control { display: flex; align-items: center; gap: 8px; }
 .font-size-display { min-width: 40px; text-align: center; font-weight: 600; font-size: 0.875rem; }
-.compact .config-card label {
-  font-size: 0.8125rem;
-}
+.compact .config-row { padding: 8px 0; min-height: 36px; }
+.compact .config-label { font-size: 0.8125rem; gap: 6px; }
+.compact .config-label i { font-size: 0.875rem; }
+.compact .toggle-switch { width: 36px; height: 20px; }
+.compact .toggle-slider::before { width: 16px; height: 16px; }
+.compact .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
 .compact .config-info p {
   font-size: 0.8125rem; margin-bottom: 6px;
 }
