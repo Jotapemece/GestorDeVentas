@@ -40,6 +40,7 @@ pub const SQL_CREATE_TABLES: &str = "
         cliente_id INTEGER,
         total_usd REAL NOT NULL,
         tasa_aplicada REAL NOT NULL,
+        total_bs REAL NOT NULL DEFAULT 0,
         FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
         FOREIGN KEY(cliente_id) REFERENCES clientes(id)
     );
@@ -67,6 +68,7 @@ pub const SQL_CREATE_TABLES: &str = "
         usuario_id INTEGER NOT NULL,
         total_ventas INTEGER NOT NULL,
         total_usd REAL NOT NULL,
+        total_bs REAL NOT NULL DEFAULT 0,
         tasa_cierre REAL NOT NULL DEFAULT 0,
         FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
     );
@@ -88,6 +90,8 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("007_add_activo_productos", add_activo_productos),
     ("008_add_tasa_cierre_cierres", add_tasa_cierre_cierres),
     ("009_clean_und_prefix", clean_und_prefix),
+    ("010_add_total_bs_ventas", add_total_bs_ventas),
+    ("011_add_total_bs_cierres", add_total_bs_cierres),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -178,11 +182,12 @@ fn migrate_ventas_check_constraint(conn: &Connection) {
                  pago_detalle TEXT DEFAULT '',
                  cliente_id INTEGER,
                  total_usd REAL NOT NULL,
-                 tasa_aplicada REAL NOT NULL,
-                 FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-                 FOREIGN KEY(cliente_id) REFERENCES clientes(id)
-             );
-             INSERT INTO ventas_new SELECT id, fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, COALESCE(pago_detalle, ''), cliente_id, total_usd, tasa_aplicada FROM ventas;
+                  tasa_aplicada REAL NOT NULL,
+                  total_bs REAL NOT NULL DEFAULT 0,
+                  FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+                  FOREIGN KEY(cliente_id) REFERENCES clientes(id)
+              );
+              INSERT INTO ventas_new SELECT id, fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, COALESCE(pago_detalle, ''), cliente_id, total_usd, tasa_aplicada, COALESCE(total_bs, 0) FROM ventas;
              DROP TABLE ventas;
              ALTER TABLE ventas_new RENAME TO ventas;
              COMMIT;
@@ -213,4 +218,26 @@ fn clean_und_prefix(conn: &Connection) {
     conn.execute_batch(
         "UPDATE productos SET nombre = REPLACE(nombre, '*UND*-', '') WHERE nombre LIKE '%*UND*-%';"
     ).ok();
+}
+
+fn add_total_bs_cierres(conn: &Connection) {
+    if !column_exists(conn, "cierres_caja", "total_bs") {
+        conn.execute_batch(
+            "ALTER TABLE cierres_caja ADD COLUMN total_bs REAL NOT NULL DEFAULT 0;"
+        ).ok();
+        conn.execute_batch(
+            "UPDATE cierres_caja SET total_bs = ROUND(total_usd * tasa_cierre, 2);"
+        ).ok();
+    }
+}
+
+fn add_total_bs_ventas(conn: &Connection) {
+    if !column_exists(conn, "ventas", "total_bs") {
+        conn.execute_batch(
+            "ALTER TABLE ventas ADD COLUMN total_bs REAL NOT NULL DEFAULT 0;"
+        ).ok();
+        conn.execute_batch(
+            "UPDATE ventas SET total_bs = ROUND(total_usd * tasa_aplicada, 2);"
+        ).ok();
+    }
 }

@@ -995,12 +995,28 @@ async function confirmPayment() {
     }
   }
   const productos = cart.map(i => ({ codigo: i.codigo, cantidad: i.cantidad }));
+  let total_bs_ingresado = null;
+  if (metodo === 'efectivo_bs') {
+    const totalMoneda = totalBsRedondeado(total);
+    const recibido = parseFloat(document.getElementById('cambio-recibido').value) || 0;
+    if (recibido > 0 && recibido !== totalMoneda) {
+      if (!calcularVuelto) {
+        total_bs_ingresado = recibido;
+      } else if (recibido <= totalMoneda) {
+        total_bs_ingresado = totalMoneda;
+      }
+    } else if (redondeoBs) {
+      total_bs_ingresado = totalMoneda;
+    }
+  } else if (redondeoBs) {
+    total_bs_ingresado = totalBsRedondeado(total);
+  }
   const confirmBtn = qs(SEL.paymentConfirmBtn);
   confirmBtn.classList.add('loading');
   confirmBtn.textContent = 'Procesando...';
   try {
     const venta = await invoke('create_sale', {
-      request: { usuario_id: currentUser.id, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle, cliente_id, productos, tasa: tasaActual }
+      request: { usuario_id: currentUser.id, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle, cliente_id, productos, tasa: tasaActual, total_bs_ingresado }
     });
     playSound('success');
     showToast('Venta #' + venta.id + ' registrada - ' + formatUSD(venta.total_usd));

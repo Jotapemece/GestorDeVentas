@@ -9,6 +9,8 @@ const SQL_COUNT_VENTAS_RANGE: &str =
     "SELECT COUNT(*) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
 const SQL_SUM_VENTAS_RANGE: &str =
     "SELECT COALESCE(SUM(total_usd), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
+const SQL_SUM_BS_RANGE: &str =
+    "SELECT COALESCE(SUM(total_bs), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
 const SQL_VENTAS_RANGE: &str = "
     SELECT metodo_pago, pago_detalle, total_usd, referencia_pago_movil
     FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2";
@@ -31,23 +33,23 @@ const SQL_CAJA_ABIERTA: &str =
     "SELECT valor FROM configuracion WHERE clave = 'caja_abierta'";
 const SQL_SET_CAJA: &str = "UPDATE configuracion SET valor = ?1 WHERE clave = 'caja_abierta'";
 const SQL_INSERT_CIERRE: &str = "
-    INSERT INTO cierres_caja (fecha_hora, usuario_id, total_ventas, total_usd, tasa_cierre)
-    VALUES (?1, ?2, ?3, ?4, ?5)";
+    INSERT INTO cierres_caja (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 const SQL_INSERT_CIERRE_DETALLE: &str =
     "INSERT INTO cierres_detalle (cierre_id, detalle_json) VALUES (?1, ?2)";
 const SQL_LIST_CIERRES: &str = "
-    SELECT c.id, c.fecha_hora, u.username, c.total_ventas, c.total_usd, c.tasa_cierre
+    SELECT c.id, c.fecha_hora, u.username, c.total_ventas, c.total_usd, c.total_bs, c.tasa_cierre
     FROM cierres_caja c
     LEFT JOIN usuarios u ON c.usuario_id = u.id
     ORDER BY c.id DESC";
 const SQL_CIERRE_BY_ID: &str = "
-    SELECT fecha_hora, usuario_id, total_ventas, total_usd, tasa_cierre
+    SELECT fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre
     FROM cierres_caja WHERE id = ?1";
 const SQL_DETALLE_JSON: &str =
     "SELECT detalle_json FROM cierres_detalle WHERE cierre_id = ?1";
 const SQL_LIST_DIARIAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada
+           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs
     FROM ventas v
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id
@@ -69,7 +71,7 @@ fn obtener_totales_del_dia(
     db: &rusqlite::Connection,
     today: &str,
     tomorrow: &str,
-) -> Result<(i64, f64, f64), String> {
+) -> Result<(i64, f64, f64, f64), String> {
     let cnt: i64 = db
         .query_row(SQL_COUNT_VENTAS_RANGE, params![today, tomorrow], |row| {
             row.get(0)
@@ -82,11 +84,17 @@ fn obtener_totales_del_dia(
         })
         .map_err(|e| format!("Error al sumar ventas del día: {}", e))?;
 
+    let bs: f64 = db
+        .query_row(SQL_SUM_BS_RANGE, params![today, tomorrow], |row| {
+            row.get(0)
+        })
+        .map_err(|e| format!("Error al sumar Bs. del día: {}", e))?;
+
     let tasa: f64 = db
         .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
         .map_err(|e| format!("Error al obtener tasa del día: {}", e))?;
 
-    Ok((cnt, usd, tasa))
+    Ok((cnt, usd, bs, tasa))
 }
 
 fn obtener_tasa(db: &rusqlite::Connection) -> f64 {
@@ -99,8 +107,7 @@ fn compute_report_data_range(
     end: &str,
     now: &str,
 ) -> Result<CloseReportData, String> {
-    let (total_ventas, total_usd, tasa) = obtener_totales_del_dia(db, start, end)?;
-    let total_bs = total_usd * tasa;
+    let (total_ventas, total_usd, total_bs, tasa) = obtener_totales_del_dia(db, start, end)?;
 
     let mut stmt = db.prepare(SQL_VENTAS_RANGE).map_err(|e| e.to_string())?;
 
@@ -207,7 +214,7 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
     let tomorrow = siguiente_dia(&today);
     let tasa = obtener_tasa(&db);
 
-    let (total_ventas, total_usd, _) = obtener_totales_del_dia(&db, &today, &tomorrow)?;
+    let (total_ventas, total_usd, total_bs, _) = obtener_totales_del_dia(&db, &today, &tomorrow)?;
 
     let mut stmt = db.prepare(SQL_LIST_DIARIAS).map_err(|e| e.to_string())?;
 
@@ -225,7 +232,7 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
                 cliente_nombre: row.get(8)?,
                 total_usd: row.get(9)?,
                 tasa_aplicada: row.get(10)?,
-                total_bs: row.get::<_, f64>(9)? * row.get::<_, f64>(10)?,
+                total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
             })
         })
         .map_err(|e| e.to_string())?
@@ -235,7 +242,7 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
     Ok(DailySummary {
         total_ventas,
         total_usd,
-        total_bs: total_usd * tasa,
+        total_bs,
         ventas,
         tasa_actual: tasa,
     })
@@ -298,8 +305,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
-    let (total_ventas, total_usd, tasa) = obtener_totales_del_dia(&db, &today, &tomorrow)?;
-    let total_bs = total_usd * tasa;
+    let (total_ventas, total_usd, total_bs, tasa) = obtener_totales_del_dia(&db, &today, &tomorrow)?;
 
     let report_data = compute_report_data_range(&db, &today, &tomorrow, &now)?;
     let detalle_json =
@@ -311,7 +317,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
 
     tx.execute(
         SQL_INSERT_CIERRE,
-        params![now, user_id, total_ventas, total_usd, tasa],
+        params![now, user_id, total_ventas, total_usd, total_bs, tasa],
     )
     .map_err(|e| e.to_string())?;
 
@@ -362,15 +368,15 @@ pub fn list_cierres(state: State<AppState>) -> Result<Vec<CierreListItem>, Strin
 
     let cierres: Vec<CierreListItem> = stmt
         .query_map([], |row| {
-            let total_usd: f64 = row.get(4)?;
-            let tasa_cierre: f64 = row.get(5)?;
+            let bs: f64 = row.get(5)?;
+            let tasa_cierre: f64 = row.get(6)?;
             Ok(CierreListItem {
                 id: row.get(0)?,
                 fecha_hora: row.get(1)?,
                 username: row.get(2)?,
                 total_ventas: row.get(3)?,
-                total_usd,
-                total_bs: total_usd * tasa_cierre,
+                total_usd: row.get(4)?,
+                total_bs: if bs > 0.0 { bs } else { row.get::<_, f64>(4)? * tasa_cierre },
                 tasa_cierre,
             })
         })
@@ -388,10 +394,11 @@ pub fn get_cierre_detalle(
 ) -> Result<CierreDetalle, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
 
-    let (fecha_hora, usuario_id, total_ventas, total_usd, tasa_cierre): (
+    let (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre): (
         String,
         i64,
         i64,
+        f64,
         f64,
         f64,
     ) = db
@@ -402,6 +409,7 @@ pub fn get_cierre_detalle(
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
+                row.get(5)?,
             ))
         })
         .map_err(|_| "Cierre no encontrado".to_string())?;
@@ -410,7 +418,7 @@ pub fn get_cierre_detalle(
         .query_row(crate::constants::SQL_USERNAME_BY_ID, params![usuario_id], |row| row.get(0))
         .unwrap_or_default();
 
-    let total_bs = total_usd * tasa_cierre;
+    let total_bs = if total_bs > 0.0 { total_bs } else { total_usd * tasa_cierre };
 
     let detalle_json: String = db
         .query_row(SQL_DETALLE_JSON, params![cierre_id], |row| row.get(0))

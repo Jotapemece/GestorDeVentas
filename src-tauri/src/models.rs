@@ -101,6 +101,7 @@ pub struct CreateSaleRequest {
     pub productos: Vec<ProductoVenta>,
     pub tasa: f64,
     pub pago_detalle: Option<Vec<PagoItem>>,
+    pub total_bs_ingresado: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -7,7 +7,7 @@ use tauri::State;
 const SQL_PRODUCTO_PRECIO_STOCK: &str = "SELECT precio_usd, stock FROM productos WHERE codigo = ?1";
 const SQL_INSERT_VENTA: &str =
     "INSERT INTO ventas (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
-     cliente_id, total_usd, tasa_aplicada) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
+     cliente_id, total_usd, tasa_aplicada, total_bs) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
 const SQL_INSERT_DETALLE: &str =
     "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario) VALUES (?1, ?2, ?3, ?4)";
 const SQL_UPDATE_STOCK: &str = "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1";
@@ -15,7 +15,7 @@ const SQL_PRODUCTO_PRECIO: &str = "SELECT precio_usd FROM productos WHERE codigo
 const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
 const SQL_LIST_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada
+           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs
     FROM ventas v
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id
@@ -139,6 +139,10 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         String::new()
     };
 
+    let total_bs = request
+        .total_bs_ingresado
+        .unwrap_or_else(|| (total_usd * request.tasa * 100.0).round() / 100.0);
+
     tx.execute(
         SQL_INSERT_VENTA,
         params![
@@ -150,6 +154,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
             request.cliente_id,
             total_usd,
             request.tasa,
+            total_bs,
         ],
     )
     .map_err(|e| format!("Error al crear venta: {}", e))?;
@@ -224,7 +229,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         cliente_nombre: None,
         total_usd,
         tasa_aplicada: request.tasa,
-        total_bs: total_usd * request.tasa,
+        total_bs,
     })
 }
 
@@ -249,7 +254,7 @@ pub fn list_sales(state: State<AppState>, limit: Option<i64>) -> Result<Vec<Vent
                 cliente_nombre: row.get(8)?,
                 total_usd: row.get(9)?,
                 tasa_aplicada: row.get(10)?,
-                total_bs: row.get::<_, f64>(9)? * row.get::<_, f64>(10)?,
+                total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
             })
         })
         .map_err(|e| e.to_string())?

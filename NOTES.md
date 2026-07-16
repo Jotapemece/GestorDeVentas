@@ -342,3 +342,39 @@ Se integró un botón 🔄 al lado del input de tasa que al presionarlo consulta
 - `src/index.html` — cambio group, toggles config
 - `src/style.css` — .btn.loading, cambio-resultado, mobile
 - `NOTES.md` — esta entrada
+
+---
+
+## 2026-07-16 — Almacenar monto real en Bs. recibido en caja (total_bs)
+
+### Problema
+La caja siempre mostraba el total Bs. calculado como `total_usd * tasa_aplicada`. Si:
+- `redondeoBs` estaba activo: se redondeaba el cálculo pero igual no se guardaba
+- El cliente pagaba más sin pedir vuelto (ej: 900 Bs. por algo de 895): se perdía el dato real
+
+### Solución
+Se añadió la columna `total_bs` a las tablas `ventas` y `cierres_caja` para almacenar el monto real en Bs. recibido.
+
+#### Backend
+- **`migrations.rs`**: Migraciones `010` (ventas) y `011` (cierres_caja) para añadir columna + poblar datos existentes con `ROUND(total_usd * tasa_aplicada, 2)`
+- **`models.rs`**: `CreateSaleRequest` ahora tiene `total_bs_ingresado: Option<f64>` — si se envía, se usa ese valor; si no, se calcula `total_usd * tasa` (redondeado a 2 decimales)
+- **`sales.rs`**: INSERT ahora incluye `total_bs`. SELECT `list_sales` lee la columna almacenada (fallback a cálculo si es 0)
+- **`cashier.rs`**:
+  - Nuevo query `SQL_SUM_BS_RANGE` para sumar total_bs del día
+  - `obtener_totales_del_dia` ahora devuelve `(cnt, usd, bs, tasa)` en lugar de `(cnt, usd, tasa)`
+  - `get_daily_summary`, `close_cashier`, `compute_report_data_range` usan el suma real de Bs.
+  - `list_cierres` y `get_cierre_detalle` leen `total_bs` almacenado (fallback a cálculo)
+
+#### Frontend
+- **`app.js`**: `confirmPayment` calcula y envía `total_bs_ingresado`:
+  - Si `redondeoBs` activo: envía `totalBsRedondeado(total)` para cualquier método
+  - Si efectivo_bs y `!calcularVuelto` y recibido > total: envía el monto recibido (el cliente pagó de más sin pedir vuelto)
+  - Si efectivo_bs y `calcularVuelto` activo: se muestra cambio, pero el Bs. registrado es el total normal
+
+### Archivos modificados
+- `src-tauri/src/migrations.rs` — migraciones 010, 011 + schema inicial
+- `src-tauri/src/models.rs` — `total_bs_ingresado` en `CreateSaleRequest`
+- `src-tauri/src/sales.rs` — INSERT/SELECT con total_bs
+- `src-tauri/src/cashier.rs` — queries y lógica actualizada
+- `src/app.js` — lógica para pasar `total_bs_ingresado`
+- `NOTES.md` — esta entrada
