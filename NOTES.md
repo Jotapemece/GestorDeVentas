@@ -206,3 +206,23 @@ El `.exe` queda en `src-tauri/target/<target>/release/gestor-ventas.exe`. Solo h
 - `src-tauri/tauri.conf.json` — añadida sección `windows` con NSIS + WebView2 config
 - `package.json` — añadido script `build:portable`
 - `NOTES.md` — esta entrada
+
+---
+
+## 2026-07-16 — Fix: crash en Windows por ruta BD usando `CARGO_MANIFEST_DIR`
+
+### Problema
+La app se abría como pantalla en blanco y se cerraba inmediatamente en Windows.
+
+### Causa
+`get_db_path()` en `db.rs` usaba `env!("CARGO_MANIFEST_DIR")`, una constante de compilación que contiene la ruta del proyecto **en la máquina de build** (Linux). En la PC Windows destino esa ruta no existe, `Connection::open()` falla, y `lib.rs` llama a `std::process::exit(1)`.
+
+### Solución
+Cambiar la resolución de ruta en desktop para usar el directorio del ejecutable (`std::env::current_exe()`) en lugar de la ruta de compilación. Así:
+- **Portable**: la BD se crea junto al `.exe` en cualquier carpeta
+- **Instalado**: la BD se crea en el directorio de instalación
+- También se simplificó `auto_import_products()` eliminando el fallback a `CARGO_MANIFEST_DIR` que era igualmente inválido en producción
+
+### Archivos modificados
+- `src-tauri/src/db.rs` — `get_db_path()` ahora usa `current_exe()`; `auto_import_products()` simplificado
+- `NOTES.md` — esta entrada

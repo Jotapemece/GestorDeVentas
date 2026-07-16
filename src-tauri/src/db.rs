@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[allow(unused_imports)]
+use tauri::Manager;
 
 const DEFAULT_PATH: &str = ".";
 pub const LOGIN_MAX_ATTEMPTS: i32 = 5;
@@ -15,25 +17,21 @@ pub struct AppState {
     pub login_attempts: Mutex<HashMap<String, (i32, Instant)>>,
 }
 
-fn get_db_path(app_handle: &AppHandle) -> PathBuf {
+fn get_db_path(_app_handle: &AppHandle) -> PathBuf {
     #[cfg(target_os = "android")]
     {
-        let data_dir = app_handle.path().app_data_dir()
+        let data_dir = _app_handle.path().app_data_dir()
             .unwrap_or_else(|_| PathBuf::from("/data/data/com.gestor-ventas.app/databases"));
         return data_dir.join("gestor_ventas.db");
     }
 
-    #[cfg(not(target_os = "android"))]
-    {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.pop();
-        path.push("gestor_ventas.db");
-        let src_alt = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("gestor_ventas.db");
-        if src_alt.exists() {
-            return src_alt;
+    // Desktop: usar directorio del ejecutable (portable-friendly)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            return exe_dir.join("gestor_ventas.db");
         }
-        path
     }
+    PathBuf::from("gestor_ventas.db")
 }
 
 pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
@@ -126,14 +124,8 @@ fn auto_import_products(conn: &Connection, app_handle: &AppHandle) {
         }
         let db_path = get_db_path(app_handle);
         let dir = db_path.parent().unwrap_or(Path::new(DEFAULT_PATH));
-        let file_path = if dir.join("productos").exists() {
-            dir.join("productos")
-        } else {
-            let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap_or(Path::new(DEFAULT_PATH)).to_path_buf();
-            let fallback = project_root.join("productos");
-            if !fallback.exists() { return; }
-            fallback
-        };
+        let file_path = dir.join("productos");
+        if !file_path.exists() { return; }
         let content = match std::fs::read_to_string(&file_path) {
             Ok(c) => c,
             Err(_) => return,
