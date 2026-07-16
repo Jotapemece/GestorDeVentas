@@ -600,7 +600,11 @@ button:focus-visible,
 }
 .config-card-header.collapsed .config-toggle { transform: rotate(-90deg); }
 .config-card-body { padding: 0 24px 20px; }
-.config-card-header.collapsed + .config-card-body { display: none; }
+.config-card-header.collapsed ~ .config-card-desc,
+.config-card-header.collapsed ~ .config-card-body { display: none; }
+.config-card-desc {
+  padding: 0 24px 12px; font-size: 13px; color: var(--text-light);
+}
 .theme-selector { display: flex; gap: 12px; flex-wrap: wrap; }
 .theme-btn {
   padding: 14px 24px; border: 2px solid var(--border); border-radius: 10px;
@@ -779,6 +783,9 @@ button:focus-visible,
 }
 .compact .config-card-body {
   padding: 0 16px 14px;
+}
+.compact .config-card-desc {
+  padding: 0 16px 8px; font-size: 0.75rem;
 }
 .compact .theme-btn {
   padding: 10px 16px; min-width: 80px; gap: 4px;
