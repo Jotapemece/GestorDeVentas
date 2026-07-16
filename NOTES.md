@@ -188,14 +188,18 @@ También se puede omitir el instalador y generar solo el `.exe` portable con: `n
 Para saltarse el NSIS y generar solo el `.exe` autónomo:
 
 ```bash
-# Cross-compile para 32-bit (portable)
-npm run build:portable -- --target i686-pc-windows-gnu
+# Opción 1: script automático (recomendado)
+./build-portable.sh                 # 32-bit (por defecto)
+./build-portable.sh x86_64-pc-windows-gnu  # 64-bit
 
-# O para 64-bit
-npm run build:portable -- --target x86_64-pc-windows-gnu
+# Opción 2: manual
+npm run build:portable -- --target i686-pc-windows-gnu
+# Luego copiar ambos archivos:
+#   src-tauri/target/i686-pc-windows-gnu/release/gestor-ventas.exe
+#   src-tauri/target/i686-pc-windows-gnu/release/WebView2Loader.dll
 ```
 
-El `.exe` queda en `src-tauri/target/<target>/release/gestor-ventas.exe`. Solo hay que copiarlo a cualquier carpeta y ejecutarlo.
+El contenido de `dist/gestor-ventas/` se copia a cualquier PC y funciona sin instalación.
 
 > Nota: si `tauri build` falla igualmente en el paso de empaquetado, el `.exe` ya está compilado en `target/` antes de que el bundler intente ejecutarse. Puedes ignorar el error y tomar el `.exe` de ahí.
 
