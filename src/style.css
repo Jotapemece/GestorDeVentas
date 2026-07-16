@@ -303,6 +303,7 @@ button:focus-visible,
 .tasa-input-group {
   display: flex; align-items: center; gap: 8px;
 }
+.tasa-icon { font-size: 16px; color: var(--text-light); }
 .tasa-input-group input { width: 130px; padding: 8px 12px; height: 40px; }
 .tasa-warning { font-size: 18px; color: var(--danger-dark); cursor: pointer; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
