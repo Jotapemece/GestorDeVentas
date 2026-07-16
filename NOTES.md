@@ -441,3 +441,18 @@ Se añadió la columna `total_bs` a las tablas `ventas` y `cierres_caja` para al
 - `src/app.js` — `loadUserList`, `handleCreateUser`, `handleChangePassword`, `loadReports`, `handleVoidSale`, `createUserRow`, `createReportRow`; event listeners; keyboard shortcuts
 - `src/style.css` — `.user-form-row`, `.reports-filters`, `.report-summary-cards`, `.report-summary-cards`; compact variants; `#view-reports` en view selectors
 - `src/fa-local.css` — iconos `ban`, `save`, `keyboard`, `calculator`, `circle`
+
+---
+
+## 2026-07-16 — Cards colapsables, descripciones inline, Reportes fuera de bottom-tabs
+
+### Cambios
+1. **Reportes fuera de bottom-tabs**: Se eliminó el botón "Reportes" de la navegación móvil (8 tabs era demasiado). En desktop sigue en sidebar. En móvil se accede desde botón "Reportes" en la vista Caja.
+2. **Config cards colapsables**: Cada tarjeta tiene un header cliqueable con chevron. Al hacer clic se pliega/despliega el contenido (clase `.collapsed`).
+3. **Descripciones en cada card**: Texto breve dentro del header. Cuando la card está **plegada** la descripción aparece inline (a la derecha del título, truncada con `…`). Cuando está **desplegada** baja a su propia línea con borde superior.
+4. **Icono `nf-fa-edit`**: Faltaba en `fa-local.css`, ahora se muestra correctamente en "Entrada de datos".
+
+### Archivos modificados
+- `src/index.html` — descripciones movidas dentro de `.config-card-header`; quitado `reports` de bottom-tabs; botón "Reportes" en vista Caja
+- `src/style.css` — `.config-card-desc` ahora dentro del header (flex inline → full-width al desplegar); compact variants
+- `src/fa-local.css` — icono `edit`
