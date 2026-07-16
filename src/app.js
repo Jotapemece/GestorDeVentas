@@ -38,6 +38,8 @@ const CFG_SONIDO_HABILITADO = 'sonido_habilitado';
 const CFG_SONIDO_VOLUMEN = 'sonido_volumen';
 const CFG_HISTORIAL_LIMPIEZA_DIAS = 'historial_limpieza_dias';
 const CFG_COMA_AUTOMATICA = 'coma_automatica';
+const CFG_CALCULAR_VUELTO = 'calcular_vuelto';
+const CFG_REDONDEO_BS = 'redondeo_bs';
 
 // Payment method keys (deben coincidir con constants.rs)
 const METODO_PAGO = {
@@ -249,6 +251,8 @@ let productCache = [];
 let lastCloseReportData = null;
 let lastViewName = 'sales';
 let comaAutomaticaEnabled = false;
+let calcularVuelto = true;
+let redondeoBs = false;
 let soundEnabled = true;
 let soundVolume = 0.5;
 let auditOffset = 0;
@@ -343,6 +347,10 @@ document.addEventListener('keydown', (e) => {
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
 function parsePrecio(s) { return parseFloat(String(s).replace(',', '.')) || 0; }
+function totalBsRedondeado(totalUsd) {
+  const bs = totalUsd * tasaActual;
+  return redondeoBs ? Math.round(bs) : bs;
+}
 
 function applyComaAutomatica(input) {
   if (!comaAutomaticaEnabled) return;
@@ -719,7 +727,7 @@ function openPaymentModal() {
   if (cart.length === 0) return;
   const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
   qs(SEL.paymentTotalUsd).textContent = formatUSD(total);
-  qs(SEL.paymentTotalBs).textContent = formatBS(total * tasaActual);
+  qs(SEL.paymentTotalBs).textContent = formatBS(totalBsRedondeado(total));
   showModal(qs(SEL.paymentModal));
   qs(SEL.referenciaInput).value = '';
   qs(SEL.clienteSelect).innerHTML = '<option value="">Seleccione...</option>';
@@ -1808,11 +1816,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (!methodBtn) return;
     const method = methodBtn.dataset.method;
     const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
-    const totalPagado = method === 'efectivo_bs' ? recibido / (tasaActual || 1) : recibido;
+    const totalMoneda = method === 'efectivo_bs' ? totalBsRedondeado(total) : total;
     const cambioEl = document.getElementById('cambio-resultado');
     const montoEl = document.getElementById('cambio-monto');
-    if (recibido > 0 && totalPagado > total) {
-      const cambio = method === 'efectivo_bs' ? (recibido - total * (tasaActual || 1)) : (recibido - total);
+    if (recibido > 0 && recibido > totalMoneda && calcularVuelto) {
+      const cambio = recibido - totalMoneda;
       const cambioTexto = method === 'efectivo_bs' ? 'Bs. ' + cambio.toFixed(2).replace('.', ',') : formatUSD(cambio);
       montoEl.textContent = cambioTexto;
       cambioEl.classList.remove('hidden');
@@ -2056,6 +2064,20 @@ document.addEventListener('DOMContentLoaded', async function() {
       try { await invoke('set_config_value', { key: CFG_COMA_AUTOMATICA, value: this.checked ? '1' : '0' }); } catch (e) {}
     });
   }
+  const vueltoToggle = document.getElementById('calcular-vuelto-toggle');
+  if (vueltoToggle) {
+    vueltoToggle.addEventListener('change', async function() {
+      calcularVuelto = this.checked;
+      try { await invoke('set_config_value', { key: CFG_CALCULAR_VUELTO, value: this.checked ? '1' : '0' }); } catch (e) {}
+    });
+  }
+  const redondeoToggle = document.getElementById('redondeo-bs-toggle');
+  if (redondeoToggle) {
+    redondeoToggle.addEventListener('change', async function() {
+      redondeoBs = this.checked;
+      try { await invoke('set_config_value', { key: CFG_REDONDEO_BS, value: this.checked ? '1' : '0' }); } catch (e) {}
+    });
+  }
 
   // Load saved sound config
   try {
@@ -2077,6 +2099,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     comaAutomaticaEnabled = savedComa === '1' || savedComa === true;
     if (comaToggle) comaToggle.checked = comaAutomaticaEnabled;
     updatePrecioInputType();
+  } catch (e) {}
+
+  // Load calcular vuelto config
+  try {
+    const savedVuelto = await invoke('get_config_value', { key: CFG_CALCULAR_VUELTO });
+    calcularVuelto = savedVuelto !== '0';
+    if (vueltoToggle) vueltoToggle.checked = calcularVuelto;
+  } catch (e) {}
+
+  // Load redondeo Bs config
+  try {
+    const savedRedondeo = await invoke('get_config_value', { key: CFG_REDONDEO_BS });
+    redondeoBs = savedRedondeo === '1' || savedRedondeo === true;
+    if (redondeoToggle) redondeoToggle.checked = redondeoBs;
   } catch (e) {}
 
   // Load saved theme on startup
