@@ -2093,6 +2093,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
+  /* ========== COLLAPSIBLE CONFIG CARDS ========== */
+  document.getElementById('view-config').addEventListener('click', function(e) {
+    const header = e.target.closest('.config-card-header');
+    if (header) header.classList.toggle('collapsed');
+  });
+
   /* ========== CHANGE PASSWORD ========== */
   const changePwdBtn = document.getElementById('change-pwd-btn');
   if (changePwdBtn) changePwdBtn.addEventListener('click', handleChangePassword);
@@ -2124,6 +2130,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
     observer.observe(reportsView, { attributes: true, attributeFilter: ['class'] });
   }
+
+  // Goto reports from cashier
+  const gotoReportsBtn = document.getElementById('goto-reports-btn');
+  if (gotoReportsBtn) gotoReportsBtn.addEventListener('click', function() { showView('reports'); });
 
   // Historial cierres
   qs(SEL.historialCierresBtn).addEventListener('click', openHistorialCierres);

@@ -130,10 +130,6 @@
           <span class="nav-icon"><i class="nf nf-fa-history"></i></span>
           <span class="nav-text">Historial</span>
         </button>
-        <button class="nav-btn" data-view="reports">
-          <span class="nav-icon"><i class="nf nf-fa-bar_chart"></i></span>
-          <span class="nav-text">Reportes</span>
-        </button>
         <button class="nav-btn admin-only" data-view="config">
           <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
           <span class="nav-text">Config.</span>
@@ -259,6 +255,7 @@
               <button id="open-cashier-btn" class="btn btn-accent hidden"><i class="nf nf-fa-unlock"></i> Abrir Caja</button>
               <button id="close-cashier-btn" class="btn btn-danger hidden"><i class="nf nf-fa-lock"></i> Cerrar Jornada</button>
               <button id="historial-cierres-btn" class="btn btn-outline"><i class="nf nf-fa-history"></i> Cierres anteriores</button>
+              <button id="goto-reports-btn" class="btn btn-outline"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
             </div>
           </div>
           <div id="caja-status-bar" class="caja-status cerrada">
@@ -386,148 +383,171 @@
             <h2><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</h2>
           </div>
           <div class="config-card">
-            <h3><i class="nf nf-fa-paint_brush"></i> Tema de la aplicaci&oacute;n</h3>
-            <div class="theme-selector">
-              <button class="theme-btn" data-theme="oscuro">
-                <i class="nf nf-fa-moon"></i>
-                <span>Oscuro</span>
-              </button>
-              <button class="theme-btn" data-theme="claro">
-                <i class="nf nf-fa-sun"></i>
-                <span>Claro</span>
-              </button>
-              <button class="theme-btn" data-theme="azul">
-                <i class="nf nf-fa-palette"></i>
-                <span>Azul</span>
-              </button>
-              <button class="theme-btn" data-theme="verde">
-                <i class="nf nf-fa-palette"></i>
-                <span>Verde</span>
-              </button>
-              <button class="theme-btn" data-theme="morado">
-                <i class="nf nf-fa-palette"></i>
-                <span>Morado</span>
-              </button>
-              <button class="theme-btn" data-theme="turquesa">
-                <i class="nf nf-fa-palette"></i>
-                <span>Turquesa</span>
-              </button>
-              <button class="theme-btn" data-theme="naranja">
-                <i class="nf nf-fa-palette"></i>
-                <span>Naranja</span>
-              </button>
+            <div class="config-card-header">
+              <i class="nf nf-fa-paint_brush"></i> Tema
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="theme-selector">
+                <button class="theme-btn" data-theme="oscuro"><i class="nf nf-fa-moon"></i><span>Oscuro</span></button>
+                <button class="theme-btn" data-theme="claro"><i class="nf nf-fa-sun"></i><span>Claro</span></button>
+                <button class="theme-btn" data-theme="azul"><i class="nf nf-fa-palette"></i><span>Azul</span></button>
+                <button class="theme-btn" data-theme="verde"><i class="nf nf-fa-palette"></i><span>Verde</span></button>
+                <button class="theme-btn" data-theme="morado"><i class="nf nf-fa-palette"></i><span>Morado</span></button>
+                <button class="theme-btn" data-theme="turquesa"><i class="nf nf-fa-palette"></i><span>Turquesa</span></button>
+                <button class="theme-btn" data-theme="naranja"><i class="nf nf-fa-palette"></i><span>Naranja</span></button>
+              </div>
             </div>
           </div>
           <div class="config-card">
-            <h3><i class="nf nf-fa-edit"></i> Entrada de datos</h3>
-            <div class="config-row">
-              <span class="config-label"><i class="nf nf-fa-keyboard"></i> Coma autom&aacute;tica</span>
-              <label class="toggle-switch">
-                <input type="checkbox" id="coma-automatica-toggle">
-                <span class="toggle-slider"></span>
-              </label>
+            <div class="config-card-header">
+              <i class="nf nf-fa-edit"></i> Entrada de datos
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
             </div>
-            <div class="config-row">
-              <span class="config-label"><i class="nf nf-fa-calculator"></i> Calcular vuelto en efectivo</span>
-              <label class="toggle-switch">
-                <input type="checkbox" id="calcular-vuelto-toggle" checked>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="config-row">
-              <span class="config-label"><i class="nf nf-fa-circle"></i> Redondear pago en efectivo Bs.</span>
-              <label class="toggle-switch">
-                <input type="checkbox" id="redondeo-bs-toggle">
-                <span class="toggle-slider"></span>
-              </label>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-keyboard"></i> Coma autom&aacute;tica</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="coma-automatica-toggle">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-calculator"></i> Calcular vuelto en efectivo</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="calcular-vuelto-toggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-circle"></i> Redondear pago en efectivo Bs.</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="redondeo-bs-toggle">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
           <div class="config-card">
-            <h3><i class="nf nf-fa-text_height"></i> Tama&ntilde;o de fuente</h3>
-            <div class="font-size-control">
-              <button id="font-dec-btn" class="btn btn-sm btn-outline" title="Reducir">A-</button>
-              <span id="font-size-display" class="font-size-display">100%</span>
-              <button id="font-inc-btn" class="btn btn-sm btn-outline" title="Aumentar">A+</button>
+            <div class="config-card-header">
+              <i class="nf nf-fa-text_height"></i> Tama&ntilde;o de fuente
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="font-size-control">
+                <button id="font-dec-btn" class="btn btn-sm btn-outline" title="Reducir">A-</button>
+                <span id="font-size-display" class="font-size-display">100%</span>
+                <button id="font-inc-btn" class="btn btn-sm btn-outline" title="Aumentar">A+</button>
+              </div>
             </div>
           </div>
           <div class="config-card config-fullscreen">
-            <h3><i class="nf nf-fa-display"></i> Pantalla completa</h3>
-            <div class="config-row">
-              <span class="config-label">Pantalla completa</span>
-              <label class="toggle-switch">
-                <input type="checkbox" id="fullscreen-toggle">
-                <span class="toggle-slider"></span>
-              </label>
+            <div class="config-card-header">
+              <i class="nf nf-fa-display"></i> Pantalla completa
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
             </div>
-          </div>
-          <div class="config-card">
-            <h3><i class="nf nf-fa-music"></i> Sonidos</h3>
-            <div class="config-row">
-              <span class="config-label">Habilitar sonidos</span>
-              <label class="toggle-switch">
-                <input type="checkbox" id="sound-toggle" checked>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="config-row">
-              <span class="config-label">Volumen</span>
-              <input type="range" id="sound-volume" min="0" max="100" value="50">
-            </div>
-          </div>
-          <div class="config-card">
-            <h3><i class="nf nf-fa-eraser"></i> Limpieza del historial</h3>
-            <div class="config-info">
-              <p class="text-sm">Limpieza autom&aacute;tica: eliminar registros despu&eacute;s de:</p>
-              <div class="historial-limpieza-row">
-                <input type="number" id="historial-limpieza-dias" min="0" max="365" value="0">
-                <span class="text-sm">d&iacute;as</span>
-                <button id="historial-limpieza-save" class="btn btn-primary btn-sm">Guardar</button>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label">Pantalla completa</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="fullscreen-toggle">
+                  <span class="toggle-slider"></span>
+                </label>
               </div>
-              <div class="historial-limpieza-info">
-                <span class="text-muted text-sm" id="historial-limpieza-status"></span>
-                <button id="audit-clear-config-btn" class="btn btn-sm btn-danger"><i class="nf nf-fa-trash"></i> Limpiar ahora</button>
+            </div>
+          </div>
+          <div class="config-card">
+            <div class="config-card-header">
+              <i class="nf nf-fa-music"></i> Sonidos
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label">Habilitar sonidos</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="sound-toggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row">
+                <span class="config-label">Volumen</span>
+                <input type="range" id="sound-volume" min="0" max="100" value="50">
+              </div>
+            </div>
+          </div>
+          <div class="config-card">
+            <div class="config-card-header">
+              <i class="nf nf-fa-eraser"></i> Limpieza del historial
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-info">
+                <p class="text-sm">Limpieza autom&aacute;tica: eliminar registros despu&eacute;s de:</p>
+                <div class="historial-limpieza-row">
+                  <input type="number" id="historial-limpieza-dias" min="0" max="365" value="0">
+                  <span class="text-sm">d&iacute;as</span>
+                  <button id="historial-limpieza-save" class="btn btn-primary btn-sm">Guardar</button>
+                </div>
+                <div class="historial-limpieza-info">
+                  <span class="text-muted text-sm" id="historial-limpieza-status"></span>
+                  <button id="audit-clear-config-btn" class="btn btn-sm btn-danger"><i class="nf nf-fa-trash"></i> Limpiar ahora</button>
+                </div>
               </div>
             </div>
           </div>
           <div class="config-card admin-only" id="user-management-card">
-            <h3><i class="nf nf-fa-users"></i> Gesti&oacute;n de Usuarios</h3>
-            <div class="config-row">
-              <span class="config-label">Nuevo usuario</span>
+            <div class="config-card-header">
+              <i class="nf nf-fa-users"></i> Usuarios
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
             </div>
-            <div class="user-form-row">
-              <input type="text" id="new-user-name" placeholder="Nombre de usuario" class="form-input">
-              <input type="password" id="new-user-password" placeholder="Contrase&ntilde;a" class="form-input">
-              <select id="new-user-rol" class="form-input">
-                <option value="vendedor">Vendedor</option>
-                <option value="admin">Admin</option>
-              </select>
-              <button id="create-user-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-plus"></i> Crear</button>
-            </div>
-            <div class="table-container" style="margin-top:12px">
-              <table class="table compact-table">
-                <thead><tr><th>Usuario</th><th>Rol</th><th>Acci&oacute;n</th></tr></thead>
-                <tbody id="user-list-body"></tbody>
-              </table>
-            </div>
-          </div>
-          <div class="config-card">
-            <h3><i class="nf nf-fa-lock"></i> Cambiar Contrase&ntilde;a</h3>
-            <div class="user-form-row">
-              <input type="password" id="change-pwd-old" placeholder="Contrase&ntilde;a actual" class="form-input">
-              <input type="password" id="change-pwd-new" placeholder="Nueva contrase&ntilde;a" class="form-input">
-              <input type="password" id="change-pwd-confirm" placeholder="Confirmar" class="form-input">
-              <button id="change-pwd-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Cambiar</button>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label">Nuevo usuario</span>
+              </div>
+              <div class="user-form-row">
+                <input type="text" id="new-user-name" placeholder="Nombre" class="form-input">
+                <input type="password" id="new-user-password" placeholder="Contrase&ntilde;a" class="form-input">
+                <select id="new-user-rol" class="form-input">
+                  <option value="vendedor">Vendedor</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <button id="create-user-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-plus"></i> Crear</button>
+              </div>
+              <div class="table-container" style="margin-top:12px">
+                <table class="table compact-table">
+                  <thead><tr><th>Usuario</th><th>Rol</th><th>Acci&oacute;n</th></tr></thead>
+                  <tbody id="user-list-body"></tbody>
+                </table>
+              </div>
             </div>
           </div>
           <div class="config-card">
-            <h3><i class="nf nf-fa-info_circle"></i> Informaci&oacute;n del sistema</h3>
-            <div class="config-info">
-              <p><strong>Versi&oacute;n:</strong> 1.0.0</p>
-              <p><strong>Base de datos:</strong> SQLite local</p>
-              <p><strong>Framework:</strong> Tauri v2 + Rust</p>
+            <div class="config-card-header">
+              <i class="nf nf-fa-lock"></i> Contrase&ntilde;a
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="user-form-row">
+                <input type="password" id="change-pwd-old" placeholder="Actual" class="form-input">
+                <input type="password" id="change-pwd-new" placeholder="Nueva" class="form-input">
+                <input type="password" id="change-pwd-confirm" placeholder="Confirmar" class="form-input">
+                <button id="change-pwd-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Cambiar</button>
+              </div>
             </div>
           </div>
-
+          <div class="config-card">
+            <div class="config-card-header">
+              <i class="nf nf-fa-info_circle"></i> Informaci&oacute;n del sistema
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-info">
+                <p><strong>Versi&oacute;n:</strong> 1.0.0</p>
+                <p><strong>Base de datos:</strong> SQLite local</p>
+                <p><strong>Framework:</strong> Tauri v2 + Rust</p>
+              </div>
+            </div>
+          </div>
         </section>
       </main>
     </div>

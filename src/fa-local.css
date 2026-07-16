@@ -62,3 +62,4 @@
 .nf-fa-keyboard::before { content: "\f11c"; }
 .nf-fa-calculator::before { content: "\f1ec"; }
 .nf-fa-circle::before { content: "\f111"; }
+.nf-fa-chevron_down::before { content: "\f078"; }
