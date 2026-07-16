@@ -310,6 +310,61 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
 }
 
 #[tauri::command]
+pub fn replace_all_products(
+    state: State<AppState>,
+    content: String,
+) -> Result<String, String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(&state, &db, "Reemplazó todos los productos")?;
+
+    db.execute("UPDATE productos SET activo = 0 WHERE activo = 1", [])
+        .map_err(|e| format!("Error al limpiar productos: {}", e))?;
+
+    let mut count = 0;
+    let mut errors: Vec<String> = Vec::new();
+
+    for (line_no, line) in content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() { continue; }
+
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() < 3 {
+            errors.push(format!("Línea {}: columnas insuficientes ({})", line_no + 1, cols.len()));
+            continue;
+        }
+
+        let nombre = cols[0].trim();
+        let stock_str = cols[1].trim();
+        let precio_str = cols[2].trim().replace(',', ".");
+
+        let stock: i64 = match stock_str.parse() {
+            Ok(s) => s,
+            Err(_) => { errors.push(format!("Línea {}: stock inválido '{}'", line_no + 1, stock_str)); continue; }
+        };
+        let precio_usd: f64 = match precio_str.parse() {
+            Ok(p) => p,
+            Err(_) => { errors.push(format!("Línea {}: precio inválido '{}'", line_no + 1, precio_str)); continue; }
+        };
+
+        let codigo = format!("P{:04}", count + 1);
+
+        db.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, stock])
+            .map_err(|e| errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e)))
+            .ok();
+        count += 1;
+    }
+
+    let msg = format!("{} productos reemplazados.", count);
+    if errors.is_empty() {
+        Ok(msg)
+    } else {
+        let detail = errors.iter().take(5).cloned().collect::<Vec<_>>().join("\n");
+        let suffix = if errors.len() > 5 { format!("\n... y {} más", errors.len() - 5) } else { String::new() };
+        Ok(format!("{}.\nErrores ({}):\n{}{}", msg, errors.len(), detail, suffix))
+    }
+}
+
+#[tauri::command]
 pub fn import_products_from_file(
     state: State<AppState>,
     content: String,

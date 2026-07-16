@@ -53,6 +53,7 @@ pub fn run() {
             products::export_products_xlsx,
             products::import_products_from_file,
             products::import_products_from_db,
+            products::replace_all_products,
             // Sales
             sales::create_sale,
             sales::list_sales,
