@@ -378,3 +378,16 @@ Se añadió la columna `total_bs` a las tablas `ventas` y `cierres_caja` para al
 - `src-tauri/src/cashier.rs` — queries y lógica actualizada
 - `src/app.js` — lógica para pasar `total_bs_ingresado`
 - `NOTES.md` — esta entrada
+
+---
+
+## 2026-07-16 — Quitar label Tasa Bs./$, modal de carga al buscar tasa BCV
+
+### Cambios
+1. **Eliminada la etiqueta "Tasa Bs./$"** del `tasa-input-group` (ocupa espacio horizontal innecesario en móvil). Se conservó el icono `$`.
+2. **Modal de carga al obtener tasa BCV**: Al presionar el botón de actualizar, aparece un overlay centrado con un spinner animado y el texto "Buscando tasa del BCV..." mientras se espera la respuesta del servidor. Se oculta automáticamente al terminar (éxito o error), gracias al bloque `finally`.
+
+### Archivos modificados
+- `src/index.html` — eliminado `<label>`, agregado `<div id="loading-modal">`
+- `src/style.css` — eliminados estilos de `.tasa-input-group label` y `.tasa-icon` (restaurado luego); agregados `.loading-overlay`, `.loading-modal`, `.loading-spinner-large`
+- `src/app.js` — nuevas funciones `showLoadingModal`/`hideLoadingModal`; `fetchTasaBcv` las usa
