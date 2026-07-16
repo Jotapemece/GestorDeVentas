@@ -1,4 +1,5 @@
 use rusqlite::{Connection, params};
+use tauri::State;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -13,6 +14,7 @@ pub const LOGIN_BLOCK_SECS: u64 = 300;
 
 pub struct AppState {
     pub db: Mutex<Connection>,
+    pub db_path: Mutex<PathBuf>,
     pub current_user: Mutex<Option<crate::models::Usuario>>,
     pub login_attempts: Mutex<HashMap<String, (i32, Instant)>>,
 }
@@ -34,7 +36,7 @@ fn get_db_path(_app_handle: &AppHandle) -> PathBuf {
     PathBuf::from("gestor_ventas.db")
 }
 
-pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
+pub fn init_db(app_handle: &AppHandle) -> Result<(Connection, PathBuf), String> {
     let db_path = get_db_path(app_handle);
     let conn = Connection::open(&db_path).map_err(|e| format!("Error al abrir BD: {}", e))?;
 
@@ -53,7 +55,7 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     auto_import_products(&conn, app_handle);
     cleanup_old_history(&conn);
 
-    Ok(conn)
+    Ok((conn, db_path))
 }
 
 fn cleanup_old_history(conn: &Connection) {
@@ -189,4 +191,22 @@ fn insert_default_config(conn: &Connection) {
 pub fn get_tasa_from_db(db: &Connection) -> Result<f64, String> {
     db.query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
         .map_err(|e| format!("Error al obtener tasa de cambio: {}", e))
+}
+
+#[tauri::command]
+pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<String, String> {
+    let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
+
+    let backup_path = if dest_path.is_empty() {
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let parent = db_path.parent().unwrap_or(std::path::Path::new("."));
+        parent.join(format!("gestor_ventas_backup_{}.db", timestamp))
+    } else {
+        std::path::PathBuf::from(&dest_path)
+    };
+
+    std::fs::copy(&db_path, &backup_path)
+        .map_err(|e| format!("Error al copiar BD: {}", e))?;
+
+    Ok(format!("Base de datos respaldada en: {}", backup_path.display()))
 }

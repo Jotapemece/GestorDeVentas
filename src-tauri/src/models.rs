@@ -214,3 +214,11 @@ pub struct VentaDetallada {
     pub tasa_aplicada: f64,
     pub productos: Vec<DetalleVenta>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TopProductItem {
+    pub codigo: String,
+    pub nombre: String,
+    pub cantidad_vendida: i64,
+    pub total_usd: f64,
+}

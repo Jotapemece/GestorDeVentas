@@ -456,3 +456,34 @@ Se añadió la columna `total_bs` a las tablas `ventas` y `cierres_caja` para al
 - `src/index.html` — descripciones movidas dentro de `.config-card-header`; quitado `reports` de bottom-tabs; botón "Reportes" en vista Caja
 - `src/style.css` — `.config-card-desc` ahora dentro del header (flex inline → full-width al desplegar); compact variants
 - `src/fa-local.css` — icono `edit`
+
+---
+
+## 2026-07-16 — Items 4, 8, 5, 3: búsqueda créditos, backup BD, top productos, admin cambia password
+
+### Item 4 — Búsqueda en créditos
+- **Frontend**: Input `#creditos-search` que filtra filas de la tabla por nombre del cliente en tiempo real (solo DOM, sin backend)
+
+### Item 8 — Backup de BD
+- **Backend** (`db.rs`): Comando `backup_database` — copia `gestor_ventas.db` a `gestor_ventas_backup_YYYYMMDD_HHMMSS.db` en el mismo directorio. Usa `chrono::Local::now()` para timestamp. Acepta `dest_path` opcional (vacío = auto).
+- **Frontend**: Tarjeta "Respaldo" en Config (admin-only) con botón "Descargar respaldo"
+- **AppState**: Nuevo campo `db_path: Mutex<PathBuf>` almacenado al iniciar la BD
+
+### Item 5 — Productos más vendidos
+- **Backend** (`products.rs`): Comando `get_top_products` — agrega ventas desde `detalles_ventas` JOIN `ventas` (excluye anuladas), agrupa por producto, ordena por total USD descendente. Acepta `start_date`, `end_date`, `limit`.
+- **Modelo** (`models.rs`): Nuevo struct `TopProductItem { codigo, nombre, cantidad_vendida, total_usd }`
+- **Frontend**: Sección `#top-products-section` en Reportes que se muestra al buscar, con selector Top 5/10/20. Función `loadReportsAndTopProducts` que llama a ambos.
+
+### Item 3 — Admin cambia password de otros
+- **Backend** (`auth.rs`): Comando `admin_change_password(usuario_id, new_password)` — requiere rol admin, sin validación de vieja contraseña
+- **Frontend**: Botón 🔑 en cada fila de la tabla de usuarios (excepto admin) que abre modal `#admin-pwd-modal` con input de nueva contraseña
+
+### Archivos modificados
+- `src-tauri/src/auth.rs` — `admin_change_password`
+- `src-tauri/src/db.rs` — `AppState.db_path`, `backup_database`, `init_db` retorna `(Connection, PathBuf)`
+- `src-tauri/src/lib.rs` — nuevos comandos registrados, AppState con db_path
+- `src-tauri/src/models.rs` — `TopProductItem`
+- `src-tauri/src/products.rs` — `get_top_products`
+- `src/index.html` — input búsqueda créditos, card Respaldo, top products en reportes, modal admin-pwd-modal
+- `src/app.js` — createUserRow con botón 🔑, créditos search filter, admin pwd modal, backup handler, loadReportsAndTopProducts, loadTopProducts
+- `src/style.css` — `.top-products-grid`, `.top-product-card`, compact variants

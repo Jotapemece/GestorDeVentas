@@ -21,8 +21,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            let conn = match db::init_db(&app.handle()) {
-                Ok(c) => c,
+            let (conn, db_path) = match db::init_db(&app.handle()) {
+                Ok(t) => t,
                 Err(e) => {
                     eprintln!("Error al inicializar BD: {}", e);
                     std::process::exit(1);
@@ -30,6 +30,7 @@ pub fn run() {
             };
             app.manage(AppState {
                 db: std::sync::Mutex::new(conn),
+                db_path: std::sync::Mutex::new(db_path),
                 current_user: std::sync::Mutex::new(None),
                 login_attempts: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
@@ -86,6 +87,12 @@ pub fn run() {
             config::list_theme_names,
             // Tasa BCV
             tasa_bcv::fetch_tasa_bcv,
+            // DB
+            db::backup_database,
+            // Auth
+            auth::admin_change_password,
+            // Products
+            products::get_top_products,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

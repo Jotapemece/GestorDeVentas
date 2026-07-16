@@ -234,6 +234,9 @@
             <h2><i class="nf nf-fa-credit_card"></i> Gesti&oacute;n de Cr&eacute;dito</h2>
             <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
           </div>
+          <div style="margin-bottom:12px">
+            <input type="text" id="creditos-search" class="form-input" placeholder="Buscar por nombre..." style="max-width:280px">
+          </div>
           <div class="table-container">
             <table class="table" id="creditos-table">
               <thead>
@@ -359,6 +362,17 @@
               <div class="summary-label">Total Bs.</div>
               <div class="summary-value" id="report-total-bs">Bs. 0,00</div>
             </div>
+          </div>
+          <div id="top-products-section" style="display:none;margin-bottom:20px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+              <h3 style="margin:0"><i class="nf nf-fa-trophy"></i> Productos m&aacute;s vendidos</h3>
+              <select id="top-products-limit" class="form-input" style="width:auto">
+                <option value="5">Top 5</option>
+                <option value="10" selected>Top 10</option>
+                <option value="20">Top 20</option>
+              </select>
+            </div>
+            <div class="top-products-grid" id="top-products-grid"></div>
           </div>
           <div class="table-container">
             <table class="table" id="report-sales-table">
@@ -498,6 +512,19 @@
                   <span class="text-muted text-sm" id="historial-limpieza-status"></span>
                   <button id="audit-clear-config-btn" class="btn btn-sm btn-danger"><i class="nf nf-fa-trash"></i> Limpiar ahora</button>
                 </div>
+              </div>
+            </div>
+          </div>
+          <div class="config-card admin-only">
+            <div class="config-card-header">
+              <i class="nf nf-fa-database"></i> Respaldo
+              <span class="config-card-desc">Copia de seguridad de la base de datos</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-database"></i> Base de datos</span>
+                <button id="backup-db-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Descargar respaldo</button>
               </div>
             </div>
           </div>
@@ -813,6 +840,22 @@
     </div>
   </div>
 
+  <div id="admin-pwd-modal" class="modal hidden">
+    <div class="modal-content" style="max-width:400px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-lock"></i> Cambiar Contrase&ntilde;a de Usuario</h3>
+        <span class="modal-close" id="admin-pwd-modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p id="admin-pwd-user-info" style="margin-bottom:12px;font-size:14px"></p>
+        <input type="password" id="admin-pwd-input" class="form-input" placeholder="Nueva contrase&ntilde;a" style="width:100%;box-sizing:border-box">
+      </div>
+      <div class="modal-footer">
+        <button id="admin-pwd-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="admin-pwd-save-btn" class="btn btn-primary"><i class="nf nf-fa-save"></i> Cambiar</button>
+      </div>
+    </div>
+  </div>
   <div id="import-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">

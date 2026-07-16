@@ -659,6 +659,26 @@ button:focus-visible,
   .summary-cards { grid-template-columns: 1fr; }
 }
 
+/* TOP PRODUCTS */
+.top-products-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.top-product-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; display: flex; align-items: center; gap: 12px;
+  box-shadow: var(--shadow);
+}
+.top-product-rank {
+  font-size: 22px; color: var(--primary); width: 36px; text-align: center;
+  flex-shrink: 0;
+}
+.top-product-name { font-weight: 600; font-size: 14px; color: var(--text); margin-bottom: 2px; }
+.top-product-meta { font-size: 12px; color: var(--text-light); }
+.compact .top-products-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.compact .top-product-card { padding: 10px; }
+.compact .top-product-name { font-size: 0.8125rem; }
+
 /* DEBT DETAIL */
 .debt-sale-card {
   background: var(--hover); border-radius: 8px; padding: 12px 16px; margin-bottom: 10px;

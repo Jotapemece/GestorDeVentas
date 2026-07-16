@@ -1,5 +1,5 @@
 use crate::db::AppState;
-use crate::models::Producto;
+use crate::models::{Producto, TopProductItem};
 use base64::Engine;
 use rusqlite::params;
 use rust_xlsxwriter::*;
@@ -422,4 +422,58 @@ pub fn import_products_from_file(
             suffix
         ))
     }
+}
+
+#[tauri::command]
+pub fn get_top_products(
+    state: State<AppState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    limit: Option<i64>,
+) -> Result<Vec<TopProductItem>, String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+
+    let mut sql = String::from(
+        "SELECT d.producto_codigo, d.producto_nombre, SUM(d.cantidad), SUM(d.subtotal_usd)
+         FROM detalles_ventas d
+         JOIN ventas v ON v.id = d.venta_id
+         WHERE v.anulada = 0"
+    );
+
+    let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        if !s.is_empty() && !e.is_empty() {
+            let eod = format!("{} 23:59:59", e);
+            sql.push_str(" AND v.fecha_hora >= ?1 AND v.fecha_hora <= ?2");
+            params_vec.push(Box::new(s.clone()));
+            params_vec.push(Box::new(eod));
+        }
+    }
+
+    sql.push_str(" GROUP BY d.producto_codigo ORDER BY SUM(d.subtotal_usd) DESC");
+
+    if let Some(l) = limit {
+        if l > 0 {
+            sql.push_str(&format!(" LIMIT {}", l));
+        }
+    }
+
+    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+    let products = stmt
+        .query_map(params_refs.as_slice(), |row| {
+            Ok(TopProductItem {
+                codigo: row.get(0)?,
+                nombre: row.get(1)?,
+                cantidad_vendida: row.get(2)?,
+                total_usd: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(products)
 }

@@ -239,7 +239,9 @@ function createDebtSaleCard(v, prodHtml) {
 }
 
 function createUserRow(u) {
-  return '<td>' + escapeHtml(u.username) + '</td><td>' + escapeHtml(u.rol) + '</td><td><button class="btn btn-sm btn-danger delete-user-btn" data-id="' + u.id + '" ' + (u.username === 'admin' ? 'disabled title="No se puede eliminar"' : '') + '><i class="nf nf-fa-trash"></i></button></td>';
+  const isAdmin = u.username === 'admin';
+  const pwdBtn = isAdmin ? '' : '<button class="btn btn-sm btn-outline admin-pwd-btn" data-id="' + u.id + '" data-username="' + escapeHtml(u.username) + '" title="Cambiar contrase\u00f1a" style="margin-right:4px"><i class="nf nf-fa-lock"></i></button>';
+  return '<td>' + escapeHtml(u.username) + '</td><td>' + escapeHtml(u.rol) + '</td><td>' + pwdBtn + '<button class="btn btn-sm btn-danger delete-user-btn" data-id="' + u.id + '" ' + (isAdmin ? 'disabled title="No se puede eliminar"' : '') + '><i class="nf nf-fa-trash"></i></button></td>';
 }
 
 function createReportRow(v) {
@@ -1866,6 +1868,40 @@ async function loadReports() {
   finally { searchBtn.innerHTML = btnHtml; }
 }
 
+async function loadReportsAndTopProducts() {
+  await loadReports();
+  await loadTopProducts();
+}
+
+async function loadTopProducts() {
+  const startDate = document.getElementById('report-start-date').value;
+  const endDate = document.getElementById('report-end-date').value;
+  const section = document.getElementById('top-products-section');
+  const grid = document.getElementById('top-products-grid');
+  if (!section || !grid) return;
+  if (!startDate || !endDate) { section.style.display = 'none'; return; }
+  const limit = parseInt(document.getElementById('top-products-limit')?.value || '10');
+  try {
+    const products = await invoke('get_top_products', {
+      startDate: startDate + ' 00:00:00',
+      endDate: endDate,
+      limit: limit
+    });
+    if (!products || products.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = 'block';
+    grid.innerHTML = '';
+    products.forEach(function(p) {
+      const card = document.createElement('div');
+      card.className = 'top-product-card';
+      card.innerHTML = '<div class="top-product-rank"><i class="nf nf-fa-cube"></i></div><div class="top-product-info"><div class="top-product-name">' + escapeHtml(p.nombre) + '</div><div class="top-product-meta">' + p.cantidad_vendida + ' vendidos &middot; ' + formatUSD(p.total_usd) + '</div></div>';
+      grid.appendChild(card);
+    });
+  } catch (e) { /* silently ignore */ section.style.display = 'none'; }
+}
+
 /* ========== VOID SALE ========== */
 async function handleVoidSale(ventaId) {
   const ok = await confirmModal('\u00bfEst\u00e1 seguro de anular la venta #' + ventaId + '? Se devolver\u00e1 el stock al inventario.', 'Anular Venta', 'S\u00ed, anular');
@@ -1875,7 +1911,7 @@ async function handleVoidSale(ventaId) {
     showToast(msg);
     playSound('remove');
     if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
-    if (qs('#view-reports')?.classList.contains('active')) loadReports();
+    if (qs('#view-reports')?.classList.contains('active')) loadReportsAndTopProducts();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
@@ -2031,6 +2067,18 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs('#client-cancel-btn').addEventListener('click', closeClientModal);
   qs('#client-save-btn').addEventListener('click', saveClient);
 
+  // Creditos search
+  const creditosSearch = document.getElementById('creditos-search');
+  if (creditosSearch) {
+    creditosSearch.addEventListener('input', function() {
+      const term = this.value.toLowerCase().trim();
+      document.querySelectorAll('#creditos-body tr').forEach(tr => {
+        const name = tr.children[0]?.textContent?.toLowerCase() || '';
+        tr.style.display = name.includes(term) ? '' : 'none';
+      });
+    });
+  }
+
   // Event delegation: creditos table
   qs(SEL.creditosBody).addEventListener('click', e => {
     const detailBtn = e.target.closest('[data-action="open-debt-detail"]');
@@ -2103,13 +2151,63 @@ document.addEventListener('DOMContentLoaded', async function() {
   const changePwdBtn = document.getElementById('change-pwd-btn');
   if (changePwdBtn) changePwdBtn.addEventListener('click', handleChangePassword);
 
+  /* ========== ADMIN CHANGE PASSWORD MODAL ========== */
+  let adminPwdUserId = null;
+  const adminPwdModal = document.getElementById('admin-pwd-modal');
+  const adminPwdInput = document.getElementById('admin-pwd-input');
+  function openAdminPwdModal(id, username) {
+    adminPwdUserId = id;
+    document.getElementById('admin-pwd-user-info').textContent = 'Cambiar contrase\u00f1a de: ' + escapeHtml(username);
+    adminPwdInput.value = '';
+    showModal(adminPwdModal);
+    setTimeout(function() { adminPwdInput.focus(); }, 100);
+  }
+  function closeAdminPwdModal() { adminPwdUserId = null; closeModal(adminPwdModal); }
+  document.getElementById('admin-pwd-modal-close').addEventListener('click', closeAdminPwdModal);
+  document.getElementById('admin-pwd-cancel-btn').addEventListener('click', closeAdminPwdModal);
+  document.getElementById('admin-pwd-save-btn').addEventListener('click', async function() {
+    const pwd = adminPwdInput.value.trim();
+    if (!pwd || pwd.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
+    try {
+      await invoke('admin_change_password', { usuarioId: adminPwdUserId, newPassword: pwd });
+      showToast('Contrase\u00f1a cambiada exitosamente');
+      closeAdminPwdModal();
+    } catch (e) { showToast('Error: ' + e, 'error'); }
+  });
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.admin-pwd-btn');
+    if (btn) {
+      openAdminPwdModal(parseInt(btn.dataset.id), btn.dataset.username);
+    }
+  });
+
+  /* ========== BACKUP DATABASE ========== */
+  const backupBtn = document.getElementById('backup-db-btn');
+  if (backupBtn) {
+    backupBtn.addEventListener('click', async function() {
+      try {
+        backupBtn.disabled = true;
+        backupBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Guardando...';
+        const msg = await invoke('backup_database', { destPath: '' });
+        showToast(msg);
+      } catch (e) {
+        showToast('Error: ' + e, 'error');
+      } finally {
+        backupBtn.disabled = false;
+        backupBtn.innerHTML = '<i class="nf nf-fa-save"></i> Descargar respaldo';
+      }
+    });
+  }
+
   /* ========== REPORTS ========== */
   const reportSearchBtn = document.getElementById('report-search-btn');
-  if (reportSearchBtn) reportSearchBtn.addEventListener('click', loadReports);
+  if (reportSearchBtn) reportSearchBtn.addEventListener('click', loadReportsAndTopProducts);
   ['report-start-date', 'report-end-date'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', setDefaultReportDates);
   });
+  const topLimitSelect = document.getElementById('top-products-limit');
+  if (topLimitSelect) topLimitSelect.addEventListener('change', loadTopProducts);
 
   /* ========== VOID SALE (delegation on daily sales table) ========== */
   document.getElementById('daily-sales-body').addEventListener('click', function(e) {

@@ -234,6 +234,28 @@ pub fn change_password(
     }
 }
 
+#[tauri::command]
+pub fn admin_change_password(
+    state: State<AppState>,
+    usuario_id: i64,
+    new_password: String,
+) -> Result<String, String> {
+    let db = state.db.lock().map_err(|_| format!("Error interno"))?;
+    let admin_user = require_admin(&state, &db, &format!("Cambió password del usuario id={}", usuario_id))?;
+    if admin_user.is_empty() { return Err("No autenticado".to_string()); }
+
+    let new_hashed = hash_password(&new_password);
+    let affected = db
+        .execute("UPDATE usuarios SET password = ?1 WHERE id = ?2", params![new_hashed, usuario_id])
+        .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
+
+    if affected == 0 {
+        Err("Usuario no encontrado".to_string())
+    } else {
+        Ok("Contraseña cambiada exitosamente".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
