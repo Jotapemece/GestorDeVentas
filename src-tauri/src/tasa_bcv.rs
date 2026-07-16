@@ -3,7 +3,7 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 struct BcvRate {
     currency: String,
-    price: f64,
+    rate: f64,
 }
 
 #[tauri::command]
@@ -18,8 +18,8 @@ pub(crate) fn fetch_tasa_bcv() -> Result<f64, String> {
 
     let usd_rate = rates
         .iter()
-        .find(|r| r.currency == "USD")
-        .map(|r| r.price)
+        .find(|r| r.currency.to_lowercase() == "dolar")
+        .map(|r| r.rate)
         .ok_or_else(|| "No se encontró tasa USD en la respuesta".to_string())?;
 
     Ok(usd_rate)
