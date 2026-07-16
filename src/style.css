@@ -590,21 +590,27 @@ button:focus-visible,
   margin-bottom: 20px; overflow: hidden;
 }
 .config-card-header {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   padding: 20px 24px; font-size: 16px; font-weight: 600;
   cursor: pointer; user-select: none;
 }
 .config-card-header:hover { background: var(--hover); }
+.config-card-header .config-card-desc {
+  flex: 1; font-size: 12px; font-weight: 400; color: var(--text-light);
+  text-align: right; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .config-card-header .config-toggle {
-  margin-left: auto; font-size: 14px; transition: transform 0.2s; color: var(--text-light);
+  font-size: 14px; transition: transform 0.2s; color: var(--text-light);
 }
 .config-card-header.collapsed .config-toggle { transform: rotate(-90deg); }
-.config-card-body { padding: 0 24px 20px; }
-.config-card-header.collapsed ~ .config-card-desc,
-.config-card-header.collapsed ~ .config-card-body { display: none; }
-.config-card-desc {
-  padding: 0 24px 12px; font-size: 13px; color: var(--text-light);
+.config-card-header:not(.collapsed) .config-card-desc {
+  flex: 0 0 100%; text-align: left; white-space: normal;
+  order: 10; padding-top: 6px; margin-top: 4px;
+  border-top: 1px solid var(--border);
 }
+.config-card-body { padding: 0 24px 20px; }
+.config-card-header.collapsed + .config-card-body { display: none; }
 .theme-selector { display: flex; gap: 12px; flex-wrap: wrap; }
 .theme-btn {
   padding: 14px 24px; border: 2px solid var(--border); border-radius: 10px;
@@ -781,11 +787,14 @@ button:focus-visible,
 .compact .config-card-header .config-toggle {
   font-size: 12px;
 }
+.compact .config-card-header .config-card-desc {
+  font-size: 0.6875rem;
+}
+.compact .config-card-header:not(.collapsed) .config-card-desc {
+  padding-top: 4px; margin-top: 3px;
+}
 .compact .config-card-body {
   padding: 0 16px 14px;
-}
-.compact .config-card-desc {
-  padding: 0 16px 8px; font-size: 0.75rem;
 }
 .compact .theme-btn {
   padding: 10px 16px; min-width: 80px; gap: 4px;
