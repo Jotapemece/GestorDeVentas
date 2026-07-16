@@ -183,7 +183,26 @@ También se puede omitir el instalador y generar solo el `.exe` portable con: `n
 - Si la PC no tiene WebView2, el bootstrapper lo descarga (~2MB la primera vez)
 - Para instalación completamente offline: cambiar `webviewInstallMode` a `"offlineInstaller"` (el installer crece ~130MB)
 
+### Cómo generar un ejecutable portable (sin instalador)
+
+Para saltarse el NSIS y generar solo el `.exe` autónomo:
+
+```bash
+# Cross-compile para 32-bit (portable)
+npm run build:portable -- --target i686-pc-windows-gnu
+
+# O para 64-bit
+npm run build:portable -- --target x86_64-pc-windows-gnu
+```
+
+El `.exe` queda en `src-tauri/target/<target>/release/gestor-ventas.exe`. Solo hay que copiarlo a cualquier carpeta y ejecutarlo.
+
+**Requisito en la PC destino:** WebView2 Runtime. En Windows 10/11 suele venir instalado. Si no:
+- Descargar e instalar el [Evergreen WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (una sola vez, funciona para cualquier app que lo use)
+- O el instalador NSIS ya lo descarga automáticamente (modo `embedBootstrapper`)
+
 ### Archivos modificados
 - `src-tauri/Cargo.toml` — añadido `[profile.release]` con optimizaciones de tamaño
 - `src-tauri/tauri.conf.json` — añadida sección `windows` con NSIS + WebView2 config
+- `package.json` — añadido script `build:portable`
 - `NOTES.md` — esta entrada
