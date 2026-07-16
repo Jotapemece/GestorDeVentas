@@ -232,3 +232,48 @@ Cambiar la resolución de ruta en desktop para usar el directorio del ejecutable
 ### Archivos modificados
 - `src-tauri/src/db.rs` — `get_db_path()` ahora usa `current_exe()`; `auto_import_products()` simplificado
 - `NOTES.md` — esta entrada
+
+---
+
+## 2026-07-16 — Tasa BCV automática desde API
+
+### Descripción
+Se integró un botón 🔄 al lado del input de tasa que al presionarlo consulta la API `https://dolar-vzla.rafnixg.dev/api/v1/bcv/realtime` y actualiza la tasa automáticamente. El proyecto de referencia es `cuantoes-master` (Flutter, del amigo del usuario).
+
+### Implementación
+
+#### Backend (Rust)
+- **`src-tauri/src/tasa_bcv.rs`** — Nuevo comando `fetch_tasa_bcv`. Usa `ureq` (HTTP client) para GET a la API, parsea JSON con serde y extrae `rate` del objeto con `currency: "dolar"`.
+- **`Cargo.toml`** — dependencia `ureq = { version = "2", features = ["json"] }`
+
+#### Frontend
+- **`index.html`** — Botón con icono `nf-fa-refresh` junto al warning de tasa
+- **`app.js`** — Función `fetchTasaBcv()`: llama al comando, guarda con `set_tasa`, refresca UI (precios, carrito, warning). Estado `.loading` con spinner.
+- **`fa-local.css`** — Iconos `nf-fa-refresh` (\f021) y `nf-fa-cloud_download` (\f0ed)
+- **`style.css`** — Estilos del botón, compatibilidad compact y mobile
+
+### API Response
+```json
+[
+  {"currency":"dolar","trade_type":"SELL","rate":727.45,"date":"..."},
+  {"currency":"euro","trade_type":"SELL","rate":832.24,"date":"..."}
+]
+```
+
+### Notas
+- El campo es `rate`, no `price` (error inicial corregido en `51974d8`)
+- La moneda es `"dolar"`, no `"USD"`
+- Se usa `to_lowercase()` para match case-insensitive
+- El comando es sincrónico (se ejecuta en thread pool de Tauri), no bloquea la UI
+- No requiere cambios en CSP ni permisos porque la petición HTTP es desde Rust
+
+### Archivos modificados
+- `src-tauri/Cargo.toml` — añadido `ureq`
+- `src-tauri/Cargo.lock` — lockfile actualizado
+- `src-tauri/src/tasa_bcv.rs` — nuevo archivo
+- `src-tauri/src/lib.rs` — registro del módulo y comando
+- `src/index.html` — botón en tasa-input-group
+- `src/app.js` — función fetchTasaBcv + event listener
+- `src/fa-local.css` — iconos refresh y cloud_download
+- `src/style.css` — estilos del botón
+- `NOTES.md` — esta entrada
