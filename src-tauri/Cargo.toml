@@ -32,3 +32,4 @@ rust_xlsxwriter = "0.64"
 base64 = "0.22"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+ureq = { version = "2", features = ["json"] }

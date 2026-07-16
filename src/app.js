@@ -508,6 +508,27 @@ async function handleTasaChange() {
   }
 }
 
+async function fetchTasaBcv() {
+  const btn = document.getElementById('tasa-fetch-btn');
+  btn.classList.add('loading');
+  try {
+    const rate = await invoke('fetch_tasa_bcv');
+    tasaActual = rate;
+    await invoke('set_tasa', { tasa: tasaActual });
+    qs(SEL.tasaInput).value = tasaActual;
+    const warn = qs(SEL.tasaWarning);
+    if (warn) warn.style.display = 'none';
+    updateCartTotals();
+    renderProductSearch();
+    refreshAllBsPrices();
+    showToast('Tasa BCV actualizada: Bs. ' + rate.toFixed(2).replace('.', ','), 'success');
+  } catch (e) {
+    showToast('Error al obtener tasa: ' + e, 'error');
+  } finally {
+    btn.classList.remove('loading');
+  }
+}
+
 function refreshAllBsPrices() {
   document.querySelectorAll('.bs-price-cell').forEach(el => {
     const usd = parseFloat(el.dataset.usdPrice);
@@ -1700,6 +1721,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
   qs(SEL.tasaInput).addEventListener('blur', handleTasaChange);
+  document.getElementById('tasa-fetch-btn')?.addEventListener('click', fetchTasaBcv);
 
   // Sales search
   qs(SEL.productSearch).addEventListener('input', handleProductSearch);

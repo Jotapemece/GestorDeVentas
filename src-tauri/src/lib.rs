@@ -9,6 +9,7 @@ mod migrations;
 mod models;
 mod products;
 mod sales;
+mod tasa_bcv;
 
 use db::AppState;
 use tauri::Manager;
@@ -77,6 +78,8 @@ pub fn run() {
             config::get_config_value,
             config::set_config_value,
             config::list_theme_names,
+            // Tasa BCV
+            tasa_bcv::fetch_tasa_bcv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

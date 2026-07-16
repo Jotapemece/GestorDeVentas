@@ -54,3 +54,5 @@
 .nf-fa-search::before { content: "\f002"; }
 .nf-fa-receipt::before { content: "\f543"; }
 .nf-fa-check_circle::before { content: "\f058"; }
+.nf-fa-refresh::before { content: "\f021"; }
+.nf-fa-cloud_download::before { content: "\f0ed"; }
