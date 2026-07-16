@@ -8,7 +8,12 @@ struct BcvRate {
 
 #[tauri::command]
 pub(crate) fn fetch_tasa_bcv() -> Result<f64, String> {
-    let response = ureq::get("https://dolar-vzla.rafnixg.dev/api/v1/bcv/realtime")
+    let response = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .timeout_read(std::time::Duration::from_secs(10))
+        .build()
+        .get("https://dolar-vzla.rafnixg.dev/api/v1/bcv/realtime")
+        .set("User-Agent", "GestorDeVentas/1.0")
         .call()
         .map_err(|e| format!("Error de conexión: {}", e))?;
 

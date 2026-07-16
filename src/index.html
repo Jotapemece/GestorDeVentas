@@ -354,6 +354,10 @@
             </div>
           </div>
           <div class="config-card">
+            <h3><i class="nf nf-fa-edit"></i> Entrada de datos</h3>
+            <label><input type="checkbox" id="coma-automatica-toggle"> Coma autom&aacute;tica (desplaza decimales al escribir precios)</label>
+          </div>
+          <div class="config-card">
             <h3><i class="nf nf-fa-text_height"></i> Tama&ntilde;o de fuente</h3>
             <div class="font-size-control">
               <button id="font-dec-btn" class="btn btn-sm btn-outline" title="Reducir">A-</button>
@@ -440,6 +444,14 @@
           <button id="mixto-add-row" class="btn btn-sm btn-outline mixto-add-row">+ Agregar m&eacute;todo</button>
           <div id="mixto-warning" class="mixto-warning hidden"><span class="warning-icon">&#9888;</span> <span id="mixto-warning-text"></span></div>
           <div id="mixto-error" class="field-error hidden"></div>
+        </div>
+        <div class="form-group hidden" id="cambio-group">
+          <label>Monto recibido</label>
+          <input type="number" id="cambio-recibido" step="any" min="0" placeholder="0.00" inputmode="decimal">
+          <div id="cambio-resultado" class="cambio-resultado hidden">
+            <span>Vuelto:</span>
+            <strong id="cambio-monto">$0.00</strong>
+          </div>
         </div>
       </div>
       <div class="modal-footer">

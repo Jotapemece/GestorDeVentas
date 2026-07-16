@@ -62,6 +62,8 @@ pub fn run() {
             clients::toggle_cliente_credito,
             clients::get_cliente_history,
             clients::pay_debt,
+            clients::update_cliente,
+            clients::delete_cliente,
             // Cashier
             cashier::get_daily_summary,
             cashier::close_cashier,

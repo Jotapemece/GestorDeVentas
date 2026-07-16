@@ -297,6 +297,9 @@ pub fn get_tasa(state: State<AppState>) -> Result<f64, String> {
 
 #[tauri::command]
 pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
+    if tasa <= 0.0 {
+        return Err("La tasa debe ser mayor a cero".to_string());
+    }
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
     let now = chrono::Local::now()
         .format("%Y-%m-%d")

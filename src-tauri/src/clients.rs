@@ -36,6 +36,8 @@ const SQL_SALDO_DEUDA: &str = "SELECT saldo_deuda_usd FROM clientes WHERE id = ?
 const SQL_UPDATE_SALDO: &str = "UPDATE clientes SET saldo_deuda_usd = ?1 WHERE id = ?2";
 const SQL_REACTIVAR_CREDITO: &str =
     "UPDATE clientes SET credito_activo = 1 WHERE id = ?1 AND credito_activo = 0";
+const SQL_UPDATE_CLIENTE: &str = "UPDATE clientes SET nombre = ?1 WHERE id = ?2";
+const SQL_DELETE_CLIENTE: &str = "DELETE FROM clientes WHERE id = ?1 AND saldo_deuda_usd = 0";
 
 #[tauri::command]
 pub fn list_clientes(state: State<AppState>) -> Result<Vec<Cliente>, String> {
@@ -254,4 +256,36 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
         "Pago registrado. Monto: ${:.2}, Saldo restante: ${:.2}",
         request.monto_usd, nuevo_saldo
     ))
+}
+
+#[tauri::command]
+pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String) -> Result<String, String> {
+    if nombre.trim().is_empty() {
+        return Err("El nombre no puede estar vacío".to_string());
+    }
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Editó cliente #{}: '{}'", cliente_id, nombre),
+    )?;
+    db.execute(SQL_UPDATE_CLIENTE, params![nombre.trim(), cliente_id])
+        .map_err(|e| e.to_string())?;
+    Ok("Cliente actualizado exitosamente".to_string())
+}
+
+#[tauri::command]
+pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String, String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Eliminó cliente #{}", cliente_id),
+    )?;
+    let affected = db.execute(SQL_DELETE_CLIENTE, params![cliente_id])
+        .map_err(|e| e.to_string())?;
+    if affected == 0 {
+        return Err("No se puede eliminar: el cliente tiene deuda pendiente".to_string());
+    }
+    Ok("Cliente eliminado exitosamente".to_string())
 }

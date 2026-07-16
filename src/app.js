@@ -37,6 +37,7 @@ const CFG_FONT_SIZE = 'font_size';
 const CFG_SONIDO_HABILITADO = 'sonido_habilitado';
 const CFG_SONIDO_VOLUMEN = 'sonido_volumen';
 const CFG_HISTORIAL_LIMPIEZA_DIAS = 'historial_limpieza_dias';
+const CFG_COMA_AUTOMATICA = 'coma_automatica';
 
 // Payment method keys (deben coincidir con constants.rs)
 const METODO_PAGO = {
@@ -202,28 +203,33 @@ const SEL = {
 };
 
 /* ========== HELPERS ========== */
-function escapeHtml(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 function createProductRow(p) {
   const name = escapeHtml(p.nombre);
-  return '<td title="' + name + '">' + p.nombre + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + p.codigo + '">+</button></td>';
+  return '<td title="' + name + '">' + name + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + escapeHtml(p.codigo) + '">+</button></td>';
 }
 function createCartRow(item) {
   const displayName = item.nombre || item.codigo;
   const name = escapeHtml(displayName);
-  return '<td title="' + name + '">' + displayName + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + item.codigo + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + item.codigo + '">\u00d7</button></td>';
+  return '<td title="' + name + '">' + name + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + escapeHtml(item.codigo) + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + escapeHtml(item.codigo) + '">\u00d7</button></td>';
 }
 function createInventoryRow(p, editBtn) {
-  return '<td>' + p.nombre + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + p.codigo + '">Detalles</button>' + editBtn + '</div></div></td>';
+  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '">Detalles</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
-  return '<td>' + c.nombre + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td><button class="btn btn-sm btn-outline" data-action="open-debt-detail" data-id="' + c.id + '">Ver Detalles</button> <button class="btn btn-sm btn-primary" data-action="open-abono" data-id="' + c.id + '">Abonar / Pagar</button></td>';
+  const isAdmin = currentUser && currentUser.rol === 'admin';
+  const adminBtns = isAdmin
+    ? '<button class="btn btn-sm btn-outline" data-action="edit-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-pencil"></i></button> '
+    + (c.saldo_deuda_usd === 0 ? '<button class="btn btn-sm btn-danger" data-action="delete-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-trash"></i></button>' : '')
+    : '';
+  return '<td>' + escapeHtml(c.nombre) + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td><button class="btn btn-sm btn-outline" data-action="open-debt-detail" data-id="' + c.id + '">Ver Detalles</button> <button class="btn btn-sm btn-primary" data-action="open-abono" data-id="' + c.id + '">Abonar / Pagar</button> ' + adminBtns + '</td>';
 }
 function createAuditRow(log) {
-  return '<td>' + log.id + '</td><td>' + log.fecha_hora + '</td><td>' + log.usuario + '</td><td>' + log.accion + '</td>';
+  return '<td>' + log.id + '</td><td>' + escapeHtml(log.fecha_hora) + '</td><td>' + escapeHtml(log.usuario) + '</td><td>' + escapeHtml(log.accion) + '</td>';
 }
 function createDailySaleRow(v, metodoLabel) {
-  return '<td>' + v.id + '</td><td>' + v.fecha_hora.split(' ')[1] + '</td><td>' + v.username + '</td><td>' + metodoLabel + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td>';
+  return '<td>' + v.id + '</td><td>' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td>' + escapeHtml(v.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td>';
 }
 function createDebtSaleCard(v, prodHtml) {
   return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
@@ -236,11 +242,13 @@ let currentUser = null;
 let cart = [];
 let tasaActual = 0;
 let editingProduct = null;
+let editingClienteId = null;
 let abonoClienteId = null;
 let productCache = [];
 
 let lastCloseReportData = null;
 let lastViewName = 'sales';
+let comaAutomaticaEnabled = false;
 let soundEnabled = true;
 let soundVolume = 0.5;
 let auditOffset = 0;
@@ -334,6 +342,17 @@ document.addEventListener('keydown', (e) => {
 
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
+function parsePrecio(s) { return parseFloat(String(s).replace(',', '.')) || 0; }
+
+function applyComaAutomatica(input) {
+  if (!comaAutomaticaEnabled) return;
+  const digits = input.value.replace(/\D/g, '');
+  if (digits.length === 0) { input.value = ''; return; }
+  const padded = digits.padStart(3, '0');
+  const intPart = padded.slice(0, -2);
+  const decPart = padded.slice(-2);
+  input.value = String(parseInt(intPart)) + ',' + decPart;
+}
 function applyRoleUI() {
   const isAdmin = currentUser && currentUser.rol === 'admin';
   document.querySelectorAll('.admin-only').forEach(el => {
@@ -399,7 +418,7 @@ function playSound(type) {
         playNote(ctx, AUDIO.FREQ.CANCEL[1], now + 0.06, AUDIO.DURATION_SEC.CANCEL * 0.8, 'sine', vol * 0.6);
         break;
     }
-  } catch(e) { showToast('Error en audio', 'error'); }
+  } catch(e) { soundEnabled = false; }
 }
 
 function toggleFullscreen() {
@@ -493,19 +512,22 @@ async function loadTasa() {
 
 async function handleTasaChange() {
   const val = parseFloat(qs(SEL.tasaInput).value);
-  if (!isNaN(val) && val > 0) {
-    tasaActual = val;
-    try {
-      await invoke('set_tasa', { tasa: tasaActual });
-    } catch (e) {
-      showToast('Error al guardar la tasa', 'error');
-    }
-    const warn = qs(SEL.tasaWarning);
-    if (warn) warn.style.display = 'none';
-    updateCartTotals();
-    renderProductSearch();
-    refreshAllBsPrices();
+  if (isNaN(val) || val <= 0) {
+    qs(SEL.tasaInput).value = tasaActual;
+    showToast('La tasa debe ser mayor a cero', 'error');
+    return;
   }
+  tasaActual = val;
+  try {
+    await invoke('set_tasa', { tasa: tasaActual });
+  } catch (e) {
+    showToast('Error al guardar la tasa', 'error');
+  }
+  const warn = qs(SEL.tasaWarning);
+  if (warn) warn.style.display = 'none';
+  updateCartTotals();
+  renderProductSearch();
+  refreshAllBsPrices();
 }
 
 async function fetchTasaBcv() {
@@ -723,6 +745,12 @@ function selectPaymentMethod(method) {
   qs(SEL.referenciaGroup).style.display = method === 'pago_movil' ? 'block' : 'none';
   qs(SEL.clienteGroup).style.display = method === 'credito' ? 'block' : 'none';
   qs(SEL.mixtoGroup).style.display = method === 'mixto' ? 'block' : 'none';
+  const isCash = method === 'efectivo_bs' || method === 'efectivo_usd';
+  const cambioGroup = document.getElementById('cambio-group');
+  if (cambioGroup) {
+    cambioGroup.style.display = isCash ? 'block' : 'none';
+    if (!isCash) { document.getElementById('cambio-recibido').value = ''; document.getElementById('cambio-resultado').classList.add('hidden'); }
+  }
   if (method === 'mixto') {
     if (!qs(SEL.mixtoItems).querySelector('.mixto-row')) addMixtoRow('mixto-items');
     distributeMixto('mixto-items');
@@ -959,6 +987,9 @@ async function confirmPayment() {
     }
   }
   const productos = cart.map(i => ({ codigo: i.codigo, cantidad: i.cantidad }));
+  const confirmBtn = qs(SEL.paymentConfirmBtn);
+  confirmBtn.classList.add('loading');
+  confirmBtn.textContent = 'Procesando...';
   try {
     const venta = await invoke('create_sale', {
       request: { usuario_id: currentUser.id, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle, cliente_id, productos, tasa: tasaActual }
@@ -969,8 +1000,12 @@ async function confirmPayment() {
     await loadProductCache();
     renderCart(); updateCheckoutBtn(); closePaymentModal();
   } catch (e) { showToast('Error: ' + e, 'error'); playSound('error'); }
-  processingPayment = false;
-  qs(SEL.paymentConfirmBtn).disabled = false;
+  finally {
+    processingPayment = false;
+    confirmBtn.disabled = false;
+    confirmBtn.classList.remove('loading');
+    confirmBtn.textContent = 'Confirmar Pago';
+  }
 }
 
 /* ========== INVENTORY ========== */
@@ -1052,7 +1087,7 @@ function editProduct(codigo) {
   qs(SEL.productModalTitle).textContent = 'Editar Producto';
   qs(SEL.productSaveText).textContent = 'Guardar';
   qs(SEL.productNombre).value = p.nombre;
-  qs(SEL.productPrecio).value = p.precio_usd;
+  qs(SEL.productPrecio).value = comaAutomaticaEnabled ? p.precio_usd.toFixed(2).replace('.', ',') : p.precio_usd;
   qs(SEL.productStock).value = p.stock;
   qs(SEL.productDeleteBtn).style.display = 'inline-flex';
   showModal(qs(SEL.productModal));
@@ -1065,7 +1100,7 @@ function closeProductModal() {
 async function saveProduct() {
   const codigo = editingProduct || '';
   const nombre = qs(SEL.productNombre).value.trim();
-  const precio = parseFloat(qs(SEL.productPrecio).value);
+  const precio = parsePrecio(qs(SEL.productPrecio).value);
   const stock = parseInt(qs(SEL.productStock).value) || 0;
   if (!nombre || isNaN(precio) || precio < 0) { showToast('Complete todos los campos', 'error'); return; }
   try {
@@ -1154,20 +1189,28 @@ async function loadCreditos() {
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
-function openCreditoModal() {
-  qs(SEL.clientNombre).value = '';
-  qs(SEL.clientModalTitle).textContent = 'Registrar Persona para Cr\u00e9dito';
+function openCreditoModal(cliente) {
+  editingClienteId = cliente ? cliente.id : null;
+  qs(SEL.clientNombre).value = cliente ? cliente.nombre : '';
+  qs(SEL.clientModalTitle).textContent = cliente ? 'Editar Cliente' : 'Registrar Persona para Cr\u00e9dito';
+  qs('#client-save-btn').textContent = cliente ? 'Guardar Cambios' : 'Guardar';
   showModal(qs(SEL.clientModal));
 }
 
-function closeClientModal() { closeModal(qs(SEL.clientModal)); }
+function closeClientModal() { editingClienteId = null; closeModal(qs(SEL.clientModal)); }
 
 async function saveClient() {
   const nombre = qs(SEL.clientNombre).value.trim();
   if (!nombre) { showToast('Ingrese el nombre', 'error'); return; }
   try {
-    await invoke('create_cliente', { nombre });
-    showToast('Cliente creado');
+    if (editingClienteId) {
+      await invoke('update_cliente', { clienteId: editingClienteId, nombre });
+      showToast('Cliente actualizado');
+    } else {
+      await invoke('create_cliente', { nombre });
+      showToast('Cliente creado');
+    }
+    editingClienteId = null;
     closeClientModal(); loadCreditos();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
@@ -1726,7 +1769,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Sales search
   qs(SEL.productSearch).addEventListener('input', handleProductSearch);
   qs(SEL.checkoutBtn).addEventListener('click', openPaymentModal);
-  qs(SEL.cancelSaleBtn).addEventListener('click', clearCart);
+  qs(SEL.cancelSaleBtn).addEventListener('click', async () => {
+    if (cart.length === 0) return;
+    const ok = await confirmModal('\u00bfEst\u00e1 seguro de cancelar la venta? El carrito se perder\u00e1.', 'Cancelar Venta', 'S\u00ed, cancelar');
+    if (ok) clearCart();
+  });
 
   // Event delegation: product search add-to-cart
   qs(SEL.productSearchBody).addEventListener('click', e => {
@@ -1755,6 +1802,24 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs('#payment-modal-close').addEventListener('click', closePaymentModal);
   qs('#payment-cancel-btn').addEventListener('click', closePaymentModal);
   qs(SEL.mixtoAddRow).addEventListener('click', function() { addMixtoRow('mixto-items'); });
+  document.getElementById('cambio-recibido')?.addEventListener('input', function() {
+    const recibido = parseFloat(this.value) || 0;
+    const methodBtn = qs('.payment-method-btn.active');
+    if (!methodBtn) return;
+    const method = methodBtn.dataset.method;
+    const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
+    const totalPagado = method === 'efectivo_bs' ? recibido / (tasaActual || 1) : recibido;
+    const cambioEl = document.getElementById('cambio-resultado');
+    const montoEl = document.getElementById('cambio-monto');
+    if (recibido > 0 && totalPagado > total) {
+      const cambio = method === 'efectivo_bs' ? (recibido - total * (tasaActual || 1)) : (recibido - total);
+      const cambioTexto = method === 'efectivo_bs' ? 'Bs. ' + cambio.toFixed(2).replace('.', ',') : formatUSD(cambio);
+      montoEl.textContent = cambioTexto;
+      cambioEl.classList.remove('hidden');
+    } else {
+      cambioEl.classList.add('hidden');
+    }
+  });
   qs('#abono-mixto-add-row').addEventListener('click', function() { addMixtoRow('abono-mixto-items'); });
   qs(SEL.paymentConfirmBtn).addEventListener('click', confirmPayment);
   qsa('.payment-method-btn').forEach(btn => {
@@ -1797,6 +1862,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs('#product-cancel-btn').addEventListener('click', closeProductModal);
   qs('#product-save-btn').addEventListener('click', saveProduct);
   qs(SEL.productDeleteBtn).addEventListener('click', deleteProduct);
+  qs(SEL.productPrecio).addEventListener('input', function() { applyComaAutomatica(this); });
 
   // Product detail modal
   qs('#product-detail-close').addEventListener('click', closeProductDetail);
@@ -1818,6 +1884,25 @@ document.addEventListener('DOMContentLoaded', async function() {
     const abonoBtn = e.target.closest('[data-action="open-abono"]');
     if (abonoBtn) {
       openAbonoModal(parseInt(abonoBtn.dataset.id));
+      return;
+    }
+    const editBtn = e.target.closest('[data-action="edit-cliente"]');
+    if (editBtn) {
+      openCreditoModal({ id: parseInt(editBtn.dataset.id), nombre: editBtn.dataset.nombre });
+      return;
+    }
+    const delBtn = e.target.closest('[data-action="delete-cliente"]');
+    if (delBtn) {
+      const id = parseInt(delBtn.dataset.id);
+      const nombre = delBtn.dataset.nombre;
+      confirmModal('\u00bfEliminar a "' + nombre + '"? Esta acci\u00f3n no se puede deshacer.', 'Eliminar Cliente', 'Eliminar').then(async ok => {
+        if (!ok) return;
+        try {
+          await invoke('delete_cliente', { clienteId: id });
+          showToast('Cliente eliminado');
+          loadCreditos();
+        } catch (e) { showToast('Error: ' + e, 'error'); }
+      });
       return;
     }
   });
@@ -1952,6 +2037,26 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   loadFontSize();
 
+  // Coma automática
+  const comaToggle = document.getElementById('coma-automatica-toggle');
+  function updatePrecioInputType() {
+    const input = qs(SEL.productPrecio);
+    if (comaAutomaticaEnabled) {
+      input.type = 'text';
+      input.inputMode = 'decimal';
+    } else {
+      input.type = 'number';
+      input.step = 'any';
+    }
+  }
+  if (comaToggle) {
+    comaToggle.addEventListener('change', async function() {
+      comaAutomaticaEnabled = this.checked;
+      updatePrecioInputType();
+      try { await invoke('set_config_value', { key: CFG_COMA_AUTOMATICA, value: this.checked ? '1' : '0' }); } catch (e) {}
+    });
+  }
+
   // Load saved sound config
   try {
     const savedSound = await invoke('get_config_value', { key: CFG_SONIDO_HABILITADO });
@@ -1964,6 +2069,14 @@ document.addEventListener('DOMContentLoaded', async function() {
       soundVolume = parseInt(savedVol) / 100 || 0.5;
       if (soundVolumeRange) soundVolumeRange.value = soundVolume * 100;
     }
+  } catch (e) {}
+
+  // Load coma automática config
+  try {
+    const savedComa = await invoke('get_config_value', { key: CFG_COMA_AUTOMATICA });
+    comaAutomaticaEnabled = savedComa === '1' || savedComa === true;
+    if (comaToggle) comaToggle.checked = comaAutomaticaEnabled;
+    updatePrecioInputType();
   } catch (e) {}
 
   // Load saved theme on startup
