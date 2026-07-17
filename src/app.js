@@ -246,7 +246,7 @@ function createUserRow(u) {
 
 function createReportRow(v) {
   const metodoLabel = formatMetodoLabel(v.venta.metodo_pago);
-  const prodCount = v.productos ? v.productos.length : 0;
+  const prodCount = v.productos ? v.productos.reduce(function(s, p) { return s + p.cantidad; }, 0) : 0;
   const badge = v.venta.anulada ? ' <span class="text-muted">(Anulada)</span>' : '';
   return '<td>' + v.venta.id + '</td><td>' + escapeHtml(v.venta.fecha_hora) + '</td><td>' + escapeHtml(v.venta.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + prodCount + '</td><td>' + formatUSD(v.venta.total_usd) + '</td><td>' + formatBS(v.venta.total_bs) + badge + '</td>';
 }
@@ -723,7 +723,7 @@ function updateCartBadge() {
   if (!badge) return;
   if (cart.length === 0) { badge.classList.add('hidden'); return; }
   badge.classList.remove('hidden');
-  badge.textContent = cart.length;
+  badge.textContent = cart.reduce(function(sum, item) { return sum + item.cantidad; }, 0);
 }
 
 function renderCart() {
