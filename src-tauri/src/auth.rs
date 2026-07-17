@@ -172,7 +172,7 @@ pub fn create_usuario(
 #[tauri::command]
 pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    crate::auth::require_admin(&state, &db, "Listó usuarios")?;
+    crate::auth::check_admin_role(&state)?;
     let mut stmt = db
         .prepare(SQL_LIST_USUARIOS)
         .map_err(|e| e.to_string())?;
