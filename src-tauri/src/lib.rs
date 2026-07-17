@@ -62,6 +62,9 @@ pub fn run() {
             sales::set_tasa,
             sales::void_sale,
             sales::get_sales_report,
+            sales::get_product_history,
+            sales::export_report_xlsx,
+            sales::void_sale_items,
             // Clients
             clients::list_clientes,
             clients::create_cliente,
@@ -78,6 +81,8 @@ pub fn run() {
             cashier::get_cierre_detalle,
             cashier::abrir_caja,
             cashier::get_caja_abierta,
+            cashier::get_dashboard_summary,
+            cashier::get_dashboard_payment_methods,
             // Audit
             audit::get_audit_logs,
             audit::get_cierres,

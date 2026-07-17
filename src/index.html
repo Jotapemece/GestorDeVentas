@@ -328,6 +328,14 @@
           <div class="view-header">
             <h2><i class="nf nf-fa-bar_chart"></i> Reportes</h2>
           </div>
+          <div class="config-card" id="dashboard-card">
+            <div class="config-card-header">
+              <i class="nf nf-fa-bar_chart"></i> Dashboard
+              <span class="config-card-desc">Resumen de ventas</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body" id="dashboard-body"></div>
+          </div>
           <div class="reports-filters">
             <div class="reports-filter-row">
               <div class="form-group">
@@ -347,6 +355,7 @@
                 <input type="text" id="report-vendor-filter" placeholder="Nombre de usuario">
               </div>
               <button id="report-search-btn" class="btn btn-primary"><i class="nf nf-fa-search"></i> Buscar</button>
+              <button id="report-export-btn" class="btn btn-accent"><i class="nf nf-fa-download"></i> Exportar XLSX</button>
             </div>
           </div>
           <div class="report-summary-cards">
@@ -695,6 +704,27 @@
     </div>
   </div>
 
+  <div id="sale-detail-modal" class="modal hidden">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3>Detalle de Venta #<span id="sale-detail-id"></span></h3>
+        <span class="modal-close" id="sale-detail-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="client-info-bar" id="sale-detail-bar">
+          <span>Total: <strong id="sale-detail-total">$0.00</strong></span>
+          <span>M&eacute;todo: <strong id="sale-detail-metodo"></strong></span>
+          <span>Usuario: <strong id="sale-detail-usuario"></strong></span>
+          <span>Fecha: <strong id="sale-detail-fecha"></strong></span>
+        </div>
+        <div id="sale-detail-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="sale-detail-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="client-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
@@ -840,6 +870,26 @@
     </div>
   </div>
 
+  <div id="product-history-modal" class="modal hidden">
+    <div class="modal-content" style="max-width:600px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-history"></i> Historial de Ventas</h3>
+        <span class="modal-close" id="product-history-modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p id="product-history-title" style="font-weight:600;margin-bottom:12px"></p>
+        <div class="table-container">
+          <table class="table compact-table">
+            <thead><tr><th>#Venta</th><th>Fecha</th><th>Cant.</th><th>Precio U.</th><th>Subtotal</th><th>M&eacute;todo</th><th>Vendedor</th></tr></thead>
+            <tbody id="product-history-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="product-history-ok-btn" class="btn btn-primary">Cerrar</button>
+      </div>
+    </div>
+  </div>
   <div id="admin-pwd-modal" class="modal hidden">
     <div class="modal-content" style="max-width:400px">
       <div class="modal-header">

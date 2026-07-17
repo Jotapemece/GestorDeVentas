@@ -1,5 +1,5 @@
 use crate::db::AppState;
-use crate::models::{Producto, TopProductItem};
+use crate::models::{PaginatedResult, Producto, TopProductItem};
 use base64::Engine;
 use rusqlite::params;
 use rust_xlsxwriter::*;
@@ -39,46 +39,56 @@ const SQL_IMPORT_PRODUCTO: &str =
 pub fn list_products(
     state: State<AppState>,
     search: Option<String>,
-) -> Result<Vec<Producto>, String> {
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<PaginatedResult<Producto>, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
 
     let has_query = search.as_ref().is_some_and(|s| !s.is_empty());
-
-    let sql = if has_query {
-        format!(
-            "{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) ORDER BY p.nombre ASC",
-            SQL_BASE_PRODUCTOS
-        )
-    } else {
-        format!("{} ORDER BY p.nombre ASC", SQL_BASE_PRODUCTOS)
-    };
-
     let q = search.unwrap_or_default();
     let pattern = format!("%{}%", q);
+    let p = page.unwrap_or(1).max(1);
+    let ps = page_size.unwrap_or(200).max(1).min(500);
+    let offset = (p - 1) * ps;
+
+    // Count
+    let count_sql = if has_query {
+        format!("SELECT COUNT(*) FROM productos p WHERE p.activo = 1 AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1)")
+    } else {
+        "SELECT COUNT(*) FROM productos p WHERE p.activo = 1".to_string()
+    };
+    let total: i64 = if has_query {
+        db.query_row(&count_sql, params![pattern], |row| row.get(0)).unwrap_or(0)
+    } else {
+        db.query_row(&count_sql, [], |row| row.get(0)).unwrap_or(0)
+    };
+
+    // Data
+    let sql = if has_query {
+        format!("{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) ORDER BY p.nombre ASC LIMIT ?2 OFFSET ?3", SQL_BASE_PRODUCTOS)
+    } else {
+        format!("{} ORDER BY p.nombre ASC LIMIT ?1 OFFSET ?2", SQL_BASE_PRODUCTOS)
+    };
 
     let map_row = |row: &rusqlite::Row| -> rusqlite::Result<Producto> {
         Ok(Producto {
-            codigo: row.get(0)?,
-            nombre: row.get(1)?,
-            precio_usd: row.get(2)?,
-            stock: row.get(3)?,
-            stock_minimo: row.get(4)?,
-            created_at: row.get(5)?,
+            codigo: row.get(0)?, nombre: row.get(1)?, precio_usd: row.get(2)?,
+            stock: row.get(3)?, stock_minimo: row.get(4)?, created_at: row.get(5)?,
         })
     };
 
     let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
 
     let products: Vec<Producto> = if has_query {
-        stmt.query_map(rusqlite::params![pattern], map_row)
+        stmt.query_map(rusqlite::params![pattern, ps, offset], map_row)
     } else {
-        stmt.query_map([], map_row)
+        stmt.query_map(rusqlite::params![ps, offset], map_row)
     }
     .map_err(|e| e.to_string())?
     .filter_map(|r| r.ok())
     .collect();
 
-    Ok(products)
+    Ok(PaginatedResult { total, page: p, page_size: ps, data: products })
 }
 
 #[tauri::command]

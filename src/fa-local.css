@@ -58,6 +58,8 @@
 .nf-fa-cloud_download::before { content: "\f0ed"; }
 .nf-fa-pencil::before { content: "\f303"; }
 .nf-fa-ban::before { content: "\f05e"; }
+.nf-fa-chart_pie::before { content: "\f200"; }
+.nf-fa-calendar::before { content: "\f133"; }
 .nf-fa-save::before { content: "\f0c7"; }
 .nf-fa-keyboard::before { content: "\f11c"; }
 .nf-fa-calculator::before { content: "\f1ec"; }

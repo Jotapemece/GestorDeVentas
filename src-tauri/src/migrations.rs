@@ -93,6 +93,7 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("010_add_total_bs_ventas", add_total_bs_ventas),
     ("011_add_total_bs_cierres", add_total_bs_cierres),
     ("012_add_anulada_ventas", add_anulada_ventas),
+    ("013_add_anulado_detalles", add_anulado_detalles),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -235,6 +236,12 @@ fn add_total_bs_cierres(conn: &Connection) {
 fn add_anulada_ventas(conn: &Connection) {
     if !column_exists(conn, "ventas", "anulada") {
         conn.execute_batch("ALTER TABLE ventas ADD COLUMN anulada INTEGER NOT NULL DEFAULT 0;").ok();
+    }
+}
+
+fn add_anulado_detalles(conn: &Connection) {
+    if !column_exists(conn, "detalles_ventas", "anulado") {
+        conn.execute_batch("ALTER TABLE detalles_ventas ADD COLUMN anulado INTEGER NOT NULL DEFAULT 0;").ok();
     }
 }
 

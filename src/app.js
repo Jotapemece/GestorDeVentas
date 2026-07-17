@@ -217,7 +217,7 @@ function createCartRow(item) {
   return '<td title="' + name + '">' + name + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + escapeHtml(item.codigo) + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + escapeHtml(item.codigo) + '">\u00d7</button></td>';
 }
 function createInventoryRow(p, editBtn) {
-  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '">Detalles</button>' + editBtn + '</div></div></td>';
+  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '">Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === 'admin';
@@ -231,8 +231,10 @@ function createAuditRow(log) {
   return '<td>' + log.id + '</td><td>' + escapeHtml(log.fecha_hora) + '</td><td>' + escapeHtml(log.usuario) + '</td><td>' + escapeHtml(log.accion) + '</td>';
 }
 function createDailySaleRow(v, metodoLabel) {
-  const voidBtn = v.anulada ? '<span class="text-muted">Anulada</span>' : '<button class="btn btn-sm btn-danger void-sale-btn" data-id="' + v.id + '"><i class="nf nf-fa-ban"></i></button>';
-  return '<td>' + v.id + '</td><td>' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td>' + escapeHtml(v.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td><td>' + voidBtn + '</td>';
+  const isAdmin = currentUser && currentUser.rol === 'admin';
+  const voidBtn = v.anulada ? '<span class="text-muted">Anulada</span>' : (isAdmin ? '<button class="btn btn-sm btn-danger void-sale-btn" data-id="' + v.id + '" title="Anular venta"><i class="nf nf-fa-ban"></i></button>' : '');
+  const detailBtn = '<button class="btn btn-sm btn-outline sale-detail-btn" data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i></button>';
+  return '<td>' + v.id + '</td><td>' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td>' + escapeHtml(v.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td><td>' + detailBtn + ' ' + voidBtn + '</td>';
 }
 function createDebtSaleCard(v, prodHtml) {
   return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
@@ -498,7 +500,6 @@ async function handleLogin() {
       qs(SEL.sidebarUser).textContent = currentUser.username + ' (' + currentUser.rol + ')';
       applyRoleUI();
       await loadTasa();
-      await checkTasaUpdate();
       await loadProductCache();
       showView(lastViewName);
       if (lastViewName === 'sales') {
@@ -607,7 +608,8 @@ function refreshAllBsPrices() {
 
 async function loadProductCache() {
   try {
-    productCache = await invoke('list_products', { search: null });
+    const result = await invoke('list_products', { search: null, page: 1, pageSize: 5000 });
+    productCache = result.data || result;
   } catch (e) { showToast('Error al cargar productos', 'error'); }
 }
 
@@ -1072,15 +1074,20 @@ async function confirmPayment() {
 }
 
 /* ========== INVENTORY ========== */
+let inventoryPage = 1;
+const INVENTORY_PAGE_SIZE = 50;
+
 async function loadInventory() {
   const query = qs(SEL.inventorySearch).value.trim();
   const tbody = qs(SEL.inventoryBody);
   showLoading(tbody);
   try {
-    const products = await invoke('list_products', { search: query || null });
+    const result = await invoke('list_products', { search: query || null, page: inventoryPage, pageSize: INVENTORY_PAGE_SIZE });
+    const products = result.data || result;
     tbody.innerHTML = '';
     if (products.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-archive"></i>', query ? 'Sin resultados' : 'No hay productos', query ? 'Pruebe con otro t\u00e9rmino de b\u00fasqueda' : 'Agregue productos desde el bot\u00f3n superior') + '</td></tr>';
+      renderInventoryPagination(result.total || 0);
       return;
     }
     const frag = document.createDocumentFragment();
@@ -1091,7 +1098,31 @@ async function loadInventory() {
       frag.appendChild(tr);
     });
     tbody.appendChild(frag);
+    renderInventoryPagination(result.total || 0);
   } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+function renderInventoryPagination(total) {
+  let el = document.getElementById('inventory-pagination');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'inventory-pagination';
+    el.className = 'pagination';
+    qs(SEL.inventoryTable).after(el);
+  }
+  const totalPages = Math.ceil(total / INVENTORY_PAGE_SIZE);
+  if (totalPages <= 1) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = '<button class="btn btn-sm btn-outline" data-inv-page="' + (inventoryPage - 1) + '" ' + (inventoryPage <= 1 ? 'disabled' : '') + '>Anterior</button>' +
+    '<span class="pagination-info">P\u00e1gina ' + inventoryPage + ' de ' + totalPages + ' (' + total + ' productos)</span>' +
+    '<button class="btn btn-sm btn-outline" data-inv-page="' + (inventoryPage + 1) + '" ' + (inventoryPage >= totalPages ? 'disabled' : '') + '>Siguiente</button>';
+  el.querySelectorAll('[data-inv-page]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (this.disabled) return;
+      inventoryPage = parseInt(this.dataset.invPage);
+      loadInventory();
+    });
+  });
 }
 
 function toggleDropdown(btn) {
@@ -1101,15 +1132,22 @@ function toggleDropdown(btn) {
   if (!isOpen) {
     menu.classList.add('show');
     const btnRect = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth;
     menu.style.position = 'fixed';
-    menu.style.left = btnRect.right - menu.offsetWidth + 'px';
     menu.style.top = btnRect.bottom + 'px';
     menu.style.right = 'auto';
     menu.style.bottom = 'auto';
+    // Align left edge with button left, but if it overflows right, flip
+    const spaceRight = window.innerWidth - btnRect.left;
+    if (spaceRight >= mw) {
+      menu.style.left = btnRect.left + 'px';
+    } else {
+      menu.style.left = Math.max(4, btnRect.right - mw) + 'px';
+    }
     const menuRect = menu.getBoundingClientRect();
     const overflowY = menuRect.bottom - window.innerHeight;
     if (overflowY > 0) {
-      menu.style.top = btnRect.top - menuRect.height + 'px';
+      menu.style.top = Math.max(4, btnRect.top - menuRect.height) + 'px';
     }
   }
 }
@@ -1918,6 +1956,431 @@ async function loadTopProducts() {
   } catch (e) { /* silently ignore */ section.style.display = 'none'; }
 }
 
+let dashboardChartType = 'bar';
+
+async function loadDashboard() {
+  const body = document.getElementById('dashboard-body');
+  if (!body) return;
+  try {
+    const data = await invoke('get_dashboard_summary');
+    var paymentMethods = null;
+    if (dashboardChartType === 'pie') {
+      try { paymentMethods = await invoke('get_dashboard_payment_methods', { period: piePeriod }); } catch (e) {}
+    }
+    const periods = [
+      { label: 'Hoy', icon: 'calendar_day', key: 'today', color: '#4f46e5' },
+      { label: '\u00daltimos 7 d\u00edas', icon: 'calendar_week', key: 'week', color: '#0891b2' },
+      { label: 'Este mes', icon: 'calendar', key: 'month', color: '#059669' }
+    ];
+    body.innerHTML =
+      '<div class="dashboard-chart-toggle">' +
+        '<button class="btn btn-sm ' + (dashboardChartType === 'bar' ? 'btn-primary' : 'btn-outline') + '" data-chart="bar"><i class="nf nf-fa-bar_chart"></i> Barras</button>' +
+        '<button class="btn btn-sm ' + (dashboardChartType === 'pie' ? 'btn-primary' : 'btn-outline') + '" data-chart="pie"><i class="nf nf-fa-chart_pie"></i> Pastel</button>' +
+      '</div>' +
+      '<div class="dashboard-chart-container"><canvas id="dashboard-canvas" width="600" height="280"></canvas></div>' +
+      '<div class="dashboard-grid">' +
+        periods.map(function(p) {
+          var d = data[p.key];
+          return '<div class="dashboard-period" style="border-left: 4px solid ' + p.color + '">' +
+            '<div class="dashboard-period-title"><i class="nf nf-fa-' + p.icon + '"></i> ' + p.label + '</div>' +
+            '<div class="dashboard-stat"><span>Ventas</span><strong>' + d.total_ventas + '</strong></div>' +
+            '<div class="dashboard-stat"><span>Total USD</span><strong>' + formatUSD(d.total_usd) + '</strong></div>' +
+            '<div class="dashboard-stat"><span>Total Bs.</span><strong>' + formatBS(d.total_bs) + '</strong></div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+    var toggleBtns = body.querySelectorAll('.dashboard-chart-toggle button');
+    for (var i = 0; i < toggleBtns.length; i++) {
+      toggleBtns[i].addEventListener('click', function() {
+        dashboardChartType = this.dataset.chart;
+        if (dashboardChartType === 'pie') piePeriod = 'day';
+        loadDashboard();
+      });
+    }
+    if (dashboardChartType === 'pie') {
+      requestAnimationFrame(function() { drawDashboardPieChart(body, paymentMethods); });
+    } else {
+      requestAnimationFrame(function() { drawDashboardBarChart(body, data, periods); });
+    }
+  } catch (e) { body.innerHTML = '<p class="text-muted">Error al cargar dashboard</p>'; }
+}
+
+var piePeriod = 'day';
+
+function showChartTooltip(clientX, clientY, text) {
+  var el = document.getElementById('chart-tooltip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'chart-tooltip';
+    el.style.cssText = 'position:fixed;pointer-events:none;background:rgba(0,0,0,0.85);color:#fff;padding:6px 10px;border-radius:4px;font-size:13px;z-index:9999;white-space:nowrap;display:none;';
+    document.body.appendChild(el);
+  }
+  if (text) {
+    el.textContent = text;
+    el.style.display = 'block';
+    el.style.left = Math.min(clientX + 12, window.innerWidth - el.offsetWidth - 8) + 'px';
+    el.style.top = Math.max(clientY - el.offsetHeight - 8, 4) + 'px';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function hideChartTooltip() {
+  var el = document.getElementById('chart-tooltip');
+  if (el) el.style.display = 'none';
+}
+
+/* ========== BAR CHART ========== */
+function drawDashboardBarChart(body, data, periods) {
+  var canvas = document.getElementById('dashboard-canvas');
+  if (!canvas) return;
+  var rect = canvas.parentElement.getBoundingClientRect();
+  var isMobile = rect.width < 500;
+  var w = Math.min(rect.width - 16, 600);
+  var h = isMobile ? 240 : 280;
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0d8e8';
+  var textLight = getComputedStyle(document.documentElement).getPropertyValue('--text-light').trim() || '#a098b8';
+  var pad = isMobile ? { top: 12, right: 8, bottom: 28, left: 40 } : { top: 20, right: 20, bottom: 35, left: 55 };
+  var chartW = w - pad.left - pad.right;
+  var chartH = h - pad.top - pad.bottom;
+
+  var metrics = [
+    { label: 'Ventas', key: 'total_ventas', values: [data.today.total_ventas, data.week.total_ventas, data.month.total_ventas] },
+    { label: 'USD', key: 'total_usd', values: [data.today.total_usd, data.week.total_usd, data.month.total_usd] }
+  ];
+
+  var barColors = ['#4f46e5', '#0891b2', '#059669'];
+  var periodLabels = ['Hoy', '7 d\u00edas', 'Mes'];
+  var groupW = chartW / metrics.length;
+  var barW = Math.min(groupW * (isMobile ? 0.24 : 0.28), isMobile ? 28 : 36);
+  var gap = (groupW - barW * 3) / 4;
+  var yMaxes = metrics.map(function(m) { return Math.max.apply(null, m.values) * 1.15 || 1; });
+
+  var bars = [];
+  var startTime = null;
+  var duration = 600;
+
+  function drawBase(ease) {
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = '#d1d5db';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, pad.top);
+    ctx.lineTo(pad.left, pad.top + chartH);
+    ctx.lineTo(pad.left + chartW, pad.top + chartH);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.setLineDash([4, 4]);
+    var gridLines = isMobile ? 3 : 4;
+    for (var gi = 1; gi <= gridLines; gi++) {
+      var gy = pad.top + chartH * (1 - gi / (gridLines + 1));
+      ctx.beginPath();
+      ctx.moveTo(pad.left, gy);
+      ctx.lineTo(pad.left + chartW, gy);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = textLight;
+    ctx.font = isMobile ? '9px sans-serif' : '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (var yi = 0; yi <= gridLines + 1; yi++) {
+      ctx.fillText(Math.round(yi * 100 / (gridLines + 1)) + '%', pad.left - (isMobile ? 4 : 8), pad.top + chartH * (1 - yi / (gridLines + 1)));
+    }
+
+    bars = [];
+    for (var mi = 0; mi < metrics.length; mi++) {
+      var gx = pad.left + mi * groupW + gap;
+      for (var bi = 0; bi < 3; bi++) {
+        var barH = Math.max(1, (metrics[mi].values[bi] / yMaxes[mi]) * chartH * ease);
+        var bx = gx + bi * (barW + gap);
+        var by = pad.top + chartH - barH;
+        bars.push({ x: bx, y: by, w: barW, h: barH, metric: metrics[mi].label, period: periodLabels[bi] });
+        ctx.fillStyle = barColors[bi];
+        ctx.fillRect(bx, by, barW, barH);
+        if (barH > (isMobile ? 10 : 15)) {
+          ctx.fillStyle = textColor;
+          ctx.font = (isMobile ? '8px' : '10px') + ' sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(mi === 0 ? String(Number(metrics[mi].values[bi])) : '$' + Number(metrics[mi].values[bi]).toFixed(1), bx + barW / 2, by - 2);
+        }
+      }
+      ctx.fillStyle = textColor;
+      ctx.font = (isMobile ? '10px' : '12px') + ' sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(metrics[mi].label, gx + groupW / 2, pad.top + chartH + 8);
+    }
+
+    var legendX = w - (isMobile ? 130 : 160), legendY = isMobile ? 4 : 6;
+    var lSize = isMobile ? 8 : 10;
+    for (var li = 0; li < 3; li++) {
+      ctx.fillStyle = barColors[li];
+      ctx.fillRect(legendX + li * (isMobile ? 44 : 52), legendY, lSize, lSize);
+      ctx.fillStyle = textColor;
+      ctx.font = (isMobile ? '8px' : '10px') + ' sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(periodLabels[li], legendX + li * (isMobile ? 44 : 52) + lSize + 3, legendY);
+    }
+  }
+
+  function animate(timestamp) {
+    if (!startTime) startTime = timestamp;
+    var progress = Math.min((timestamp - startTime) / duration, 1);
+    drawBase(1 - Math.pow(1 - progress, 3));
+    if (progress < 1) { requestAnimationFrame(animate); }
+    else { attachChartHover(canvas, bars, dpr); }
+  }
+  requestAnimationFrame(animate);
+}
+
+/* ========== PIE CHART ========== */
+function drawDashboardPieChart(body, paymentMethods) {
+  var periodLabels = { day: 'Hoy', week: 'Semana', month: 'Mes' };
+  var periodBar = document.createElement('div');
+  periodBar.className = 'dashboard-chart-toggle';
+  periodBar.innerHTML = Object.keys(periodLabels).map(function(k) {
+    return '<button class="btn btn-sm ' + (piePeriod === k ? 'btn-primary' : 'btn-outline') + '" data-pie-period="' + k + '">' + periodLabels[k] + '</button>';
+  }).join('');
+  var container = body.querySelector('.dashboard-chart-container');
+  if (container) body.insertBefore(periodBar, container);
+  var periodBtns = periodBar.querySelectorAll('[data-pie-period]');
+  for (var pi = 0; pi < periodBtns.length; pi++) {
+    periodBtns[pi].addEventListener('click', function() {
+      piePeriod = this.dataset.piePeriod;
+      loadDashboard();
+    });
+  }
+
+  var canvas = document.getElementById('dashboard-canvas');
+  if (!canvas) return;
+  var rect = canvas.parentElement.getBoundingClientRect();
+  var isMobile = rect.width < 500;
+  var w = Math.min(rect.width - 16, 600);
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = 280 * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = '280px';
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  var h = 280;
+
+  var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0d8e8';
+  var textLight = getComputedStyle(document.documentElement).getPropertyValue('--text-light').trim() || '#a098b8';
+  var cardColor = getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#1f2937';
+
+  var pieColors = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#7c3aed', '#dc2626'];
+  var methodLabels = {
+    efectivo: 'Efectivo',
+    punto: 'Punto',
+    pago_movil: 'Pago M\u00f3vil',
+    mixto: 'Mixto',
+    credito: 'Cr\u00e9dito',
+    efectivo_usd: 'Efectivo USD'
+  };
+
+  var slices = [];
+  if (paymentMethods && paymentMethods.length) {
+    paymentMethods.forEach(function(m, i) {
+      if (m.total_usd > 0) {
+        slices.push({ label: methodLabels[m.metodo] || m.metodo, value: m.total_usd, color: pieColors[i % pieColors.length] });
+      }
+    });
+  }
+  if (slices.length === 0) {
+    slices.push({ label: 'Sin datos', value: 1, color: '#6b7280' });
+  }
+
+  var total = slices.reduce(function(s, sl) { return s + sl.value; }, 0);
+
+  var legendW = isMobile ? 90 : 130;
+  var chartW = w - legendW;
+  var cx = chartW / 2;
+  var cy = h / 2;
+  var radius = Math.min(chartW, h) / 2 - (isMobile ? 20 : 40);
+
+  var acc = 0;
+  var angles = slices.map(function(sl) {
+    var a = (sl.value / total) * Math.PI * 2;
+    var seg = { start: acc, end: acc + a, slice: sl };
+    acc += a;
+    return seg;
+  });
+
+  var duration = 500;
+  var startTime = null;
+
+  function drawBase(ease) {
+    ctx.clearRect(0, 0, w, h);
+
+    for (var si = 0; si < angles.length; si++) {
+      var seg = angles[si];
+      var sweep = (seg.end - seg.start) * ease;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, seg.start, seg.start + sweep);
+      ctx.closePath();
+      ctx.fillStyle = seg.slice.color;
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.45, 0, Math.PI * 2);
+    ctx.fillStyle = cardColor;
+    ctx.fill();
+
+    ctx.fillStyle = textColor;
+    ctx.font = 'bold ' + (isMobile ? '13px' : '16px') + ' sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('$' + total.toFixed(1), cx, cy - 6);
+    ctx.font = (isMobile ? '8px' : '10px') + ' sans-serif';
+    ctx.fillStyle = textLight;
+    ctx.fillText(periodLabels[piePeriod] || 'Total', cx, cy + 14);
+
+    var legX = chartW + (isMobile ? 6 : 12);
+    var legY = 24;
+    var sq = isMobile ? 10 : 12;
+    for (var li = 0; li < slices.length; li++) {
+      ctx.fillStyle = slices[li].color;
+      ctx.fillRect(legX, legY, sq, sq);
+      ctx.fillStyle = textColor;
+      ctx.font = (isMobile ? '10px' : '12px') + ' sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(slices[li].label, legX + sq + (isMobile ? 4 : 6), legY);
+      var pct = ((slices[li].value / total) * 100).toFixed(1);
+      ctx.fillStyle = textLight;
+      ctx.font = (isMobile ? '8px' : '11px') + ' sans-serif';
+      ctx.fillText('$' + slices[li].value.toFixed(1) + ' (' + pct + '%)', legX + sq + (isMobile ? 4 : 6), legY + sq + 2);
+      legY += (isMobile ? 34 : 50);
+    }
+  }
+
+  function animate(timestamp) {
+    if (!startTime) startTime = timestamp;
+    var progress = Math.min((timestamp - startTime) / duration, 1);
+    drawBase(1 - Math.pow(1 - progress, 3));
+    if (progress < 1) { requestAnimationFrame(animate); }
+    else { attachPieHover(canvas, angles, cx, cy, radius, dpr); }
+  }
+  requestAnimationFrame(animate);
+}
+
+function attachChartHover(canvas, bars, dpr) {
+  function onMove(e) {
+    var cr = canvas.getBoundingClientRect();
+    var mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr;
+    var my = (e.clientY - cr.top) * (canvas.height / cr.height) / dpr;
+    for (var i = 0; i < bars.length; i++) {
+      if (mx >= bars[i].x && mx <= bars[i].x + bars[i].w && my >= bars[i].y && my <= bars[i].y + bars[i].h) {
+        showChartTooltip(e.clientX, e.clientY, bars[i].period + ' - ' + bars[i].metric);
+        canvas.style.cursor = 'pointer';
+        return;
+      }
+    }
+    hideChartTooltip();
+    canvas.style.cursor = 'default';
+  }
+  function onOut() { hideChartTooltip(); canvas.style.cursor = 'default'; }
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseout', onOut);
+}
+
+function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
+  function onMove(e) {
+    var cr = canvas.getBoundingClientRect();
+    var mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr - cx;
+    var my = (e.clientY - cr.top) * (canvas.height / cr.height) / dpr - cy;
+    var dist = Math.sqrt(mx * mx + my * my);
+    var innerR = radius * 0.45;
+    if (dist < innerR || dist > radius) {
+      hideChartTooltip();
+      canvas.style.cursor = 'default';
+      return;
+    }
+    var angle = Math.atan2(my, mx);
+    if (angle < 0) angle += Math.PI * 2;
+    for (var i = 0; i < angles.length; i++) {
+      if (angle >= angles[i].start && angle < angles[i].end) {
+        showChartTooltip(e.clientX, e.clientY, angles[i].slice.label + ' - $' + angles[i].slice.value.toFixed(1));
+        canvas.style.cursor = 'pointer';
+        return;
+      }
+    }
+    hideChartTooltip();
+    canvas.style.cursor = 'default';
+  }
+  function onOut() { hideChartTooltip(); canvas.style.cursor = 'default'; }
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseout', onOut);
+}
+
+/* ========== PRODUCT HISTORY ========== */
+async function showProductHistory(codigo, nombre) {
+  const title = document.getElementById('product-history-title');
+  const tbody = document.getElementById('product-history-body');
+  if (title) title.textContent = 'Producto: ' + escapeHtml(nombre) + ' (C\u00f3digo: ' + escapeHtml(codigo) + ')';
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="7">Cargando...</td></tr>';
+    showModal(document.getElementById('product-history-modal'));
+    try {
+      const items = await invoke('get_product_history', { productoCodigo: codigo });
+      tbody.innerHTML = '';
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-muted">Sin ventas registradas</td></tr>';
+      } else {
+        items.forEach(function(item) {
+          var tr = document.createElement('tr');
+          tr.innerHTML = '<td>' + item.venta_id + '</td><td>' + escapeHtml(item.fecha_hora) + '</td><td>' + item.cantidad + '</td><td>' + formatUSD(item.precio_usd_unitario) + '</td><td>' + formatUSD(item.subtotal_usd) + '</td><td>' + escapeHtml(item.metodo_pago) + '</td><td>' + escapeHtml(item.username) + '</td>';
+          tbody.appendChild(tr);
+        });
+      }
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="7">Error: ' + escapeHtml(e) + '</td></tr>'; }
+  } else {
+    showModal(document.getElementById('product-history-modal'));
+  }
+}
+
+/* ========== EXPORT REPORT ========== */
+async function handleExportReport() {
+  const startDate = document.getElementById('report-start-date').value;
+  const endDate = document.getElementById('report-end-date').value;
+  if (!startDate || !endDate) { showToast('Seleccione fecha de inicio y fin', 'error'); return; }
+  try {
+    const b64 = await invoke('export_report_xlsx', {
+      filter: {
+        start_date: startDate + ' 00:00:00',
+        end_date: endDate + ' 23:59:59',
+        producto_codigo: document.getElementById('report-product-filter').value.trim() || null,
+        username: document.getElementById('report-vendor-filter').value.trim() || null,
+      }
+    });
+    var url = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + b64;
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'reporte_ventas_' + startDate + '_' + endDate + '.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Reporte exportado');
+  } catch (e) { showToast('Error al exportar: ' + e, 'error'); }
+}
+
 /* ========== VOID SALE ========== */
 async function handleVoidSale(ventaId) {
   const ok = await confirmModal('\u00bfEst\u00e1 seguro de anular la venta #' + ventaId + '? Se devolver\u00e1 el stock al inventario.', 'Anular Venta', 'S\u00ed, anular');
@@ -1926,6 +2389,57 @@ async function handleVoidSale(ventaId) {
     const msg = await invoke('void_sale', { ventaId });
     showToast(msg);
     playSound('remove');
+    if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
+    if (qs('#view-reports')?.classList.contains('active')) loadReportsAndTopProducts();
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+/* ========== SALE DETAIL MODAL + PARTIAL VOID ========== */
+async function showSaleDetail(ventaId, btn) {
+  try {
+    const detalles = await invoke('get_sale_detail', { ventaId });
+    document.getElementById('sale-detail-id').textContent = ventaId;
+    if (btn) {
+      document.getElementById('sale-detail-total').textContent = formatUSD(parseFloat(btn.dataset.total));
+      document.getElementById('sale-detail-metodo').textContent = btn.dataset.metodo;
+      document.getElementById('sale-detail-usuario').textContent = btn.dataset.usuario;
+      document.getElementById('sale-detail-fecha').textContent = btn.dataset.fecha;
+    }
+    const list = document.getElementById('sale-detail-list');
+    list.innerHTML = '';
+    if (detalles.length === 0) {
+      list.innerHTML = '<p class="text-muted">No hay detalles.</p>';
+      showModal(document.getElementById('sale-detail-modal'));
+      return;
+    }
+    const allVoided = detalles.every(function(d) { return d.anulado; });
+    const table = document.createElement('table');
+    table.className = 'table';
+    table.innerHTML = '<thead><tr><th>Producto</th><th>Cantidad</th><th>Precio Unit.</th><th>Subtotal</th><th>Estado</th><th>Acci\u00f3n</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    detalles.forEach(function(d) {
+      const tr = document.createElement('tr');
+      if (d.anulado) tr.style.textDecoration = 'line-through';
+      const voidBtn = d.anulado
+        ? '<span class="text-muted">Anulado</span>'
+        : '<button class="btn btn-sm btn-danger void-item-btn" data-detalle-id="' + d.id + '" data-venta-id="' + ventaId + '" ' + (allVoided ? 'disabled' : '') + '>Anular</button>';
+      tr.innerHTML = '<td>' + escapeHtml(d.producto_nombre || d.producto_codigo) + '</td><td>' + d.cantidad + '</td><td>' + formatUSD(d.precio_usd_unitario) + '</td><td>' + formatUSD(d.subtotal_usd) + '</td><td>' + (d.anulado ? '<span class="text-danger">Anulado</span>' : 'Activo') + '</td><td>' + voidBtn + '</td>';
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    list.appendChild(table);
+    showModal(document.getElementById('sale-detail-modal'));
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+async function handleVoidItem(ventaId, detalleId) {
+  const ok = await confirmModal('\u00bfAnular este \u00edtem de la venta? Se devolver\u00e1 el stock al inventario.', 'Anular \u00cdtem', 'S\u00ed, anular');
+  if (!ok) return;
+  try {
+    await invoke('void_sale_items', { request: { venta_id: ventaId, detalle_ids: [detalleId] } });
+    showToast('Item anulado correctamente');
+    playSound('remove');
+    showSaleDetail(ventaId);
     if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
     if (qs('#view-reports')?.classList.contains('active')) loadReportsAndTopProducts();
   } catch (e) { showToast('Error: ' + e, 'error'); }
@@ -2039,6 +2553,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   let inventoryTimer = null;
   qs(SEL.inventorySearch).addEventListener('input', () => {
     clearTimeout(inventoryTimer);
+    inventoryPage = 1;
     inventoryTimer = setTimeout(loadInventory, 250);
   });
   qs(SEL.inventoryAddBtn).addEventListener('click', openNewProductModal);
@@ -2062,6 +2577,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     const editBtn = e.target.closest('[data-action="edit-product"]');
     if (editBtn) {
       editProduct(editBtn.dataset.codigo);
+      return;
+    }
+    const histBtn = e.target.closest('[data-action="show-product-history"]');
+    if (histBtn) {
+      showProductHistory(histBtn.dataset.codigo, histBtn.dataset.nombre);
       return;
     }
   });
@@ -2157,8 +2677,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  /* ========== COLLAPSIBLE CONFIG CARDS ========== */
+  /* ========== COLLAPSIBLE CARDS ========== */
   document.getElementById('view-config').addEventListener('click', function(e) {
+    const header = e.target.closest('.config-card-header');
+    if (header) header.classList.toggle('collapsed');
+  });
+  document.getElementById('view-reports')?.addEventListener('click', function(e) {
     const header = e.target.closest('.config-card-header');
     if (header) header.classList.toggle('collapsed');
   });
@@ -2225,10 +2749,28 @@ document.addEventListener('DOMContentLoaded', async function() {
   const topLimitSelect = document.getElementById('top-products-limit');
   if (topLimitSelect) topLimitSelect.addEventListener('change', loadTopProducts);
 
+  /* ========== EXPORT REPORT ========== */
+  const exportBtn = document.getElementById('report-export-btn');
+  if (exportBtn) exportBtn.addEventListener('click', handleExportReport);
+
+  /* ========== PRODUCT HISTORY MODAL ========== */
+  document.getElementById('product-history-modal-close')?.addEventListener('click', function() { closeModal(document.getElementById('product-history-modal')); });
+  document.getElementById('product-history-ok-btn')?.addEventListener('click', function() { closeModal(document.getElementById('product-history-modal')); });
+
   /* ========== VOID SALE (delegation on daily sales table) ========== */
   document.getElementById('daily-sales-body').addEventListener('click', function(e) {
     const btn = e.target.closest('.void-sale-btn');
     if (btn) handleVoidSale(parseInt(btn.dataset.id));
+    const detailBtn = e.target.closest('.sale-detail-btn');
+    if (detailBtn) showSaleDetail(parseInt(detailBtn.dataset.id), detailBtn);
+  });
+
+  /* ========== SALE DETAIL MODAL ========== */
+  document.getElementById('sale-detail-close')?.addEventListener('click', function() { closeModal(document.getElementById('sale-detail-modal')); });
+  document.getElementById('sale-detail-ok-btn')?.addEventListener('click', function() { closeModal(document.getElementById('sale-detail-modal')); });
+  document.getElementById('sale-detail-list')?.addEventListener('click', function(e) {
+    const btn = e.target.closest('.void-item-btn');
+    if (btn) handleVoidItem(parseInt(btn.dataset.ventaId), parseInt(btn.dataset.detalleId));
   });
 
   /* ========== VIEW-SPECIFIC LOAD ========== */
@@ -2240,6 +2782,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (reportsView.classList.contains('active')) {
         loadUserList();
         setDefaultReportDates();
+        loadDashboard();
       }
     });
     observer.observe(reportsView, { attributes: true, attributeFilter: ['class'] });
@@ -2506,4 +3049,33 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   });
   window.addEventListener('tauri://blur', () => {});
+
+  // Mobile keyboard: push content up when keyboard opens
+  if (window.visualViewport) {
+    var _prevVpHeight = window.visualViewport.height;
+    window.visualViewport.addEventListener('resize', function() {
+      var diff = _prevVpHeight - window.visualViewport.height;
+      var main = document.getElementById('main-app');
+      if (!main) return;
+      if (diff > 100) {
+        // Keyboard opened
+        var view = document.querySelector('.view.active');
+        if (view) view.classList.add('mobile-keyboard');
+        var el = document.activeElement;
+        if (el) {
+          setTimeout(function() {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 300);
+        }
+        main.style.paddingBottom = (diff - 40) + 'px';
+      } else if (diff < -100) {
+        // Keyboard closed
+        var view2 = document.querySelector('.view.active');
+        if (view2) view2.classList.remove('mobile-keyboard');
+        main.style.paddingBottom = '';
+        window.scrollTo(0, 0);
+      }
+      _prevVpHeight = window.visualViewport.height;
+    });
+  }
 });

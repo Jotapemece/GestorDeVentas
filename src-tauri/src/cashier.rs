@@ -442,6 +442,68 @@ pub fn get_cierre_detalle(
     })
 }
 
+#[tauri::command]
+pub fn get_dashboard_payment_methods(state: State<AppState>, period: String) -> Result<Vec<MetodoTotal>, String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let now = chrono::Local::now();
+    let today = now.format("%Y-%m-%d").to_string();
+    let tomorrow = siguiente_dia(&today);
+
+    let (start, end) = match period.as_str() {
+        "day" => (today.clone(), tomorrow),
+        "week" => {
+            let week_ago = (now - chrono::Duration::days(6)).format("%Y-%m-%d").to_string();
+            (week_ago, tomorrow)
+        }
+        "month" => {
+            let month_start = now.format("%Y-%m-01").to_string();
+            let after_month = siguiente_dia(&now.format("%Y-%m-%d").to_string());
+            (month_start, after_month)
+        }
+        _ => return Err("Periodo invalido. Use day, week o month".to_string()),
+    };
+
+    let data = compute_report_data_range(&db, &start, &end, &today)?;
+    Ok(data.por_metodo)
+}
+
+#[tauri::command]
+pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary, String> {
+    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let tomorrow = siguiente_dia(&today);
+
+    let week_ago = (chrono::Local::now() - chrono::Duration::days(6))
+        .format("%Y-%m-%d")
+        .to_string();
+    let after_week = siguiente_dia(&today);
+
+    let month_start = chrono::Local::now()
+        .format("%Y-%m-01")
+        .to_string();
+    let after_month = siguiente_dia(&chrono::Local::now().format("%Y-%m-%d").to_string());
+
+    fn period(db: &rusqlite::Connection, start: &str, end: &str) -> Result<DashboardPeriod, String> {
+        let cnt: i64 = db
+            .query_row(SQL_COUNT_VENTAS_RANGE, params![start, end], |row| row.get(0))
+            .map_err(|e| format!("Error al contar: {}", e))?;
+        let usd: f64 = db
+            .query_row(SQL_SUM_VENTAS_RANGE, params![start, end], |row| row.get(0))
+            .map_err(|e| format!("Error al sumar USD: {}", e))?;
+        let bs: f64 = db
+            .query_row(SQL_SUM_BS_RANGE, params![start, end], |row| row.get(0))
+            .map_err(|e| format!("Error al sumar Bs: {}", e))?;
+        Ok(DashboardPeriod { total_ventas: cnt, total_usd: usd, total_bs: bs })
+    }
+
+    Ok(DashboardSummary {
+        today: period(&db, &today, &tomorrow)?,
+        week: period(&db, &week_ago, &after_week)?,
+        month: period(&db, &month_start, &after_month)?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
