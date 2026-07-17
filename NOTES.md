@@ -487,3 +487,52 @@ Se añadió la columna `total_bs` a las tablas `ventas` y `cierres_caja` para al
 - `src/index.html` — input búsqueda créditos, card Respaldo, top products en reportes, modal admin-pwd-modal
 - `src/app.js` — createUserRow con botón 🔑, créditos search filter, admin pwd modal, backup handler, loadReportsAndTopProducts, loadTopProducts
 - `src/style.css` — `.top-products-grid`, `.top-product-card`, compact variants
+
+---
+
+## 2026-07-17 — replace_all_products + importación 320 productos
+
+### replace_all_products (Rust)
+- Comando en `products.rs` que limpia todos los productos (`activo = 0`) y los reemplaza desde TSV con códigos P0001-Pxxxx
+- Registrado en `lib.rs`
+
+### Importación
+- 320 productos importados desde `/tmp/productos.tsv` directamente a SQLite vía script Python
+- BD en `/home/jotapemece/Escritorio/programming_things/gestor_ventas/gestor_ventas.db`
+- Productos anteriores desactivados (conservan historial de ventas)
+
+---
+
+## 2026-07-17 — Check automático de tasa BCV al abrir app
+
+### Backend (`tasa_bcv.rs`)
+- `fetch_tasa_bcv_inner()`: función interna reutilizable
+- `check_tasa_update`: verifica si ya se consultó BCV hoy (clave `bcv_ultima_fecha` en config). Si no, obtiene la tasa, la compara con la actual, retorna `Some(new_rate)` si cambió o `None` si no.
+
+### Frontend
+- `checkTasaUpdate()` se llama después de `loadTasa()` en `handleLogin`
+- Si hay nueva tasa, agrega clase `.tasa-nueva` al botón de fetch (pulso + punto indicador)
+- Al hacer clic en el botón, se aplica la tasa y desaparece el indicador
+
+### CSS
+- `.tasa-nueva` con `box-shadow` pulsante (`@keyframes pulse-tasa`)
+- `::after` pseudo-elemento con punto rojo en la esquina
+
+---
+
+## 2026-07-17 — Fix: conteo de productos suma cantidades
+
+### Problema
+- Cart badge y columna "Productos" en reportes usaban `item.length` (líneas) en vez de sumar cantidades
+
+### Solución
+- `updateCartBadge`: `cart.reduce((sum, item) => sum + item.cantidad, 0)` en vez de `cart.length`
+- `createReportRow`: `v.productos.reduce((s, p) => s + p.cantidad, 0)` en vez de `v.productos.length`
+
+---
+
+## 2026-07-17 — Fix: no registrar en historial acciones triviales
+
+### Cambios
+- `list_usuarios`: usa `check_admin_role` en vez de `require_admin` (no loggea)
+- `set_config_value`: usa `check_admin_role` en vez de `require_admin` (no loggea tema, sonido, etc.)
