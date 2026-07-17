@@ -88,6 +88,7 @@ pub fn run() {
             config::list_theme_names,
             // Tasa BCV
             tasa_bcv::fetch_tasa_bcv,
+            tasa_bcv::check_tasa_update,
             // DB
             db::backup_database,
             // Auth

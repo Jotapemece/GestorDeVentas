@@ -498,6 +498,7 @@ async function handleLogin() {
       qs(SEL.sidebarUser).textContent = currentUser.username + ' (' + currentUser.rol + ')';
       applyRoleUI();
       await loadTasa();
+      await checkTasaUpdate();
       await loadProductCache();
       showView(lastViewName);
       if (lastViewName === 'sales') {
@@ -580,6 +581,21 @@ async function fetchTasaBcv() {
     btn.classList.remove('loading');
     hideLoadingModal();
   }
+}
+
+async function checkTasaUpdate() {
+  try {
+    const newRate = await invoke('check_tasa_update');
+    const btn = document.getElementById('tasa-fetch-btn');
+    if (!btn) return;
+    if (newRate != null) {
+      btn.classList.add('tasa-nueva');
+      btn.title = 'Nueva tasa BCV disponible: Bs. ' + newRate.toFixed(2).replace('.', ',') + '. Haz clic para actualizar';
+    } else {
+      btn.classList.remove('tasa-nueva');
+      btn.title = 'Obtener tasa autom\u00e1tica del BCV';
+    }
+  } catch (e) { /* ignore */ }
 }
 
 function refreshAllBsPrices() {
