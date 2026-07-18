@@ -102,6 +102,10 @@
             <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
             <span class="nav-text">Config.</span>
           </button>
+          <button class="nav-btn admin-only" data-view="sync">
+            <span class="nav-icon"><i class="nf nf-fa-cloud_upload"></i></span>
+            <span class="nav-text">Sync</span>
+          </button>
         </nav>
         <div class="sidebar-footer">
           <div class="sidebar-version">InariMarket v1.0</div>
@@ -133,6 +137,10 @@
         <button class="nav-btn admin-only" data-view="config">
           <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
           <span class="nav-text">Config.</span>
+        </button>
+        <button class="nav-btn admin-only" data-view="sync">
+          <span class="nav-icon"><i class="nf nf-fa-cloud_upload"></i></span>
+          <span class="nav-text">Sync</span>
         </button>
         <button id="mobile-logout-btn" class="nav-btn danger-text">
           <span class="nav-icon"><i class="nf nf-fa-sign_out"></i></span>
@@ -197,7 +205,6 @@
                 </div>
               </div>
             </div>
-
           </div>
         </section>
 
@@ -537,45 +544,6 @@
               </div>
             </div>
           </div>
-          <div class="config-card admin-only">
-            <div class="config-card-header">
-              <i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n
-              <span class="config-card-desc">Sincroniza productos con Supabase</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
-              <div class="config-row">
-                <span class="config-label"><i class="nf nf-fa-link"></i> URL de Supabase</span>
-                <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co" style="flex:1">
-              </div>
-              <div class="config-row">
-                <span class="config-label"><i class="nf nf-fa-key"></i> API Key</span>
-                <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_..." style="flex:1">
-              </div>
-              <div class="config-row">
-                <span class="config-label"><i class="nf nf-fa-display"></i> Dispositivo</span>
-                <button id="register-device-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-tag"></i> Registrar / Ver ID</button>
-              </div>
-              <div class="config-row">
-                <span class="config-label"><i class="nf nf-fa-upload"></i> Subir</span>
-                <button id="upload-products-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-cloud_upload"></i> Subir productos</button>
-              </div>
-              <div class="config-row">
-                <span class="config-label"><i class="nf nf-fa-download"></i> Descargar</span>
-                <button id="download-products-btn" class="btn btn-accent btn-sm"><i class="nf nf-fa-cloud_download"></i> Descargar productos</button>
-              </div>
-              <div class="config-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:14px">
-                <span class="config-label"><i class="nf nf-fa-shopping_cart"></i> Ventas</span>
-                <div style="display:flex;gap:8px">
-                  <button id="upload-sales-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-cloud_upload"></i> Subir ventas</button>
-                  <button id="download-sales-btn" class="btn btn-accent btn-sm"><i class="nf nf-fa-cloud_download"></i> Descargar ventas</button>
-                </div>
-              </div>
-              <div class="config-row">
-                <span class="text-muted text-sm" id="sync-status">No sincronizado</span>
-              </div>
-            </div>
-          </div>
           <div class="config-card admin-only" id="user-management-card">
             <div class="config-card-header">
               <i class="nf nf-fa-users"></i> Usuarios
@@ -629,6 +597,90 @@
                 <p><strong>Versi&oacute;n:</strong> 1.0.0</p>
                 <p><strong>Base de datos:</strong> SQLite local</p>
                 <p><strong>Framework:</strong> Tauri v2 + Rust</p>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="view-sync" class="view">
+          <div class="view-header">
+            <h2><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</h2>
+          </div>
+          <div style="max-width:960px;margin:20px auto 0;padding:0 16px;width:100%">
+            <div id="sync-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+              <div style="background:var(--card);border-radius:10px;padding:14px;box-shadow:var(--shadow);text-align:center">
+                <div style="font-size:24px;font-weight:700;color:var(--text)" id="stat-products">-</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Productos activos</div>
+              </div>
+              <div style="background:var(--card);border-radius:10px;padding:14px;box-shadow:var(--shadow);text-align:center">
+                <div style="font-size:24px;font-weight:700;color:var(--text)" id="stat-clients">-</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Clientes registrados</div>
+              </div>
+              <div style="background:var(--card);border-radius:10px;padding:14px;box-shadow:var(--shadow);text-align:center">
+                <div style="font-size:24px;font-weight:700;color:var(--text)" id="stat-sales">-</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Ventas totales</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start">
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-link"></i> Conexi&oacute;n</h3>
+                  <div style="display:flex;flex-direction:column;gap:10px">
+                    <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co">
+                    <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_...">
+                    <button id="register-device-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-tag"></i> Registrar / Ver ID</button>
+                    <div style="display:flex;gap:8px;align-items:center">
+                      <button id="test-connection-btn" class="btn btn-outline btn-sm" style="flex:1;justify-content:center"><i class="nf nf-fa-plug"></i> Probar conexi&oacute;n</button>
+                      <span id="connection-status" style="font-size:20px" title="Sin probar">&bull;</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-history"></i> &Uacute;ltima sincronizaci&oacute;n</h3>
+                  <div id="sync-detail-status" style="font-size:12px;color:var(--text-secondary);display:flex;flex-direction:column;gap:6px">
+                    <span>Subir productos: <span id="sync-upload-time">-</span></span>
+                    <span>Descargar productos: <span id="sync-download-time">-</span></span>
+                    <span>Subir ventas: <span id="sync-upload-sales-time">-</span></span>
+                    <span>Descargar ventas: <span id="sync-download-sales-time">-</span></span>
+                    <span>Subir clientes: <span id="sync-upload-clientes-time">-</span></span>
+                    <span>Descargar clientes: <span id="sync-download-clientes-time">-</span></span>
+                  </div>
+                </div>
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-warning"></i> Conflictos</h3>
+                  <div style="display:flex;flex-direction:column;gap:10px">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                      <span style="font-size:14px;color:var(--text)">Pendientes</span>
+                      <span id="conflict-count" class="text-muted">0</span>
+                    </div>
+                    <button id="view-conflicts-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-search"></i> Ver conflictos</button>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-cog"></i> Acciones r&aacute;pidas</h3>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button id="upload-all-btn" class="btn" style="flex:1;min-width:120px;padding:12px 16px;background:var(--primary);color:var(--sidebar-text);font-size:14px;border:none;border-radius:8px;cursor:pointer"><i class="nf nf-fa-cloud_upload" style="font-size:18px;display:block;margin-bottom:2px"></i> Subir todo</button>
+                    <button id="download-all-btn" class="btn" style="flex:1;min-width:120px;padding:12px 16px;background:var(--accent);color:var(--sidebar-text);font-size:14px;border:none;border-radius:8px;cursor:pointer"><i class="nf nf-fa-cloud_download" style="font-size:18px;display:block;margin-bottom:2px"></i> Descargar todo</button>
+                    <button id="sync-all-btn" class="btn btn-primary" style="flex:1;min-width:120px;padding:12px 16px;font-size:14px;border:none;border-radius:8px;cursor:pointer"><i class="nf nf-fa-sync" style="font-size:18px;display:block;margin-bottom:2px"></i> Sincronizar todo</button>
+                  </div>
+                </div>
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-upload"></i> Subir</h3>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <button id="upload-products-btn" class="btn btn-primary btn-sm" style="justify-content:flex-start"><i class="nf nf-fa-archive"></i> Productos</button>
+                    <button id="upload-sales-btn" class="btn btn-primary btn-sm" style="justify-content:flex-start"><i class="nf nf-fa-shopping_cart"></i> Ventas</button>
+                    <button id="upload-clientes-btn" class="btn btn-primary btn-sm" style="justify-content:flex-start"><i class="nf nf-fa-users"></i> Clientes</button>
+                  </div>
+                </div>
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-download"></i> Descargar</h3>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <button id="download-products-btn" class="btn btn-accent btn-sm" style="justify-content:flex-start"><i class="nf nf-fa-archive"></i> Productos</button>
+                    <button id="download-sales-btn" class="btn btn-accent btn-sm" style="justify-content:flex-start"><i class="nf nf-fa-shopping_cart"></i> Ventas</button>
+                    <button id="download-clientes-btn" class="btn btn-accent btn-sm" style="justify-content:flex-start"><i class="nf nf-fa-users"></i> Clientes</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -945,28 +997,6 @@
       </div>
     </div>
   </div>
-  <div id="import-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3><i class="nf nf-fa-upload"></i> Importar Productos</h3>
-        <span class="modal-close" id="import-modal-close">&times;</span>
-      </div>
-      <div class="modal-body">
-        <p>Se importar&aacute;n productos desde un archivo separado por tabs (TSV).</p>
-        <p>Por defecto busca <strong>productos</strong> en el mismo directorio del ejecutable. Especifique una ruta absoluta si el archivo est&aacute; en otra ubicaci&oacute;n.</p>
-        <p>Formato esperado: <code>Nombre, Stock, Precio</code> (separado por tabs)</p>
-        <div class="form-group">
-          <label>Ruta del archivo</label>
-          <input type="text" id="import-file-path" placeholder="productos" value="productos">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="import-cancel-btn" class="btn btn-outline">Cancelar</button>
-        <button id="import-confirm-btn" class="btn btn-primary"><i class="nf nf-fa-upload"></i> Importar</button>
-      </div>
-    </div>
-  </div>
-
   <div id="confirm-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
@@ -979,6 +1009,35 @@
       <div class="modal-footer">
         <button id="confirm-cancel-btn" class="btn btn-outline">Cancelar</button>
         <button id="confirm-ok-btn" class="btn btn-danger">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="conflict-modal" class="modal hidden">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-warning"></i> Conflictos de Sincronizaci&oacute;n</h3>
+        <span class="modal-close" id="conflict-modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:12px;font-size:14px;color:var(--text-secondary)">
+          Estos productos/clientes fueron modificados tanto local como remotamente.
+          Elige qu&eacute; versi&oacute;n conservar.
+        </p>
+        <div id="conflict-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="conflict-close-btn" class="btn btn-primary">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sync-progress-modal" class="loading-overlay hidden">
+    <div class="loading-modal" style="max-width:420px">
+      <h3 style="margin:0 0 12px;font-size:16px">Sincronizando...</h3>
+      <p id="sync-progress-text" style="margin:0 0 12px;font-size:14px;color:var(--text-secondary)">Preparando...</p>
+      <div style="background:var(--border);border-radius:8px;height:8px;overflow:hidden">
+        <div id="sync-progress-bar" style="width:0%;height:100%;background:var(--primary);border-radius:8px;transition:width .3s ease"></div>
       </div>
     </div>
   </div>

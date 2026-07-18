@@ -8,6 +8,19 @@ pub struct Producto {
     pub stock: i64,
     pub stock_minimo: i64,
     pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Conflicto {
+    pub id: i64,
+    pub tabla: String,
+    pub item_id: String,
+    pub local_json: String,
+    pub remote_json: String,
+    pub resuelto: bool,
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -23,6 +36,10 @@ pub struct Cliente {
     pub nombre: String,
     pub credito_activo: bool,
     pub saldo_deuda_usd: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -286,14 +303,3 @@ pub struct ExportReportFilter {
     pub username: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AjusteStock {
-    pub id: i64,
-    pub sync_id: Option<String>,
-    pub producto_codigo: String,
-    pub cantidad: i64,
-    pub motivo: String,
-    pub dispositivo_origen: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-}

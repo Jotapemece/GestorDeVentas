@@ -106,9 +106,18 @@ pub fn run() {
             sync::download_products,
             sync::upload_sales,
             sync::download_sales,
+            sync::upload_clientes,
+            sync::download_clientes,
             sync::register_device,
             sync::get_ultimo_upload,
             sync::get_ultimo_download,
+            sync::get_conflictos,
+            sync::resolve_conflicto,
+            sync::upload_all,
+            sync::download_all,
+            sync::sync_all,
+            sync::get_sync_stats,
+            sync::test_supabase_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

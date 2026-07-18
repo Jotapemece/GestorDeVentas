@@ -2,9 +2,11 @@ use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
 use crate::sales;
+use chrono::Utc;
 use rusqlite::params;
 use std::collections::HashMap;
 use tauri::State;
+use uuid::Uuid;
 
 type VentaRow = (
     i64,
@@ -19,10 +21,11 @@ type VentaRow = (
 );
 
 const SQL_LIST_CLIENTES: &str =
-    "SELECT id, nombre, credito_activo, saldo_deuda_usd FROM clientes ORDER BY nombre ASC";
+    "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at FROM clientes ORDER BY nombre ASC";
 const SQL_CLIENTE_BY_ID: &str =
-    "SELECT id, nombre, credito_activo, saldo_deuda_usd FROM clientes WHERE id = ?1";
-const SQL_INSERT_CLIENTE: &str = "INSERT INTO clientes (nombre) VALUES (?1)";
+    "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at FROM clientes WHERE id = ?1";
+const SQL_INSERT_CLIENTE: &str =
+    "INSERT INTO clientes (nombre, sync_id, updated_at) VALUES (?1, ?2, ?3)";
 const SQL_TOGGLE_CREDITO: &str = "UPDATE clientes SET credito_activo = ?1 WHERE id = ?2";
 const SQL_HISTORY_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.total_usd, v.tasa_aplicada,
@@ -36,7 +39,7 @@ const SQL_SALDO_DEUDA: &str = "SELECT saldo_deuda_usd FROM clientes WHERE id = ?
 const SQL_UPDATE_SALDO: &str = "UPDATE clientes SET saldo_deuda_usd = ?1 WHERE id = ?2";
 const SQL_REACTIVAR_CREDITO: &str =
     "UPDATE clientes SET credito_activo = 1 WHERE id = ?1 AND credito_activo = 0";
-const SQL_UPDATE_CLIENTE: &str = "UPDATE clientes SET nombre = ?1 WHERE id = ?2";
+const SQL_UPDATE_CLIENTE: &str = "UPDATE clientes SET nombre = ?1, updated_at = ?2 WHERE id = ?3";
 const SQL_DELETE_CLIENTE: &str = "DELETE FROM clientes WHERE id = ?1 AND saldo_deuda_usd = 0";
 
 #[tauri::command]
@@ -54,6 +57,8 @@ pub fn list_clientes(state: State<AppState>) -> Result<Vec<Cliente>, String> {
                 nombre: row.get(1)?,
                 credito_activo: activo == 1,
                 saldo_deuda_usd: row.get(3)?,
+                sync_id: row.get(4)?,
+                updated_at: row.get(5)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -71,7 +76,9 @@ pub fn create_cliente(state: State<AppState>, nombre: String) -> Result<String, 
         &db,
         &format!("Creó cliente '{}'", nombre),
     )?;
-    match db.execute(SQL_INSERT_CLIENTE, params![nombre]) {
+    let sync_id = Uuid::new_v4().to_string();
+    let now = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    match db.execute(SQL_INSERT_CLIENTE, params![nombre, sync_id, now]) {
         Ok(_) => Ok("Cliente creado exitosamente".to_string()),
         Err(e) => Err(format!("Error al crear cliente: {}", e)),
     }
@@ -115,6 +122,8 @@ pub fn get_cliente_history(
                 nombre: row.get(1)?,
                 credito_activo: activo == 1,
                 saldo_deuda_usd: row.get(3)?,
+                sync_id: row.get(4)?,
+                updated_at: row.get(5)?,
             })
         })
         .map_err(|_| "Cliente no encontrado".to_string())?;
@@ -269,7 +278,8 @@ pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String) -
         &db,
         &format!("Editó cliente #{}: '{}'", cliente_id, nombre),
     )?;
-    db.execute(SQL_UPDATE_CLIENTE, params![nombre.trim(), cliente_id])
+    let now = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    db.execute(SQL_UPDATE_CLIENTE, params![nombre.trim(), now, cliente_id])
         .map_err(|e| e.to_string())?;
     Ok("Cliente actualizado exitosamente".to_string())
 }

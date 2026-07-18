@@ -1,13 +1,14 @@
 use crate::db::AppState;
 use crate::models::{PaginatedResult, Producto, TopProductItem};
 use base64::Engine;
+use chrono::Utc;
 use rusqlite::params;
 use rust_xlsxwriter::*;
 use tauri::State;
 
 const SQL_BASE_PRODUCTOS: &str =
     "SELECT p.codigo, p.nombre, p.precio_usd, p.stock, COALESCE(p.stock_minimo,0), \
-     COALESCE(p.created_at,'') \
+     COALESCE(p.created_at,''), p.updated_at \
      FROM productos p WHERE p.activo = 1";
 
 const SQL_NEXT_CODIGO: &str =
@@ -15,15 +16,15 @@ const SQL_NEXT_CODIGO: &str =
      FROM productos WHERE activo = 1 AND codigo GLOB 'P[0-9]*'";
 
 const SQL_UPDATE_REACTIVATE: &str =
-    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, stock = ?3 \
-     WHERE codigo = ?4";
+    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, stock = ?3, updated_at = ?4 \
+     WHERE codigo = ?5";
 
 const SQL_INSERT_PRODUCTO: &str =
-    "INSERT INTO productos (codigo, nombre, precio_usd, stock, created_at) \
-     VALUES (?1, ?2, ?3, ?4, datetime('now','localtime')) ON CONFLICT(codigo) DO NOTHING";
+    "INSERT INTO productos (codigo, nombre, precio_usd, stock, created_at, updated_at) \
+     VALUES (?1, ?2, ?3, ?4, datetime('now','localtime'), ?5) ON CONFLICT(codigo) DO NOTHING";
 
 const SQL_UPDATE_PRODUCTO: &str =
-    "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock = ?3 WHERE codigo = ?4";
+    "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock = ?3, updated_at = ?4 WHERE codigo = ?5";
 
 const SQL_HAS_SALES: &str = "SELECT COUNT(*) > 0 FROM detalles_ventas WHERE producto_codigo = ?1";
 
@@ -32,8 +33,8 @@ const SQL_SOFT_DELETE: &str = "UPDATE productos SET activo = 0, stock = 0 WHERE 
 const SQL_DELETE_PRODUCTO: &str = "DELETE FROM productos WHERE codigo = ?1";
 
 const SQL_IMPORT_PRODUCTO: &str =
-    "INSERT INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) \
-     VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'))";
+    "INSERT INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at, updated_at) \
+     VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'), ?5)";
 
 #[tauri::command]
 pub fn list_products(
@@ -74,6 +75,7 @@ pub fn list_products(
         Ok(Producto {
             codigo: row.get(0)?, nombre: row.get(1)?, precio_usd: row.get(2)?,
             stock: row.get(3)?, stock_minimo: row.get(4)?, created_at: row.get(5)?,
+            updated_at: row.get(6)?,
         })
     };
 
@@ -108,6 +110,7 @@ pub fn create_product(
     } else {
         codigo
     };
+    let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
     crate::auth::require_admin(
         &state,
         &db,
@@ -115,13 +118,13 @@ pub fn create_product(
     )?;
     db.execute(
         SQL_UPDATE_REACTIVATE,
-        params![nombre, precio_usd, stock, codigo],
+        params![nombre, precio_usd, stock, ts, codigo],
     )
     .ok();
 
     match db.execute(
         SQL_INSERT_PRODUCTO,
-        params![codigo, nombre, precio_usd, stock],
+        params![codigo, nombre, precio_usd, stock, ts],
     ) {
         Ok(_) => Ok("Producto creado exitosamente".to_string()),
         Err(e) => Err(format!("Error al crear producto: {}", e)),
@@ -137,6 +140,7 @@ pub fn update_product(
     stock: i64,
 ) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
     crate::auth::require_admin(
         &state,
         &db,
@@ -145,7 +149,7 @@ pub fn update_product(
 
     match db.execute(
         SQL_UPDATE_PRODUCTO,
-        params![nombre, precio_usd, stock, codigo],
+        params![nombre, precio_usd, stock, ts, codigo],
     ) {
         Ok(_) => Ok("Producto actualizado exitosamente".to_string()),
         Err(e) => Err(format!("Error al actualizar producto: {}", e)),
@@ -225,11 +229,12 @@ pub fn import_products_from_db(
         return Err("No se encontraron productos en el archivo".to_string());
     }
 
+    let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
     let mut imported = 0;
     for (codigo, nombre, precio_usd, stock, stock_minimo) in &products {
         match db.execute(
-            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'))",
-            params![codigo, nombre, precio_usd, stock, stock_minimo],
+            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6)",
+            params![codigo, nombre, precio_usd, stock, stock_minimo, ts],
         ) {
             Ok(n) => {
                 if n > 0 {
@@ -263,6 +268,7 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
                 stock: row.get(3)?,
                 stock_minimo: row.get(4)?,
                 created_at: row.get(5)?,
+                updated_at: row.get(6)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -358,7 +364,8 @@ pub fn replace_all_products(
 
         let codigo = format!("P{:04}", count + 1);
 
-        db.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, stock])
+        let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+        db.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, stock, ts])
             .map_err(|e| errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e)))
             .ok();
         count += 1;
@@ -452,9 +459,10 @@ pub fn import_products_from_file(
 
         let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
 
+        let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
         if let Err(e) = db.execute(
             SQL_IMPORT_PRODUCTO,
-            params![codigo, nombre, precio_usd, stock],
+            params![codigo, nombre, precio_usd, stock, ts],
         ) {
             errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e));
             continue;

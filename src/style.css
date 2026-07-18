@@ -14,6 +14,7 @@ html { font-size: 16px; }
   --card: #FFFFFF;
   --text: #4A4458;
   --text-light: #7A7590;
+  --text-secondary: #7A7590;
   --border: #E0D6E8;
   --hover: #F0EAF8;
   --shadow: 0 2px 12px rgba(74, 68, 88, 0.08);
@@ -206,7 +207,8 @@ button:focus-visible,
 #view-cashier.active,
 #view-audit.active,
 #view-reports.active,
-#view-config.active {
+#view-config.active,
+#view-sync.active {
   display: block; overflow-y: auto; padding: 24px;
 }
 
@@ -512,8 +514,6 @@ button:focus-visible,
 .payment-total { display: flex; justify-content: space-between; padding: 12px; background: var(--hover); border-radius: 8px; margin-bottom: 16px; font-weight: 700; font-size: 18px; }
 
 /* Floating print button */
-#print-receipt { position: fixed; bottom: 80px; right: 24px; z-index: 2001; }
-
 /* Misc utility classes */
 .danger-text { color: var(--danger-dark); }
 
@@ -541,6 +541,10 @@ button:focus-visible,
 .toggle-switch input:checked + .toggle-slider { background: var(--primary); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
 .text-sm { font-size: 12px; }
+.text-muted { color: var(--text-secondary); }
+.text-danger { color: var(--danger); }
+.compact-table td, .compact-table th { padding: 4px 6px; font-size: 13px; }
+.compact-table th { white-space: nowrap; }
 .mixto-add-row { margin-top: 4px; }
 .abono-mixto-group { margin-top: 6px; }
 .empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); width: 100%; }
@@ -927,8 +931,6 @@ button:focus-visible,
 .bottom-tabs .nav-btn.active { background: var(--card); }
 
 /* MOBILE TOGGLE */
-#sales-toggle-btn { white-space: nowrap; }
-
 /* ===== MOBILE (≤768px) ===== */
 @media (max-width: 768px) {
   /* Bottom tabs replaces sidebar */
@@ -1029,7 +1031,7 @@ button:focus-visible,
   /* Inventory header: stack */
   #view-inventory.active, #view-creditos.active, #view-cashier.active,
   #view-audit.active, #view-reports.active,
-#view-config.active { padding: 12px; }
+  #view-config.active, #view-sync.active { padding: 12px; }
 
   /* Cart footer: compact */
   .cart-footer { padding: 8px 12px; }
@@ -1038,6 +1040,9 @@ button:focus-visible,
 
   /* Toast: center on mobile */
   .toast { left: 16px; right: 16px; bottom: 80px; text-align: center; }
+
+  /* Sync view: stack columns on mobile */
+  #view-sync > div > div { grid-template-columns: 1fr !important; }
 }
 
 @media (max-width: 480px) {

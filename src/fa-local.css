@@ -40,7 +40,6 @@
 .nf-fa-sun::before { content: "\f185"; }
 .nf-fa-info_circle::before { content: "\f05a"; }
 .nf-fa-bar_chart::before { content: "\f080"; }
-.nf-fa-print::before { content: "\f02f"; }
 .nf-fa-display::before { content: "\f108"; }
 .nf-fa-music::before { content: "\f001"; }
 .nf-fa-eye::before { content: "\f06e"; }
@@ -49,7 +48,6 @@
 .nf-fa-exclamation_triangle::before { content: "\f071"; }
 .nf-fa-text_height::before { content: "\f034"; }
 .nf-fa-eraser::before { content: "\f12d"; }
-.nf-fa-tags::before { content: "\f02c"; }
 .nf-fa-spinner::before { content: "\f110"; }
 .nf-fa-search::before { content: "\f002"; }
 .nf-fa-receipt::before { content: "\f543"; }
@@ -67,3 +65,7 @@
 .nf-fa-chevron_down::before { content: "\f078"; }
 .nf-fa-edit::before { content: "\f044"; }
 .nf-fa-cloud_upload::before { content: "\f0ee"; }
+.nf-fa-cube::before { content: "\f1b2"; }
+.nf-fa-calendar_day::before { content: "\f783"; }
+.nf-fa-calendar_week::before { content: "\f784"; }
+.nf-fa-warning::before { content: "\f071"; }

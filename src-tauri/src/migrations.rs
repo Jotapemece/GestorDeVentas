@@ -8,7 +8,8 @@ pub const SQL_CREATE_TABLES: &str = "
         stock INTEGER NOT NULL DEFAULT 0,
         stock_minimo INTEGER NOT NULL DEFAULT 0,
         activo INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT DEFAULT (datetime('now','localtime'))
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
     );
 
     CREATE TABLE IF NOT EXISTS configuracion (
@@ -27,7 +28,9 @@ pub const SQL_CREATE_TABLES: &str = "
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL,
         credito_activo INTEGER NOT NULL DEFAULT 1 CHECK(credito_activo IN (0, 1)),
-        saldo_deuda_usd REAL NOT NULL DEFAULT 0.0
+        saldo_deuda_usd REAL NOT NULL DEFAULT 0.0,
+        sync_id TEXT,
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
     );
 
     CREATE TABLE IF NOT EXISTS ventas (
@@ -99,6 +102,8 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("012_add_anulada_ventas", add_anulada_ventas),
     ("013_add_anulado_detalles", add_anulado_detalles),
     ("014_add_sync_fields", add_sync_fields),
+    ("015_add_client_sync_fields", add_client_sync_fields),
+    ("016_add_product_updated_at_conflictos", add_product_updated_at_conflictos),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -293,5 +298,46 @@ fn add_sync_fields(conn: &Connection) {
             updated_at TEXT DEFAULT (datetime('now','localtime')),
             FOREIGN KEY(producto_codigo) REFERENCES productos(codigo)
         );"
+    ).ok();
+}
+
+fn add_client_sync_fields(conn: &Connection) {
+    if !column_exists(conn, "clientes", "sync_id") {
+        conn.execute("ALTER TABLE clientes ADD COLUMN sync_id TEXT", []).ok();
+    }
+    if !column_exists(conn, "clientes", "updated_at") {
+        conn.execute(
+            "ALTER TABLE clientes ADD COLUMN updated_at TEXT DEFAULT (datetime('now','localtime'))",
+            [],
+        ).ok();
+    }
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_sync_id ON clientes(sync_id)", []).ok();
+}
+
+
+fn add_product_updated_at_conflictos(conn: &Connection) {
+    if !column_exists(conn, "productos", "updated_at") {
+        if let Err(e) = conn.execute(
+            "ALTER TABLE productos ADD COLUMN updated_at TEXT DEFAULT (datetime('now','localtime'))",
+            [],
+        ) {
+            eprintln!("Error adding updated_at to productos: {}", e);
+        }
+        conn.execute(
+            "UPDATE productos SET updated_at = datetime('now','localtime') WHERE updated_at IS NULL",
+            [],
+        ).ok();
+    }
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS conflictos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tabla TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            local_json TEXT NOT NULL DEFAULT '{}',
+            remote_json TEXT NOT NULL DEFAULT '{}',
+            resuelto INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        )",
+        [],
     ).ok();
 }

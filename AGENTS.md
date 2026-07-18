@@ -172,10 +172,14 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 
 ## Sync Plan (próximas fases)
 
-### Fase 4 — Sincronización de Clientes
-- **upload_clientes**: sube clientes locales a Supabase (tabla `clientes`, upsert por `documento`)
-- **download_clientes**: descarga clientes con `updated_at > ultimo_download` (insert/update local)
-- Botones en Config: Subir clientes / Descargar clientes
+### Fase 4 — Sincronización de Clientes ✅
+- **upload_clientes** (`sync.rs`): sube todos los clientes locales a Supabase (tabla `clientes`, upsert por `sync_id`). Genera UUID (`sync_id`) automáticamente para clientes existentes que no tengan uno
+- **download_clientes** (`sync.rs`): descarga clientes con `updated_at > ultimo_download_clientes`, INSERT OR IGNORE por `sync_id`
+- **Migration 015**: agrega `sync_id TEXT UNIQUE` y `updated_at TEXT` a `clientes` local
+- **Cliente model**: nuevos campos `sync_id: Option<String>`, `updated_at: Option<String>`
+- **UUID generation**: `create_cliente` y `update_cliente` generan UUID y setean `updated_at`
+- Botones en Config → Sincronización: Subir clientes / Descargar clientes
+- **Supabase SQL necesario**: `ALTER TABLE clientes ADD COLUMN sync_id TEXT UNIQUE; ALTER TABLE clientes ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW(); ALTER TABLE clientes ADD COLUMN local_id BIGINT;`
 
 ### Fase 5 — Sincronización de Ventas
 - **upload_ventas**: sube ventas con `updated_at > ultimo_upload` + sus detalles (tablas `ventas`, `detalles_ventas`)
@@ -196,11 +200,13 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 - **Notificación**: badge o toast al completar auto-sync
 - **Indicador**: mostrar última sincronización en tiempo real
 
-### Fase 8 — Resolución de conflictos
-- **Last-write-wins**: comparar `updated_at` local vs nube, el más reciente gana
-- **Conflicto de productos**: si mismo `codigo` con `updated_at` similar (< 5 min), marcar como conflicto
-- **Reporte**: tabla `conflictos` en Supabase o log local
-- **UI**: modal de conflictos al terminar sync para resolver manualmente
+### Fase 8 — Resolución de conflictos ✅
+- **Last-write-wins** por defecto: al descargar productos/clientes, si no hay conflicto la versión remota más reciente gana
+- **Detección**: si mismo item fue modificado local y remotamente después del último sync, y los `updated_at` están a menos de 5 min de diferencia → se marca como conflicto
+- **Tabla `conflictos`** local: almacena `local_json` y `remote_json` del item en conflicto
+- **Comandos**: `get_conflictos` (lista no resueltos), `resolve_conflicto(conflicto_id, use_remote)` (aplica versión remota o mantiene local)
+- **Migration 016**: agrega `updated_at` a `productos` y crea tabla `conflictos`
+- **Frontend**: contador de conflictos en Config → Sincronización, botón "Ver conflictos" que abre modal con tabla de diferencias campo por campo y botones "Mantener local" / "Usar remoto"
 
 ### Fase 9 — Multi-dispositivo completo
 - **Asignación de ventas**: asociar cada venta a un dispositivo (`dispositivo_id`)

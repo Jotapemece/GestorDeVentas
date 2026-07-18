@@ -25,12 +25,6 @@ const SQL_LIST_VENTAS: &str = "
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id
     ORDER BY v.id DESC LIMIT ?1";
-const SQL_GET_DETALLE: &str = "
-    SELECT dv.id, dv.venta_id, dv.producto_codigo, p.nombre, dv.cantidad, dv.precio_usd_unitario
-    FROM detalles_ventas dv
-    LEFT JOIN productos p ON dv.producto_codigo = p.codigo
-    WHERE dv.venta_id = ?1
-    ORDER BY dv.id ASC";
 const SQL_UPDATE_TASA: &str = "UPDATE configuracion SET valor = ?1 WHERE clave = 'tasa_dolar'";
 const SQL_UPSERT_TASA_UPDATED: &str =
     "INSERT INTO configuracion (clave, valor) VALUES ('tasa_updated_at', ?1) \

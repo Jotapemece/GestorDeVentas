@@ -21,7 +21,6 @@ const AUDIO = {
 };
 const SEARCH_DEBOUNCE_MS = 200;
 const AUDIT_LIMIT_DEFAULT = 50;
-// const PRINT_BTN_TIMEOUT_MS removed
 const FONT_SIZE_MIN = 75;
 const FONT_SIZE_MAX = 150;
 const FONT_SIZE_DEFAULT = 100;
@@ -29,9 +28,7 @@ const FONT_SIZE_DEFAULT = 100;
 // Constantes frontend → debe coincidir con src-tauri/src/constants.rs
 //   AUDIT_LIMIT_DEFAULT ↔ AUDIT_LOG_DEFAULT_LIMIT
 // Config keys (db::configuracion.clave) y métodos de pago
-const CFG_TASA_DOLAR = 'tasa_dolar';
 const CFG_TASA_UPDATED_AT = 'tasa_updated_at';
-const CFG_CAJA_ABIERTA = 'caja_abierta';
 const CFG_TEMA = 'tema';
 const CFG_FONT_SIZE = 'font_size';
 const CFG_SONIDO_HABILITADO = 'sonido_habilitado';
@@ -42,15 +39,6 @@ const CFG_CALCULAR_VUELTO = 'calcular_vuelto';
 const CFG_REDONDEO_BS = 'redondeo_bs';
 
 // Payment method keys (deben coincidir con constants.rs)
-const METODO_PAGO = {
-  EFECTIVO_BS: 'efectivo_bs',
-  EFECTIVO_USD: 'efectivo_usd',
-  BIOPAGO: 'biopago',
-  PUNTO: 'punto',
-  PAGO_MOVIL: 'pago_movil',
-  CREDITO: 'credito',
-  MIXTO: 'mixto',
-};
 
 const ICON = {
   UNLOCK: '<i class="nf nf-fa-unlock"></i>',
@@ -98,7 +86,6 @@ const SEL = {
   tasaWarning: '#tasa-warning',
   productSearch: '#product-search',
   productSearchBody: '#product-search-body',
-  productSearchTable: '#product-search-table',
   checkoutBtn: '#checkout-btn',
   cancelSaleBtn: '#cancel-sale-btn',
   cartBody: '#cart-body',
@@ -141,8 +128,6 @@ const SEL = {
   detailPrecio: '#detail-precio',
   detailStock: '#detail-stock',
   detailCreated: '#detail-created',
-  importModal: '#import-modal',
-  importFilePath: '#import-file-path',
 
   // --- Creditos / Clientes ---
   creditosBody: '#creditos-body',
@@ -336,6 +321,8 @@ function closeModal(el) {
   el.classList.add('hidden');
 }
 
+function isBsMethod(m) { return m === 'efectivo_bs' || m === 'biopago' || m === 'punto' || m === 'pago_movil'; }
+
 /* Focus trap for modals */
 let activeModal = null;
 function trapFocus(modalEl) {
@@ -463,20 +450,78 @@ function getViewEl(name) {
   return document.getElementById('view-' + name);
 }
 
+/* ========== CONFLICTOS ========== */
+async function loadConflictCount() {
+  const countEl = document.getElementById('conflict-count');
+  if (!countEl) return;
+  try {
+    const conflictos = await invoke('get_conflictos');
+    countEl.textContent = conflictos.length;
+  } catch (_) { countEl.textContent = '?'; }
+}
+
+async function openConflictModal() {
+  let conflictos;
+  try {
+    conflictos = await invoke('get_conflictos');
+  } catch (e) { showToast('Error: ' + e, 'error'); return; }
+  if (!conflictos.length) {
+    showToast('No hay conflictos pendientes');
+    return;
+  }
+  const container = document.getElementById('conflict-list');
+  container.innerHTML = '';
+  conflictos.forEach(c => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px';
+    let localData, remoteData;
+    try { localData = JSON.parse(c.local_json); } catch (_) { localData = {}; }
+    try { remoteData = JSON.parse(c.remote_json); } catch (_) { remoteData = {}; }
+    const fields = [];
+    for (const key of Object.keys(remoteData)) {
+      const lv = JSON.stringify(localData[key]);
+      const rv = JSON.stringify(remoteData[key]);
+      if (lv !== rv) {
+        fields.push('<tr><td style="padding:2px 8px;font-weight:600">' + escapeHtml(key) + '</td><td style="padding:2px 8px;color:var(--text)">' + escapeHtml(lv) + '</td><td style="padding:2px 8px;color:var(--accent)">' + escapeHtml(rv) + '</td></tr>');
+      }
+    }
+    const tablaLabel = c.tabla === 'productos' ? 'Producto' : 'Cliente';
+    const itemId = escapeHtml(c.item_id);
+    card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px"><strong>' + tablaLabel + ': ' + itemId + '</strong><span class="text-muted text-sm">' + escapeHtml(c.created_at) + '</span></div>' +
+      '<table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px"><thead><tr style="border-bottom:1px solid var(--border)"><th style="padding:4px 8px;text-align:left">Campo</th><th style="padding:4px 8px;text-align:left">Local</th><th style="padding:4px 8px;text-align:left">Remoto</th></tr></thead><tbody>' + fields.join('') + '</tbody></table>' +
+      '<div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm conflict-keep-local" data-id="' + c.id + '"><i class="nf nf-fa-check"></i> Mantener local</button><button class="btn btn-accent btn-sm conflict-use-remote" data-id="' + c.id + '"><i class="nf nf-fa-cloud_download"></i> Usar remoto</button></div>';
+    container.appendChild(card);
+  });
+  showModal(document.getElementById('conflict-modal'));
+}
+
 /* ========== SUPABASE SYNC ========== */
 async function loadSyncConfig() {
   const urlEl = document.getElementById('sync-url');
   const keyEl = document.getElementById('sync-key');
-  const statusEl = document.getElementById('sync-status');
   if (!urlEl) return;
   try {
     const url = await invoke('get_config_value', { key: 'supabase_url' });
     if (url) urlEl.value = url;
     const key = await invoke('get_config_value', { key: 'supabase_key' });
     if (key) keyEl.value = key;
-    const upload = await invoke('get_ultimo_upload');
-    const download = await invoke('get_ultimo_download');
-    statusEl.innerHTML = 'Última subida: ' + upload + '<br>Última descarga: ' + download;
+  } catch (_) {}
+  loadSyncStats();
+}
+
+async function loadSyncStats() {
+  try {
+    const stats = await invoke('get_sync_stats');
+    var fmt = function(v) { return v ? v : '-'; };
+    document.getElementById('stat-products').textContent = stats.active_products;
+    document.getElementById('stat-clients').textContent = stats.total_clientes;
+    document.getElementById('stat-sales').textContent = stats.total_sales;
+    document.getElementById('sync-upload-time').textContent = fmt(stats.ultimo_upload);
+    document.getElementById('sync-download-time').textContent = fmt(stats.ultimo_download);
+    document.getElementById('sync-upload-sales-time').textContent = fmt(stats.ultimo_upload_ventas);
+    document.getElementById('sync-download-sales-time').textContent = fmt(stats.ultimo_download_ventas);
+    document.getElementById('sync-upload-clientes-time').textContent = fmt(stats.ultimo_upload_clientes);
+    document.getElementById('sync-download-clientes-time').textContent = fmt(stats.ultimo_download_clientes);
   } catch (_) {}
 }
 
@@ -492,7 +537,8 @@ function showView(name) {
     cashier: loadDailySummary,
     audit: loadAudit,
     reports: () => { loadUserList(); setDefaultReportDates(); },
-    config: () => { loadThemeConfig(); loadSyncConfig(); },
+    config: () => { loadThemeConfig(); loadConflictCount(); },
+    sync: () => { loadSyncConfig(); loadConflictCount(); },
   };
   if (loaders[name]) loaders[name]();
   document.dispatchEvent(new CustomEvent('viewChanged', { detail: name }));
@@ -602,20 +648,6 @@ async function fetchTasaBcv() {
   }
 }
 
-async function checkTasaUpdate() {
-  try {
-    const newRate = await invoke('check_tasa_update');
-    const btn = document.getElementById('tasa-fetch-btn');
-    if (!btn) return;
-    if (newRate != null) {
-      btn.classList.add('tasa-nueva');
-      btn.title = 'Nueva tasa BCV disponible: Bs. ' + newRate.toFixed(2).replace('.', ',') + '. Haz clic para actualizar';
-    } else {
-      btn.classList.remove('tasa-nueva');
-      btn.title = 'Obtener tasa autom\u00e1tica del BCV';
-    }
-  } catch (e) { /* ignore */ }
-}
 
 function refreshAllBsPrices() {
   document.querySelectorAll('.bs-price-cell').forEach(el => {
@@ -850,8 +882,6 @@ function addMixtoRow(containerId, autoDistribute) {
   const refInput = row.querySelector('.mixto-ref');
   const curLabel = row.querySelector('.mixto-currency-label');
 
-  function isBsMethod(m) { return m === 'efectivo_bs' || m === 'biopago' || m === 'punto' || m === 'pago_movil'; }
-
   function updateConversion() {
     const val = parseFloat(montoInput.value) || 0;
     if (sel.value === 'efectivo_usd') {
@@ -910,12 +940,11 @@ function distributeMixto(containerId) {
     : parseFloat(qs(SEL.abonoMonto).value) || 0;
   if (total <= 0) return;
   const share = total / rows.length;
-  function isBs(m) { return m === 'efectivo_bs' || m === 'biopago' || m === 'punto' || m === 'pago_movil'; }
   for (const row of rows) {
     const sel = row.querySelector('select');
     const input = row.querySelector('.mixto-monto');
     const method = sel.value;
-    if (isBs(method)) {
+    if (isBsMethod(method)) {
       input.value = (share * tasaActual).toFixed(2).replace(/\.?0+$/, '');
       input._usdValue = share;
     } else {
@@ -926,7 +955,7 @@ function distributeMixto(containerId) {
     if (method === 'efectivo_usd') {
       convSpan.textContent = '= Bs. ' + formatBS(share * tasaActual);
       convSpan.style.display = 'inline';
-    } else if (isBs(method)) {
+    } else if (isBsMethod(method)) {
       convSpan.textContent = '= $ ' + formatUSD(share);
       convSpan.style.display = 'inline';
     } else {
@@ -939,14 +968,13 @@ function distributeMixto(containerId) {
 function getMixtoData(containerId) {
   containerId = containerId || 'mixto-items';
   const rows = document.querySelectorAll('#' + containerId + ' .mixto-row');
-  function isBs(m) { return m === 'efectivo_bs' || m === 'biopago' || m === 'punto' || m === 'pago_movil'; }
   const items = [];
   for (const row of rows) {
     const metodo = row.querySelector('select').value;
     const ref = row.querySelector('.mixto-ref').value.trim() || null;
     const input = row.querySelector('.mixto-monto');
     let monto_usd;
-    if (isBs(metodo)) {
+    if (isBsMethod(metodo)) {
       const bs = parseFloat(input.value) || 0;
       monto_usd = tasaActual > 0 ? bs / tasaActual : 0;
     } else {
@@ -2580,7 +2608,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.inventoryAddBtn).addEventListener('click', openNewProductModal);
   qs(SEL.inventoryExportBtn).addEventListener('click', exportProducts);
   qs(SEL.inventoryImportBtn).addEventListener('click', openImportModal);
-  // removed: importProductsFromDb button
 
   // Event delegation: inventory dropdown and actions
   qs(SEL.inventoryBody).addEventListener('click', e => {
@@ -2619,7 +2646,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs('#product-detail-ok-btn').addEventListener('click', closeProductDetail);
 
   // Creditos
-  qs(SEL.creditoAddBtn).addEventListener('click', openCreditoModal);
+  qs(SEL.creditoAddBtn).addEventListener('click', () => openCreditoModal());
   qs('#client-modal-close').addEventListener('click', closeClientModal);
   qs('#client-cancel-btn').addEventListener('click', closeClientModal);
   qs('#client-save-btn').addEventListener('click', saveClient);
@@ -2704,6 +2731,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (header) header.classList.toggle('collapsed');
   });
   document.getElementById('view-reports')?.addEventListener('click', function(e) {
+    const header = e.target.closest('.config-card-header');
+    if (header) header.classList.toggle('collapsed');
+  });
+  document.getElementById('view-sync')?.addEventListener('click', function(e) {
     const header = e.target.closest('.config-card-header');
     if (header) header.classList.toggle('collapsed');
   });
@@ -2838,6 +2869,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           loadProductCache();
         }
         loadSyncConfig();
+        loadConflictCount();
       } catch (e) { showToast('Error: ' + e, 'error'); }
       finally {
         downloadBtn.disabled = false;
@@ -2888,6 +2920,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         loadInventory();
         loadProductCache();
         loadSyncConfig();
+        loadConflictCount();
       } catch (e) { showToast('Error: ' + e, 'error'); }
       finally {
         downloadSalesBtn.disabled = false;
@@ -2895,6 +2928,186 @@ document.addEventListener('DOMContentLoaded', async function() {
       }
     });
   }
+
+  /* Subir clientes */
+  const uploadClientesBtn = document.getElementById('upload-clientes-btn');
+  if (uploadClientesBtn) {
+    uploadClientesBtn.addEventListener('click', async function() {
+      const urlEl = document.getElementById('sync-url');
+      const keyEl = document.getElementById('sync-key');
+      if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
+      if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
+      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      try {
+        uploadClientesBtn.disabled = true;
+        uploadClientesBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Subiendo...';
+        const result = await invoke('upload_clientes');
+        showToast(result);
+        loadSyncConfig();
+      } catch (e) { showToast('Error: ' + e, 'error'); }
+      finally {
+        uploadClientesBtn.disabled = false;
+        uploadClientesBtn.innerHTML = '<i class="nf nf-fa-cloud_upload"></i> Subir clientes';
+      }
+    });
+  }
+
+  /* Descargar clientes */
+  const downloadClientesBtn = document.getElementById('download-clientes-btn');
+  if (downloadClientesBtn) {
+    downloadClientesBtn.addEventListener('click', async function() {
+      const urlEl = document.getElementById('sync-url');
+      const keyEl = document.getElementById('sync-key');
+      if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
+      if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
+      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      try {
+        downloadClientesBtn.disabled = true;
+        downloadClientesBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Descargando...';
+        const result = await invoke('download_clientes');
+        showToast(result);
+        loadCreditos();
+        loadSyncConfig();
+        loadConflictCount();
+      } catch (e) { showToast('Error: ' + e, 'error'); }
+      finally {
+        downloadClientesBtn.disabled = false;
+        downloadClientesBtn.innerHTML = '<i class="nf nf-fa-cloud_download"></i> Descargar clientes';
+      }
+    });
+  }
+
+  /* Conflictos: botones de resolución delegados */
+  document.getElementById('conflict-modal')?.addEventListener('click', async function(e) {
+    const btn = e.target.closest('.conflict-keep-local, .conflict-use-remote');
+    if (!btn) return;
+    const id = parseInt(btn.dataset.id);
+    const useRemote = btn.classList.contains('conflict-use-remote');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i>';
+    try {
+      const msg = await invoke('resolve_conflicto', { conflictoId: id, useRemote });
+      showToast(msg);
+      openConflictModal();
+      loadConflictCount();
+    } catch (e) { showToast('Error: ' + e, 'error'); }
+  });
+
+  /* Ver conflictos */
+  document.getElementById('view-conflicts-btn')?.addEventListener('click', openConflictModal);
+
+  /* Sync all progress UI */
+  const syncProgressModal = document.getElementById('sync-progress-modal');
+  const syncProgressText = document.getElementById('sync-progress-text');
+  const syncProgressBar = document.getElementById('sync-progress-bar');
+  function showSyncProgress() { syncProgressModal.classList.remove('hidden'); }
+  function hideSyncProgress() { syncProgressModal.classList.add('hidden'); syncProgressBar.style.width = '0%'; }
+  function updateSyncProgress(step, current, total) {
+    const pct = Math.round((current / total) * 100);
+    syncProgressText.textContent = step + ' (' + current + '/' + total + ')';
+    syncProgressBar.style.width = pct + '%';
+  }
+  window.addEventListener('sync-progress', function(e) {
+    var d = e.detail || e;
+    updateSyncProgress(d.step, d.current, d.total);
+  });
+
+  function syncSaveConfig() {
+    var urlEl = document.getElementById('sync-url');
+    var keyEl = document.getElementById('sync-key');
+    if (urlEl && urlEl.value) invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(function(){});
+    if (keyEl && keyEl.value) invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(function(){});
+  }
+
+  /* Subir todo */
+  document.getElementById('upload-all-btn')?.addEventListener('click', function() {
+    confirmModal('¿Subir productos, clientes y ventas a Supabase?', 'Subir todo', 'Subir').then(function(ok) {
+      if (!ok) return;
+      syncSaveConfig();
+      showSyncProgress();
+      invoke('upload_all').then(function(r) {
+        hideSyncProgress();
+        showToast('Subida completa');
+        loadConflictCount();
+      }).catch(function(e) {
+        hideSyncProgress();
+        showToast('Error: ' + e, 'error');
+      });
+    });
+  });
+
+  /* Descargar todo */
+  document.getElementById('download-all-btn')?.addEventListener('click', function() {
+    confirmModal('¿Descargar productos, clientes y ventas desde Supabase?', 'Descargar todo', 'Descargar').then(function(ok) {
+      if (!ok) return;
+      syncSaveConfig();
+      showSyncProgress();
+      invoke('download_all').then(function(r) {
+        hideSyncProgress();
+        showToast('Descarga completa');
+        loadProductCache();
+        loadConflictCount();
+      }).catch(function(e) {
+        hideSyncProgress();
+        showToast('Error: ' + e, 'error');
+      });
+    });
+  });
+
+  /* Sincronizar todo */
+  document.getElementById('sync-all-btn')?.addEventListener('click', function() {
+    confirmModal('¿Sincronizar completamente (subir y descargar todo) con Supabase?', 'Sincronizar todo', 'Sincronizar').then(function(ok) {
+      if (!ok) return;
+      syncSaveConfig();
+      showSyncProgress();
+      invoke('sync_all').then(function(r) {
+        hideSyncProgress();
+        showToast('Sincronización completa');
+        loadProductCache();
+        loadConflictCount();
+      }).catch(function(e) {
+        hideSyncProgress();
+        showToast('Error: ' + e, 'error');
+      });
+    });
+  });
+
+  /* Probar conexión */
+  document.getElementById('test-connection-btn')?.addEventListener('click', async function() {
+    var statusEl = document.getElementById('connection-status');
+    if (!statusEl) return;
+    var btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Probando...';
+    statusEl.style.color = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+    statusEl.title = 'Probando...';
+    syncSaveConfig();
+    try {
+      var ok = await invoke('test_supabase_connection');
+      if (ok) {
+        statusEl.style.color = getComputedStyle(document.documentElement).getPropertyValue('--success').trim();
+        statusEl.title = 'Conectado';
+        showToast('Conexión exitosa');
+      } else {
+        statusEl.style.color = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim();
+        statusEl.title = 'Error de conexión';
+        showToast('No se pudo conectar a Supabase', 'error');
+      }
+    } catch (e) {
+      statusEl.style.color = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim();
+      statusEl.title = 'Error: ' + e;
+      showToast('Error: ' + e, 'error');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="nf nf-fa-plug"></i> Probar conexión';
+    loadSyncStats();
+  });
+
+  /* Cerrar modal conflictos */
+  document.getElementById('conflict-modal-close')?.addEventListener('click', function() { closeModal(document.getElementById('conflict-modal')); });
+  document.getElementById('conflict-close-btn')?.addEventListener('click', function() { closeModal(document.getElementById('conflict-modal')); });
 
   /* ========== REPORTS ========== */
   const reportSearchBtn = document.getElementById('report-search-btn');
@@ -2932,7 +3145,6 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   /* ========== VIEW-SPECIFIC LOAD ========== */
   // Reports: set default dates on show
-  const origShowView = showView;
   const reportsView = document.getElementById('view-reports');
   if (reportsView) {
     const observer = new MutationObserver(function() {
@@ -3217,7 +3429,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (diff > 100) {
         // Keyboard opened
         var view = document.querySelector('.view.active');
-        if (view) view.classList.add('mobile-keyboard');
         var el = document.activeElement;
         if (el) {
           setTimeout(function() {
