@@ -1,3 +1,4 @@
+use crate::constants;
 use crate::db::AppState;
 use crate::models::{PaginatedResult, Producto, TopProductItem};
 use base64::Engine;
@@ -33,8 +34,8 @@ const SQL_SOFT_DELETE: &str = "UPDATE productos SET activo = 0, stock = 0 WHERE 
 const SQL_DELETE_PRODUCTO: &str = "DELETE FROM productos WHERE codigo = ?1";
 
 const SQL_IMPORT_PRODUCTO: &str =
-    "INSERT INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at, updated_at) \
-     VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'), ?5)";
+    "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at, updated_at) \
+     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6)";
 
 #[tauri::command]
 pub fn list_products(
@@ -49,7 +50,7 @@ pub fn list_products(
     let q = search.unwrap_or_default();
     let pattern = format!("%{}%", q);
     let p = page.unwrap_or(1).max(1);
-    let ps = page_size.unwrap_or(200).max(1).min(500);
+    let ps = page_size.unwrap_or(constants::PAGE_SIZE_DEFAULT).max(1).min(constants::PAGE_SIZE_MAX);
     let offset = (p - 1) * ps;
 
     // Count
@@ -233,7 +234,7 @@ pub fn import_products_from_db(
     let mut imported = 0;
     for (codigo, nombre, precio_usd, stock, stock_minimo) in &products {
         match db.execute(
-            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6)",
+            SQL_IMPORT_PRODUCTO,
             params![codigo, nombre, precio_usd, stock, stock_minimo, ts],
         ) {
             Ok(n) => {
@@ -365,7 +366,7 @@ pub fn replace_all_products(
         let codigo = format!("P{:04}", count + 1);
 
         let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
-        db.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, stock, ts])
+        db.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, stock, 0, ts])
             .map_err(|e| errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e)))
             .ok();
         count += 1;
@@ -462,7 +463,7 @@ pub fn import_products_from_file(
         let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
         if let Err(e) = db.execute(
             SQL_IMPORT_PRODUCTO,
-            params![codigo, nombre, precio_usd, stock, ts],
+            params![codigo, nombre, precio_usd, stock, 0, ts],
         ) {
             errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e));
             continue;

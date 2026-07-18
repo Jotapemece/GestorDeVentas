@@ -25,10 +25,6 @@ const SQL_LIST_VENTAS: &str = "
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id
     ORDER BY v.id DESC LIMIT ?1";
-const SQL_UPDATE_TASA: &str = "UPDATE configuracion SET valor = ?1 WHERE clave = 'tasa_dolar'";
-const SQL_UPSERT_TASA_UPDATED: &str =
-    "INSERT INTO configuracion (clave, valor) VALUES ('tasa_updated_at', ?1) \
-     ON CONFLICT(clave) DO UPDATE SET valor = ?1";
 
 pub(crate) fn validar_pago_detalle(detalle: &[PagoItem], total_usd: f64) -> Result<String, String> {
     let mut suma = 0.0;
@@ -150,7 +146,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
 
     let total_bs = request
         .total_bs_ingresado
-        .unwrap_or_else(|| (total_usd * request.tasa * 100.0).round() / 100.0);
+        .unwrap_or_else(|| (total_usd * request.tasa * constants::ROUNDING_FACTOR).round() / constants::ROUNDING_FACTOR);
 
     let now_iso = chrono::Utc::now()
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
@@ -341,8 +337,14 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
     let now = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
-    let _ = db.execute(SQL_UPDATE_TASA, params![tasa.to_string()]);
-    let _ = db.execute(SQL_UPSERT_TASA_UPDATED, params![now]);
+    let _ = db.execute(
+        &format!("UPDATE configuracion SET valor = ?1 WHERE clave = '{}'", constants::CFG_TASA_DOLAR),
+        params![tasa.to_string()],
+    );
+    let _ = db.execute(
+        &format!("INSERT INTO configuracion (clave, valor) VALUES ('{}', ?1) ON CONFLICT(clave) DO UPDATE SET valor = ?1", constants::CFG_TASA_UPDATED_AT),
+        params![now],
+    );
     Ok(())
 }
 

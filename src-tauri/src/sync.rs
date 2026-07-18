@@ -1,3 +1,4 @@
+use crate::constants;
 use crate::db::AppState;
 use chrono::{NaiveDateTime, Utc};
 use rusqlite::{params, Connection};
@@ -152,7 +153,7 @@ fn upload_products_inner(
     )?;
 
     // Update last_upload timestamp
-    upsert_config(&db, "ultimo_upload", &ts);
+    upsert_config(&db, constants::CFG_ULTIMO_UPLOAD, &ts);
 
     Ok(format!(
         "Subida completada: {} categorías y {} productos subidos",
@@ -164,8 +165,8 @@ fn upload_products_inner(
 #[tauri::command]
 pub fn upload_products(state: State<AppState>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     let dispositivo_id = get_config(&db, "dispositivo_id")?;
     upload_products_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
@@ -180,7 +181,7 @@ fn download_products_inner(
     // Get last download sync timestamp
     let last_sync = db
         .query_row(
-            "SELECT valor FROM configuracion WHERE clave = 'ultimo_download'",
+            &format!("SELECT valor FROM configuracion WHERE clave = '{}'", constants::CFG_ULTIMO_DOWNLOAD),
             [],
             |r| r.get::<_, String>(0),
         )
@@ -212,9 +213,9 @@ fn download_products_inner(
 
     let mut ins = db
         .prepare(
-            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, \
+            &format!("INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, \
              activo, categoria_id, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now','localtime'), ?8)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, {}, ?8)", constants::SQL_DATETIME_NOW),
         )
         .map_err(|e| e.to_string())?;
 
@@ -306,7 +307,7 @@ fn download_products_inner(
     drop(upd);
     drop(ins);
 
-    upsert_config(&db, "ultimo_download", &ts);
+    upsert_config(&db, constants::CFG_ULTIMO_DOWNLOAD, &ts);
 
     let parts: Vec<String> = [
         (updated > 0, format!("{} actualizados", updated)),
@@ -336,8 +337,8 @@ fn download_products_inner(
 #[tauri::command]
 pub fn download_products(state: State<AppState>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     download_products_inner(&db, &supabase_url, &supabase_key)
 }
 
@@ -351,7 +352,7 @@ fn upload_sales_inner(
 
     let last_upload = db
         .query_row(
-            "SELECT valor FROM configuracion WHERE clave = 'ultimo_upload_ventas'",
+            &format!("SELECT valor FROM configuracion WHERE clave = '{}'", constants::CFG_ULTIMO_UPLOAD_VENTAS),
             [],
             |r| r.get::<_, String>(0),
         )
@@ -476,7 +477,7 @@ fn upload_sales_inner(
         uploaded += 1;
     }
 
-    upsert_config(&db, "ultimo_upload_ventas", &ts);
+    upsert_config(&db, constants::CFG_ULTIMO_UPLOAD_VENTAS, &ts);
 
     Ok(format!("Subida completada: {} venta(s) subidas", uploaded))
 }
@@ -484,8 +485,8 @@ fn upload_sales_inner(
 #[tauri::command]
 pub fn upload_sales(state: State<AppState>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     let dispositivo_id = get_config(&db, "dispositivo_id")?;
     upload_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
@@ -500,7 +501,7 @@ fn download_sales_inner(
 
     let last_sync = db
         .query_row(
-            "SELECT valor FROM configuracion WHERE clave = 'ultimo_download_ventas'",
+            &format!("SELECT valor FROM configuracion WHERE clave = '{}'", constants::CFG_ULTIMO_DOWNLOAD_VENTAS),
             [],
             |r| r.get::<_, String>(0),
         )
@@ -605,7 +606,7 @@ fn download_sales_inner(
         }
     }
 
-    upsert_config(&db, "ultimo_download_ventas", &ts);
+    upsert_config(&db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
 
     Ok(format!(
         "Descarga completada: {} venta(s) nuevas, {} unidad(es) ajustadas en stock",
@@ -616,8 +617,8 @@ fn download_sales_inner(
 #[tauri::command]
 pub fn download_sales(state: State<AppState>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     let dispositivo_id = get_config(&db, "dispositivo_id").unwrap_or_default();
     download_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
@@ -698,7 +699,7 @@ fn upload_clientes_inner(
         uploaded += 1;
     }
 
-    upsert_config(&db, "ultimo_upload_clientes", &ts);
+    upsert_config(&db, constants::CFG_ULTIMO_UPLOAD_CLIENTES, &ts);
 
     Ok(format!("Subida completada: {} cliente(s) subidos", uploaded))
 }
@@ -706,8 +707,8 @@ fn upload_clientes_inner(
 #[tauri::command]
 pub fn upload_clientes(state: State<AppState>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     upload_clientes_inner(&db, &supabase_url, &supabase_key)
 }
 
@@ -720,7 +721,7 @@ fn download_clientes_inner(
 
     let last_sync = db
         .query_row(
-            "SELECT valor FROM configuracion WHERE clave = 'ultimo_download_clientes'",
+            &format!("SELECT valor FROM configuracion WHERE clave = '{}'", constants::CFG_ULTIMO_DOWNLOAD_CLIENTES),
             [],
             |r| r.get::<_, String>(0),
         )
@@ -824,7 +825,7 @@ fn download_clientes_inner(
         }
     }
 
-    upsert_config(&db, "ultimo_download_clientes", &ts);
+    upsert_config(&db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES, &ts);
 
     let parts: Vec<String> = [
         (inserted > 0, format!("{} nuevos insertados", inserted)),
@@ -854,8 +855,8 @@ fn download_clientes_inner(
 #[tauri::command]
 pub fn download_clientes(state: State<AppState>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     download_clientes_inner(&db, &supabase_url, &supabase_key)
 }
 
@@ -863,11 +864,11 @@ pub fn download_clientes(state: State<AppState>) -> Result<String, String> {
 pub fn register_device(state: State<AppState>, nombre: String) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
 
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
 
     if let Ok(id) = db.query_row(
-        "SELECT valor FROM configuracion WHERE clave = 'dispositivo_id'",
+        &format!("SELECT valor FROM configuracion WHERE clave = '{}'", constants::CFG_DISPOSITIVO_ID),
         [],
         |r| r.get::<_, String>(0),
     ) {
@@ -897,7 +898,7 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
         return Err("No se recibió ID del dispositivo".to_string());
     }
 
-    upsert_config(&db, "dispositivo_id", &new_id);
+    upsert_config(&db, constants::CFG_DISPOSITIVO_ID, &new_id);
 
     Ok(format!("Dispositivo registrado: {}", new_id))
 }
@@ -906,7 +907,7 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
 pub fn get_ultimo_upload(state: State<AppState>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
     match db.query_row(
-        "SELECT valor FROM configuracion WHERE clave = 'ultimo_upload'",
+        &format!("SELECT valor FROM configuracion WHERE clave = '{}'", constants::CFG_ULTIMO_UPLOAD),
         [],
         |r| r.get::<_, String>(0),
     ) {
@@ -1060,8 +1061,8 @@ fn emit_progress(app: &tauri::AppHandle, step: &str, current: u32, total: u32) {
 #[tauri::command]
 pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     let dispositivo_id = get_config(&db, "dispositivo_id")?;
 
     let total = 3u32;
@@ -1078,8 +1079,8 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
 #[tauri::command]
 pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     let dispositivo_id = get_config(&db, "dispositivo_id").unwrap_or_default();
 
     let total = 3u32;
@@ -1096,8 +1097,8 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
 #[tauri::command]
 pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
     let dispositivo_id = get_config(&db, "dispositivo_id")?;
 
     let total = 6u32;
@@ -1158,21 +1159,21 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
         active_products,
         total_clientes,
         total_sales,
-        ultimo_upload: gc("ultimo_upload"),
-        ultimo_download: gc("ultimo_download"),
-        ultimo_upload_ventas: gc("ultimo_upload_ventas"),
-        ultimo_download_ventas: gc("ultimo_download_ventas"),
-        ultimo_upload_clientes: gc("ultimo_upload_clientes"),
-        ultimo_download_clientes: gc("ultimo_download_clientes"),
-        dispositivo_id: gc("dispositivo_id"),
+        ultimo_upload: gc(constants::CFG_ULTIMO_UPLOAD),
+        ultimo_download: gc(constants::CFG_ULTIMO_DOWNLOAD),
+        ultimo_upload_ventas: gc(constants::CFG_ULTIMO_UPLOAD_VENTAS),
+        ultimo_download_ventas: gc(constants::CFG_ULTIMO_DOWNLOAD_VENTAS),
+        ultimo_upload_clientes: gc(constants::CFG_ULTIMO_UPLOAD_CLIENTES),
+        ultimo_download_clientes: gc(constants::CFG_ULTIMO_DOWNLOAD_CLIENTES),
+        dispositivo_id: gc(constants::CFG_DISPOSITIVO_ID),
     })
 }
 
 #[tauri::command]
 pub fn test_supabase_connection(state: State<AppState>) -> Result<bool, String> {
     let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, "supabase_url")?;
-    let supabase_key = get_config(&db, "supabase_key")?;
+    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
+    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
 
     let test_url = format!(
         "{}/rest/v1/productos?select=codigo&limit=1",

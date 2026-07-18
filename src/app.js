@@ -187,6 +187,31 @@ const SEL = {
   soundVolume: '#sound-volume',
   historialLimpiezaDias: '#historial-limpieza-dias',
   historialLimpiezaSave: '#historial-limpieza-save',
+
+  // --- Sync / Conflictos ---
+  syncUrl: '#sync-url',
+  syncKey: '#sync-key',
+  conflictCount: '#conflict-count',
+  conflictList: '#conflict-list',
+  conflictModal: '#conflict-modal',
+  statProducts: '#stat-products',
+  statClients: '#stat-clients',
+  statSales: '#stat-sales',
+  syncUploadTime: '#sync-upload-time',
+  syncDownloadTime: '#sync-download-time',
+  syncUploadSalesTime: '#sync-upload-sales-time',
+  syncDownloadSalesTime: '#sync-download-sales-time',
+  syncUploadClientesTime: '#sync-upload-clientes-time',
+  syncDownloadClientesTime: '#sync-download-clientes-time',
+
+  // --- Tasa ---
+  tasaFetchBtn: '#tasa-fetch-btn',
+
+  // --- Cambio (vuelto) ---
+  cambioGroup: '#cambio-group',
+  cambioRecibido: '#cambio-recibido',
+  cambioResultado: '#cambio-resultado',
+  cambioMonto: '#cambio-monto',
 };
 
 /* ========== HELPERS ========== */
@@ -452,7 +477,7 @@ function getViewEl(name) {
 
 /* ========== CONFLICTOS ========== */
 async function loadConflictCount() {
-  const countEl = document.getElementById('conflict-count');
+  const countEl = qs(SEL.conflictCount);
   if (!countEl) return;
   try {
     const conflictos = await invoke('get_conflictos');
@@ -469,7 +494,7 @@ async function openConflictModal() {
     showToast('No hay conflictos pendientes');
     return;
   }
-  const container = document.getElementById('conflict-list');
+  const container = qs(SEL.conflictList);
   container.innerHTML = '';
   conflictos.forEach(c => {
     const card = document.createElement('div');
@@ -492,13 +517,13 @@ async function openConflictModal() {
       '<div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm conflict-keep-local" data-id="' + c.id + '"><i class="nf nf-fa-check"></i> Mantener local</button><button class="btn btn-accent btn-sm conflict-use-remote" data-id="' + c.id + '"><i class="nf nf-fa-cloud_download"></i> Usar remoto</button></div>';
     container.appendChild(card);
   });
-  showModal(document.getElementById('conflict-modal'));
+  showModal(qs(SEL.conflictModal));
 }
 
 /* ========== SUPABASE SYNC ========== */
 async function loadSyncConfig() {
-  const urlEl = document.getElementById('sync-url');
-  const keyEl = document.getElementById('sync-key');
+  const urlEl = qs(SEL.syncUrl);
+  const keyEl = qs(SEL.syncKey);
   if (!urlEl) return;
   try {
     const url = await invoke('get_config_value', { key: 'supabase_url' });
@@ -513,15 +538,15 @@ async function loadSyncStats() {
   try {
     const stats = await invoke('get_sync_stats');
     var fmt = function(v) { return v ? v : '-'; };
-    document.getElementById('stat-products').textContent = stats.active_products;
-    document.getElementById('stat-clients').textContent = stats.total_clientes;
-    document.getElementById('stat-sales').textContent = stats.total_sales;
-    document.getElementById('sync-upload-time').textContent = fmt(stats.ultimo_upload);
-    document.getElementById('sync-download-time').textContent = fmt(stats.ultimo_download);
-    document.getElementById('sync-upload-sales-time').textContent = fmt(stats.ultimo_upload_ventas);
-    document.getElementById('sync-download-sales-time').textContent = fmt(stats.ultimo_download_ventas);
-    document.getElementById('sync-upload-clientes-time').textContent = fmt(stats.ultimo_upload_clientes);
-    document.getElementById('sync-download-clientes-time').textContent = fmt(stats.ultimo_download_clientes);
+    qs(SEL.statProducts).textContent = stats.active_products;
+    qs(SEL.statClients).textContent = stats.total_clientes;
+    qs(SEL.statSales).textContent = stats.total_sales;
+    qs(SEL.syncUploadTime).textContent = fmt(stats.ultimo_upload);
+    qs(SEL.syncDownloadTime).textContent = fmt(stats.ultimo_download);
+    qs(SEL.syncUploadSalesTime).textContent = fmt(stats.ultimo_upload_ventas);
+    qs(SEL.syncDownloadSalesTime).textContent = fmt(stats.ultimo_download_ventas);
+    qs(SEL.syncUploadClientesTime).textContent = fmt(stats.ultimo_upload_clientes);
+    qs(SEL.syncDownloadClientesTime).textContent = fmt(stats.ultimo_download_clientes);
   } catch (_) {}
 }
 
@@ -626,7 +651,7 @@ async function handleTasaChange() {
 }
 
 async function fetchTasaBcv() {
-  const btn = document.getElementById('tasa-fetch-btn');
+  const btn = qs(SEL.tasaFetchBtn);
   btn.classList.add('loading');
   showLoadingModal('Buscando tasa del BCV...');
   try {
@@ -845,10 +870,10 @@ function selectPaymentMethod(method) {
   qs(SEL.clienteGroup).style.display = method === 'credito' ? 'block' : 'none';
   qs(SEL.mixtoGroup).style.display = method === 'mixto' ? 'block' : 'none';
   const isCash = method === 'efectivo_bs' || method === 'efectivo_usd';
-  const cambioGroup = document.getElementById('cambio-group');
+  const cambioGroup = qs(SEL.cambioGroup);
   if (cambioGroup) {
     cambioGroup.style.display = isCash ? 'block' : 'none';
-    if (!isCash) { document.getElementById('cambio-recibido').value = ''; document.getElementById('cambio-resultado').classList.add('hidden'); }
+    if (!isCash) { qs(SEL.cambioRecibido).value = ''; qs(SEL.cambioResultado).classList.add('hidden'); }
   }
   if (method === 'mixto') {
     if (!qs(SEL.mixtoItems).querySelector('.mixto-row')) addMixtoRow('mixto-items');
@@ -1085,7 +1110,7 @@ async function confirmPayment() {
   let total_bs_ingresado = null;
   if (metodo === 'efectivo_bs') {
     const totalMoneda = totalBsRedondeado(total);
-    const recibido = parseFloat(document.getElementById('cambio-recibido').value) || 0;
+    const recibido = parseFloat(qs(SEL.cambioRecibido).value) || 0;
     if (recibido > 0 && recibido !== totalMoneda) {
       if (!calcularVuelto) {
         total_bs_ingresado = recibido;
@@ -2536,7 +2561,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
   qs(SEL.tasaInput).addEventListener('blur', handleTasaChange);
-  document.getElementById('tasa-fetch-btn')?.addEventListener('click', fetchTasaBcv);
+  qs(SEL.tasaFetchBtn)?.addEventListener('click', fetchTasaBcv);
 
   // Sales search
   qs(SEL.productSearch).addEventListener('input', handleProductSearch);
@@ -2574,15 +2599,15 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs('#payment-modal-close').addEventListener('click', closePaymentModal);
   qs('#payment-cancel-btn').addEventListener('click', closePaymentModal);
   qs(SEL.mixtoAddRow).addEventListener('click', function() { addMixtoRow('mixto-items'); });
-  document.getElementById('cambio-recibido')?.addEventListener('input', function() {
+  qs(SEL.cambioRecibido)?.addEventListener('input', function() {
     const recibido = parseFloat(this.value) || 0;
     const methodBtn = qs('.payment-method-btn.active');
     if (!methodBtn) return;
     const method = methodBtn.dataset.method;
     const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
     const totalMoneda = method === 'efectivo_bs' ? totalBsRedondeado(total) : total;
-    const cambioEl = document.getElementById('cambio-resultado');
-    const montoEl = document.getElementById('cambio-monto');
+    const cambioEl = qs(SEL.cambioResultado);
+    const montoEl = qs(SEL.cambioMonto);
     if (recibido > 0 && recibido > totalMoneda && calcularVuelto) {
       const cambio = recibido - totalMoneda;
       const cambioTexto = method === 'efectivo_bs' ? 'Bs. ' + cambio.toFixed(2).replace('.', ',') : formatUSD(cambio);

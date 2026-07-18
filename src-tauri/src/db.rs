@@ -1,3 +1,4 @@
+use crate::constants;
 use rusqlite::{Connection, params};
 use tauri::State;
 use std::collections::HashMap;
@@ -61,11 +62,11 @@ pub fn init_db(app_handle: &AppHandle) -> Result<(Connection, PathBuf), String> 
 fn cleanup_old_history(conn: &Connection) {
     let dias: i64 = conn
         .query_row(
-            "SELECT CAST(COALESCE(valor, '0') AS INTEGER) FROM configuracion WHERE clave = 'historial_limpieza_dias'",
+            &format!("SELECT CAST(COALESCE(valor, '0') AS INTEGER) FROM configuracion WHERE clave = '{}'", constants::CFG_HISTORIAL_LIMPIEZA_DIAS),
             [],
             |row| row.get(0),
         )
-        .unwrap_or_else(|e| { eprintln!("Error leyendo historial_limpieza_dias: {}", e); 0 });
+        .unwrap_or_else(|e| { eprintln!("Error leyendo {}: {}", constants::CFG_HISTORIAL_LIMPIEZA_DIAS, e); 0 });
     if dias <= 0 {
         return;
     }
@@ -163,7 +164,7 @@ fn auto_import_products(conn: &Connection, app_handle: &AppHandle) {
             let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
             let nombre = nombre.trim_end_matches("*UND*-").trim_end_matches(',');
             conn.execute(
-                "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) VALUES (?1, ?2, ?3, ?4, 0, datetime('now','localtime'))",
+                &format!("INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at) VALUES (?1, ?2, ?3, ?4, 0, {})", constants::SQL_DATETIME_NOW),
                 rusqlite::params![codigo, nombre, precio_usd, stock],
             ).ok();
         }
@@ -172,17 +173,17 @@ fn auto_import_products(conn: &Connection, app_handle: &AppHandle) {
 
 fn insert_default_config(conn: &Connection) {
     conn.execute(
-        "INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('tasa_dolar', '0')",
+        &format!("INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('{}', '0')", constants::CFG_TASA_DOLAR),
         [],
     )
     .ok();
     conn.execute(
-        "INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('caja_abierta', 'true')",
+        &format!("INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('{}', 'true')", constants::CFG_CAJA_ABIERTA),
         [],
     )
     .ok();
     conn.execute(
-        "INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('historial_limpieza_dias', '0')",
+        &format!("INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('{}', '0')", constants::CFG_HISTORIAL_LIMPIEZA_DIAS),
         [],
     )
     .ok();

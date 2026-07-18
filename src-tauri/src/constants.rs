@@ -16,5 +16,29 @@ pub const TEMAS_DISPONIBLES: &[&str] = &[
     "oscuro", "claro", "azul", "verde", "morado", "turquesa", "naranja",
 ];
 
+// SQL
 pub const SQL_USERNAME_BY_ID: &str = "SELECT username FROM usuarios WHERE id = ?1";
 pub const SQL_TASA: &str = "SELECT CAST(valor AS REAL) FROM configuracion WHERE clave = 'tasa_dolar'";
+pub const SQL_DATETIME_NOW: &str = "datetime('now','localtime')";
+
+// Config keys
+pub const CFG_TASA_DOLAR: &str = "tasa_dolar";
+pub const CFG_TASA_UPDATED_AT: &str = "tasa_updated_at";
+pub const CFG_CAJA_ABIERTA: &str = "caja_abierta";
+pub const CFG_HISTORIAL_LIMPIEZA_DIAS: &str = "historial_limpieza_dias";
+pub const CFG_ULTIMO_UPLOAD: &str = "ultimo_upload";
+pub const CFG_ULTIMO_DOWNLOAD: &str = "ultimo_download";
+pub const CFG_ULTIMO_UPLOAD_VENTAS: &str = "ultimo_upload_ventas";
+pub const CFG_ULTIMO_DOWNLOAD_VENTAS: &str = "ultimo_download_ventas";
+pub const CFG_ULTIMO_UPLOAD_CLIENTES: &str = "ultimo_upload_clientes";
+pub const CFG_ULTIMO_DOWNLOAD_CLIENTES: &str = "ultimo_download_clientes";
+pub const CFG_DISPOSITIVO_ID: &str = "dispositivo_id";
+pub const CFG_SUPABASE_URL: &str = "supabase_url";
+pub const CFG_SUPABASE_KEY: &str = "supabase_key";
+
+// Pagination
+pub const PAGE_SIZE_DEFAULT: i64 = 200;
+pub const PAGE_SIZE_MAX: i64 = 500;
+
+// Rounding
+pub const ROUNDING_FACTOR: f64 = 100.0;
