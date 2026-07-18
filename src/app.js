@@ -463,6 +463,23 @@ function getViewEl(name) {
   return document.getElementById('view-' + name);
 }
 
+/* ========== SUPABASE SYNC ========== */
+async function loadSyncConfig() {
+  const urlEl = document.getElementById('sync-url');
+  const keyEl = document.getElementById('sync-key');
+  const statusEl = document.getElementById('sync-status');
+  if (!urlEl) return;
+  try {
+    const url = await invoke('get_config_value', { key: 'supabase_url' });
+    if (url) urlEl.value = url;
+    const key = await invoke('get_config_value', { key: 'supabase_key' });
+    if (key) keyEl.value = key;
+    const upload = await invoke('get_ultimo_upload');
+    const download = await invoke('get_ultimo_download');
+    statusEl.innerHTML = 'Última subida: ' + upload + '<br>Última descarga: ' + download;
+  } catch (_) {}
+}
+
 function showView(name) {
   lastViewName = name;
   qsa('.view').forEach(v => v.classList.remove('active'));
@@ -475,9 +492,10 @@ function showView(name) {
     cashier: loadDailySummary,
     audit: loadAudit,
     reports: () => { loadUserList(); setDefaultReportDates(); },
-    config: loadThemeConfig,
+    config: () => { loadThemeConfig(); loadSyncConfig(); },
   };
   if (loaders[name]) loaders[name]();
+  document.dispatchEvent(new CustomEvent('viewChanged', { detail: name }));
 }
 
 /* ========== AUTH ========== */
@@ -2456,6 +2474,9 @@ function setDefaultReportDates() {
 
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
+  // Collapse all config cards by default
+  document.querySelectorAll('.config-card-header').forEach(h => h.classList.add('collapsed'));
+
   // Auth
   qs(SEL.loginBtn).addEventListener('click', handleLogin);
   qs(SEL.loginUsername).addEventListener('keydown', e => {
@@ -2735,6 +2756,142 @@ document.addEventListener('DOMContentLoaded', async function() {
       } finally {
         backupBtn.disabled = false;
         backupBtn.innerHTML = '<i class="nf nf-fa-save"></i> Descargar respaldo';
+      }
+    });
+  }
+
+  /* ========== SUPABASE SYNC ========== */
+  /* Guardar URL y Key al cambiar */
+  document.addEventListener('change', function(e) {
+    if (e.target.id === 'sync-url') {
+      invoke('set_config_value', { key: 'supabase_url', value: e.target.value }).catch(() => {});
+    }
+    if (e.target.id === 'sync-key') {
+      invoke('set_config_value', { key: 'supabase_key', value: e.target.value }).catch(() => {});
+    }
+  });
+
+  /* Registrar dispositivo */
+  const registerBtn = document.getElementById('register-device-btn');
+  if (registerBtn) {
+    registerBtn.addEventListener('click', async function() {
+      const name = 'PC Jotapemece';
+      const urlEl = document.getElementById('sync-url');
+      const keyEl = document.getElementById('sync-key');
+      if (urlEl && urlEl.value) await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
+      if (keyEl && keyEl.value) await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      try {
+        registerBtn.disabled = true;
+        registerBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Registrando...';
+        const result = await invoke('register_device', { nombre: name });
+        showToast(result);
+        loadSyncConfig();
+      } catch (e) { showToast('Error: ' + e, 'error'); }
+      finally {
+        registerBtn.disabled = false;
+        registerBtn.innerHTML = '<i class="nf nf-fa-tag"></i> Registrar dispositivo';
+      }
+    });
+  }
+
+  /* Subir productos */
+  const uploadBtn = document.getElementById('upload-products-btn');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', async function() {
+      const urlEl = document.getElementById('sync-url');
+      const keyEl = document.getElementById('sync-key');
+      if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
+      if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
+      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      try {
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Subiendo...';
+        const result = await invoke('upload_products');
+        showToast(result);
+        loadSyncConfig();
+      } catch (e) { showToast('Error: ' + e, 'error'); }
+      finally {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="nf nf-fa-cloud_upload"></i> Subir productos';
+      }
+    });
+  }
+
+  /* Descargar productos */
+  const downloadBtn = document.getElementById('download-products-btn');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', async function() {
+      const urlEl = document.getElementById('sync-url');
+      const keyEl = document.getElementById('sync-key');
+      if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
+      if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
+      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      try {
+        downloadBtn.disabled = true;
+        downloadBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Descargando...';
+        const result = await invoke('download_products');
+        showToast(result);
+        if (result.includes('procesados') || result.includes('insertados')) {
+          loadInventory();
+          loadProductCache();
+        }
+        loadSyncConfig();
+      } catch (e) { showToast('Error: ' + e, 'error'); }
+      finally {
+        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = '<i class="nf nf-fa-cloud_download"></i> Descargar productos';
+      }
+    });
+  }
+
+  /* Subir ventas */
+  const uploadSalesBtn = document.getElementById('upload-sales-btn');
+  if (uploadSalesBtn) {
+    uploadSalesBtn.addEventListener('click', async function() {
+      const urlEl = document.getElementById('sync-url');
+      const keyEl = document.getElementById('sync-key');
+      if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
+      if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
+      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      try {
+        uploadSalesBtn.disabled = true;
+        uploadSalesBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Subiendo...';
+        const result = await invoke('upload_sales');
+        showToast(result);
+        loadSyncConfig();
+      } catch (e) { showToast('Error: ' + e, 'error'); }
+      finally {
+        uploadSalesBtn.disabled = false;
+        uploadSalesBtn.innerHTML = '<i class="nf nf-fa-cloud_upload"></i> Subir ventas';
+      }
+    });
+  }
+
+  /* Descargar ventas */
+  const downloadSalesBtn = document.getElementById('download-sales-btn');
+  if (downloadSalesBtn) {
+    downloadSalesBtn.addEventListener('click', async function() {
+      const urlEl = document.getElementById('sync-url');
+      const keyEl = document.getElementById('sync-key');
+      if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
+      if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
+      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      try {
+        downloadSalesBtn.disabled = true;
+        downloadSalesBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Descargando...';
+        const result = await invoke('download_sales');
+        showToast(result);
+        loadInventory();
+        loadProductCache();
+        loadSyncConfig();
+      } catch (e) { showToast('Error: ' + e, 'error'); }
+      finally {
+        downloadSalesBtn.disabled = false;
+        downloadSalesBtn.innerHTML = '<i class="nf nf-fa-cloud_download"></i> Descargar ventas';
       }
     });
   }

@@ -66,3 +66,4 @@
 .nf-fa-circle::before { content: "\f111"; }
 .nf-fa-chevron_down::before { content: "\f078"; }
 .nf-fa-edit::before { content: "\f044"; }
+.nf-fa-cloud_upload::before { content: "\f0ee"; }

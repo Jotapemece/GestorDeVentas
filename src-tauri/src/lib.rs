@@ -9,6 +9,7 @@ mod migrations;
 mod models;
 mod products;
 mod sales;
+mod sync;
 mod tasa_bcv;
 
 use db::AppState;
@@ -100,6 +101,14 @@ pub fn run() {
             auth::admin_change_password,
             // Products
             products::get_top_products,
+            // Sync
+            sync::upload_products,
+            sync::download_products,
+            sync::upload_sales,
+            sync::download_sales,
+            sync::register_device,
+            sync::get_ultimo_upload,
+            sync::get_ultimo_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

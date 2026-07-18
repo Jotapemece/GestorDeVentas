@@ -41,6 +41,9 @@ pub const SQL_CREATE_TABLES: &str = "
         total_usd REAL NOT NULL,
         tasa_aplicada REAL NOT NULL,
         total_bs REAL NOT NULL DEFAULT 0,
+        sync_id TEXT,
+        dispositivo_origen TEXT DEFAULT '',
+        updated_at TEXT DEFAULT (datetime('now','localtime')),
         FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
         FOREIGN KEY(cliente_id) REFERENCES clientes(id)
     );
@@ -51,6 +54,7 @@ pub const SQL_CREATE_TABLES: &str = "
         producto_codigo TEXT NOT NULL,
         cantidad INTEGER NOT NULL,
         precio_usd_unitario REAL NOT NULL,
+        sync_id TEXT,
         FOREIGN KEY(venta_id) REFERENCES ventas(id),
         FOREIGN KEY(producto_codigo) REFERENCES productos(codigo)
     );
@@ -94,6 +98,7 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("011_add_total_bs_cierres", add_total_bs_cierres),
     ("012_add_anulada_ventas", add_anulada_ventas),
     ("013_add_anulado_detalles", add_anulado_detalles),
+    ("014_add_sync_fields", add_sync_fields),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -254,4 +259,39 @@ fn add_total_bs_ventas(conn: &Connection) {
             "UPDATE ventas SET total_bs = ROUND(total_usd * tasa_aplicada, 2);"
         ).ok();
     }
+}
+
+fn add_sync_fields(conn: &Connection) {
+    if !column_exists(conn, "ventas", "sync_id") {
+        conn.execute("ALTER TABLE ventas ADD COLUMN sync_id TEXT", []).ok();
+    }
+    if !column_exists(conn, "ventas", "dispositivo_origen") {
+        conn.execute("ALTER TABLE ventas ADD COLUMN dispositivo_origen TEXT DEFAULT ''", []).ok();
+    }
+    if !column_exists(conn, "ventas", "updated_at") {
+        if let Err(e) = conn.execute(
+            "ALTER TABLE ventas ADD COLUMN updated_at TEXT DEFAULT (datetime('now','localtime'))",
+            [],
+        ) {
+            eprintln!("Error adding updated_at to ventas: {}", e);
+        }
+    }
+    if !column_exists(conn, "detalles_ventas", "sync_id") {
+        conn.execute("ALTER TABLE detalles_ventas ADD COLUMN sync_id TEXT", []).ok();
+    }
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ventas_sync_id ON ventas(sync_id)", []).ok();
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_detalles_ventas_sync_id ON detalles_ventas(sync_id)", []).ok();
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ajustes_stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sync_id TEXT UNIQUE,
+            producto_codigo TEXT NOT NULL,
+            cantidad INTEGER NOT NULL,
+            motivo TEXT DEFAULT '',
+            dispositivo_origen TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            updated_at TEXT DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY(producto_codigo) REFERENCES productos(codigo)
+        );"
+    ).ok();
 }

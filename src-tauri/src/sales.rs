@@ -4,19 +4,23 @@ use crate::db::AppState;
 use crate::models::*;
 use rusqlite::params;
 use tauri::State;
+use uuid::Uuid;
 
 const SQL_PRODUCTO_PRECIO_STOCK: &str = "SELECT precio_usd, stock FROM productos WHERE codigo = ?1";
 const SQL_INSERT_VENTA: &str =
     "INSERT INTO ventas (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
-     cliente_id, total_usd, tasa_aplicada, total_bs) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
+     cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at) \
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)";
 const SQL_INSERT_DETALLE: &str =
-    "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario) VALUES (?1, ?2, ?3, ?4)";
+    "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
+     VALUES (?1, ?2, ?3, ?4, ?5)";
 const SQL_UPDATE_STOCK: &str = "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1";
 const SQL_PRODUCTO_PRECIO: &str = "SELECT precio_usd FROM productos WHERE codigo = ?1";
 const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
 const SQL_LIST_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada
+           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
+           v.sync_id, v.dispositivo_origen
     FROM ventas v
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id
@@ -107,6 +111,16 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         .clone()
         .map(|u| u.username)
         .ok_or_else(|| "No hay usuario autenticado".to_string())?;
+
+    let venta_sync_id = Uuid::new_v4().to_string();
+    let dispositivo_origen = db
+        .query_row(
+            "SELECT valor FROM configuracion WHERE clave = 'dispositivo_id'",
+            [],
+            |r| r.get::<_, String>(0),
+        )
+        .unwrap_or_default();
+
     let mut total_usd = 0.0;
 
     let tx = db
@@ -144,6 +158,9 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         .total_bs_ingresado
         .unwrap_or_else(|| (total_usd * request.tasa * 100.0).round() / 100.0);
 
+    let now_iso = chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
     tx.execute(
         SQL_INSERT_VENTA,
         params![
@@ -156,6 +173,9 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
             total_usd,
             request.tasa,
             total_bs,
+            venta_sync_id,
+            dispositivo_origen,
+            now_iso,
         ],
     )
     .map_err(|e| format!("Error al crear venta: {}", e))?;
@@ -172,9 +192,10 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
                 )
             })?;
 
+        let detalle_sync_id = Uuid::new_v4().to_string();
         tx.execute(
             SQL_INSERT_DETALLE,
-            params![venta_id, pv.codigo, pv.cantidad, precio],
+            params![venta_id, pv.codigo, pv.cantidad, precio, detalle_sync_id],
         )
         .map_err(|e| format!("Error al insertar detalle: {}", e))?;
 
@@ -232,6 +253,8 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         tasa_aplicada: request.tasa,
         total_bs,
         anulada: false,
+        sync_id: Some(venta_sync_id),
+        dispositivo_origen: Some(dispositivo_origen),
     })
 }
 
@@ -258,6 +281,8 @@ pub fn list_sales(state: State<AppState>, limit: Option<i64>) -> Result<Vec<Vent
                 tasa_aplicada: row.get(10)?,
                 total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
                 anulada: { let a: i64 = row.get(12)?; a != 0 },
+                sync_id: row.get(13)?,
+                dispositivo_origen: row.get(14)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -381,10 +406,13 @@ pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String
         }
     }
 
+    let void_ts = chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
     // Mark as voided
     tx.execute(
-        "UPDATE ventas SET anulada = 1 WHERE id = ?1",
-        params![venta_id],
+        "UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2",
+        params![void_ts, venta_id],
     )
     .map_err(|e| e.to_string())?;
 
@@ -419,7 +447,8 @@ pub fn get_sales_report(
     let end = crate::cashier::siguiente_dia(&filter.end_date);
     let sql = format!(
         "SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada
+                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
+                v.sync_id, v.dispositivo_origen
          FROM ventas v
          LEFT JOIN usuarios u ON v.usuario_id = u.id
          LEFT JOIN clientes c ON v.cliente_id = c.id
@@ -467,6 +496,8 @@ pub fn get_sales_report(
                     if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? }
                 },
                 anulada: { let a: i64 = row.get(12)?; a != 0 },
+                sync_id: row.get(13)?,
+                dispositivo_origen: row.get(14)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -637,7 +668,8 @@ fn get_sales_report_inner(
     let end = crate::cashier::siguiente_dia(&filter.end_date);
     let sql = format!(
         "SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada
+                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
+                v.sync_id, v.dispositivo_origen
          FROM ventas v
          LEFT JOIN usuarios u ON v.usuario_id = u.id
          LEFT JOIN clientes c ON v.cliente_id = c.id
@@ -670,6 +702,8 @@ fn get_sales_report_inner(
                 total_usd: row.get(9)?, tasa_aplicada: row.get(10)?,
                 total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
                 anulada: { let a: i64 = row.get(12)?; a != 0 },
+                sync_id: row.get(13)?,
+                dispositivo_origen: row.get(14)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -755,6 +789,9 @@ pub fn void_sale_items(
         params![new_total_usd, new_total_bs, request.venta_id],
     ).ok();
 
+    let void_ts = chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
     // Check if all items are now voided
     let remaining: i64 = tx
         .query_row(
@@ -764,7 +801,9 @@ pub fn void_sale_items(
         )
         .unwrap_or(0);
     if remaining == 0 {
-        tx.execute("UPDATE ventas SET anulada = 1 WHERE id = ?1", params![request.venta_id]).ok();
+        tx.execute("UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2", params![void_ts, request.venta_id]).ok();
+    } else {
+        tx.execute("UPDATE ventas SET updated_at = ?1 WHERE id = ?2", params![void_ts, request.venta_id]).ok();
     }
 
     crate::audit::log_action(&*tx, &current_username,

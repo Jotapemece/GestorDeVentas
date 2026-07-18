@@ -49,7 +49,8 @@ const SQL_DETALLE_JSON: &str =
     "SELECT detalle_json FROM cierres_detalle WHERE cierre_id = ?1";
 const SQL_LIST_DIARIAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada
+           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
+           v.sync_id, v.dispositivo_origen
     FROM ventas v
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id
@@ -234,6 +235,8 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
                 tasa_aplicada: row.get(10)?,
                 total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
                 anulada: { let a: i64 = row.get(12)?; a != 0 },
+                sync_id: row.get(13)?,
+                dispositivo_origen: row.get(14)?,
             })
         })
         .map_err(|e| e.to_string())?

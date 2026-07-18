@@ -29,7 +29,7 @@ npm run tauri build                     # Genera instalador NSIS en src-tauri/ta
 
 ### Testing
 ```sh
-cd src-tauri && cargo test --lib        # 23 tests (auth, config, sales)
+cd src-tauri && cargo test --lib        # 29 tests (auth, config, sales, sync)
 cd src-tauri && cargo check             # Verifica compilación Rust
 ```
 
@@ -50,6 +50,7 @@ cd src-tauri && cargo check             # Verifica compilación Rust
 - `src/tasa_bcv.rs` — Fetch BCV, check_tasa_update
 - `src/audit.rs` — Auditoría
 - `src/clients.rs` — Clientes/crédito/abonos
+- `src/sync.rs` — Supabase sync (upload_products, download_products, upload_sales, download_sales, register_device)
 - `src/constants.rs` — Constantes (métodos de pago, config keys)
 
 ### `src/` (frontend)
@@ -61,7 +62,25 @@ cd src-tauri && cargo check             # Verifica compilación Rust
 ## Base de datos
 - Archivo: `gestor_ventas.db` (SQLite, se crea automáticamente)
 - Backup: botón en Config → `backup_database` copia a `gestor_ventas_backup_YYYYMMDD_HHMMSS.db`
-- Migraciones en `migrations.rs` (013 actual: `anulado` en `detalles_ventas`)
+- Migraciones en `migrations.rs` (014 actual: `sync_id`, `dispositivo_origen`, `updated_at` en `ventas`; `sync_id` en `detalles_ventas`; tabla `ajustes_stock`)
+
+## Supabase Sync
+- Proyecto: `https://xryvxaslbtouihbulonw.supabase.co`
+- Tablas: `dispositivos`, `categorias`, `productos`, `clientes`, `ventas`, `detalles_ventas`
+- Anon key: `sb_publishable_3XXhx5ktfhrUvngJDYAQAA_xPCRMFzh`
+- **Dispositivo registrado**: PC Jotapemece (`d093e594-8745-4dca-b97a-f7851c62cb65`)
+- **Upload productos**: sube categorías + productos activos locales a la nube (upsert por `codigo`)
+- **Upload ventas**: sube ventas con `sync_id` y `updated_at > ultimo_upload_ventas` + sus detalles (upsert por `sync_id`)
+- **Download productos**: descarga productos con `updated_at > ultimo_download`; **NO sobrescribe `stock`** en productos existentes (stock se deriva de ventas/eventos, no de snapshots absolutos)
+- **Download ventas**: descarga ventas de OTROS dispositivos (`dispositivo_origen ≠ local_id`), INSERT OR IGNORE por `sync_id`, y decrementa stock local por cada unidad vendida remotamente
+- El download de ventas NO filtra por fecha — descarga **todas** las ventas remotas desde `ultimo_download_ventas`. Es correcto porque stock se deriva de TODAS las ventas de todos los dispositivos, sin importar la fecha
+- Los `sync_id` se usan como PK en Supabase (`ventas.id = sync_id`) para que `detalles_ventas.venta_id` referencie correctamente
+- Tabla `detalles_ventas` en Supabase: `id (UUID), venta_id (UUID FK), local_id (int), producto_codigo, cantidad, precio_usd_unitario, anulado, sync_id (UUID), updated_at`
+- Timestamps separados: `ultimo_upload`, `ultimo_download`, `ultimo_upload_ventas`, `ultimo_download_ventas` en `configuracion`
+- Cada nueva venta recibe un UUID (`sync_id`) y almacena `dispositivo_origen`
+- `void_sale` y `void_sale_items` actualizan `updated_at` para propagar anulaciones
+- Config URL/Key almacenadas en config local (`supabase_url`, `supabase_key`)
+- Registro de dispositivo vía `register_device` → guarda `dispositivo_id` en config local
 
 ## Paginación
 - Inventario: `list_products(search, page, page_size)` → `PaginatedResult<Producto>`
@@ -89,6 +108,7 @@ cd src-tauri && cargo check             # Verifica compilación Rust
 - Los IDs de elementos se definen en `const SEL = { ... }` en app.js
 - `escapeHtml()` para todo texto insertado como HTML (XSS)
 - `invoke('comando', { arg })` para llamadas Tauri
+- `productCache` se usa en Caja para búsqueda de productos; refrescar con `loadProductCache()` tras descargar productos/ventas
 - `showToast(msg, type)` para notificaciones
 - `confirmModal(text, title, confirmLabel)` para confirmaciones
 - `playSound('add'|'remove')` para sonidos
@@ -149,3 +169,41 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 ### macOS / iOS (futuro)
 - Tauri v2 soporta iOS vía `npm run tauri ios init`
 - Requiere Xcode 15+, macOS 14+
+
+## Sync Plan (próximas fases)
+
+### Fase 4 — Sincronización de Clientes
+- **upload_clientes**: sube clientes locales a Supabase (tabla `clientes`, upsert por `documento`)
+- **download_clientes**: descarga clientes con `updated_at > ultimo_download` (insert/update local)
+- Botones en Config: Subir clientes / Descargar clientes
+
+### Fase 5 — Sincronización de Ventas
+- **upload_ventas**: sube ventas con `updated_at > ultimo_upload` + sus detalles (tablas `ventas`, `detalles_ventas`)
+- **download_ventas**: descarga ventas de otros dispositivos con `updated_at > ultimo_download`
+- **Control de duplicados**: `dispositivo_id + id local` como identificador único, o migración 014 con `sync_id TEXT UNIQUE`
+- Botones en Config o integrado en sincronización general
+
+### Fase 6 — Sync unificado con progreso
+- **sync_all**: comando único que upload productos + clientes + ventas, luego download todo
+- **Progreso**: evento Tauri `sync-progress` emitido durante la operación (paso actual, %)
+- **Barra de progreso** en frontend (modal/overlay)
+- **Resumen**: "X productos subidos, Y clientes descargados, Z ventas subidas"
+- Botón "Sincronizar todo" como acción principal, botones individuales como avanzados
+
+### Fase 7 — Sync automático
+- **Intervalo configurable**: campo en Config ("Sync automático cada X minutos", 0 = desactivado)
+- **setInterval** en frontend que llama a `sync_all` en background
+- **Notificación**: badge o toast al completar auto-sync
+- **Indicador**: mostrar última sincronización en tiempo real
+
+### Fase 8 — Resolución de conflictos
+- **Last-write-wins**: comparar `updated_at` local vs nube, el más reciente gana
+- **Conflicto de productos**: si mismo `codigo` con `updated_at` similar (< 5 min), marcar como conflicto
+- **Reporte**: tabla `conflictos` en Supabase o log local
+- **UI**: modal de conflictos al terminar sync para resolver manualmente
+
+### Fase 9 — Multi-dispositivo completo
+- **Asignación de ventas**: asociar cada venta a un dispositivo (`dispositivo_id`)
+- **Dashboard global**: reportes con ventas de todos los dispositivos
+- **Inventario consolidado**: stock unificado (último que sube gana)
+- **Roles de dispositivo**: maestro (sync completo) vs esclavo (solo lectura/comparte ventas)

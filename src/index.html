@@ -537,6 +537,45 @@
               </div>
             </div>
           </div>
+          <div class="config-card admin-only">
+            <div class="config-card-header">
+              <i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n
+              <span class="config-card-desc">Sincroniza productos con Supabase</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-link"></i> URL de Supabase</span>
+                <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co" style="flex:1">
+              </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-key"></i> API Key</span>
+                <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_..." style="flex:1">
+              </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-display"></i> Dispositivo</span>
+                <button id="register-device-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-tag"></i> Registrar / Ver ID</button>
+              </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-upload"></i> Subir</span>
+                <button id="upload-products-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-cloud_upload"></i> Subir productos</button>
+              </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-download"></i> Descargar</span>
+                <button id="download-products-btn" class="btn btn-accent btn-sm"><i class="nf nf-fa-cloud_download"></i> Descargar productos</button>
+              </div>
+              <div class="config-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:14px">
+                <span class="config-label"><i class="nf nf-fa-shopping_cart"></i> Ventas</span>
+                <div style="display:flex;gap:8px">
+                  <button id="upload-sales-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-cloud_upload"></i> Subir ventas</button>
+                  <button id="download-sales-btn" class="btn btn-accent btn-sm"><i class="nf nf-fa-cloud_download"></i> Descargar ventas</button>
+                </div>
+              </div>
+              <div class="config-row">
+                <span class="text-muted text-sm" id="sync-status">No sincronizado</span>
+              </div>
+            </div>
+          </div>
           <div class="config-card admin-only" id="user-management-card">
             <div class="config-card-header">
               <i class="nf nf-fa-users"></i> Usuarios

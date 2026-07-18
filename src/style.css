@@ -520,7 +520,7 @@ button:focus-visible,
 .inventory-search-input { max-width: 320px; }
 .config-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 0; min-height: 44px;
+  padding: 10px 0; min-height: 44px; gap: 12px;
 }
 .config-row + .config-row { border-top: 1px solid var(--border); }
 .config-label { font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 8px; }

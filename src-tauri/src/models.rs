@@ -40,6 +40,10 @@ pub struct Venta {
     pub tasa_aplicada: f64,
     pub total_bs: f64,
     pub anulada: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dispositivo_origen: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -280,4 +284,16 @@ pub struct ExportReportFilter {
     pub end_date: String,
     pub producto_codigo: Option<String>,
     pub username: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AjusteStock {
+    pub id: i64,
+    pub sync_id: Option<String>,
+    pub producto_codigo: String,
+    pub cantidad: i64,
+    pub motivo: String,
+    pub dispositivo_origen: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }

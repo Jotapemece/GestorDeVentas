@@ -33,3 +33,4 @@ base64 = "0.22"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 ureq = { version = "2", features = ["json"] }
+uuid = { version = "1", features = ["v4"] }
