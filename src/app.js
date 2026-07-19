@@ -1,5 +1,7 @@
 const invoke = window.__TAURI__.core.invoke;
 
+const IS_ANDROID = navigator.userAgent.includes('Android');
+
 /* ========== CONSTANTS ========== */
 const TOAST_DURATION = 3000;
 const AUDIO = {
@@ -382,6 +384,7 @@ let sidebarHideTimeout = null;
 const SIDEBAR_HIDE_DELAY = 250;
 
 function initSidebarAutoHide() {
+  if (IS_ANDROID) return;
   const sidebar = document.getElementById('sidebar');
   const mainApp = document.getElementById('main-app');
   if (!sidebar || !mainApp) return;
@@ -421,6 +424,7 @@ function initSidebarAutoHide() {
 }
 
 function setSidebarAutoHide(enabled) {
+  if (IS_ANDROID) return;
   sidebarAutoHideEnabled = enabled;
   const mainApp = document.getElementById('main-app');
   if (!mainApp) return;
@@ -3508,10 +3512,14 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   const sidebarToggle = qs(SEL.sidebarAutoHideToggle);
   if (sidebarToggle) {
-    sidebarToggle.addEventListener('change', function() {
-      setSidebarAutoHide(this.checked);
-      setUserConfig(CFG_SIDEBAR_AUTO_HIDE, this.checked ? 'true' : 'false').catch(e => showToast('Error al guardar configuración', 'error'));
-    });
+    if (IS_ANDROID) {
+      sidebarToggle.closest('.config-row').style.display = 'none';
+    } else {
+      sidebarToggle.addEventListener('change', function() {
+        setSidebarAutoHide(this.checked);
+        setUserConfig(CFG_SIDEBAR_AUTO_HIDE, this.checked ? 'true' : 'false').catch(e => showToast('Error al guardar configuración', 'error'));
+      });
+    }
   }
 
   // Fullscreen toggle
