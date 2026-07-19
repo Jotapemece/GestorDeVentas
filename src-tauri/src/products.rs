@@ -191,7 +191,7 @@ pub fn import_products_from_db(
 ) -> Result<String, String> {
     use std::io::Write;
 
-    let db = state.lock_db()?;
+    let mut db = state.lock_db()?;
     crate::auth::require_admin(&state, &db, "Importó productos desde archivo DB")?;
 
     let bytes = base64::engine::general_purpose::STANDARD
@@ -233,10 +233,11 @@ pub fn import_products_from_db(
         return Err("No se encontraron productos en el archivo".to_string());
     }
 
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
     let ts = crate::helpers::now_iso();
     let mut imported = 0;
     for (codigo, nombre, precio_usd, stock, stock_minimo) in &products {
-        if let Ok(n) = db.execute(
+        if let Ok(n) = tx.execute(
             SQL_IMPORT_PRODUCTO,
             params![codigo, nombre, precio_usd, stock, stock_minimo, ts],
         ) {
@@ -245,6 +246,7 @@ pub fn import_products_from_db(
             }
         }
     }
+    tx.commit().map_err(|e| format!("Error al confirmar importación: {}", e))?;
 
     let skipped = products.len() - imported;
     Ok(format!(

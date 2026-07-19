@@ -92,9 +92,10 @@ pub fn resolve_conflicto(
     conflicto_id: i64,
     use_remote: bool,
 ) -> Result<String, String> {
-    let db = state.lock_db()?;
+    let mut db = state.lock_db()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
-    let (tabla, item_id, remote_json): (String, String, String) = db
+    let (tabla, item_id, remote_json): (String, String, String) = tx
         .query_row(
             "SELECT tabla, item_id, remote_json FROM conflictos WHERE id = ?1 AND resuelto = 0",
             params![conflicto_id],
@@ -115,7 +116,7 @@ pub fn resolve_conflicto(
                 let stock_minimo = remote["stock_minimo"].as_i64().unwrap_or(0);
                 let activo = remote["activo"].as_i64().unwrap_or(1);
                 let cat_id = remote["categoria_id"].as_i64();
-                db.execute(
+                tx.execute(
                     "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock_minimo = ?3, \
                      activo = ?4, categoria_id = ?5, updated_at = ?6 WHERE codigo = ?7",
                     params![nombre, precio_usd, stock_minimo, activo, cat_id, ts, codigo],
@@ -126,7 +127,7 @@ pub fn resolve_conflicto(
                 let nombre = remote["nombre"].as_str().unwrap_or("");
                 let credito_activo = remote["credito_activo"].as_i64().unwrap_or(1);
                 let saldo = remote["saldo_deuda_usd"].as_f64().unwrap_or(0.0);
-                db.execute(
+                tx.execute(
                     "UPDATE clientes SET nombre = ?1, credito_activo = ?2, \
                      saldo_deuda_usd = ?3, updated_at = ?4 WHERE sync_id = ?5",
                     params![nombre, credito_activo, saldo, ts, sync_id],
@@ -136,11 +137,13 @@ pub fn resolve_conflicto(
         }
     }
 
-    db.execute(
+    tx.execute(
         "UPDATE conflictos SET resuelto = 1 WHERE id = ?1",
         params![conflicto_id],
     )
     .map_err(|e| e.to_string())?;
+
+    tx.commit().map_err(|e| format!("Error al confirmar resolución: {}", e))?;
 
     Ok(if use_remote {
         "Conflicto resuelto: se usó la versión remota".to_string()

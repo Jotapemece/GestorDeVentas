@@ -285,7 +285,8 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
     tx.execute(SQL_INSERT_CIERRE_DETALLE, params![cierre_id, detalle_json])
         .map_err(|e| format!("Error al guardar detalle del cierre: {}", e))?;
 
-    tx.execute(SQL_SET_CAJA, params!["false"]).ok();
+    tx.execute(SQL_SET_CAJA, params!["false"])
+        .map_err(|e| format!("Error al cerrar caja: {}", e))?;
 
     let accion = format!(
         "Cierre de caja - Ventas: {}, Total USD: ${:.2}, Total Bs.: Bs. {:.2}",

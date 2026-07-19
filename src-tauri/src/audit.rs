@@ -75,9 +75,11 @@ pub fn get_cierres(
 
 #[tauri::command]
 pub fn clear_audit(state: State<AppState>) -> Result<(), String> {
-    let db = state.lock_db()?;
-    db.execute("DELETE FROM historial_acciones", [])
+    let mut db = state.lock_db()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    tx.execute("DELETE FROM historial_acciones", [])
         .map_err(|e| format!("Error al limpiar auditoría: {}", e))?;
-    log_action(&db, "sistema", "Historial de auditoría limpiado")?;
+    log_action(&tx, "sistema", "Historial de auditoría limpiado")?;
+    tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
     Ok(())
 }

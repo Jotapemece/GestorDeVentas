@@ -329,7 +329,7 @@ pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String
         if let Some(cliente_id) = cliente_id {
             let total: f64 = tx
                 .query_row("SELECT total_usd FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
-                .unwrap_or(0.0);
+                .map_err(|e| format!("Error al obtener total de venta: {}", e))?;
             tx.execute(
                 "UPDATE clientes SET saldo_deuda_usd = MAX(0, saldo_deuda_usd - ?1) WHERE id = ?2",
                 params![total, cliente_id],
