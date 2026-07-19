@@ -42,12 +42,6 @@ const CFG_REDONDEO_BS = 'redondeo_bs';
 const CFG_SIDEBAR_AUTO_HIDE = 'sidebar_auto_hide';
 const CFG_CONFIRMAR_VENTA = 'confirmar_venta';
 
-const VIEW_NAMES = {
-  sales: 'Caja', inventory: 'Inventario', creditos: 'Créditos',
-  cashier: 'Caja Diaria', audit: 'Auditoría', reports: 'Reportes', config: 'Configuración'
-};
-const VIEW_LIST = Object.keys(VIEW_NAMES);
-
 // Payment method keys (deben coincidir con constants.rs)
 const METODO_EFECTIVO_BS = 'efectivo_bs';
 const METODO_EFECTIVO_USD = 'efectivo_usd';
@@ -803,7 +797,7 @@ function showView(name) {
     cashier: loadDailySummary,
     audit: loadAudit,
     reports: () => { loadUserList(); setDefaultReportDates(); },
-    config: () => { loadThemeConfig(); loadConflictCount(); loadShortcutConfigUI(); },
+    config: () => { loadThemeConfig(); loadConflictCount(); },
     sync: () => { loadSyncConfig(); loadConflictCount(); },
   };
   if (loaders[name]) loaders[name]();
@@ -2159,62 +2153,6 @@ async function saveFontSize(pct) {
   } catch (e) {}
 }
 
-/* ========== SHORTCUTS ========== */
-const DEFAULT_SHORTCUTS = {
-  F1: 'sales', F2: 'inventory', F3: 'creditos', F4: 'cashier',
-  F5: 'audit', F6: 'reports', F7: 'config'
-};
-let shortcutMappings = { ...DEFAULT_SHORTCUTS };
-
-async function loadShortcutMappings() {
-  try {
-    const raw = await getUserConfig('shortcut_mappings');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      shortcutMappings = { ...DEFAULT_SHORTCUTS, ...parsed };
-    }
-  } catch (e) {}
-}
-
-async function saveShortcutMappings() {
-  try {
-    await setUserConfig('shortcut_mappings', JSON.stringify(shortcutMappings));
-  } catch (e) {}
-}
-
-function loadShortcutConfigUI() {
-  const container = qs('#shortcut-config');
-  if (!container) return;
-  container.innerHTML = '';
-  ['F1','F2','F3','F4','F5','F6','F7'].forEach(key => {
-    const row = document.createElement('div');
-    row.className = 'config-row shortcut-row';
-    const label = document.createElement('span');
-    label.className = 'config-label';
-    label.textContent = key;
-    const select = document.createElement('select');
-    select.className = 'shortcut-select';
-    VIEW_LIST.forEach(view => {
-      const opt = document.createElement('option');
-      opt.value = view;
-      opt.textContent = VIEW_NAMES[view];
-      opt.selected = (shortcutMappings[key] || DEFAULT_SHORTCUTS[key]) === view;
-      select.appendChild(opt);
-    });
-    select.addEventListener('change', () => {
-      shortcutMappings[key] = select.value;
-      saveShortcutMappings();
-    });
-    row.appendChild(label);
-    row.appendChild(select);
-    container.appendChild(row);
-  });
-  const f8row = document.createElement('div');
-  f8row.className = 'config-row shortcut-row';
-  f8row.innerHTML = '<span class="config-label">F8</span><span style="color:var(--text-light);font-size:0.85rem">Buscar (fijo)</span>';
-  container.appendChild(f8row);
-}
-
 /* ========== USER MANAGEMENT ========== */
 async function loadUserList() {
   try {
@@ -3543,14 +3481,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     const activeView = qs('.view.active');
     const viewId = activeView ? activeView.id : '';
     switch (e.key) {
-      case 'F1': case 'F2': case 'F3': case 'F4':
-      case 'F5': case 'F6': case 'F7':
-        e.preventDefault();
-        {
-          const target = shortcutMappings[e.key] || DEFAULT_SHORTCUTS[e.key];
-          if (target) showView(target);
-        }
-        break;
+      case 'F1': e.preventDefault(); showView('sales'); break;
+      case 'F2': e.preventDefault(); showView('inventory'); break;
+      case 'F3': e.preventDefault(); showView('creditos'); break;
+      case 'F4': e.preventDefault(); showView('cashier'); break;
+      case 'F5': e.preventDefault(); showView('audit'); break;
+      case 'F6': e.preventDefault(); showView('reports'); break;
+      case 'F7': e.preventDefault(); showView('config'); break;
       case 'F8':
         e.preventDefault();
         if (viewId === 'view-sales') qs(SEL.productSearch).focus();
@@ -3716,9 +3653,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const toggle = qs('#confirmar-venta-toggle');
     if (toggle) toggle.checked = val === '1';
   } catch (e) {}
-
-  // Load keyboard shortcuts
-  await loadShortcutMappings();
 
   // Load history cleanup config
   try {
