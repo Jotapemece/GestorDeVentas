@@ -245,7 +245,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
             .lock()
             .map_err(|e| format!("Error interno: {}", e))?;
         match lock.as_ref() {
-            Some(ref u) => (u.username.clone(), u.id),
+            Some(u) => (u.username.clone(), u.id),
             None => (String::new(), 0),
         }
     };
@@ -291,7 +291,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         "Cierre de caja - Ventas: {}, Total USD: ${:.2}, Total Bs.: Bs. {:.2}",
         total_ventas, total_usd, total_bs
     );
-    crate::audit::log_action(&*tx, &username, &accion).ok();
+    crate::audit::log_action(&tx, &username, &accion).ok();
 
     tx.commit()
         .map_err(|e| format!("Error al confirmar cierre: {}", e))?;
@@ -459,5 +459,92 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
         week: period(&db, &week_ago, &after_week)?,
         month: period(&db, &month_start, &after_month)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_group_payments_empty() {
+        let rows: Vec<(String, Option<String>, f64, Option<String>)> = vec![];
+        let result = group_payments_by_method(&rows);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_group_payments_single_usd() {
+        let rows = vec![("efectivo_usd".into(), None, 50.0, None)];
+        let result = group_payments_by_method(&rows);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].metodo, "efectivo_usd");
+        assert!((result[0].total_usd - 50.0).abs() < f64::EPSILON);
+        assert!(result[0].referencias.is_empty());
+    }
+
+    #[test]
+    fn test_group_payments_mixto() {
+        let detalle = r#"[{"metodo":"efectivo_usd","monto_usd":30.0,"referencia":null},{"metodo":"punto","monto_usd":20.0,"referencia":"ref123"}]"#;
+        let rows = vec![("mixto".into(), Some(detalle.into()), 50.0, None)];
+        let result = group_payments_by_method(&rows);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].metodo, "efectivo_usd");
+        assert!((result[0].total_usd - 30.0).abs() < f64::EPSILON);
+        assert_eq!(result[1].metodo, "punto");
+        assert!((result[1].total_usd - 20.0).abs() < f64::EPSILON);
+        assert_eq!(result[1].referencias, vec!["ref123"]);
+    }
+
+    #[test]
+    fn test_group_payments_pago_movil_dedup() {
+        let rows = vec![
+            ("pago_movil".into(), None, 100.0, Some("ABC1".into())),
+            ("pago_movil".into(), None, 50.0, Some("ABC1".into())),
+            ("pago_movil".into(), None, 30.0, Some("XYZ2".into())),
+        ];
+        let result = group_payments_by_method(&rows);
+        assert_eq!(result.len(), 1);
+        assert!((result[0].total_usd - 180.0).abs() < f64::EPSILON);
+        assert_eq!(result[0].referencias.len(), 2);
+        assert!(result[0].referencias.contains(&"ABC1".to_string()));
+        assert!(result[0].referencias.contains(&"XYZ2".to_string()));
+    }
+
+    #[test]
+    fn test_group_payments_sort_descending() {
+        let rows = vec![
+            ("efectivo_usd".into(), None, 10.0, None),
+            ("punto".into(), None, 50.0, None),
+            ("biopago".into(), None, 30.0, None),
+        ];
+        let result = group_payments_by_method(&rows);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].metodo, "punto");
+        assert_eq!(result[1].metodo, "biopago");
+        assert_eq!(result[2].metodo, "efectivo_usd");
+    }
+
+    #[test]
+    fn test_group_payments_mixto_malformed_json() {
+        let detalle = "esto no es json";
+        let rows = vec![("mixto".into(), Some(detalle.into()), 50.0, None)];
+        let result = group_payments_by_method(&rows);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_group_payments_mixed_direct_and_mixto() {
+        let detalle = r#"[{"metodo":"punto","monto_usd":20.0,"referencia":null}]"#;
+        let rows = vec![
+            ("efectivo_usd".into(), None, 30.0, None),
+            ("mixto".into(), Some(detalle.into()), 20.0, None),
+        ];
+        let result = group_payments_by_method(&rows);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].metodo, "efectivo_usd");
+        assert!((result[0].total_usd - 30.0).abs() < f64::EPSILON);
+        assert_eq!(result[1].metodo, "punto");
+        assert!((result[1].total_usd - 20.0).abs() < f64::EPSILON);
+    }
 }
 

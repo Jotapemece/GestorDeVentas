@@ -23,7 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            let (conn, db_path) = match db::init_db(&app.handle()) {
+            let (conn, db_path) = match db::init_db(app.handle()) {
                 Ok(t) => t,
                 Err(e) => {
                     eprintln!("Error al inicializar BD: {}", e);

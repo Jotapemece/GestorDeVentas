@@ -35,8 +35,8 @@ pub fn upload_products_inner(
     if !cats.is_empty() {
         let body = serde_json::to_string(&cats).map_err(|e| e.to_string())?;
         supabase_post(
-            &api_url(&supabase_url, "/categorias?on_conflict=id"),
-            &supabase_key,
+            &api_url(supabase_url, "/categorias?on_conflict=id"),
+            supabase_key,
             &body,
         )?;
     }
@@ -58,7 +58,7 @@ pub fn upload_products_inner(
                 "stock_minimo": row.get::<_, i64>(4)?,
                 "activo": 1i64,
                 "categoria_id": if cat_id == 0 { serde_json::Value::Null } else { json!(cat_id) },
-                "dispositivo_id": &*dispositivo_id,
+                "dispositivo_id": dispositivo_id,
                 "updated_at": &*ts,
             }))
         })
@@ -73,12 +73,12 @@ pub fn upload_products_inner(
 
     let body = serde_json::to_string(&products).map_err(|e| e.to_string())?;
     supabase_post(
-        &api_url(&supabase_url, "/productos?on_conflict=codigo"),
-        &supabase_key,
+        &api_url(supabase_url, "/productos?on_conflict=codigo"),
+        supabase_key,
         &body,
     )?;
 
-    upsert_config(&db, constants::CFG_ULTIMO_UPLOAD, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD, &ts);
 
     Ok(format!(
         "Subida completada: {} categorías y {} productos subidos",
@@ -102,12 +102,12 @@ pub fn download_products_inner(
 ) -> Result<String, String> {
     let ts = now_iso();
 
-    let last_sync = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD)
+    let last_sync = super::get_config(db, constants::CFG_ULTIMO_DOWNLOAD)
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
 
     let since = urlencoding(&last_sync);
     let get_url = api_url(
-        &supabase_url,
+        supabase_url,
         &format!(
             "/productos?updated_at=gt.{}&select=codigo,nombre,precio_usd,stock,stock_minimo,activo,categoria_id,updated_at",
             since,
@@ -115,7 +115,7 @@ pub fn download_products_inner(
     );
 
     let cloud_products: Vec<serde_json::Value> =
-        supabase_get(&get_url, &supabase_key).unwrap_or_default();
+        supabase_get(&get_url, supabase_key).unwrap_or_default();
 
     let count = cloud_products.len();
     if count == 0 {
@@ -218,7 +218,7 @@ pub fn download_products_inner(
     drop(upd);
     drop(ins);
 
-    upsert_config(&db, constants::CFG_ULTIMO_DOWNLOAD, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD, &ts);
 
     let parts: Vec<String> = [
         (updated > 0, format!("{} actualizados", updated)),

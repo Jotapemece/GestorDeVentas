@@ -87,6 +87,7 @@ pub const SQL_CREATE_TABLES: &str = "
     );
 ";
 
+#[allow(clippy::type_complexity)]
 const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("001_add_created_at_productos", add_created_at_productos),
     ("002_add_stock_minimo_productos", add_stock_minimo_productos),

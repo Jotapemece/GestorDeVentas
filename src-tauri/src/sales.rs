@@ -346,7 +346,7 @@ pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String
     )
     .map_err(|e| e.to_string())?;
 
-    crate::audit::log_action(&*tx, &current_username, &format!("Anuló venta #{}", venta_id)).ok();
+    crate::audit::log_action(&tx, &current_username, &format!("Anuló venta #{}", venta_id)).ok();
 
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
@@ -472,8 +472,8 @@ fn get_sales_report_inner(
         "v.fecha_hora < ?2".to_string(),
         "v.anulada = 0".to_string(),
     ];
-    let has_producto = filter.producto_codigo.as_ref().map_or(false, |c| !c.is_empty());
-    let has_username = filter.username.as_ref().map_or(false, |u| !u.is_empty());
+    let has_producto = filter.producto_codigo.as_ref().is_some_and(|c| !c.is_empty());
+    let has_username = filter.username.as_ref().is_some_and(|u| !u.is_empty());
     if has_producto {
         where_clauses.push("v.id IN (SELECT venta_id FROM detalles_ventas WHERE producto_codigo = ?3)".to_string());
     }
@@ -511,7 +511,7 @@ fn get_sales_report_inner(
 
     // Pagination
     let page = filter.page.unwrap_or(1).max(1);
-    let page_size = filter.page_size.unwrap_or(constants::VENTAS_LIMIT_DEFAULT).max(1).min(constants::PAGE_SIZE_MAX);
+    let page_size = filter.page_size.unwrap_or(constants::VENTAS_LIMIT_DEFAULT).clamp(1, constants::PAGE_SIZE_MAX);
     let offset = (page - 1) * page_size;
 
     // Fetch ventas with LIMIT/OFFSET
@@ -615,7 +615,7 @@ pub fn void_sale_items(
 
     recalculate_sale_after_void(&tx, request.venta_id)?;
 
-    crate::audit::log_action(&*tx, &current_username,
+    crate::audit::log_action(&tx, &current_username,
         &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id)).ok();
 
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
@@ -793,6 +793,154 @@ mod tests {
             referencia: None,
         }];
         let result = validar_pago_detalle(&items, 75.5);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_sale_request_empty_productos() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "efectivo_usd".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("menos un producto"));
+    }
+
+    #[test]
+    fn test_validate_sale_request_tasa_cero() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "efectivo_usd".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            tasa: 0.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("tasa"));
+    }
+
+    #[test]
+    fn test_validate_sale_request_tasa_negativa() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "efectivo_usd".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            tasa: -1.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("tasa"));
+    }
+
+    #[test]
+    fn test_validate_sale_request_pago_movil_sin_ref() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "pago_movil".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_sale_request_pago_movil_ref_corta() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "pago_movil".into(),
+            referencia_pago_movil: Some("AB".into()),
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_sale_request_credito_sin_cliente() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "credito".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cliente"));
+    }
+
+    #[test]
+    fn test_validate_sale_request_ok() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "efectivo_usd".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2 }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_sale_request_credito_ok() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "credito".into(),
+            referencia_pago_movil: None,
+            cliente_id: Some(5),
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_sale_request_pago_movil_ok() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "pago_movil".into(),
+            referencia_pago_movil: Some("ABCD".into()),
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+        };
+        let result = validate_sale_request(&req);
         assert!(result.is_ok());
     }
 }

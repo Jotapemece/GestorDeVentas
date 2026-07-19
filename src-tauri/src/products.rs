@@ -57,12 +57,12 @@ pub fn list_products(
     let q = search.unwrap_or_default();
     let pattern = format!("%{}%", q);
     let p = page.unwrap_or(1).max(1);
-    let ps = page_size.unwrap_or(constants::PAGE_SIZE_DEFAULT).max(1).min(constants::PAGE_SIZE_MAX);
+    let ps = page_size.unwrap_or(constants::PAGE_SIZE_DEFAULT).clamp(1, constants::PAGE_SIZE_MAX);
     let offset = (p - 1) * ps;
 
     // Count
     let count_sql = if has_query {
-        format!("SELECT COUNT(*) FROM productos p WHERE p.activo = 1 AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1)")
+        "SELECT COUNT(*) FROM productos p WHERE p.activo = 1 AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1)".to_string()
     } else {
         "SELECT COUNT(*) FROM productos p WHERE p.activo = 1".to_string()
     };
@@ -236,16 +236,13 @@ pub fn import_products_from_db(
     let ts = crate::helpers::now_iso();
     let mut imported = 0;
     for (codigo, nombre, precio_usd, stock, stock_minimo) in &products {
-        match db.execute(
+        if let Ok(n) = db.execute(
             SQL_IMPORT_PRODUCTO,
             params![codigo, nombre, precio_usd, stock, stock_minimo, ts],
         ) {
-            Ok(n) => {
-                if n > 0 {
-                    imported += 1;
-                }
+            if n > 0 {
+                imported += 1;
             }
-            Err(_) => {}
         }
     }
 

@@ -13,7 +13,7 @@ pub fn upload_sales_inner(
 ) -> Result<String, String> {
     let ts = now_iso();
 
-    let last_upload = super::get_config(&db, constants::CFG_ULTIMO_UPLOAD_VENTAS)
+    let last_upload = super::get_config(db, constants::CFG_ULTIMO_UPLOAD_VENTAS)
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
 
     let mut stmt = db
@@ -82,8 +82,8 @@ pub fn upload_sales_inner(
         let ventas_json = serde_json::to_string(&venta_array)
             .map_err(|e| format!("Error serializando ventas JSON: {}", e))?;
         supabase_post(
-            &api_url(&supabase_url, "/ventas?on_conflict=sync_id"),
-            &supabase_key,
+            &api_url(supabase_url, "/ventas?on_conflict=sync_id"),
+            supabase_key,
             &ventas_json,
         )?;
 
@@ -128,8 +128,8 @@ pub fn upload_sales_inner(
             let detalles_json = serde_json::to_string(&detalle_bodies)
                 .map_err(|e| format!("Error serializando detalles JSON: {}", e))?;
             supabase_post(
-                &api_url(&supabase_url, "/detalles_ventas?on_conflict=sync_id"),
-                &supabase_key,
+                &api_url(supabase_url, "/detalles_ventas?on_conflict=sync_id"),
+                supabase_key,
                 &detalles_json,
             )?;
         }
@@ -137,7 +137,7 @@ pub fn upload_sales_inner(
         uploaded += 1;
     }
 
-    upsert_config(&db, constants::CFG_ULTIMO_UPLOAD_VENTAS, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_VENTAS, &ts);
 
     Ok(format!("Subida completada: {} venta(s) subidas", uploaded))
 }
@@ -158,21 +158,21 @@ pub fn download_sales_inner(
 ) -> Result<String, String> {
     let ts = now_iso();
 
-    let last_sync = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS)
+    let last_sync = super::get_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS)
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
 
     let since = urlencoding(&last_sync);
     let get_url = api_url(
-        &supabase_url,
+        supabase_url,
         &format!(
             "/ventas?updated_at=gt.{}&dispositivo_origen=neq.{}&select=*",
             since,
-            urlencoding(&dispositivo_id),
+            urlencoding(dispositivo_id),
         ),
     );
 
     let cloud_ventas: Vec<serde_json::Value> =
-        supabase_get(&get_url, &supabase_key)
+        supabase_get(&get_url, supabase_key)
             .map_err(|e| format!("Error al descargar ventas: {}", e))?;
 
     if cloud_ventas.is_empty() {
@@ -218,12 +218,12 @@ pub fn download_sales_inner(
         };
 
         let det_url = api_url(
-            &supabase_url,
+            supabase_url,
             &format!("/detalles_ventas?venta_id=eq.{}&select=*", urlencoding(sync_id)),
         );
 
         let cloud_detalles: Vec<serde_json::Value> =
-            supabase_get(&det_url, &supabase_key)
+            supabase_get(&det_url, supabase_key)
                 .map_err(|e| format!("Error al descargar detalles de venta {}: {}", sync_id, e))?;
 
         for det in &cloud_detalles {
@@ -258,7 +258,7 @@ pub fn download_sales_inner(
         }
     }
 
-    upsert_config(&db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
 
     Ok(format!(
         "Descarga completada: {} venta(s) nuevas, {} unidad(es) ajustadas en stock",

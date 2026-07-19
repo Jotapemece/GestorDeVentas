@@ -26,7 +26,7 @@ pub fn verify_password(password: &str, stored_hash: &str) -> bool {
     if stored_hash.starts_with("$argon2") {
         PasswordHash::new(stored_hash)
             .ok()
-            .map_or(false, |parsed| {
+            .is_some_and(|parsed| {
                 Argon2::default()
                     .verify_password(password.as_bytes(), &parsed)
                     .is_ok()
@@ -268,7 +268,7 @@ pub fn change_password(
     let user = state
         .current_user
         .lock()
-        .map_err(|_| format!("Error interno"))?
+        .map_err(|_| "Error interno".to_string())?
         .clone()
         .ok_or("No autenticado")?;
 

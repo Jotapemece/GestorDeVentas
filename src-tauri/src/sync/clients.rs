@@ -21,6 +21,7 @@ pub fn upload_clientes_inner(
         )
         .map_err(|e| e.to_string())?;
 
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(i64, String, i64, f64, Option<String>, Option<String>)> = stmt
         .query_map([], |row| {
             Ok((
@@ -76,15 +77,15 @@ pub fn upload_clientes_inner(
         let clientes_json = serde_json::to_string(&body)
             .map_err(|e| format!("Error serializando clientes JSON: {}", e))?;
         supabase_post(
-            &api_url(&supabase_url, "/clientes?on_conflict=sync_id"),
-            &supabase_key,
+            &api_url(supabase_url, "/clientes?on_conflict=sync_id"),
+            supabase_key,
             &clientes_json,
         )?;
 
         uploaded += 1;
     }
 
-    upsert_config(&db, constants::CFG_ULTIMO_UPLOAD_CLIENTES, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_CLIENTES, &ts);
 
     Ok(format!("Subida completada: {} cliente(s) subidos", uploaded))
 }
@@ -103,17 +104,17 @@ pub fn download_clientes_inner(
 ) -> Result<String, String> {
     let ts = now_iso();
 
-    let last_sync = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES)
+    let last_sync = super::get_config(db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES)
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
 
     let since = urlencoding(&last_sync);
     let get_url = api_url(
-        &supabase_url,
+        supabase_url,
         &format!("/clientes?updated_at=gt.{}&select=*", since),
     );
 
     let cloud_clientes: Vec<serde_json::Value> =
-        supabase_get(&get_url, &supabase_key).unwrap_or_default();
+        supabase_get(&get_url, supabase_key).unwrap_or_default();
 
     let count = cloud_clientes.len();
     if count == 0 {
@@ -199,7 +200,7 @@ pub fn download_clientes_inner(
         }
     }
 
-    upsert_config(&db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES, &ts);
 
     let parts: Vec<String> = [
         (inserted > 0, format!("{} nuevos insertados", inserted)),

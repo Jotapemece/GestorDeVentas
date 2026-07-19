@@ -155,4 +155,29 @@ mod tests {
     fn test_urlencoding_encodes_percent() {
         assert_eq!(urlencoding("100%"), "100%25");
     }
+
+    #[test]
+    fn test_normalize_fecha_full_iso() {
+        assert_eq!(normalize_fecha("2026-07-18T10:00:00.000Z"), "2026-07-18 10:00:00");
+    }
+
+    #[test]
+    fn test_normalize_fecha_no_t() {
+        assert_eq!(normalize_fecha("2026-07-18 10:00:00"), "2026-07-18 10:00:00");
+    }
+
+    #[test]
+    fn test_normalize_fecha_no_millis() {
+        assert_eq!(normalize_fecha("2026-07-18T10:00:00Z"), "2026-07-18 10:00:00");
+    }
+
+    #[test]
+    fn test_normalize_fecha_no_z() {
+        assert_eq!(normalize_fecha("2026-07-18T10:00:00.000"), "2026-07-18 10:00:00");
+    }
+
+    #[test]
+    fn test_normalize_fecha_empty() {
+        assert_eq!(normalize_fecha(""), "");
+    }
 }
