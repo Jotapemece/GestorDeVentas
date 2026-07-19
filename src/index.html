@@ -687,18 +687,35 @@
                     <button id="view-conflicts-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-search"></i> Ver conflictos</button>
                   </div>
                 </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:16px">
                 <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
-                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-clock"></i> Sincronización automática</h3>
-                  <div style="display:flex;flex-direction:column;gap:10px">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                      <span style="font-size:13px;color:var(--text);white-space:nowrap">Intervalo de descarga</span>
-                      <div style="display:flex;align-items:center;gap:4px">
-                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px;text-align:center">
-                        <span style="font-size:12px;color:var(--text-light);min-width:40px">min</span>
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-cog"></i> Acciones r&aacute;pidas</h3>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button id="upload-all-btn" class="btn" style="flex:1;min-width:120px;padding:12px 16px;background:var(--primary);color:#fff;font-size:14px;border:none;border-radius:8px;cursor:pointer"><i class="nf nf-fa-cloud_upload" style="font-size:18px;display:block;margin-bottom:2px"></i> Subir todo</button>
+                    <button id="download-all-btn" class="btn" style="flex:1;min-width:120px;padding:12px 16px;background:var(--accent);color:#fff;font-size:14px;border:none;border-radius:8px;cursor:pointer"><i class="nf nf-fa-cloud_download" style="font-size:18px;display:block;margin-bottom:2px"></i> Descargar todo</button>
+                    <button id="sync-all-btn" class="btn btn-primary" style="flex:1;min-width:120px;padding:12px 16px;font-size:14px;border:none;border-radius:8px;cursor:pointer"><i class="nf nf-fa-sync" style="font-size:18px;display:block;margin-bottom:2px"></i> Sincronizar todo</button>
+                  </div>
+                </div>
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow);border-left:4px solid var(--accent);background:linear-gradient(135deg,var(--card) 0%,color-mix(in srgb,var(--accent) 6%,var(--card)) 100%)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text);display:flex;align-items:center;gap:8px">
+                    <i class="nf nf-fa-clock" style="color:var(--accent)"></i> Sincronización automática
+                    <span style="margin-left:auto;font-size:11px;background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-weight:500">Activo</span>
+                  </h3>
+                  <div style="display:flex;flex-direction:column;gap:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <i class="nf nf-fa-refresh" style="font-size:14px;color:var(--accent)"></i>
+                        <span style="font-size:13px;color:var(--text)">Intervalo de descarga</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" style="width:56px;padding:4px 8px;border:2px solid var(--accent);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:center;font-weight:600">
+                        <span style="font-size:12px;color:var(--text-light);min-width:28px">min</span>
                       </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <span style="font-size:11px;color:var(--text-light)">Cada 30 min — 8 h. Tras subir ventas también se descarga automáticamente.</span>
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:color-mix(in srgb,var(--accent) 8%,var(--card));border-radius:8px">
+                      <i class="nf nf-fa-info_circle" style="font-size:12px;color:var(--accent);flex-shrink:0"></i>
+                      <span style="font-size:11px;color:var(--text-light);line-height:1.4">Despu&eacute;s de cada venta se sube autom&aacute;ticamente. Este timer descarga datos de otros dispositivos en segundo plano.</span>
                     </div>
                   </div>
                 </div>
