@@ -589,10 +589,10 @@ function trapFocus(modalEl) {
 function releaseFocus() { activeModal = null; }
 document.querySelectorAll('.modal').forEach(modal => {
   const obs = new MutationObserver(() => {
-    if (modal.style.display === 'flex') trapFocus(modal);
-    else if (modal.style.display === 'none' && activeModal === modal) releaseFocus();
+    if (!modal.classList.contains('hidden')) trapFocus(modal);
+    else if (activeModal === modal) releaseFocus();
   });
-  obs.observe(modal, { attributes: true, attributeFilter: ['style'] });
+  obs.observe(modal, { attributes: true, attributeFilter: ['class'] });
 });
 document.addEventListener('keydown', (e) => {
   if (!activeModal) return;
@@ -1495,23 +1495,25 @@ function toggleDropdown(btn) {
   closeAllDropdowns();
   if (!isOpen) {
     menu.classList.add('show');
-    const btnRect = btn.getBoundingClientRect();
-    const mw = menu.offsetWidth;
-    menu.style.position = 'fixed';
-    menu.style.top = btnRect.bottom + 'px';
-    menu.style.right = 'auto';
-    menu.style.bottom = 'auto';
-    // Align left edge with button left, but if it overflows right, flip
-    const spaceRight = window.innerWidth - btnRect.left;
-    if (spaceRight >= mw) {
-      menu.style.left = btnRect.left + 'px';
-    } else {
-      menu.style.left = Math.max(4, btnRect.right - mw) + 'px';
-    }
-    const menuRect = menu.getBoundingClientRect();
-    const overflowY = menuRect.bottom - window.innerHeight;
-    if (overflowY > 0) {
-      menu.style.top = Math.max(4, btnRect.top - menuRect.height) + 'px';
+    if (window.innerWidth > 768) {
+      const btnRect = btn.getBoundingClientRect();
+      const mw = menu.offsetWidth;
+      menu.style.position = 'fixed';
+      menu.style.top = btnRect.bottom + 'px';
+      menu.style.right = 'auto';
+      menu.style.bottom = 'auto';
+      // Align left edge with button left, but if it overflows right, flip
+      const spaceRight = window.innerWidth - btnRect.left;
+      if (spaceRight >= mw) {
+        menu.style.left = btnRect.left + 'px';
+      } else {
+        menu.style.left = Math.max(4, btnRect.right - mw) + 'px';
+      }
+      const menuRect = menu.getBoundingClientRect();
+      const overflowY = menuRect.bottom - window.innerHeight;
+      if (overflowY > 0) {
+        menu.style.top = Math.max(4, btnRect.top - menuRect.height) + 'px';
+      }
     }
   }
 }
@@ -2662,8 +2664,13 @@ function attachChartHover(canvas, bars, dpr) {
     canvas.style.cursor = 'default';
   }
   function onOut() { hideChartTooltip(); canvas.style.cursor = 'default'; }
+  function onTouch(e) {
+    var t = e.touches[0];
+    onMove({ clientX: t.clientX, clientY: t.clientY });
+  }
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseout', onOut);
+  canvas.addEventListener('touchstart', onTouch);
 }
 
 function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
@@ -2691,9 +2698,16 @@ function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
     canvas.style.cursor = 'default';
   }
   function onOut() { hideChartTooltip(); canvas.style.cursor = 'default'; }
+  function onTouch(e) {
+    var t = e.touches[0];
+    onMove({ clientX: t.clientX, clientY: t.clientY });
+  }
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseout', onOut);
+  canvas.addEventListener('touchstart', onTouch);
 }
+
+function showChartTooltip(x, y, text) {
 
 /* ========== PRODUCT HISTORY ========== */
 async function showProductHistory(codigo, nombre) {
@@ -3623,6 +3637,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (diff > 100) {
         // Keyboard opened
         var view = document.querySelector('.view.active');
+        if (view) view.classList.add('mobile-keyboard');
         var el = document.activeElement;
         if (el) {
           setTimeout(function() {

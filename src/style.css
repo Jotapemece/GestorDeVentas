@@ -34,6 +34,7 @@ html, body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
+  overscroll-behavior: contain;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Fira Code', 'Cascadia Code', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -958,7 +959,8 @@ button:focus-visible,
 }
 .bottom-tabs .nav-btn .nav-icon { font-size: 18px; }
 .bottom-tabs .nav-btn .nav-text { display: block; font-size: 9px; line-height: 1; }
-.bottom-tabs .nav-btn.active { background: var(--card); }
+.bottom-tabs .nav-btn.active { background: var(--card); color: var(--text); font-weight: 700; }
+.bottom-tabs .nav-btn.active .nav-icon { color: var(--primary); }
 
 /* MOBILE TOGGLE */
 /* ===== MOBILE (≤768px) ===== */
@@ -1013,11 +1015,17 @@ button:focus-visible,
 
   /* Modals: bottom-sheet on mobile */
   .modal { align-items: flex-end; }
-  .modal-content { width: 100%; max-width: 100%; max-height: 90vh; border-radius: 16px 16px 0 0; }
+  .modal-content { width: 100%; max-width: 100%; max-height: 90vh; border-radius: 16px 16px 0 0; animation: slideUp .25s ease-out; }
   .modal-lg { width: 100%; }
   .modal-header { padding: 16px 18px; }
   .modal-body { padding: 14px 18px; overflow-x: auto; }
-  .modal-footer { padding: 12px 18px; }
+  .modal-footer { padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .password-toggle { min-width: 44px; min-height: 44px; }
+  .btn-cancel { width: 44px; height: 44px; }
+  .mixto-remove { min-width: 44px; min-height: 44px; font-size: 20px; }
+  .btn:active, .nav-btn:active, .payment-method-btn:active, .abono-metodo-btn:active,
+  .theme-btn:active, .dropdown-btn:active, .dropdown-menu button:active { opacity: .7; }
+  .view.active.mobile-keyboard { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
   /* Payment: 2-col method grid */
   .payment-methods { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
@@ -1069,7 +1077,7 @@ button:focus-visible,
   .cart-empty { padding: 24px 12px; }
 
   /* Toast: center on mobile */
-  .toast { left: 16px; right: 16px; bottom: 80px; text-align: center; }
+  .toast { left: 16px; right: 16px; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); text-align: center; }
 
   /* Sync view: stack columns on mobile */
   #view-sync > div > div { grid-template-columns: 1fr !important; }
