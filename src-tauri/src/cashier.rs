@@ -102,6 +102,39 @@ fn obtener_tasa(db: &rusqlite::Connection) -> f64 {
     crate::db::get_tasa_from_db(db).unwrap_or(0.0)
 }
 
+fn group_payments_by_method(rows: &[(String, Option<String>, f64, Option<String>)]) -> Vec<MetodoTotal> {
+    let mut por_metodo: HashMap<String, (f64, Vec<String>)> = HashMap::new();
+    for (metodo, detalle, monto, ref_movil) in rows {
+        if metodo == "mixto" {
+            if let Some(json) = detalle {
+                if let Ok(items) = serde_json::from_str::<Vec<PagoItem>>(json) {
+                    for item in items {
+                        let entry = por_metodo.entry(item.metodo.clone()).or_insert((0.0, Vec::new()));
+                        entry.0 += item.monto_usd;
+                        if let Some(ref r) = item.referencia {
+                            if !entry.1.contains(r) { entry.1.push(r.clone()); }
+                        }
+                    }
+                }
+            }
+        } else {
+            let entry = por_metodo.entry(metodo.clone()).or_insert((0.0, Vec::new()));
+            entry.0 += monto;
+            if metodo == constants::METODO_PAGO_MOVIL {
+                if let Some(ref r) = ref_movil {
+                    if !entry.1.contains(r) { entry.1.push(r.clone()); }
+                }
+            }
+        }
+    }
+    let mut result: Vec<MetodoTotal> = por_metodo
+        .into_iter()
+        .map(|(metodo, (total_usd, referencias))| MetodoTotal { metodo, total_usd, referencias })
+        .collect();
+    result.sort_by(|a, b| b.total_usd.partial_cmp(&a.total_usd).unwrap_or(std::cmp::Ordering::Equal));
+    result
+}
+
 fn compute_report_data_range(
     db: &rusqlite::Connection,
     start: &str,
@@ -120,47 +153,7 @@ fn compute_report_data_range(
         .filter_map(|r| r.ok())
         .collect();
 
-    let mut por_metodo: HashMap<String, (f64, Vec<String>)> = HashMap::new();
-    for (metodo, detalle, monto, ref_movil) in &rows {
-        if metodo == "mixto" {
-            if let Some(json) = detalle {
-                if let Ok(items) = serde_json::from_str::<Vec<PagoItem>>(json) {
-                    for item in items {
-                        let entry = por_metodo
-                            .entry(item.metodo.clone())
-                            .or_insert((0.0, Vec::new()));
-                        entry.0 += item.monto_usd;
-                        if let Some(ref r) = item.referencia {
-                            if !entry.1.contains(r) {
-                                entry.1.push(r.clone());
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            let entry = por_metodo
-                .entry(metodo.clone())
-                .or_insert((0.0, Vec::new()));
-            entry.0 += monto;
-            if metodo == constants::METODO_PAGO_MOVIL {
-                if let Some(ref r) = ref_movil {
-                    if !entry.1.contains(r) {
-                        entry.1.push(r.clone());
-                    }
-                }
-            }
-        }
-    }
-    let mut por_metodo: Vec<MetodoTotal> = por_metodo
-        .into_iter()
-        .map(|(metodo, (total_usd, referencias))| MetodoTotal {
-            metodo,
-            total_usd,
-            referencias,
-        })
-        .collect();
-    por_metodo.sort_by(|a, b| b.total_usd.partial_cmp(&a.total_usd).unwrap_or(std::cmp::Ordering::Equal));
+    let por_metodo = group_payments_by_method(&rows);
 
     let mut prod_stmt = db
         .prepare(SQL_PRODUCTOS_VENDIDOS)
@@ -207,7 +200,7 @@ fn compute_report_data_range(
 
 #[tauri::command]
 pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
@@ -220,25 +213,7 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
     let mut stmt = db.prepare(SQL_LIST_DIARIAS).map_err(|e| e.to_string())?;
 
     let ventas: Vec<Venta> = stmt
-        .query_map(params![today, tomorrow], |row| {
-            Ok(Venta {
-                id: row.get(0)?,
-                fecha_hora: row.get(1)?,
-                usuario_id: row.get(2)?,
-                username: row.get(3)?,
-                metodo_pago: row.get(4)?,
-                referencia_pago_movil: row.get(5)?,
-                pago_detalle: row.get(6)?,
-                cliente_id: row.get(7)?,
-                cliente_nombre: row.get(8)?,
-                total_usd: row.get(9)?,
-                tasa_aplicada: row.get(10)?,
-                total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
-                anulada: { let a: i64 = row.get(12)?; a != 0 },
-                sync_id: row.get(13)?,
-                dispositivo_origen: row.get(14)?,
-            })
-        })
+        .query_map(params![today, tomorrow], crate::sales::row_to_venta)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
@@ -254,14 +229,8 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
 
 #[tauri::command]
 pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
-    let username = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?
-        .clone()
-        .map(|u| u.username)
-        .unwrap_or_default();
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let username = state.get_username().unwrap_or_default();
+    let db = state.lock_db()?;
     db.execute(SQL_SET_CAJA, params!["true"])
         .map_err(|e| e.to_string())?;
 
@@ -272,7 +241,7 @@ pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 pub fn get_caja_abierta(state: State<AppState>) -> Result<bool, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let val: String = db
         .query_row(SQL_CAJA_ABIERTA, [], |row| row.get(0))
         .unwrap_or_else(|_| "false".to_string());
@@ -292,14 +261,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         }
     };
 
-    let mut db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-
-    let caja_abierta: String = db
-        .query_row(SQL_CAJA_ABIERTA, [], |row| row.get(0))
-        .unwrap_or_else(|_| "false".to_string());
-    if caja_abierta != "true" {
-        return Err("La caja no está abierta. Ábrela primero.".to_string());
-    }
+    let mut db = state.lock_db()?;
 
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
@@ -309,15 +271,22 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
-    let (total_ventas, total_usd, total_bs, tasa) = obtener_totales_del_dia(&db, &today, &tomorrow)?;
-
-    let report_data = compute_report_data_range(&db, &today, &tomorrow, &now)?;
-    let detalle_json =
-        serde_json::to_string(&report_data).map_err(|e| format!("Error al serializar reporte: {}", e))?;
-
     let tx = db
         .transaction()
         .map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+
+    let caja_abierta: String = tx
+        .query_row(SQL_CAJA_ABIERTA, [], |row| row.get(0))
+        .unwrap_or_else(|_| "false".to_string());
+    if caja_abierta != "true" {
+        return Err("La caja no está abierta. Ábrela primero.".to_string());
+    }
+
+    let (total_ventas, total_usd, total_bs, tasa) = obtener_totales_del_dia(&tx, &today, &tomorrow)?;
+
+    let report_data = compute_report_data_range(&tx, &today, &tomorrow, &now)?;
+    let detalle_json =
+        serde_json::to_string(&report_data).map_err(|e| format!("Error al serializar reporte: {}", e))?;
 
     tx.execute(
         SQL_INSERT_CIERRE,
@@ -352,7 +321,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
 
 #[tauri::command]
 pub fn get_close_report_data(state: State<AppState>) -> Result<CloseReportData, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
@@ -365,7 +334,7 @@ pub fn get_close_report_data(state: State<AppState>) -> Result<CloseReportData, 
 
 #[tauri::command]
 pub fn list_cierres(state: State<AppState>) -> Result<Vec<CierreListItem>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let mut stmt = db
         .prepare(SQL_LIST_CIERRES)
         .map_err(|e| e.to_string())?;
@@ -396,7 +365,7 @@ pub fn get_cierre_detalle(
     state: State<AppState>,
     cierre_id: i64,
 ) -> Result<CierreDetalle, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre): (
         String,
@@ -447,7 +416,7 @@ pub fn get_cierre_detalle(
 
 #[tauri::command]
 pub fn get_dashboard_payment_methods(state: State<AppState>, period: String) -> Result<Vec<MetodoTotal>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let now = chrono::Local::now();
     let today = now.format("%Y-%m-%d").to_string();
     let tomorrow = siguiente_dia(&today);
@@ -472,7 +441,7 @@ pub fn get_dashboard_payment_methods(state: State<AppState>, period: String) -> 
 
 #[tauri::command]
 pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let tomorrow = siguiente_dia(&today);

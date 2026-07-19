@@ -144,7 +144,7 @@ button:focus-visible,
 }
 .password-toggle:hover { color: var(--text); background: var(--hover); }
 .remember-row { margin-bottom: 4px !important; }
-.remember-row .remember-label { display: flex; align-items: center; gap: 8px; margin-bottom: 0; cursor: pointer; font-weight: 500; font-size: 13px; color: var(--text); user-select: none; }
+.login-card .remember-row .remember-label { display: flex; align-items: center; gap: 8px; margin-bottom: 0; cursor: pointer; font-weight: 500; font-size: 13px; color: var(--text); user-select: none; }
 .remember-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
 
 /* MAIN LAYOUT */

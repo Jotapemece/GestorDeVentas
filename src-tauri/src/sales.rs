@@ -17,6 +17,19 @@ const SQL_INSERT_DETALLE: &str =
 const SQL_UPDATE_STOCK: &str = "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1";
 const SQL_PRODUCTO_PRECIO: &str = "SELECT precio_usd FROM productos WHERE codigo = ?1";
 const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
+pub(crate) fn row_to_venta(row: &rusqlite::Row) -> rusqlite::Result<Venta> {
+    Ok(Venta {
+        id: row.get(0)?, fecha_hora: row.get(1)?, usuario_id: row.get(2)?,
+        username: row.get(3)?, metodo_pago: row.get(4)?, referencia_pago_movil: row.get(5)?,
+        pago_detalle: row.get(6)?, cliente_id: row.get(7)?, cliente_nombre: row.get(8)?,
+        total_usd: row.get(9)?, tasa_aplicada: row.get(10)?,
+        total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
+        anulada: { let a: i64 = row.get(12)?; a != 0 },
+        sync_id: row.get(13)?,
+        dispositivo_origen: row.get(14)?,
+    })
+}
+
 const SQL_LIST_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
            v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
@@ -60,62 +73,34 @@ pub(crate) fn validar_pago_detalle(detalle: &[PagoItem], total_usd: f64) -> Resu
     serde_json::to_string(detalle).map_err(|e| format!("Error al serializar pago: {}", e))
 }
 
-#[tauri::command]
-pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result<Venta, String> {
-    let mut db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-
+fn validate_sale_request(request: &CreateSaleRequest) -> Result<(), String> {
     if request.productos.is_empty() {
         return Err("Debe haber al menos un producto en la venta".to_string());
     }
-
     if request.tasa <= 0.0 {
         return Err("La tasa debe ser mayor a cero".to_string());
     }
-
     if request.metodo_pago == constants::METODO_PAGO_MOVIL
-        && request
-            .referencia_pago_movil
-            .as_deref()
-            .unwrap_or("")
-            .len()
-            != constants::PAGO_MOVIL_REF_LEN
+        && request.referencia_pago_movil.as_deref().unwrap_or("").len() != constants::PAGO_MOVIL_REF_LEN
     {
-        return Err(
-            "Debe ingresar los últimos 4 dígitos de la referencia".to_string(),
-        );
+        return Err("Debe ingresar los últimos 4 dígitos de la referencia".to_string());
     }
-
     if request.metodo_pago == constants::METODO_CREDITO && request.cliente_id.is_none() {
-        return Err(
-            "Debe seleccionar un cliente para la venta a crédito".to_string(),
-        );
+        return Err("Debe seleccionar un cliente para la venta a crédito".to_string());
     }
+    Ok(())
+}
 
-    let now = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
-    let current_username = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?
-        .clone()
-        .map(|u| u.username)
-        .ok_or_else(|| "No hay usuario autenticado".to_string())?;
-
-    let venta_sync_id = Uuid::new_v4().to_string();
-    let dispositivo_origen = db
-        .query_row(
-            "SELECT valor FROM configuracion WHERE clave = 'dispositivo_id'",
-            [],
-            |r| r.get::<_, String>(0),
-        )
-        .unwrap_or_default();
-
+fn execute_sale_transaction(
+    tx: rusqlite::Transaction,
+    request: &CreateSaleRequest,
+    current_username: &str,
+    venta_sync_id: &str,
+    dispositivo_origen: &str,
+    now: &str,
+    now_iso: &str,
+) -> Result<(i64, String, f64, f64), String> {
     let mut total_usd = 0.0;
-
-    let tx = db
-        .transaction()
-        .map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
     for pv in &request.productos {
         let (precio, stock): (f64, i64) = tx
@@ -123,14 +108,12 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
                 Ok((row.get(0)?, row.get(1)?))
             })
             .map_err(|_| format!("Producto '{}' no encontrado", pv.codigo))?;
-
         if stock < pv.cantidad {
             return Err(format!(
                 "Stock insuficiente para '{}'. Disponible: {}, solicitado: {}",
                 pv.codigo, stock, pv.cantidad
             ));
         }
-
         total_usd += precio * pv.cantidad as f64;
     }
 
@@ -148,24 +131,12 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         .total_bs_ingresado
         .unwrap_or_else(|| (total_usd * request.tasa * constants::ROUNDING_FACTOR).round() / constants::ROUNDING_FACTOR);
 
-    let now_iso = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-        .to_string();
     tx.execute(
         SQL_INSERT_VENTA,
         params![
-            now,
-            request.usuario_id,
-            request.metodo_pago,
-            request.referencia_pago_movil,
-            pago_json,
-            request.cliente_id,
-            total_usd,
-            request.tasa,
-            total_bs,
-            venta_sync_id,
-            dispositivo_origen,
-            now_iso,
+            now, request.usuario_id, request.metodo_pago,
+            request.referencia_pago_movil, pago_json, request.cliente_id,
+            total_usd, request.tasa, total_bs, venta_sync_id, dispositivo_origen, now_iso,
         ],
     )
     .map_err(|e| format!("Error al crear venta: {}", e))?;
@@ -175,24 +146,13 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
     for pv in &request.productos {
         let precio: f64 = tx
             .query_row(SQL_PRODUCTO_PRECIO, params![pv.codigo], |row| row.get(0))
-            .map_err(|_| {
-                format!(
-                    "Producto '{}' no encontrado al insertar detalle",
-                    pv.codigo
-                )
-            })?;
-
+            .map_err(|_| format!("Producto '{}' no encontrado al insertar detalle", pv.codigo))?;
         let detalle_sync_id = Uuid::new_v4().to_string();
-        tx.execute(
-            SQL_INSERT_DETALLE,
-            params![venta_id, pv.codigo, pv.cantidad, precio, detalle_sync_id],
-        )
-        .map_err(|e| format!("Error al insertar detalle: {}", e))?;
-
+        tx.execute(SQL_INSERT_DETALLE, params![venta_id, pv.codigo, pv.cantidad, precio, detalle_sync_id])
+            .map_err(|e| format!("Error al insertar detalle: {}", e))?;
         let affected = tx
             .execute(SQL_UPDATE_STOCK, params![pv.cantidad, pv.codigo])
             .map_err(|e| format!("Error al actualizar stock: {}", e))?;
-
         if affected == 0 {
             return Err(format!("Stock insuficiente para '{}'", pv.codigo));
         }
@@ -200,81 +160,66 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
 
     let accion = format!(
         "Venta #{} creada - Total: ${:.2} - Método: {} - Productos: {}",
-        venta_id,
-        total_usd,
-        request.metodo_pago,
-        request.productos.len()
+        venta_id, total_usd, request.metodo_pago, request.productos.len()
     );
-    crate::audit::log_action(&*tx, &current_username, &accion).ok();
+    crate::audit::log_action(&tx, current_username, &accion).ok();
 
     if request.metodo_pago == constants::METODO_CREDITO {
         if let Some(cliente_id) = request.cliente_id {
-            tx.execute(SQL_UPDATE_CLIENTE_DEUDA, params![total_usd, cliente_id])
-                .ok();
+            tx.execute(SQL_UPDATE_CLIENTE_DEUDA, params![total_usd, cliente_id]).ok();
         }
     }
 
-    tx.commit()
-        .map_err(|e| format!("Error al confirmar transacción: {}", e))?;
+    tx.commit().map_err(|e| format!("Error al confirmar transacción: {}", e))?;
+
+    Ok((venta_id, pago_json, total_bs, total_usd))
+}
+
+#[tauri::command]
+pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result<Venta, String> {
+    let mut db = state.lock_db()?;
+    validate_sale_request(&request)?;
+
+    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let current_username = state.get_username()?;
+    let venta_sync_id = Uuid::new_v4().to_string();
+    let dispositivo_origen = db.query_row(
+        "SELECT valor FROM configuracion WHERE clave = 'dispositivo_id'",
+        [], |r| r.get::<_, String>(0),
+    ).unwrap_or_default();
+    let now_iso = crate::helpers::now_iso();
+
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let (venta_id, pago_json, total_bs, total_usd) = execute_sale_transaction(
+        tx, &request, &current_username, &venta_sync_id, &dispositivo_origen, &now, &now_iso,
+    )?;
 
     let username: String = db
-        .query_row(crate::constants::SQL_USERNAME_BY_ID, params![request.usuario_id], |row| {
-            row.get(0)
-        })
+        .query_row(crate::constants::SQL_USERNAME_BY_ID, params![request.usuario_id], |row| row.get(0))
         .unwrap_or_default();
 
-    let pago_detalle_opt = if pago_json.is_empty() {
-        None
-    } else {
-        Some(pago_json)
-    };
+    let pago_detalle_opt = if pago_json.is_empty() { None } else { Some(pago_json) };
 
     Ok(Venta {
-        id: venta_id,
-        fecha_hora: now,
-        usuario_id: request.usuario_id,
-        username,
-        metodo_pago: request.metodo_pago,
+        id: venta_id, fecha_hora: now, usuario_id: request.usuario_id,
+        username, metodo_pago: request.metodo_pago,
         referencia_pago_movil: request.referencia_pago_movil,
-        pago_detalle: pago_detalle_opt,
-        cliente_id: request.cliente_id,
-        cliente_nombre: None,
-        total_usd,
-        tasa_aplicada: request.tasa,
-        total_bs,
-        anulada: false,
-        sync_id: Some(venta_sync_id),
+        pago_detalle: pago_detalle_opt, cliente_id: request.cliente_id,
+        cliente_nombre: None, total_usd, tasa_aplicada: request.tasa,
+        total_bs, anulada: false, sync_id: Some(venta_sync_id),
         dispositivo_origen: Some(dispositivo_origen),
     })
 }
 
 #[tauri::command]
 pub fn list_sales(state: State<AppState>, limit: Option<i64>) -> Result<Vec<Venta>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let lim = limit.unwrap_or(constants::VENTAS_LIMIT_DEFAULT);
 
     let mut stmt = db.prepare(SQL_LIST_VENTAS).map_err(|e| e.to_string())?;
 
     let ventas: Vec<Venta> = stmt
-        .query_map(params![lim], |row| {
-            Ok(Venta {
-                id: row.get(0)?,
-                fecha_hora: row.get(1)?,
-                usuario_id: row.get(2)?,
-                username: row.get(3)?,
-                metodo_pago: row.get(4)?,
-                referencia_pago_movil: row.get(5)?,
-                pago_detalle: row.get(6)?,
-                cliente_id: row.get(7)?,
-                cliente_nombre: row.get(8)?,
-                total_usd: row.get(9)?,
-                tasa_aplicada: row.get(10)?,
-                total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
-                anulada: { let a: i64 = row.get(12)?; a != 0 },
-                sync_id: row.get(13)?,
-                dispositivo_origen: row.get(14)?,
-            })
-        })
+        .query_map(params![lim], row_to_venta)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
@@ -287,7 +232,7 @@ pub fn get_sale_detail(
     state: State<AppState>,
     venta_id: i64,
 ) -> Result<Vec<SaleDetailItem>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let mut stmt = db
         .prepare(
@@ -324,7 +269,7 @@ pub fn get_sale_detail(
 
 #[tauri::command]
 pub fn get_tasa(state: State<AppState>) -> Result<f64, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::db::get_tasa_from_db(&db)
 }
 
@@ -333,7 +278,7 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
     if tasa <= 0.0 {
         return Err("La tasa debe ser mayor a cero".to_string());
     }
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let now = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
@@ -350,14 +295,8 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
 
 #[tauri::command]
 pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String> {
-    let mut db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    let current_username = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?
-        .clone()
-        .map(|u| u.username)
-        .ok_or_else(|| "No autenticado".to_string())?;
+    let mut db = state.lock_db()?;
+    let current_username = state.get_username()?;
 
     let (metodo, cliente_id): (String, Option<i64>) = db
         .query_row(
@@ -402,9 +341,7 @@ pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String
         }
     }
 
-    let void_ts = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-        .to_string();
+    let void_ts = crate::helpers::now_iso();
     // Mark as voided
     tx.execute(
         "UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2",
@@ -424,124 +361,8 @@ pub fn get_sales_report(
     state: State<AppState>,
     filter: SalesReportFilter,
 ) -> Result<SalesReportResult, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-
-    let mut where_clauses = vec![
-        "v.fecha_hora >= ?1".to_string(),
-        "v.fecha_hora < ?2".to_string(),
-        "v.anulada = 0".to_string(),
-    ];
-    let has_producto = filter.producto_codigo.as_ref().map_or(false, |c| !c.is_empty());
-    let has_username = filter.username.as_ref().map_or(false, |u| !u.is_empty());
-    if has_producto {
-        where_clauses.push("v.id IN (SELECT venta_id FROM detalles_ventas WHERE producto_codigo = ?3)".to_string());
-    }
-    if has_username {
-        where_clauses.push(format!("v.usuario_id IN (SELECT id FROM usuarios WHERE username = ?{})", if has_producto { 4 } else { 3 }));
-    }
-
-    let end = crate::cashier::siguiente_dia(&filter.end_date);
-    let sql = format!(
-        "SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
-                v.sync_id, v.dispositivo_origen
-         FROM ventas v
-         LEFT JOIN usuarios u ON v.usuario_id = u.id
-         LEFT JOIN clientes c ON v.cliente_id = c.id
-         WHERE {}
-         ORDER BY v.id DESC",
-        where_clauses.join(" AND ")
-    );
-
-    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
-
-    // Build params dynamically
-    let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
-        Box::new(filter.start_date.clone()),
-        Box::new(end.clone()),
-    ];
-    if let Some(ref codigo) = filter.producto_codigo {
-        if !codigo.is_empty() {
-            params_vec.push(Box::new(codigo.clone()));
-        }
-    }
-    if let Some(ref username) = filter.username {
-        if !username.is_empty() {
-            params_vec.push(Box::new(username.clone()));
-        }
-    }
-
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
-
-    let ventas: Vec<Venta> = stmt
-        .query_map(params_refs.as_slice(), |row| {
-            Ok(Venta {
-                id: row.get(0)?,
-                fecha_hora: row.get(1)?,
-                usuario_id: row.get(2)?,
-                username: row.get(3)?,
-                metodo_pago: row.get(4)?,
-                referencia_pago_movil: row.get(5)?,
-                pago_detalle: row.get(6)?,
-                cliente_id: row.get(7)?,
-                cliente_nombre: row.get(8)?,
-                total_usd: row.get(9)?,
-                tasa_aplicada: row.get(10)?,
-                total_bs: {
-                    let bs: f64 = row.get(11)?;
-                    if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? }
-                },
-                anulada: { let a: i64 = row.get(12)?; a != 0 },
-                sync_id: row.get(13)?,
-                dispositivo_origen: row.get(14)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    let total_ventas = ventas.len() as i64;
-    let total_usd: f64 = ventas.iter().map(|v| v.total_usd).sum();
-    let total_bs: f64 = ventas.iter().map(|v| v.total_bs).sum();
-
-    // Load details for each sale
-    let mut items = Vec::new();
-    let detail_sql = "SELECT dv.id, dv.venta_id, dv.producto_codigo, p.nombre, dv.cantidad, dv.precio_usd_unitario
-                      FROM detalles_ventas dv
-                      LEFT JOIN productos p ON dv.producto_codigo = p.codigo
-                      WHERE dv.venta_id = ?1
-                      ORDER BY dv.id ASC";
-    let mut detail_stmt = db.prepare(detail_sql).map_err(|e| e.to_string())?;
-    for v in ventas {
-        let productos: Vec<DetalleVenta> = detail_stmt
-            .query_map(params![v.id], |row| {
-                let cantidad: i64 = row.get(4)?;
-                let precio: f64 = row.get(5)?;
-                Ok(DetalleVenta {
-                    id: row.get(0)?,
-                    venta_id: row.get(1)?,
-                    producto_codigo: row.get(2)?,
-                    producto_nombre: row.get(3)?,
-                    cantidad,
-                    precio_usd_unitario: precio,
-                    subtotal_usd: cantidad as f64 * precio,
-                })
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-        items.push(SalesReportItem {
-            venta: v,
-            productos,
-        });
-    }
-
-    Ok(SalesReportResult {
-        total_ventas,
-        total_usd,
-        total_bs,
-        ventas: items,
-    })
+    let db = state.lock_db()?;
+    get_sales_report_inner(&db, filter)
 }
 
 #[tauri::command]
@@ -549,7 +370,7 @@ pub fn get_product_history(
     state: State<AppState>,
     producto_codigo: String,
 ) -> Result<Vec<ProductHistoryItem>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let mut stmt = db
         .prepare(
             "SELECT dv.venta_id, v.fecha_hora, dv.cantidad, dv.precio_usd_unitario, \
@@ -587,7 +408,7 @@ pub fn export_report_xlsx(
 ) -> Result<String, String> {
     use rust_xlsxwriter::*;
 
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let s = SalesReportFilter {
         start_date: filter.start_date.clone(),
@@ -690,18 +511,7 @@ fn get_sales_report_inner(
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
 
     let ventas: Vec<Venta> = stmt
-        .query_map(params_refs.as_slice(), |row| {
-            Ok(Venta {
-                id: row.get(0)?, fecha_hora: row.get(1)?, usuario_id: row.get(2)?,
-                username: row.get(3)?, metodo_pago: row.get(4)?, referencia_pago_movil: row.get(5)?,
-                pago_detalle: row.get(6)?, cliente_id: row.get(7)?, cliente_nombre: row.get(8)?,
-                total_usd: row.get(9)?, tasa_aplicada: row.get(10)?,
-                total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
-                anulada: { let a: i64 = row.get(12)?; a != 0 },
-                sync_id: row.get(13)?,
-                dispositivo_origen: row.get(14)?,
-            })
-        })
+        .query_map(params_refs.as_slice(), row_to_venta)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
@@ -742,11 +552,8 @@ pub fn void_sale_items(
     state: State<AppState>,
     request: VoidItemRequest,
 ) -> Result<String, String> {
-    let mut db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    let current_username = state
-        .current_user.lock().map_err(|e| format!("Error interno: {}", e))?
-        .clone().map(|u| u.username)
-        .ok_or_else(|| "No autenticado".to_string())?;
+    let mut db = state.lock_db()?;
+    let current_username = state.get_username()?;
 
     let tx = db.transaction().map_err(|e| e.to_string())?;
 
@@ -766,41 +573,7 @@ pub fn void_sale_items(
             .map_err(|e| format!("Error al anular detalle: {}", e))?;
     }
 
-    // Recalculate sale totals
-    let new_total_usd: f64 = tx
-        .query_row(
-            "SELECT COALESCE(SUM(CAST(anulado IS NULL OR anulado = 0 AS INTEGER) * cantidad * precio_usd_unitario), 0) \
-             FROM detalles_ventas WHERE venta_id = ?1",
-            params![request.venta_id],
-            |row| row.get(0),
-        )
-        .unwrap_or(0.0);
-    let tasa: f64 = tx
-        .query_row("SELECT tasa_aplicada FROM ventas WHERE id = ?1", params![request.venta_id], |row| row.get(0))
-        .unwrap_or(0.0);
-    let new_total_bs = (new_total_usd * tasa * 100.0).round() / 100.0;
-
-    tx.execute(
-        "UPDATE ventas SET total_usd = ?1, total_bs = ?2 WHERE id = ?3",
-        params![new_total_usd, new_total_bs, request.venta_id],
-    ).ok();
-
-    let void_ts = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-        .to_string();
-    // Check if all items are now voided
-    let remaining: i64 = tx
-        .query_row(
-            "SELECT COUNT(*) FROM detalles_ventas WHERE venta_id = ?1 AND (anulado IS NULL OR anulado = 0)",
-            params![request.venta_id],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-    if remaining == 0 {
-        tx.execute("UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2", params![void_ts, request.venta_id]).ok();
-    } else {
-        tx.execute("UPDATE ventas SET updated_at = ?1 WHERE id = ?2", params![void_ts, request.venta_id]).ok();
-    }
+    recalculate_sale_after_void(&tx, request.venta_id)?;
 
     crate::audit::log_action(&*tx, &current_username,
         &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id)).ok();
@@ -808,6 +581,39 @@ pub fn void_sale_items(
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
     Ok(format!("{} item(es) anulado(s) de venta #{}. Stock restaurado.", request.detalle_ids.len(), request.venta_id))
+}
+
+fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64) -> Result<(), String> {
+    let new_total_usd: f64 = tx
+        .query_row(
+            "SELECT COALESCE(SUM(CAST(anulado IS NULL OR anulado = 0 AS INTEGER) * cantidad * precio_usd_unitario), 0) \
+             FROM detalles_ventas WHERE venta_id = ?1",
+            params![venta_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+    let tasa: f64 = tx
+        .query_row("SELECT tasa_aplicada FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
+        .unwrap_or(0.0);
+    let new_total_bs = (new_total_usd * tasa * 100.0).round() / 100.0;
+
+    tx.execute("UPDATE ventas SET total_usd = ?1, total_bs = ?2 WHERE id = ?3",
+        params![new_total_usd, new_total_bs, venta_id]).ok();
+
+    let void_ts = crate::helpers::now_iso();
+    let remaining: i64 = tx
+        .query_row(
+            "SELECT COUNT(*) FROM detalles_ventas WHERE venta_id = ?1 AND (anulado IS NULL OR anulado = 0)",
+            params![venta_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if remaining == 0 {
+        tx.execute("UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id]).ok();
+    } else {
+        tx.execute("UPDATE ventas SET updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id]).ok();
+    }
+    Ok(())
 }
 
 #[cfg(test)]

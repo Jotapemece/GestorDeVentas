@@ -2,10 +2,17 @@ use crate::constants;
 use crate::db::AppState;
 use crate::models::{PaginatedResult, Producto, TopProductItem};
 use base64::Engine;
-use chrono::Utc;
 use rusqlite::params;
 use rust_xlsxwriter::*;
 use tauri::State;
+
+fn row_to_producto(row: &rusqlite::Row) -> rusqlite::Result<Producto> {
+    Ok(Producto {
+        codigo: row.get(0)?, nombre: row.get(1)?, precio_usd: row.get(2)?,
+        stock: row.get(3)?, stock_minimo: row.get(4)?, created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
+}
 
 const SQL_BASE_PRODUCTOS: &str =
     "SELECT p.codigo, p.nombre, p.precio_usd, p.stock, COALESCE(p.stock_minimo,0), \
@@ -44,7 +51,7 @@ pub fn list_products(
     page: Option<i64>,
     page_size: Option<i64>,
 ) -> Result<PaginatedResult<Producto>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let has_query = search.as_ref().is_some_and(|s| !s.is_empty());
     let q = search.unwrap_or_default();
@@ -72,20 +79,12 @@ pub fn list_products(
         format!("{} ORDER BY p.nombre ASC LIMIT ?1 OFFSET ?2", SQL_BASE_PRODUCTOS)
     };
 
-    let map_row = |row: &rusqlite::Row| -> rusqlite::Result<Producto> {
-        Ok(Producto {
-            codigo: row.get(0)?, nombre: row.get(1)?, precio_usd: row.get(2)?,
-            stock: row.get(3)?, stock_minimo: row.get(4)?, created_at: row.get(5)?,
-            updated_at: row.get(6)?,
-        })
-    };
-
     let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
 
     let products: Vec<Producto> = if has_query {
-        stmt.query_map(rusqlite::params![pattern, ps, offset], map_row)
+        stmt.query_map(rusqlite::params![pattern, ps, offset], row_to_producto)
     } else {
-        stmt.query_map(rusqlite::params![ps, offset], map_row)
+        stmt.query_map(rusqlite::params![ps, offset], row_to_producto)
     }
     .map_err(|e| e.to_string())?
     .filter_map(|r| r.ok())
@@ -102,7 +101,7 @@ pub fn create_product(
     precio_usd: f64,
     stock: i64,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let codigo = if codigo.is_empty() {
         let next_id: i64 = db
             .query_row(SQL_NEXT_CODIGO, [], |row| row.get(0))
@@ -111,7 +110,7 @@ pub fn create_product(
     } else {
         codigo
     };
-    let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    let ts = crate::helpers::now_iso();
     crate::auth::require_admin(
         &state,
         &db,
@@ -140,8 +139,8 @@ pub fn update_product(
     precio_usd: f64,
     stock: i64,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
-    let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    let db = state.lock_db()?;
+    let ts = crate::helpers::now_iso();
     crate::auth::require_admin(
         &state,
         &db,
@@ -159,7 +158,7 @@ pub fn update_product(
 
 #[tauri::command]
 pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
@@ -188,7 +187,7 @@ pub fn import_products_from_db(
 ) -> Result<String, String> {
     use std::io::Write;
 
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(&state, &db, "Importó productos desde archivo DB")?;
 
     let bytes = base64::engine::general_purpose::STANDARD
@@ -230,7 +229,7 @@ pub fn import_products_from_db(
         return Err("No se encontraron productos en el archivo".to_string());
     }
 
-    let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    let ts = crate::helpers::now_iso();
     let mut imported = 0;
     for (codigo, nombre, precio_usd, stock, stock_minimo) in &products {
         match db.execute(
@@ -255,23 +254,13 @@ pub fn import_products_from_db(
 
 #[tauri::command]
 pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let full_sql = format!("{} ORDER BY p.nombre ASC", SQL_BASE_PRODUCTOS);
     let mut stmt = db.prepare(&full_sql).map_err(|e| e.to_string())?;
 
     let products: Vec<Producto> = stmt
-        .query_map([], |row| {
-            Ok(Producto {
-                codigo: row.get(0)?,
-                nombre: row.get(1)?,
-                precio_usd: row.get(2)?,
-                stock: row.get(3)?,
-                stock_minimo: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
-            })
-        })
+        .query_map([], row_to_producto)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
@@ -331,10 +320,12 @@ pub fn replace_all_products(
     state: State<AppState>,
     content: String,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let mut db = state.lock_db()?;
     crate::auth::require_admin(&state, &db, "Reemplazó todos los productos")?;
 
-    db.execute("UPDATE productos SET activo = 0 WHERE activo = 1", [])
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+
+    tx.execute("UPDATE productos SET activo = 0 WHERE activo = 1", [])
         .map_err(|e| format!("Error al limpiar productos: {}", e))?;
 
     let mut count = 0;
@@ -365,11 +356,18 @@ pub fn replace_all_products(
 
         let codigo = format!("P{:04}", count + 1);
 
-        let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
-        db.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, stock, 0, ts])
+        let ts = crate::helpers::now_iso();
+        tx.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, stock, 0, ts])
             .map_err(|e| errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e)))
             .ok();
         count += 1;
+    }
+
+    if errors.is_empty() {
+        tx.commit().map_err(|e| format!("Error al confirmar transacción: {}", e))?;
+    } else {
+        // Rollback on any errors to preserve original state
+        drop(tx);
     }
 
     let msg = format!("{} productos reemplazados.", count);
@@ -382,12 +380,57 @@ pub fn replace_all_products(
     }
 }
 
+pub(crate) fn parse_product_tsv_line(line: &str, line_no: usize, count: i64) -> Result<(String, String, i64, f64), String> {
+    let cols: Vec<&str> = line.split('\t').collect();
+    if cols.len() < 3 {
+        return Err(format!("Línea {}: columnas insuficientes ({})", line_no + 1, cols.len()));
+    }
+
+    let (codigo, nombre, stock_str, precio_str) = match cols.len() {
+        7 => {
+            let code = cols[0].trim();
+            let name = cols[1].trim().trim_end_matches(',');
+            let stock = cols[2].trim().trim_end_matches(',');
+            let price = cols[5].trim().replace(',', ".");
+            (Some(code.to_string()), name, stock, price)
+        }
+        6 => {
+            let name = cols[0].trim().trim_end_matches(',');
+            let stock = cols[1].trim().trim_end_matches(',');
+            let price = cols[4].trim().replace(',', ".");
+            (None, name, stock, price)
+        }
+        _ => {
+            let nombre = cols[0].trim().trim_end_matches(',');
+            let stock_str = cols[1].trim().trim_end_matches(',');
+            let precio_str = cols[2].trim().replace(',', ".");
+            (None, nombre, stock_str, precio_str)
+        }
+    };
+
+    let stock: i64 = stock_str.parse().map_err(|_| format!("Línea {}: stock inválido '{}'", line_no + 1, stock_str))?;
+    let precio_usd: f64 = precio_str.parse().map_err(|_| format!("Línea {}: precio inválido '{}'", line_no + 1, precio_str))?;
+    let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
+    let nombre = nombre.trim_end_matches("*UND*-").trim_end_matches(',').to_string();
+
+    Ok((codigo, nombre, stock, precio_usd))
+}
+
+fn format_import_result(count: i64, errors: &[String]) -> String {
+    if errors.is_empty() {
+        return format!("Importados {} productos sin errores.", count);
+    }
+    let detail = errors.iter().take(10).cloned().collect::<Vec<_>>().join("\n");
+    let suffix = if errors.len() > 10 { format!("\n... y {} más", errors.len() - 10) } else { String::new() };
+    format!("Importados {} productos.\nErrores ({}):\n{}{}", count, errors.len(), detail, suffix)
+}
+
 #[tauri::command]
 pub fn import_products_from_file(
     state: State<AppState>,
     content: String,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
@@ -396,106 +439,28 @@ pub fn import_products_from_file(
 
     let mut count = 0;
     let mut errors: Vec<String> = Vec::new();
+    let ts = crate::helpers::now_iso();
 
     for (line_no, line) in content.lines().enumerate() {
         let line = line.trim();
-        if line.is_empty() {
-            continue;
+        if line.is_empty() { continue; }
+
+        match parse_product_tsv_line(line, line_no, count) {
+            Ok((codigo, nombre, stock, precio_usd)) => {
+                if let Err(e) = db.execute(
+                    SQL_IMPORT_PRODUCTO,
+                    params![codigo, nombre, precio_usd, stock, 0, ts],
+                ) {
+                    errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e));
+                    continue;
+                }
+                count += 1;
+            }
+            Err(e) => errors.push(e),
         }
-
-        let cols: Vec<&str> = line.split('\t').collect();
-        if cols.len() < 3 {
-            errors.push(format!(
-                "Línea {}: columnas insuficientes ({})",
-                line_no + 1,
-                cols.len()
-            ));
-            continue;
-        }
-
-        let (codigo, nombre, stock_str, precio_str) = match cols.len() {
-            7 => {
-                let code = cols[0].trim();
-                let name = cols[1].trim().trim_end_matches(',');
-                let stock = cols[2].trim().trim_end_matches(',');
-                let price = cols[5].trim().replace(',', ".");
-                (Some(code.to_string()), name, stock, price)
-            }
-            6 => {
-                let name = cols[0].trim().trim_end_matches(',');
-                let stock = cols[1].trim().trim_end_matches(',');
-                let price = cols[4].trim().replace(',', ".");
-                (None, name, stock, price)
-            }
-            _ => {
-                let nombre = cols[0].trim().trim_end_matches(',');
-                let stock_str = cols[1].trim().trim_end_matches(',');
-                let precio_str = cols[2].trim().replace(',', ".");
-                (None, nombre, stock_str, precio_str)
-            }
-        };
-
-        let stock: i64 = match stock_str.parse() {
-            Ok(s) => s,
-            Err(_) => {
-                errors.push(format!(
-                    "Línea {}: stock inválido '{}'",
-                    line_no + 1,
-                    stock_str
-                ));
-                continue;
-            }
-        };
-        let precio_usd: f64 = match precio_str.parse() {
-            Ok(p) => p,
-            Err(_) => {
-                errors.push(format!(
-                    "Línea {}: precio inválido '{}'",
-                    line_no + 1,
-                    precio_str
-                ));
-                continue;
-            }
-        };
-
-        let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
-
-        let ts = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
-        if let Err(e) = db.execute(
-            SQL_IMPORT_PRODUCTO,
-            params![codigo, nombre, precio_usd, stock, 0, ts],
-        ) {
-            errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e));
-            continue;
-        }
-        count += 1;
     }
 
-    if errors.is_empty() {
-        Ok(format!(
-            "Importados {} productos sin errores.",
-            count
-        ))
-    } else {
-        let detail = errors
-            .iter()
-            .take(10)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n");
-        let suffix = if errors.len() > 10 {
-            format!("\n... y {} más", errors.len() - 10)
-        } else {
-            String::new()
-        };
-        Ok(format!(
-            "Importados {} productos.\nErrores ({}):\n{}{}",
-            count,
-            errors.len(),
-            detail,
-            suffix
-        ))
-    }
+    Ok(format_import_result(count, &errors))
 }
 
 #[tauri::command]
@@ -505,7 +470,7 @@ pub fn get_top_products(
     end_date: Option<String>,
     limit: Option<i64>,
 ) -> Result<Vec<TopProductItem>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let mut sql = String::from(
         "SELECT d.producto_codigo, d.producto_nombre, SUM(d.cantidad), SUM(d.subtotal_usd)

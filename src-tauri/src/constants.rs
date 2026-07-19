@@ -13,7 +13,7 @@ pub const AUDIT_LOG_DEFAULT_LIMIT: i64 = 50;
 pub const VENTAS_LIMIT_DEFAULT: i64 = 100;
 
 pub const TEMAS_DISPONIBLES: &[&str] = &[
-    "oscuro", "claro", "azul", "verde", "morado", "turquesa", "naranja", "crema",
+    "oscuro", "claro", "azul", "verde", "morado", "turquesa", "naranja",
 ];
 
 // SQL
@@ -35,6 +35,17 @@ pub const CFG_ULTIMO_DOWNLOAD_CLIENTES: &str = "ultimo_download_clientes";
 pub const CFG_DISPOSITIVO_ID: &str = "dispositivo_id";
 pub const CFG_SUPABASE_URL: &str = "supabase_url";
 pub const CFG_SUPABASE_KEY: &str = "supabase_key";
+
+// Default values
+pub const DB_FILENAME: &str = "gestor_ventas.db";
+pub const BACKUP_FILENAME_PREFIX: &str = "gestor_ventas_backup_";
+pub const AUTO_IMPORT_FILENAME: &str = "productos";
+pub const DEFAULT_ADMIN_USERNAME: &str = "admin";
+pub const DEFAULT_ADMIN_PASSWORD: &str = "admin";
+pub const DEFAULT_JOTA_USERNAME: &str = "jota";
+pub const DEFAULT_JOTA_PASSWORD: &str = "1234";
+pub const DEFAULT_VENDEDOR_USERNAME: &str = "vendedor";
+pub const DEFAULT_VENDEDOR_PASSWORD: &str = "1234";
 
 // Pagination
 pub const PAGE_SIZE_DEFAULT: i64 = 200;

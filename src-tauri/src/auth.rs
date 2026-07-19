@@ -1,20 +1,40 @@
 use crate::db::AppState;
 use crate::models::*;
+use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::Argon2;
 use rusqlite::params;
 use sha2::{Digest, Sha256};
 use std::time::Instant;
 use tauri::State;
 
-const SQL_LOGIN: &str = "SELECT id, username, rol FROM usuarios WHERE username = ?1 AND password = ?2";
+const SQL_USER_BY_USERNAME: &str = "SELECT id, username, password, rol FROM usuarios WHERE username = ?1";
 const SQL_INSERT_USUARIO: &str = "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)";
 const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol FROM usuarios ORDER BY username";
 const SQL_DELETE_USUARIO: &str = "DELETE FROM usuarios WHERE id = ?1 AND username != 'admin'";
-const SQL_CHANGE_PASSWORD: &str = "UPDATE usuarios SET password = ?1 WHERE id = ?2 AND password = ?3";
+
 
 pub fn hash_password(password: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes());
-    hex::encode(hasher.finalize())
+    let salt = SaltString::generate(&mut OsRng);
+    Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .expect("Error al generar hash argon2")
+        .to_string()
+}
+
+pub fn verify_password(password: &str, stored_hash: &str) -> bool {
+    if stored_hash.starts_with("$argon2") {
+        PasswordHash::new(stored_hash)
+            .ok()
+            .map_or(false, |parsed| {
+                Argon2::default()
+                    .verify_password(password.as_bytes(), &parsed)
+                    .is_ok()
+            })
+    } else {
+        let mut hasher = Sha256::new();
+        hasher.update(password.as_bytes());
+        hex::encode(hasher.finalize()) == stored_hash
+    }
 }
 
 pub(crate) fn check_admin_role(state: &State<AppState>) -> Result<String, String> {
@@ -79,39 +99,23 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
             }
         }
     };
-    let hashed = hash_password(&password);
 
     let username_clone = username.clone();
-    match db.query_row(SQL_LOGIN, rusqlite::params![username, hashed], |row| {
-        Ok(Usuario {
-            id: row.get(0)?,
-            username: row.get(1)?,
-            rol: row.get(2)?,
-        })
-    }) {
-        Ok(usuario) => {
-            let user_clone = usuario.clone();
-            if let Ok(mut attempts) = state.login_attempts.lock() {
-                attempts.remove(&username_clone);
-            }
-            drop(db);
-            let mut current = match state.current_user.lock() {
-                Ok(c) => c,
-                Err(_) => {
-                    return LoginResponse {
-                        success: false,
-                        message: "Error interno".to_string(),
-                        usuario: None,
-                    }
-                }
-            };
-            *current = Some(usuario);
-            LoginResponse {
-                success: true,
-                message: "Inicio de sesión exitoso".to_string(),
-                usuario: Some(user_clone),
-            }
-        }
+    let (stored_hash, usuario) = match db.query_row(
+        SQL_USER_BY_USERNAME,
+        rusqlite::params![username],
+        |row| {
+            Ok((
+                row.get::<_, String>(2)?,
+                Usuario {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    rol: row.get(3)?,
+                },
+            ))
+        },
+    ) {
+        Ok(v) => v,
         Err(_) => {
             if let Ok(mut attempts) = state.login_attempts.lock() {
                 let entry = attempts.entry(username_clone.clone()).or_insert((0, Instant::now()));
@@ -120,12 +124,59 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                     entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
                 }
             }
-            LoginResponse {
+            return LoginResponse {
                 success: false,
                 message: "Credenciales inválidas".to_string(),
                 usuario: None,
+            };
+        }
+    };
+
+    if !verify_password(&password, &stored_hash) {
+        if let Ok(mut attempts) = state.login_attempts.lock() {
+            let entry = attempts.entry(username_clone.clone()).or_insert((0, Instant::now()));
+            entry.0 += 1;
+            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
             }
-        },
+        }
+        return LoginResponse {
+            success: false,
+            message: "Credenciales inválidas".to_string(),
+            usuario: None,
+        };
+    }
+
+    // Upgrade legacy SHA-256 hash to argon2
+    if !stored_hash.starts_with("$argon2") {
+        let new_hash = hash_password(&password);
+        db.execute(
+            "UPDATE usuarios SET password = ?1 WHERE id = ?2",
+            rusqlite::params![new_hash, usuario.id],
+        )
+        .ok();
+    }
+
+    let user_clone = usuario.clone();
+    if let Ok(mut attempts) = state.login_attempts.lock() {
+        attempts.remove(&username_clone);
+    }
+    drop(db);
+    let mut current = match state.current_user.lock() {
+        Ok(c) => c,
+        Err(_) => {
+            return LoginResponse {
+                success: false,
+                message: "Error interno".to_string(),
+                usuario: None,
+            }
+        }
+    };
+    *current = Some(usuario);
+    LoginResponse {
+        success: true,
+        message: "Inicio de sesión exitoso".to_string(),
+        usuario: Some(user_clone),
     }
 }
 
@@ -155,7 +206,7 @@ pub fn create_usuario(
     password: String,
     rol: String,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
@@ -171,7 +222,7 @@ pub fn create_usuario(
 
 #[tauri::command]
 pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::check_admin_role(&state)?;
     let mut stmt = db
         .prepare(SQL_LIST_USUARIOS)
@@ -194,7 +245,7 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
 
 #[tauri::command]
 pub fn delete_usuario(state: State<AppState>, usuario_id: i64) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let admin_user = crate::auth::require_admin(&state, &db, &format!("Eliminó usuario id={}", usuario_id))?;
     if admin_user.is_empty() { return Err("No autenticado".to_string()); }
     let affected = db
@@ -212,7 +263,7 @@ pub fn change_password(
     state: State<AppState>,
     request: ChangePasswordRequest,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|_| format!("Error interno"))?;
+    let db = state.lock_db()?;
     let user = state
         .current_user
         .lock()
@@ -220,18 +271,27 @@ pub fn change_password(
         .clone()
         .ok_or("No autenticado")?;
 
-    let old_hashed = hash_password(&request.old_password);
-    let new_hashed = hash_password(&request.new_password);
+    // Verify old password
+    let stored_hash: String = db
+        .query_row(
+            "SELECT password FROM usuarios WHERE id = ?1",
+            params![user.id],
+            |r| r.get(0),
+        )
+        .map_err(|_| "Usuario no encontrado".to_string())?;
 
-    let affected = db
-        .execute(SQL_CHANGE_PASSWORD, params![new_hashed, user.id, old_hashed])
-        .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
-
-    if affected == 0 {
-        Err("La contraseña actual no es correcta".to_string())
-    } else {
-        Ok("Contraseña cambiada exitosamente".to_string())
+    if !verify_password(&request.old_password, &stored_hash) {
+        return Err("La contraseña actual no es correcta".to_string());
     }
+
+    let new_hashed = hash_password(&request.new_password);
+    db.execute(
+        "UPDATE usuarios SET password = ?1 WHERE id = ?2",
+        params![new_hashed, user.id],
+    )
+    .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
+
+    Ok("Contraseña cambiada exitosamente".to_string())
 }
 
 #[tauri::command]
@@ -240,9 +300,34 @@ pub fn admin_change_password(
     usuario_id: i64,
     new_password: String,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|_| format!("Error interno"))?;
-    let admin_user = require_admin(&state, &db, &format!("Cambió password del usuario id={}", usuario_id))?;
-    if admin_user.is_empty() { return Err("No autenticado".to_string()); }
+    let admin_username = {
+        let lock = state
+            .current_user
+            .lock()
+            .map_err(|_| "Error interno".to_string())?;
+        lock.as_ref()
+            .filter(|u| u.rol == "admin")
+            .map(|u| u.username.clone())
+            .ok_or("Solo administradores pueden realizar esta acción")?
+    };
+
+    {
+        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
+        if let Some(&(count, until)) = attempts.get("admin_change_password") {
+            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
+                return Err(format!(
+                    "Demasiados intentos. Intente de nuevo en {} segundos.",
+                    until.duration_since(Instant::now()).as_secs()
+                ));
+            }
+            if Instant::now() >= until {
+                attempts.remove("admin_change_password");
+            }
+        }
+    }
+
+    let db = state.lock_db()?;
+    crate::audit::log_action(&db, &admin_username, &format!("Cambió password del usuario id={}", usuario_id)).ok();
 
     let new_hashed = hash_password(&new_password);
     let affected = db
@@ -250,8 +335,18 @@ pub fn admin_change_password(
         .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
 
     if affected == 0 {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            let entry = attempts.entry("admin_change_password".to_string()).or_insert((0, Instant::now()));
+            entry.0 += 1;
+            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
+            }
+        }
         Err("Usuario no encontrado".to_string())
     } else {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            attempts.remove("admin_change_password");
+        }
         Ok("Contraseña cambiada exitosamente".to_string())
     }
 }
@@ -261,34 +356,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hash_password_deterministic() {
-        let a = hash_password("admin");
-        let b = hash_password("admin");
-        assert_eq!(a, b);
-        assert_ne!(a, hash_password("admin2"));
+    fn test_hash_password_verify_roundtrip() {
+        let pw = "admin";
+        let hash = hash_password(pw);
+        assert!(verify_password(pw, &hash));
+        assert!(!verify_password("wrong", &hash));
     }
 
     #[test]
     fn test_hash_password_empty() {
-        let a = hash_password("");
-        let b = hash_password("");
-        assert_eq!(a, b);
-        assert_eq!(a.len(), 64);
+        let hash = hash_password("");
+        assert!(verify_password("", &hash));
+        assert!(hash.starts_with("$argon2"));
     }
 
     #[test]
     fn test_hash_password_long() {
         let long = "a".repeat(1000);
-        let a = hash_password(&long);
-        let b = hash_password(&long);
-        assert_eq!(a, b);
-        assert_eq!(a.len(), 64);
+        let hash = hash_password(&long);
+        assert!(verify_password(&long, &hash));
     }
 
     #[test]
-    fn test_hash_password_different_lengths() {
-        let a = hash_password("abc");
-        let b = hash_password("abcd");
-        assert_ne!(a, b);
+    fn test_verify_legacy_sha256() {
+        let sha_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918";
+        assert!(verify_password("admin", sha_hash));
+        assert!(!verify_password("wrong", sha_hash));
     }
 }

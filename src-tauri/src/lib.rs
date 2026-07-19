@@ -5,6 +5,7 @@ mod clients;
 mod config;
 mod constants;
 mod db;
+mod helpers;
 mod migrations;
 mod models;
 mod products;
@@ -34,6 +35,7 @@ pub fn run() {
                 db_path: std::sync::Mutex::new(db_path),
                 current_user: std::sync::Mutex::new(None),
                 login_attempts: std::sync::Mutex::new(std::collections::HashMap::new()),
+                admin_action_attempts: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
             Ok(())
         })

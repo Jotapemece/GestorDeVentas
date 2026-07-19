@@ -2,7 +2,6 @@ use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
 use crate::sales;
-use chrono::Utc;
 use rusqlite::params;
 use std::collections::HashMap;
 use tauri::State;
@@ -35,32 +34,34 @@ const SQL_HISTORY_VENTAS: &str = "
     LEFT JOIN productos p ON dv.producto_codigo = p.codigo
     WHERE v.cliente_id = ?1 AND v.metodo_pago = 'credito'
     ORDER BY v.fecha_hora DESC, dv.id ASC";
-const SQL_SALDO_DEUDA: &str = "SELECT saldo_deuda_usd FROM clientes WHERE id = ?1";
-const SQL_UPDATE_SALDO: &str = "UPDATE clientes SET saldo_deuda_usd = ?1 WHERE id = ?2";
+const SQL_PAGO_DEUDA_ATOMICO: &str =
+    "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd - ?1 WHERE id = ?2 AND saldo_deuda_usd >= ?1";
 const SQL_REACTIVAR_CREDITO: &str =
     "UPDATE clientes SET credito_activo = 1 WHERE id = ?1 AND credito_activo = 0";
 const SQL_UPDATE_CLIENTE: &str = "UPDATE clientes SET nombre = ?1, updated_at = ?2 WHERE id = ?3";
 const SQL_DELETE_CLIENTE: &str = "DELETE FROM clientes WHERE id = ?1 AND saldo_deuda_usd = 0";
 
+fn row_to_cliente(row: &rusqlite::Row) -> rusqlite::Result<Cliente> {
+    let activo: i64 = row.get(2)?;
+    Ok(Cliente {
+        id: row.get(0)?,
+        nombre: row.get(1)?,
+        credito_activo: activo == 1,
+        saldo_deuda_usd: row.get(3)?,
+        sync_id: row.get(4)?,
+        updated_at: row.get(5)?,
+    })
+}
+
 #[tauri::command]
 pub fn list_clientes(state: State<AppState>) -> Result<Vec<Cliente>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let mut stmt = db
         .prepare(SQL_LIST_CLIENTES)
         .map_err(|e| e.to_string())?;
 
     let clientes: Vec<Cliente> = stmt
-        .query_map([], |row| {
-            let activo: i64 = row.get(2)?;
-            Ok(Cliente {
-                id: row.get(0)?,
-                nombre: row.get(1)?,
-                credito_activo: activo == 1,
-                saldo_deuda_usd: row.get(3)?,
-                sync_id: row.get(4)?,
-                updated_at: row.get(5)?,
-            })
-        })
+        .query_map([], row_to_cliente)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
@@ -70,14 +71,14 @@ pub fn list_clientes(state: State<AppState>) -> Result<Vec<Cliente>, String> {
 
 #[tauri::command]
 pub fn create_cliente(state: State<AppState>, nombre: String) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
         &format!("Creó cliente '{}'", nombre),
     )?;
     let sync_id = Uuid::new_v4().to_string();
-    let now = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    let now = crate::helpers::now_iso();
     match db.execute(SQL_INSERT_CLIENTE, params![nombre, sync_id, now]) {
         Ok(_) => Ok("Cliente creado exitosamente".to_string()),
         Err(e) => Err(format!("Error al crear cliente: {}", e)),
@@ -90,7 +91,7 @@ pub fn toggle_cliente_credito(
     cliente_id: i64,
     activo: bool,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
@@ -112,20 +113,10 @@ pub fn get_cliente_history(
     state: State<AppState>,
     cliente_id: i64,
 ) -> Result<ClienteHistory, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
 
     let cliente: Cliente = db
-        .query_row(SQL_CLIENTE_BY_ID, params![cliente_id], |row| {
-            let activo: i64 = row.get(2)?;
-            Ok(Cliente {
-                id: row.get(0)?,
-                nombre: row.get(1)?,
-                credito_activo: activo == 1,
-                saldo_deuda_usd: row.get(3)?,
-                sync_id: row.get(4)?,
-                updated_at: row.get(5)?,
-            })
-        })
+        .query_row(SQL_CLIENTE_BY_ID, params![cliente_id], row_to_cliente)
         .map_err(|_| "Cliente no encontrado".to_string())?;
 
     let mut stmt = db
@@ -193,8 +184,7 @@ pub fn get_cliente_history(
     })
 }
 
-#[tauri::command]
-pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<String, String> {
+fn validate_pay_debt_request(request: &PayDebtRequest) -> Result<(), String> {
     if request.monto_usd <= 0.0 {
         return Err("El monto debe ser mayor a cero".to_string());
     }
@@ -224,42 +214,41 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
         }
     }
 
-    let username = state
-        .current_user
-        .lock()
-        .map_err(|e| format!("Error interno: {}", e))?
-        .clone()
-        .map(|u| u.username)
-        .unwrap_or_default();
+    Ok(())
+}
 
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+#[tauri::command]
+pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<String, String> {
+    validate_pay_debt_request(&request)?;
 
-    let saldo_actual: f64 = db
-        .query_row(SQL_SALDO_DEUDA, params![request.cliente_id], |row| {
-            row.get(0)
-        })
-        .map_err(|_| "Cliente no encontrado".to_string())?;
+    let username = state.get_username().unwrap_or_default();
+    let mut db = state.lock_db()?;
 
-    if request.monto_usd > saldo_actual {
-        return Err(format!(
-            "El monto (${:.2}) excede la deuda actual (${:.2})",
-            request.monto_usd, saldo_actual
-        ));
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+
+    let affected = tx
+        .execute(SQL_PAGO_DEUDA_ATOMICO, params![request.monto_usd, request.cliente_id])
+        .map_err(|e| format!("Error al procesar pago: {}", e))?;
+
+    if affected == 0 {
+        return Err("Cliente no encontrado o saldo insuficiente".to_string());
     }
 
-    let nuevo_saldo = saldo_actual - request.monto_usd;
-    db.execute(SQL_UPDATE_SALDO, params![nuevo_saldo, request.cliente_id])
-        .map_err(|e| e.to_string())?;
+    let nuevo_saldo: f64 = tx
+        .query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = ?1", params![request.cliente_id], |r| r.get(0))
+        .map_err(|_| "Error al leer saldo actualizado".to_string())?;
 
     let accion = format!(
         "Pago de deuda - Cliente #{} - Monto: ${:.2} - Método: {} - Saldo restante: ${:.2}",
         request.cliente_id, request.monto_usd, request.metodo_pago, nuevo_saldo
     );
-    crate::audit::log_action(&db, &username, &accion).ok();
+    crate::audit::log_action(&tx, &username, &accion).ok();
 
     if (nuevo_saldo - 0.0).abs() < constants::MONTO_TOLERANCIA {
-        let _ = db.execute(SQL_REACTIVAR_CREDITO, params![request.cliente_id]);
+        let _ = tx.execute(SQL_REACTIVAR_CREDITO, params![request.cliente_id]);
     }
+
+    tx.commit().map_err(|e| format!("Error al confirmar pago: {}", e))?;
 
     Ok(format!(
         "Pago registrado. Monto: ${:.2}, Saldo restante: ${:.2}",
@@ -272,13 +261,13 @@ pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String) -
     if nombre.trim().is_empty() {
         return Err("El nombre no puede estar vacío".to_string());
     }
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
         &format!("Editó cliente #{}: '{}'", cliente_id, nombre),
     )?;
-    let now = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    let now = crate::helpers::now_iso();
     db.execute(SQL_UPDATE_CLIENTE, params![nombre.trim(), now, cliente_id])
         .map_err(|e| e.to_string())?;
     Ok("Cliente actualizado exitosamente".to_string())
@@ -286,7 +275,7 @@ pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String) -
 
 #[tauri::command]
 pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,

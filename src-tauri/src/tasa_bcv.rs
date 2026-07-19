@@ -39,7 +39,7 @@ pub(crate) fn fetch_tasa_bcv() -> Result<f64, String> {
 
 #[tauri::command]
 pub fn check_tasa_update(state: State<AppState>) -> Result<Option<f64>, String> {
-    let db = state.db.lock().map_err(|_| "Error interno".to_string())?;
+    let db = state.lock_db()?;
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
     let last_check: String = db

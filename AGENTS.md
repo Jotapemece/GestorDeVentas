@@ -213,3 +213,23 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 - **Dashboard global**: reportes con ventas de todos los dispositivos
 - **Inventario consolidado**: stock unificado (último que sube gana)
 - **Roles de dispositivo**: maestro (sync completo) vs esclavo (solo lectura/comparte ventas)
+
+---
+
+## Work State
+
+### Objective
+Optimizar y limpiar el código backend (Rust/Tauri): eliminar duplicación, lógica mágica, extraer helpers y refactorizar funciones grandes.
+
+### Completed
+- **Fase 1**: `serde_json.unwrap()` → `?` (3x), `"dispositivo_id"` → `constants::CFG_DISPOSITIVO_ID` (6x), constantes, tema crema eliminado
+- **Fase 2**: `create_sale` → `validate_sale_request + execute_sale_transaction`; `get_sales_report` → `get_sales_report_inner`; `import_products_from_file` → `parse_product_tsv_line + format_import_result`; `void_sale_items` → `recalculate_sale_after_void`
+- **Fase 3**: `sync.rs` (1310 líneas) dividido en `sync/mod.rs + products.rs + sales.rs + clients.rs + conflicts.rs + orchestrator.rs`
+- **Fase 4**: `helpers.rs` con `now_iso()` integrado; `row_to_venta/pub(crate)` en sales.rs; `row_to_cliente` en clients.rs; `row_to_historial` en audit.rs; `row_to_producto` en products.rs; `lock_db()/get_username()` en AppState/db.rs; `state.get_username()` reemplaza `current_user.lock()` en auth, cashier, clients, sales; `state.lock_db()` en tasa_bcv.rs; 6 SQL format strings → `get_config()` en sync/; 5 URLs → `api_url()` en sync/; `get_ultimo_download` usa constante. ✅ 36 tests pasan
+
+### Active
+- (ninguno)
+
+### Next Move
+- Revisar que upload/download ventas funcione correctamente con cambios Phase 4
+- Continuar con Fase 7 (Sync automático) o Fase 8 (Resolución conflictos)

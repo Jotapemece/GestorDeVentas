@@ -5,6 +5,15 @@ use chrono;
 use rusqlite::params;
 use tauri::State;
 
+fn row_to_historial(row: &rusqlite::Row) -> rusqlite::Result<HistorialAccion> {
+    Ok(HistorialAccion {
+        id: row.get(0)?,
+        fecha_hora: row.get(1)?,
+        usuario: row.get(2)?,
+        accion: row.get(3)?,
+    })
+}
+
 pub(crate) const SQL_INSERT_HISTORIAL: &str =
     "INSERT INTO historial_acciones (fecha_hora, usuario, accion) VALUES (?1, ?2, ?3)";
 
@@ -33,21 +42,14 @@ pub fn get_audit_logs(
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<HistorialAccion>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let lim = limit.unwrap_or(constants::AUDIT_LOG_DEFAULT_LIMIT);
     let off = offset.unwrap_or(0);
 
     let mut stmt = db.prepare(SQL_AUDIT_LOGS).map_err(|e| e.to_string())?;
 
     let logs: Vec<HistorialAccion> = stmt
-        .query_map(params![lim, off], |row| {
-            Ok(HistorialAccion {
-                id: row.get(0)?,
-                fecha_hora: row.get(1)?,
-                usuario: row.get(2)?,
-                accion: row.get(3)?,
-            })
-        })
+        .query_map(params![lim, off], row_to_historial)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
@@ -60,20 +62,13 @@ pub fn get_cierres(
     state: State<AppState>,
     limit: Option<i64>,
 ) -> Result<Vec<HistorialAccion>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     let lim = limit.unwrap_or(constants::AUDIT_LOG_DEFAULT_LIMIT);
 
     let mut stmt = db.prepare(SQL_CIERRES).map_err(|e| e.to_string())?;
 
     let cierres: Vec<HistorialAccion> = stmt
-        .query_map(params![lim], |row| {
-            Ok(HistorialAccion {
-                id: row.get(0)?,
-                fecha_hora: row.get(1)?,
-                usuario: row.get(2)?,
-                accion: row.get(3)?,
-            })
-        })
+        .query_map(params![lim], row_to_historial)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
@@ -83,7 +78,7 @@ pub fn get_cierres(
 
 #[tauri::command]
 pub fn clear_audit(state: State<AppState>) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| format!("Error interno: {}", e))?;
+    let db = state.lock_db()?;
     db.execute("DELETE FROM historial_acciones", [])
         .map_err(|e| format!("Error al limpiar auditoría: {}", e))?;
     log_action(&db, "sistema", "Historial de auditoría limpiado")?;
