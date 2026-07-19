@@ -40,6 +40,13 @@ const CFG_COMA_AUTOMATICA = 'coma_automatica';
 const CFG_CALCULAR_VUELTO = 'calcular_vuelto';
 const CFG_REDONDEO_BS = 'redondeo_bs';
 const CFG_SIDEBAR_AUTO_HIDE = 'sidebar_auto_hide';
+const CFG_CONFIRMAR_VENTA = 'confirmar_venta';
+
+const VIEW_NAMES = {
+  sales: 'Caja', inventory: 'Inventario', creditos: 'Créditos',
+  cashier: 'Caja Diaria', audit: 'Auditoría', reports: 'Reportes', config: 'Configuración'
+};
+const VIEW_LIST = Object.keys(VIEW_NAMES);
 
 // Payment method keys (deben coincidir con constants.rs)
 const METODO_EFECTIVO_BS = 'efectivo_bs';
@@ -785,6 +792,7 @@ async function loadSyncStats() {
 
 function showView(name) {
   lastViewName = name;
+  try { localStorage.setItem('last_view', name); } catch (e) {}
   qsa('.view').forEach(v => v.classList.remove('active'));
   qsa('.nav-btn').forEach(b => b.classList.remove('active'));
   getViewEl(name).classList.add('active');
@@ -795,10 +803,15 @@ function showView(name) {
     cashier: loadDailySummary,
     audit: loadAudit,
     reports: () => { loadUserList(); setDefaultReportDates(); },
-    config: () => { loadThemeConfig(); loadConflictCount(); },
+    config: () => { loadThemeConfig(); loadConflictCount(); loadShortcutConfigUI(); },
     sync: () => { loadSyncConfig(); loadConflictCount(); },
   };
   if (loaders[name]) loaders[name]();
+  if (name === 'sales') {
+    qs(SEL.productSearch).focus();
+    renderProductSearch();
+    renderCart();
+  }
   document.dispatchEvent(new CustomEvent('viewChanged', { detail: name }));
 }
 
@@ -826,6 +839,7 @@ async function handleLogin() {
       applyRoleUI();
       await loadTasa();
       await loadProductCache();
+      try { lastViewName = localStorage.getItem('last_view') || 'sales'; } catch (e) {}
       showView(lastViewName);
       if (lastViewName === 'sales') {
         renderProductSearch();
@@ -1318,6 +1332,11 @@ async function loadClientesForSelect() {
 let processingPayment = false;
 async function confirmPayment() {
   if (processingPayment) return;
+  const confirmarVenta = await getUserConfig(CFG_CONFIRMAR_VENTA);
+  if (confirmarVenta === '1') {
+    const ok = await confirmModal('¿Confirmar la venta por ' + formatUSD(cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0)) + '?', 'Confirmar Venta', 'Cobrar');
+    if (!ok) return;
+  }
   processingPayment = true;
   qs(SEL.paymentConfirmBtn).disabled = true;
   const methodBtn = qs('.payment-method-btn.active');
@@ -2138,6 +2157,62 @@ async function saveFontSize(pct) {
   try {
     await setUserConfig(CFG_FONT_SIZE, String(pct));
   } catch (e) {}
+}
+
+/* ========== SHORTCUTS ========== */
+const DEFAULT_SHORTCUTS = {
+  F1: 'sales', F2: 'inventory', F3: 'creditos', F4: 'cashier',
+  F5: 'audit', F6: 'reports', F7: 'config'
+};
+let shortcutMappings = { ...DEFAULT_SHORTCUTS };
+
+async function loadShortcutMappings() {
+  try {
+    const raw = await getUserConfig('shortcut_mappings');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      shortcutMappings = { ...DEFAULT_SHORTCUTS, ...parsed };
+    }
+  } catch (e) {}
+}
+
+async function saveShortcutMappings() {
+  try {
+    await setUserConfig('shortcut_mappings', JSON.stringify(shortcutMappings));
+  } catch (e) {}
+}
+
+function loadShortcutConfigUI() {
+  const container = qs('#shortcut-config');
+  if (!container) return;
+  container.innerHTML = '';
+  ['F1','F2','F3','F4','F5','F6','F7'].forEach(key => {
+    const row = document.createElement('div');
+    row.className = 'config-row shortcut-row';
+    const label = document.createElement('span');
+    label.className = 'config-label';
+    label.textContent = key;
+    const select = document.createElement('select');
+    select.className = 'shortcut-select';
+    VIEW_LIST.forEach(view => {
+      const opt = document.createElement('option');
+      opt.value = view;
+      opt.textContent = VIEW_NAMES[view];
+      opt.selected = (shortcutMappings[key] || DEFAULT_SHORTCUTS[key]) === view;
+      select.appendChild(opt);
+    });
+    select.addEventListener('change', () => {
+      shortcutMappings[key] = select.value;
+      saveShortcutMappings();
+    });
+    row.appendChild(label);
+    row.appendChild(select);
+    container.appendChild(row);
+  });
+  const f8row = document.createElement('div');
+  f8row.className = 'config-row shortcut-row';
+  f8row.innerHTML = '<span class="config-label">F8</span><span style="color:var(--text-light);font-size:0.85rem">Buscar (fijo)</span>';
+  container.appendChild(f8row);
 }
 
 /* ========== USER MANAGEMENT ========== */
@@ -3468,13 +3543,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     const activeView = qs('.view.active');
     const viewId = activeView ? activeView.id : '';
     switch (e.key) {
-      case 'F1': e.preventDefault(); showView('sales'); break;
-      case 'F2': e.preventDefault(); showView('inventory'); break;
-      case 'F3': e.preventDefault(); showView('creditos'); break;
-      case 'F4': e.preventDefault(); showView('cashier'); break;
-      case 'F5': e.preventDefault(); showView('audit'); break;
-      case 'F6': e.preventDefault(); showView('reports'); break;
-      case 'F7': e.preventDefault(); showView('config'); break;
+      case 'F1': case 'F2': case 'F3': case 'F4':
+      case 'F5': case 'F6': case 'F7':
+        e.preventDefault();
+        {
+          const target = shortcutMappings[e.key] || DEFAULT_SHORTCUTS[e.key];
+          if (target) showView(target);
+        }
+        break;
       case 'F8':
         e.preventDefault();
         if (viewId === 'view-sales') qs(SEL.productSearch).focus();
@@ -3520,6 +3596,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         setUserConfig(CFG_SIDEBAR_AUTO_HIDE, this.checked ? 'true' : 'false').catch(e => showToast('Error al guardar configuración', 'error'));
       });
     }
+  }
+
+  // Confirmar venta toggle
+  const confirmarToggle = qs('#confirmar-venta-toggle');
+  if (confirmarToggle) {
+    confirmarToggle.addEventListener('change', function() {
+      setUserConfig(CFG_CONFIRMAR_VENTA, this.checked ? '1' : '0').catch(e => showToast('Error al guardar configuración', 'error'));
+    });
   }
 
   // Fullscreen toggle
@@ -3625,6 +3709,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     const savedTheme = await getUserConfig(CFG_TEMA);
     if (savedTheme) applyTheme(savedTheme);
   } catch (e) {}
+
+  // Load confirmar venta config
+  try {
+    const val = await getUserConfig(CFG_CONFIRMAR_VENTA);
+    const toggle = qs('#confirmar-venta-toggle');
+    if (toggle) toggle.checked = val === '1';
+  } catch (e) {}
+
+  // Load keyboard shortcuts
+  await loadShortcutMappings();
 
   // Load history cleanup config
   try {

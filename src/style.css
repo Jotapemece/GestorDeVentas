@@ -296,10 +296,14 @@ button:focus-visible,
 }
 
 .product-list-container .table td:first-child {
-  max-width: 200px;
+  max-width: 170px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.product-list-container .table td,
+.product-list-container .table th {
+  padding: 6px 8px; font-size: 0.8125rem;
 }
 .cart-container .table td:first-child {
   white-space: nowrap;
@@ -549,6 +553,15 @@ button:focus-visible,
 }
 .config-row + .config-row { border-top: 1px solid var(--border); }
 .config-label { font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.config-divider {
+  height: 1px; background: var(--border); margin: 12px 0;
+}
+.shortcut-row { min-height: 36px; padding: 6px 0; }
+.shortcut-row .config-label { min-width: 32px; font-weight: 600; }
+.shortcut-select {
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--card); color: var(--text); font-size: 13px;
+}
 /* Toggle switch */
 .toggle-switch {
   position: relative; display: inline-block; width: 44px; height: 24px;
