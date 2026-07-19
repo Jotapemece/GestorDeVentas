@@ -19,7 +19,7 @@ pub(crate) use crate::helpers::now_iso;
 
 /// Convierte timestamp ISO 8601 ("2026-07-18T10:00:00.000Z") al formato local SQLite
 /// ("2026-07-18 10:00:00"). Si no tiene 'T', lo devuelve tal cual.
-pub fn normalize_fecha(iso: &str) -> String {
+pub(crate) fn normalize_fecha(iso: &str) -> String {
     let s = iso.replace('T', " ");
     let s = s.trim_end_matches('Z');
     if let Some(dot) = s.find('.') {
@@ -29,12 +29,12 @@ pub fn normalize_fecha(iso: &str) -> String {
     }
 }
 
-pub fn api_url(base: &str, path: &str) -> String {
+pub(crate) fn api_url(base: &str, path: &str) -> String {
     let base = base.trim_end_matches('/');
     format!("{}/rest/v1{}", base, path)
 }
 
-pub fn supabase_post(url: &str, key: &str, body: &str) -> Result<(), String> {
+pub(crate) fn supabase_post(url: &str, key: &str, body: &str) -> Result<(), String> {
     match ureq::post(url)
         .set("apikey", key)
         .set("Authorization", &format!("Bearer {}", key))
@@ -51,7 +51,7 @@ pub fn supabase_post(url: &str, key: &str, body: &str) -> Result<(), String> {
     }
 }
 
-pub fn supabase_get(url: &str, key: &str) -> Result<Vec<serde_json::Value>, String> {
+pub(crate) fn supabase_get(url: &str, key: &str) -> Result<Vec<serde_json::Value>, String> {
     match ureq::get(url)
         .set("apikey", key)
         .set("Authorization", &format!("Bearer {}", key))
@@ -66,14 +66,14 @@ pub fn supabase_get(url: &str, key: &str) -> Result<Vec<serde_json::Value>, Stri
     }
 }
 
-pub fn supabase_config(db: &rusqlite::Connection) -> Result<(String, String), String> {
+pub(crate) fn supabase_config(db: &rusqlite::Connection) -> Result<(String, String), String> {
     Ok((
         get_config(db, constants::CFG_SUPABASE_URL)?,
         get_config(db, constants::CFG_SUPABASE_KEY)?,
     ))
 }
 
-pub fn get_config(db: &rusqlite::Connection, key: &str) -> Result<String, String> {
+pub(crate) fn get_config(db: &rusqlite::Connection, key: &str) -> Result<String, String> {
     db.query_row(
         "SELECT valor FROM configuracion WHERE clave = ?1",
         params![key],
@@ -82,7 +82,7 @@ pub fn get_config(db: &rusqlite::Connection, key: &str) -> Result<String, String
     .map_err(|_| format!("Configura '{}' primero en Ajustes", key))
 }
 
-pub fn upsert_config(db: &rusqlite::Connection, key: &str, value: &str) {
+pub(crate) fn upsert_config(db: &rusqlite::Connection, key: &str, value: &str) {
     db.execute(
         "INSERT INTO configuracion (clave, valor) VALUES (?1, ?2) \
          ON CONFLICT(clave) DO UPDATE SET valor = ?2",
@@ -91,7 +91,7 @@ pub fn upsert_config(db: &rusqlite::Connection, key: &str, value: &str) {
     .ok();
 }
 
-pub fn urlencoding(s: &str) -> String {
+pub(crate) fn urlencoding(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -116,7 +116,7 @@ pub fn urlencoding(s: &str) -> String {
     out
 }
 
-pub fn emit_progress(app: &tauri::AppHandle, step: &str, current: u32, total: u32) {
+pub(crate) fn emit_progress(app: &tauri::AppHandle, step: &str, current: u32, total: u32) {
     let payload = json!({
         "step": step,
         "current": current,

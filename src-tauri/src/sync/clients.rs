@@ -7,7 +7,7 @@ use uuid::Uuid;
 use serde_json::json;
 use tauri::State;
 
-pub fn upload_clientes_inner(
+pub(crate) fn upload_clientes_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
@@ -97,7 +97,7 @@ pub fn upload_clientes(state: State<AppState>) -> Result<String, String> {
     upload_clientes_inner(&db, &supabase_url, &supabase_key)
 }
 
-pub fn download_clientes_inner(
+pub(crate) fn download_clientes_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
@@ -114,7 +114,7 @@ pub fn download_clientes_inner(
     );
 
     let cloud_clientes: Vec<serde_json::Value> =
-        supabase_get(&get_url, supabase_key).unwrap_or_default();
+        supabase_get(&get_url, supabase_key)?;
 
     let count = cloud_clientes.len();
     if count == 0 {

@@ -122,6 +122,11 @@ fn execute_sale_transaction(
         String::new()
     };
 
+    if let Some(bs) = request.total_bs_ingresado {
+        if !bs.is_finite() || bs < 0.0 {
+            return Err("El total en Bs. ingresado no es válido".to_string());
+        }
+    }
     let total_bs = request
         .total_bs_ingresado
         .unwrap_or_else(|| (total_usd * request.tasa * constants::ROUNDING_FACTOR).round() / constants::ROUNDING_FACTOR);

@@ -20,7 +20,9 @@ type VentaRow = (
 );
 
 const SQL_LIST_CLIENTES: &str =
-    "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at FROM clientes ORDER BY nombre ASC";
+    "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at FROM clientes ORDER BY nombre ASC LIMIT ?1 OFFSET ?2";
+const SQL_COUNT_CLIENTES: &str =
+    "SELECT COUNT(*) FROM clientes";
 const SQL_CLIENTE_BY_ID: &str =
     "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at FROM clientes WHERE id = ?1";
 const SQL_INSERT_CLIENTE: &str =
@@ -54,14 +56,28 @@ fn row_to_cliente(row: &rusqlite::Row) -> rusqlite::Result<Cliente> {
 }
 
 #[tauri::command]
-pub fn list_clientes(state: State<AppState>) -> Result<Vec<Cliente>, String> {
+pub fn list_clientes(
+    state: State<AppState>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<Cliente>, String> {
     let db = state.lock_db()?;
+    let total: i64 = db
+        .query_row(SQL_COUNT_CLIENTES, [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    let ps = page_size.unwrap_or(constants::PAGE_SIZE_DEFAULT).clamp(1, 200);
+    let p = page.unwrap_or(1).max(1);
+    let offset = (p - 1) * ps;
+    if offset >= total {
+        return Ok(Vec::new());
+    }
+
     let mut stmt = db
         .prepare(SQL_LIST_CLIENTES)
         .map_err(|e| e.to_string())?;
 
     let clientes: Vec<Cliente> = stmt
-        .query_map([], row_to_cliente)
+        .query_map(params![ps, offset], row_to_cliente)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
@@ -71,6 +87,9 @@ pub fn list_clientes(state: State<AppState>) -> Result<Vec<Cliente>, String> {
 
 #[tauri::command]
 pub fn create_cliente(state: State<AppState>, nombre: String) -> Result<String, String> {
+    if nombre.trim().is_empty() {
+        return Err("El nombre del cliente no puede estar vacío".to_string());
+    }
     let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
@@ -221,7 +240,7 @@ fn validate_pay_debt_request(request: &PayDebtRequest) -> Result<(), String> {
 pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<String, String> {
     validate_pay_debt_request(&request)?;
 
-    let username = state.get_username().unwrap_or_default();
+    let username = state.get_username()?;
     let mut db = state.lock_db()?;
 
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;

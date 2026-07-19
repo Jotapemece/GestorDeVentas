@@ -17,7 +17,7 @@ pub fn parse_ts(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
 
 /// Checks for conflict and records it in the conflictos table. Returns true if conflict was detected.
 #[allow(clippy::too_many_arguments)]
-pub fn check_and_record_conflict(
+pub(crate) fn check_and_record_conflict(
     db: &Connection,
     table: &str,
     item_id: &str,
@@ -40,7 +40,7 @@ pub fn check_and_record_conflict(
     false
 }
 
-pub fn is_conflict(local_ts: Option<&str>, remote_ts: Option<&str>, last_sync: &str) -> bool {
+pub(crate) fn is_conflict(local_ts: Option<&str>, remote_ts: Option<&str>, last_sync: &str) -> bool {
     let local = match local_ts {
         Some(s) if !s.is_empty() => s,
         _ => return false,

@@ -5,7 +5,7 @@ use rusqlite::{params, Connection};
 use serde_json::json;
 use tauri::State;
 
-pub fn upload_sales_inner(
+pub(crate) fn upload_sales_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
@@ -150,7 +150,7 @@ pub fn upload_sales(state: State<AppState>) -> Result<String, String> {
     upload_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
 
-pub fn download_sales_inner(
+pub(crate) fn download_sales_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,

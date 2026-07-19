@@ -5,12 +5,9 @@ use rusqlite::params;
 use std::collections::HashMap;
 use tauri::State;
 
-const SQL_COUNT_VENTAS_RANGE: &str =
-    "SELECT COUNT(*) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
 const SQL_SUM_VENTAS_RANGE: &str =
-    "SELECT COALESCE(SUM(total_usd), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
-const SQL_SUM_BS_RANGE: &str =
-    "SELECT COALESCE(SUM(total_bs), 0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
+    "SELECT COUNT(*), COALESCE(SUM(total_usd), 0), COALESCE(SUM(total_bs), 0) \
+     FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
 const SQL_VENTAS_RANGE: &str = "
     SELECT metodo_pago, pago_detalle, total_usd, referencia_pago_movil
     FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
@@ -41,7 +38,8 @@ const SQL_LIST_CIERRES: &str = "
     SELECT c.id, c.fecha_hora, u.username, c.total_ventas, c.total_usd, c.total_bs, c.tasa_cierre
     FROM cierres_caja c
     LEFT JOIN usuarios u ON c.usuario_id = u.id
-    ORDER BY c.id DESC";
+    ORDER BY c.id DESC LIMIT ?1 OFFSET ?2";
+const SQL_COUNT_CIERRES: &str = "SELECT COUNT(*) FROM cierres_caja";
 const SQL_CIERRE_BY_ID: &str = "
     SELECT fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre
     FROM cierres_caja WHERE id = ?1";
@@ -62,33 +60,17 @@ fn obtener_totales_del_dia(
     today: &str,
     tomorrow: &str,
 ) -> Result<(i64, f64, f64, f64), String> {
-    let cnt: i64 = db
-        .query_row(SQL_COUNT_VENTAS_RANGE, params![today, tomorrow], |row| {
-            row.get(0)
-        })
-        .map_err(|e| format!("Error al contar ventas del día: {}", e))?;
-
-    let usd: f64 = db
+    let (cnt, usd, bs): (i64, f64, f64) = db
         .query_row(SQL_SUM_VENTAS_RANGE, params![today, tomorrow], |row| {
-            row.get(0)
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })
-        .map_err(|e| format!("Error al sumar ventas del día: {}", e))?;
-
-    let bs: f64 = db
-        .query_row(SQL_SUM_BS_RANGE, params![today, tomorrow], |row| {
-            row.get(0)
-        })
-        .map_err(|e| format!("Error al sumar Bs. del día: {}", e))?;
+        .map_err(|e| format!("Error al obtener totales del día: {}", e))?;
 
     let tasa: f64 = db
         .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
         .map_err(|e| format!("Error al obtener tasa del día: {}", e))?;
 
     Ok((cnt, usd, bs, tasa))
-}
-
-fn obtener_tasa(db: &rusqlite::Connection) -> f64 {
-    crate::db::get_tasa_from_db(db).unwrap_or(0.0)
 }
 
 fn group_payments_by_method(rows: &[(String, Option<String>, f64, Option<String>)]) -> Vec<MetodoTotal> {
@@ -195,7 +177,7 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
         .format("%Y-%m-%d")
         .to_string();
     let tomorrow = crate::helpers::siguiente_dia(&today);
-    let tasa = obtener_tasa(&db);
+    let tasa = crate::db::get_tasa_from_db(&db).unwrap_or(0.0);
 
     let (total_ventas, total_usd, total_bs, _) = obtener_totales_del_dia(&db, &today, &tomorrow)?;
 
@@ -218,7 +200,7 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
 
 #[tauri::command]
 pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
-    let username = state.get_username().unwrap_or_default();
+    let username = state.get_username()?;
     let db = state.lock_db()?;
     db.execute(SQL_SET_CAJA, params!["true"])
         .map_err(|e| e.to_string())?;
@@ -239,16 +221,14 @@ pub fn get_caja_abierta(state: State<AppState>) -> Result<bool, String> {
 
 #[tauri::command]
 pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
-    let (username, user_id) = {
-        let lock = state
-            .current_user
-            .lock()
-            .map_err(|e| format!("Error interno: {}", e))?;
-        match lock.as_ref() {
-            Some(u) => (u.username.clone(), u.id),
-            None => (String::new(), 0),
-        }
-    };
+    let username = state.get_username()?;
+    let user_id = state
+        .current_user
+        .lock()
+        .map_err(|e| format!("Error interno: {}", e))?
+        .as_ref()
+        .map(|u| u.id)
+        .ok_or("No autenticado")?;
 
     let mut db = state.lock_db()?;
 
@@ -319,14 +299,28 @@ pub fn get_close_report_data(state: State<AppState>) -> Result<CloseReportData, 
 }
 
 #[tauri::command]
-pub fn list_cierres(state: State<AppState>) -> Result<Vec<CierreListItem>, String> {
+pub fn list_cierres(
+    state: State<AppState>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<CierreListItem>, String> {
     let db = state.lock_db()?;
+    let total: i64 = db
+        .query_row(SQL_COUNT_CIERRES, [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    let ps = page_size.unwrap_or(constants::PAGE_SIZE_DEFAULT).clamp(1, 200);
+    let p = page.unwrap_or(1).max(1);
+    let offset = (p - 1) * ps;
+    if offset >= total {
+        return Ok(Vec::new());
+    }
+
     let mut stmt = db
         .prepare(SQL_LIST_CIERRES)
         .map_err(|e| e.to_string())?;
 
     let cierres: Vec<CierreListItem> = stmt
-        .query_map([], |row| {
+        .query_map(params![ps, offset], |row| {
             let bs: f64 = row.get(5)?;
             let tasa_cierre: f64 = row.get(6)?;
             Ok(CierreListItem {
@@ -443,16 +437,14 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
     let after_month = crate::helpers::siguiente_dia(&chrono::Local::now().format("%Y-%m-%d").to_string());
 
     fn period(db: &rusqlite::Connection, start: &str, end: &str) -> Result<DashboardPeriod, String> {
-        let cnt: i64 = db
-            .query_row(SQL_COUNT_VENTAS_RANGE, params![start, end], |row| row.get(0))
-            .map_err(|e| format!("Error al contar: {}", e))?;
-        let usd: f64 = db
-            .query_row(SQL_SUM_VENTAS_RANGE, params![start, end], |row| row.get(0))
-            .map_err(|e| format!("Error al sumar USD: {}", e))?;
-        let bs: f64 = db
-            .query_row(SQL_SUM_BS_RANGE, params![start, end], |row| row.get(0))
-            .map_err(|e| format!("Error al sumar Bs: {}", e))?;
-        Ok(DashboardPeriod { total_ventas: cnt, total_usd: usd, total_bs: bs })
+        db.query_row(SQL_SUM_VENTAS_RANGE, params![start, end], |row| {
+            Ok(DashboardPeriod {
+                total_ventas: row.get(0)?,
+                total_usd: row.get(1)?,
+                total_bs: row.get(2)?,
+            })
+        })
+        .map_err(|e| format!("Error al obtener totales del período: {}", e))
     }
 
     Ok(DashboardSummary {

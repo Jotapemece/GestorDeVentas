@@ -6,7 +6,7 @@ use rusqlite::{params, Connection};
 use serde_json::json;
 use tauri::State;
 
-pub fn upload_products_inner(
+pub(crate) fn upload_products_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
@@ -95,7 +95,7 @@ pub fn upload_products(state: State<AppState>) -> Result<String, String> {
     upload_products_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
 
-pub fn download_products_inner(
+pub(crate) fn download_products_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
@@ -115,7 +115,7 @@ pub fn download_products_inner(
     );
 
     let cloud_products: Vec<serde_json::Value> =
-        supabase_get(&get_url, supabase_key).unwrap_or_default();
+        supabase_get(&get_url, supabase_key)?;
 
     let count = cloud_products.len();
     if count == 0 {

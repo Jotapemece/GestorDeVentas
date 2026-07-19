@@ -101,6 +101,12 @@ pub fn create_product(
     precio_usd: f64,
     stock: i64,
 ) -> Result<String, String> {
+    if precio_usd <= 0.0 {
+        return Err("El precio debe ser mayor a cero".to_string());
+    }
+    if stock < 0 {
+        return Err("El stock no puede ser negativo".to_string());
+    }
     let mut db = state.lock_db()?;
     let codigo = if codigo.is_empty() {
         let next_id: i64 = db
@@ -143,6 +149,12 @@ pub fn update_product(
     precio_usd: f64,
     stock: i64,
 ) -> Result<String, String> {
+    if precio_usd <= 0.0 {
+        return Err("El precio debe ser mayor a cero".to_string());
+    }
+    if stock < 0 {
+        return Err("El stock no puede ser negativo".to_string());
+    }
     let db = state.lock_db()?;
     let ts = crate::helpers::now_iso();
     crate::auth::require_admin(
@@ -497,7 +509,9 @@ pub fn get_top_products(
 
     if let Some(l) = limit {
         if l > 0 {
-            sql.push_str(&format!(" LIMIT {}", l));
+            let param_idx = params_vec.len() + 1;
+            sql.push_str(&format!(" LIMIT ?{}", param_idx));
+            params_vec.push(Box::new(l));
         }
     }
 
