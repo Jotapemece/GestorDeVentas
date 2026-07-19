@@ -687,6 +687,21 @@
                     <button id="view-conflicts-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-search"></i> Ver conflictos</button>
                   </div>
                 </div>
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-clock"></i> Sincronización automática</h3>
+                  <div style="display:flex;flex-direction:column;gap:10px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                      <span style="font-size:13px;color:var(--text);white-space:nowrap">Intervalo de descarga</span>
+                      <div style="display:flex;align-items:center;gap:4px">
+                        <input type="number" id="sync-auto-interval" min="10" max="480" value="30" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px;text-align:center">
+                        <span style="font-size:12px;color:var(--text-light);min-width:40px">min</span>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="font-size:11px;color:var(--text-light)">Cada 10 min — 8 h. Tras subir ventas también se descarga automáticamente.</span>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div style="display:flex;flex-direction:column;gap:16px">
                 <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">

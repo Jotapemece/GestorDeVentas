@@ -56,6 +56,9 @@ const PAGO_MOVIL_REF_LEN = 4;
 // Config keys (db::configuracion.clave) — back-end sync
 const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
+const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
+
+const SYNC_SALE_DEBOUNCE_MS = 5 * 60 * 1000;
 
 async function getUserConfig(key) {
   return invoke('get_user_config_value', { key });
@@ -766,6 +769,7 @@ async function loadSyncConfig() {
     if (key) keyEl.value = key;
   } catch (_) {}
   loadSyncStats();
+  loadSyncAutoConfig();
 }
 
 async function loadSyncStats() {
@@ -782,6 +786,51 @@ async function loadSyncStats() {
     qs(SEL.syncUploadClientesTime).textContent = fmt(stats.ultimo_upload_clientes);
     qs(SEL.syncDownloadClientesTime).textContent = fmt(stats.ultimo_download_clientes);
   } catch (_) {}
+}
+
+/* ========== SYNC AUTO TIMERS ========== */
+let syncAutoIntervalId = null;
+let saleUploadTimer = null;
+let isSyncing = false;
+
+function loadSyncAutoConfig() {
+  const input = qs('#sync-auto-interval');
+  if (!input) return;
+  invoke('get_config_value', { key: CFG_SYNC_AUTO_INTERVAL }).then(val => {
+    const minutes = parseInt(val) || 30;
+    input.value = Math.max(10, Math.min(480, minutes));
+    startSyncAutoInterval(minutes);
+  }).catch(() => {});
+  input.addEventListener('change', () => {
+    let minutes = parseInt(input.value) || 30;
+    minutes = Math.max(10, Math.min(480, minutes));
+    input.value = minutes;
+    invoke('set_config_value', { key: CFG_SYNC_AUTO_INTERVAL, value: String(minutes) }).catch(() => {});
+    startSyncAutoInterval(minutes);
+  });
+}
+
+function startSyncAutoInterval(minutes) {
+  if (syncAutoIntervalId) clearInterval(syncAutoIntervalId);
+  syncAutoIntervalId = null;
+  if (minutes <= 0) return;
+  syncAutoIntervalId = setInterval(() => {
+    if (!isSyncing) {
+      isSyncing = true;
+      invoke('sync_all').then(() => { isSyncing = false; }).catch(() => { isSyncing = false; });
+    }
+  }, minutes * 60 * 1000);
+}
+
+function scheduleSaleUpload() {
+  if (saleUploadTimer) clearTimeout(saleUploadTimer);
+  saleUploadTimer = setTimeout(() => {
+    if (!isSyncing) {
+      isSyncing = true;
+      invoke('sync_all').then(() => { isSyncing = false; }).catch(() => { isSyncing = false; });
+    }
+    saleUploadTimer = null;
+  }, SYNC_SALE_DEBOUNCE_MS);
 }
 
 function showView(name) {
@@ -1384,6 +1433,7 @@ async function confirmPayment() {
     cart = [];
     await loadProductCache();
     renderCart(); updateCheckoutBtn(); closePaymentModal();
+    scheduleSaleUpload();
   } catch (e) { showToast('Error: ' + e, 'error'); playSound('error'); }
   finally {
     processingPayment = false;
@@ -2712,6 +2762,7 @@ async function handleVoidSale(ventaId) {
     playSound('remove');
     if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
     if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
+    scheduleSaleUpload();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
@@ -2763,6 +2814,7 @@ async function handleVoidItem(ventaId, detalleId) {
     showSaleDetail(ventaId);
     if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
     if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
+    scheduleSaleUpload();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
