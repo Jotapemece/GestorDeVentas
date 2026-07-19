@@ -13,7 +13,7 @@ pub const AUDIT_LOG_DEFAULT_LIMIT: i64 = 50;
 pub const VENTAS_LIMIT_DEFAULT: i64 = 100;
 
 pub const TEMAS_DISPONIBLES: &[&str] = &[
-    "oscuro", "claro", "azul", "verde", "morado", "turquesa", "naranja",
+    "oscuro", "claro", "azul", "verde", "morado", "turquesa", "naranja", "crema",
 ];
 
 // SQL
