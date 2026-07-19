@@ -38,8 +38,7 @@ const SQL_LIST_CIERRES: &str = "
     SELECT c.id, c.fecha_hora, u.username, c.total_ventas, c.total_usd, c.total_bs, c.tasa_cierre
     FROM cierres_caja c
     LEFT JOIN usuarios u ON c.usuario_id = u.id
-    ORDER BY c.id DESC LIMIT ?1 OFFSET ?2";
-const SQL_COUNT_CIERRES: &str = "SELECT COUNT(*) FROM cierres_caja";
+    ORDER BY c.id DESC";
 const SQL_CIERRE_BY_ID: &str = "
     SELECT fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre
     FROM cierres_caja WHERE id = ?1";
@@ -299,28 +298,14 @@ pub fn get_close_report_data(state: State<AppState>) -> Result<CloseReportData, 
 }
 
 #[tauri::command]
-pub fn list_cierres(
-    state: State<AppState>,
-    page: Option<i64>,
-    page_size: Option<i64>,
-) -> Result<Vec<CierreListItem>, String> {
+pub fn list_cierres(state: State<AppState>) -> Result<Vec<CierreListItem>, String> {
     let db = state.lock_db()?;
-    let total: i64 = db
-        .query_row(SQL_COUNT_CIERRES, [], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
-    let ps = page_size.unwrap_or(constants::PAGE_SIZE_DEFAULT).clamp(1, 200);
-    let p = page.unwrap_or(1).max(1);
-    let offset = (p - 1) * ps;
-    if offset >= total {
-        return Ok(Vec::new());
-    }
-
     let mut stmt = db
         .prepare(SQL_LIST_CIERRES)
         .map_err(|e| e.to_string())?;
 
     let cierres: Vec<CierreListItem> = stmt
-        .query_map(params![ps, offset], |row| {
+        .query_map([], |row| {
             let bs: f64 = row.get(5)?;
             let tasa_cierre: f64 = row.get(6)?;
             Ok(CierreListItem {

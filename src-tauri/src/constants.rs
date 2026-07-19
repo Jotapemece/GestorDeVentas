@@ -53,7 +53,7 @@ pub const DEFAULT_VENDEDOR_PASSWORD: &str = "1234";
 
 // Pagination
 pub const PAGE_SIZE_DEFAULT: i64 = 200;
-pub const PAGE_SIZE_MAX: i64 = 500;
+pub const PAGE_SIZE_MAX: i64 = 5000;
 
 // Rounding
 pub const ROUNDING_FACTOR: f64 = 100.0;

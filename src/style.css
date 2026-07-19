@@ -1083,7 +1083,7 @@ button:focus-visible,
   .payment-methods { grid-template-columns: 1fr 1fr; }
   .bottom-tabs .nav-btn .nav-text { display: block; font-size: 8px; }
   .bottom-tabs .nav-btn .nav-icon { font-size: 18px; }
-  .bottom-tabs .nav-btn { gap: 1px; padding: 4px 2px; }
+  .bottom-tabs .nav-btn { gap: 1px; padding: 8px 2px; }
   #main-content { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
 }
 
