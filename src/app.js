@@ -37,6 +37,7 @@ const CFG_HISTORIAL_LIMPIEZA_DIAS = 'historial_limpieza_dias';
 const CFG_COMA_AUTOMATICA = 'coma_automatica';
 const CFG_CALCULAR_VUELTO = 'calcular_vuelto';
 const CFG_REDONDEO_BS = 'redondeo_bs';
+const CFG_SIDEBAR_AUTO_HIDE = 'sidebar_auto_hide';
 
 // Payment method keys (deben coincidir con constants.rs)
 const METODO_EFECTIVO_BS = 'efectivo_bs';
@@ -52,6 +53,13 @@ const PAGO_MOVIL_REF_LEN = 4;
 // Config keys (db::configuracion.clave) — back-end sync
 const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
+
+async function getUserConfig(key) {
+  return invoke('get_user_config_value', { key });
+}
+async function setUserConfig(key, value) {
+  return invoke('set_user_config_value', { key, value });
+}
 
 const ICON = {
   UNLOCK: '<i class="nf nf-fa-unlock"></i>',
@@ -225,7 +233,215 @@ const SEL = {
   cambioRecibido: '#cambio-recibido',
   cambioResultado: '#cambio-resultado',
   cambioMonto: '#cambio-monto',
+
+  // --- Reports / Dashboard ---
+  reportStartDate: '#report-start-date',
+  reportEndDate: '#report-end-date',
+  reportSearchBtn: '#report-search-btn',
+  reportProductFilter: '#report-product-filter',
+  reportVendorFilter: '#report-vendor-filter',
+  reportTotalCount: '#report-total-count',
+  reportTotalUsd: '#report-total-usd',
+  reportTotalBs: '#report-total-bs',
+  reportSalesBody: '#report-sales-body',
+  reportExportBtn: '#report-export-btn',
+  topProductsSection: '#top-products-section',
+  topProductsGrid: '#top-products-grid',
+  topProductsLimit: '#top-products-limit',
+  dashboardBody: '#dashboard-body',
+  chartTooltip: '#chart-tooltip',
+  dashboardCanvas: '#dashboard-canvas',
+  saleDetailModal: '#sale-detail-modal',
+  saleDetailId: '#sale-detail-id',
+  saleDetailTotal: '#sale-detail-total',
+  saleDetailMetodo: '#sale-detail-metodo',
+  saleDetailUsuario: '#sale-detail-usuario',
+  saleDetailFecha: '#sale-detail-fecha',
+  saleDetailList: '#sale-detail-list',
+  saleDetailClose: '#sale-detail-close',
+  saleDetailOkBtn: '#sale-detail-ok-btn',
+  viewReports: '#view-reports',
+  gotoReportsBtn: '#goto-reports-btn',
+
+  // --- User Management ---
+  userListBody: '#user-list-body',
+  newUserName: '#new-user-name',
+  newUserPassword: '#new-user-password',
+  newUserRol: '#new-user-rol',
+  createUserBtn: '#create-user-btn',
+  changePwdOld: '#change-pwd-old',
+  changePwdNew: '#change-pwd-new',
+  changePwdConfirm: '#change-pwd-confirm',
+  changePwdBtn: '#change-pwd-btn',
+  adminPwdModal: '#admin-pwd-modal',
+  adminPwdInput: '#admin-pwd-input',
+  adminPwdUserInfo: '#admin-pwd-user-info',
+  adminPwdModalClose: '#admin-pwd-modal-close',
+  adminPwdCancelBtn: '#admin-pwd-cancel-btn',
+  adminPwdSaveBtn: '#admin-pwd-save-btn',
+
+  // --- Product History ---
+  productHistoryModal: '#product-history-modal',
+  productHistoryTitle: '#product-history-title',
+  productHistoryBody: '#product-history-body',
+  productHistoryModalClose: '#product-history-modal-close',
+  productHistoryOkBtn: '#product-history-ok-btn',
+
+  // --- Confirm / Loading Modals ---
+  confirmModal: '#confirm-modal',
+  confirmTitle: '#confirm-title',
+  confirmMessage: '#confirm-message',
+  confirmOkBtn: '#confirm-ok-btn',
+  confirmCancelBtn: '#confirm-cancel-btn',
+  confirmClose: '#confirm-close',
+  loadingText: '#loading-text',
+  loadingModal: '#loading-modal',
+
+  // --- Sync buttons ---
+  backupDbBtn: '#backup-db-btn',
+  registerDeviceBtn: '#register-device-btn',
+  uploadProductsBtn: '#upload-products-btn',
+  downloadProductsBtn: '#download-products-btn',
+  uploadSalesBtn: '#upload-sales-btn',
+  downloadSalesBtn: '#download-sales-btn',
+  uploadClientesBtn: '#upload-clientes-btn',
+  downloadClientesBtn: '#download-clientes-btn',
+  viewConflictsBtn: '#view-conflicts-btn',
+  syncProgressModal: '#sync-progress-modal',
+  syncProgressText: '#sync-progress-text',
+  syncProgressBar: '#sync-progress-bar',
+  uploadAllBtn: '#upload-all-btn',
+  downloadAllBtn: '#download-all-btn',
+  syncAllBtn: '#sync-all-btn',
+  testConnectionBtn: '#test-connection-btn',
+  connectionStatus: '#connection-status',
+  conflictModalClose: '#conflict-modal-close',
+  conflictCloseBtn: '#conflict-close-btn',
+  viewConfig: '#view-config',
+  viewSync: '#view-sync',
+
+  // --- Modal close / cancel / ok buttons ---
+  paymentModalClose: '#payment-modal-close',
+  paymentCancelBtn: '#payment-cancel-btn',
+  abonoMixtoAddRow: '#abono-mixto-add-row',
+  productModalClose: '#product-modal-close',
+  productCancelBtn: '#product-cancel-btn',
+  productSaveBtn: '#product-save-btn',
+  productDetailClose: '#product-detail-close',
+  productDetailOkBtn: '#product-detail-ok-btn',
+  clientModalClose: '#client-modal-close',
+  clientCancelBtn: '#client-cancel-btn',
+  clientSaveBtn: '#client-save-btn',
+  closeCashierClose: '#close-cashier-close',
+  closeCashierCancelBtn: '#close-cashier-cancel-btn',
+  closeCashierConfirmBtn: '#close-cashier-confirm-btn',
+  closeReportClose: '#close-report-close',
+  closeReportOkBtn: '#close-report-ok-btn',
+  historialCierresClose: '#historial-cierres-close',
+  historialCierresOkBtn: '#historial-cierres-ok-btn',
+  historialCierreDetalleClose: '#historial-cierre-detalle-close',
+  historialCierreDetalleOkBtn: '#historial-cierre-detalle-ok-btn',
+  debtDetailClose: '#debt-detail-close',
+  debtDetailOkBtn: '#debt-detail-ok-btn',
+  abonoClose: '#abono-close',
+  abonoCancelBtn: '#abono-cancel-btn',
+
+  // --- Misc ---
+  inventoryPagination: '#inventory-pagination',
+  togglePassword: '#toggle-password',
+  mobileLogoutBtn: '#mobile-logout-btn',
+  creditosSearch: '#creditos-search',
+  cartBadge: '#cart-badge',
+  historialLimpiezaStatus: '#historial-limpieza-status',
+  comaAutomaticaToggle: '#coma-automatica-toggle',
+  calcularVueltoToggle: '#calcular-vuelto-toggle',
+  redondeoBsToggle: '#redondeo-bs-toggle',
+  sidebarAutoHideToggle: '#sidebar-auto-hide-toggle',
 };
+
+/* ========== CLOCK ========== */
+function startClock() {
+  const hourHand = document.querySelector('#clock-hour');
+  const minuteHand = document.querySelector('#clock-minute');
+  const secondHand = document.querySelector('#clock-second');
+  if (!hourHand) return;
+  function update() {
+    const now = new Date();
+    const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
+    hourHand.setAttribute('transform', `rotate(${h * 30 + m * 0.5}, 50, 50)`);
+    minuteHand.setAttribute('transform', `rotate(${m * 6 + s * 0.1}, 50, 50)`);
+    secondHand.setAttribute('transform', `rotate(${s * 6}, 50, 50)`);
+  }
+  update();
+  setInterval(update, 1000);
+}
+
+/* ========== SIDEBAR AUTO-HIDE ========== */
+let sidebarAutoHideEnabled = false;
+let sidebarHideTimeout = null;
+const SIDEBAR_HIDE_DELAY = 250;
+
+function initSidebarAutoHide() {
+  const sidebar = document.getElementById('sidebar');
+  const mainApp = document.getElementById('main-app');
+  if (!sidebar || !mainApp) return;
+
+  let lastMouseX = -1, lastMouseY = -1;
+
+  document.addEventListener('mousemove', (e) => {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    if (!sidebarAutoHideEnabled) return;
+    if (e.clientX <= 14) {
+      clearTimeout(sidebarHideTimeout);
+      sidebarHideTimeout = null;
+      mainApp.classList.remove('sidebar-hidden');
+      setTimeout(checkSidebarHover, 350);
+      return;
+    }
+    checkSidebarHover();
+  });
+
+  function checkSidebarHover() {
+    if (!sidebarAutoHideEnabled) return;
+    if (mainApp.classList.contains('sidebar-hidden')) return;
+    const rect = sidebar.getBoundingClientRect();
+    const inside = lastMouseX >= rect.left && lastMouseX <= rect.right &&
+                   lastMouseY >= rect.top && lastMouseY <= rect.bottom;
+    if (inside) {
+      clearTimeout(sidebarHideTimeout);
+      sidebarHideTimeout = null;
+    } else if (!sidebarHideTimeout) {
+      sidebarHideTimeout = setTimeout(() => {
+        mainApp.classList.add('sidebar-hidden');
+        sidebarHideTimeout = null;
+      }, SIDEBAR_HIDE_DELAY);
+    }
+  }
+}
+
+function setSidebarAutoHide(enabled) {
+  sidebarAutoHideEnabled = enabled;
+  const mainApp = document.getElementById('main-app');
+  if (!mainApp) return;
+  if (enabled) {
+    mainApp.classList.add('sidebar-hidden');
+  } else {
+    mainApp.classList.remove('sidebar-hidden');
+  }
+}
+
+async function loadSidebarAutoHideConfig() {
+  try {
+    const val = await getUserConfig(CFG_SIDEBAR_AUTO_HIDE);
+    const enabled = val === 'true';
+    setSidebarAutoHide(enabled);
+    const toggle = document.getElementById('sidebar-auto-hide-toggle');
+    if (toggle) toggle.checked = enabled;
+  } catch (e) {
+    setSidebarAutoHide(false);
+  }
+}
 
 /* ========== HELPERS ========== */
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -240,7 +456,7 @@ function createCartRow(item) {
   return '<td title="' + name + '">' + name + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + escapeHtml(item.codigo) + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + escapeHtml(item.codigo) + '">\u00d7</button></td>';
 }
 function createInventoryRow(p, editBtn) {
-  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '">Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
+  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
@@ -320,14 +536,14 @@ function qsa(sel) { return document.querySelectorAll(sel); }
 /* ========== CONFIRM MODAL ========== */
 function confirmModal(msg, title, okText) {
   return new Promise(resolve => {
-    const modal = qs('#confirm-modal');
-    qs('#confirm-title').textContent = title || 'Confirmar';
-    qs('#confirm-message').textContent = msg;
-    const okBtn = qs('#confirm-ok-btn');
+    const modal = qs(SEL.confirmModal);
+    qs(SEL.confirmTitle).textContent = title || 'Confirmar';
+    qs(SEL.confirmMessage).textContent = msg;
+    const okBtn = qs(SEL.confirmOkBtn);
     okBtn.textContent = okText || 'Confirmar';
     okBtn.onclick = () => { closeModal(modal); resolve(true); };
-    qs('#confirm-cancel-btn').onclick = () => { closeModal(modal); resolve(false); };
-    qs('#confirm-close').onclick = () => { closeModal(modal); resolve(false); };
+    qs(SEL.confirmCancelBtn).onclick = () => { closeModal(modal); resolve(false); };
+    qs(SEL.confirmClose).onclick = () => { closeModal(modal); resolve(false); };
     modal.addEventListener('click', function handler(e) {
       if (e.target === modal) { closeModal(modal); resolve(false); modal.removeEventListener('click', handler); }
     });
@@ -340,11 +556,11 @@ function showLoading(el) {
   el.innerHTML = '<div class="loading-spinner"><i class="nf nf-fa-spinner spinner-icon"></i></div>';
 }
 function showLoadingModal(text) {
-  qs('#loading-text').textContent = text || 'Cargando...';
-  qs('#loading-modal').classList.remove('hidden');
+  qs(SEL.loadingText).textContent = text || 'Cargando...';
+  qs(SEL.loadingModal).classList.remove('hidden');
 }
 function hideLoadingModal() {
-  qs('#loading-modal').classList.add('hidden');
+  qs(SEL.loadingModal).classList.add('hidden');
 }
 function emptyState(icon, text, sub) {
   return '<div class="empty-state"><span class="empty-icon">' + icon + '</span><div class="empty-text">' + text + '</div>' + (sub ? '<div class="empty-sub">' + sub + '</div>' : '') + '</div>';
@@ -437,7 +653,7 @@ function playNote(ctx, freq, startTime, duration, type, vol) {
 }
 
 function updateHistoryCleanupStatus(days) {
-  const el = qs('#historial-limpieza-status');
+  const el = qs(SEL.historialLimpiezaStatus);
   if (!el) return;
   if (days > 0) {
     el.innerHTML = '<i class="nf nf-fa-check_circle" style="color:var(--success)"></i> Limpieza cada ' + days + ' d&iacute;a(s)';
@@ -600,6 +816,9 @@ async function handleLogin() {
       qs(SEL.loginScreen).style.display = 'none';
       qs(SEL.mainApp).style.display = 'flex';
       qs(SEL.sidebarUser).textContent = currentUser.username + ' (' + currentUser.rol + ')';
+      startClock();
+      initSidebarAutoHide();
+      loadSidebarAutoHideConfig();
       applyRoleUI();
       await loadTasa();
       await loadProductCache();
@@ -809,7 +1028,7 @@ function clearCart() {
 }
 
 function updateCartBadge() {
-  const badge = qs('#cart-badge');
+  const badge = qs(SEL.cartBadge);
   if (!badge) return;
   if (cart.length === 0) { badge.classList.add('hidden'); return; }
   badge.classList.remove('hidden');
@@ -1177,7 +1396,7 @@ async function loadInventory() {
     const frag = document.createDocumentFragment();
     products.forEach(p => {
       const tr = document.createElement('tr');
-      const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button data-action="edit-product" data-codigo="' + p.codigo + '">Editar</button>' : '';
+      const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button data-action="edit-product" data-codigo="' + p.codigo + '"><i class="nf nf-fa-pencil"></i> Editar</button>' : '';
       tr.innerHTML = createInventoryRow(p, editBtn);
       frag.appendChild(tr);
     });
@@ -1187,7 +1406,7 @@ async function loadInventory() {
 }
 
 function renderInventoryPagination(total) {
-  let el = document.getElementById('inventory-pagination');
+  let el = qs(SEL.inventoryPagination);
   if (!el) {
     el = document.createElement('div');
     el.id = 'inventory-pagination';
@@ -1378,7 +1597,7 @@ function openCreditoModal(cliente) {
   editingClienteId = cliente ? cliente.id : null;
   qs(SEL.clientNombre).value = cliente ? cliente.nombre : '';
   qs(SEL.clientModalTitle).textContent = cliente ? 'Editar Cliente' : 'Registrar Persona para Cr\u00e9dito';
-  qs('#client-save-btn').textContent = cliente ? 'Guardar Cambios' : 'Guardar';
+  qs(SEL.clientSaveBtn).textContent = cliente ? 'Guardar Cambios' : 'Guardar';
   showModal(qs(SEL.clientModal));
 }
 
@@ -1848,7 +2067,7 @@ async function loadAuditMore() {
 /* ========== CONFIG ========== */
 async function loadThemeConfig() {
   try {
-    const currentTheme = await invoke('get_config_value', { key: CFG_TEMA });
+    const currentTheme = await getUserConfig(CFG_TEMA);
     const theme = currentTheme || 'claro';
     applyTheme(theme);
     qsa('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
@@ -1862,7 +2081,8 @@ const themes = {
   verde: { '--bg': '#F0F7F0', '--card': '#FFFFFF', '--card-alt': '#EAF3EA', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#A8C9A8', '--primary-dark': '#8BB08B', '--primary-rgb': '168, 201, 168', '--accent': '#B8DCC8', '--accent-dark': '#9CC8AC', '--accent-rgb': '184, 220, 200', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.15)', '--toast-bg': '#3A6A3A', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#E6F0E6', '--border': '#D0E0D0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#3A6A3A', '--sidebar-text': '#F0FFF0', '--sidebar-text-rgb': '240, 255, 240' },
   morado: { '--bg': '#F5F0FA', '--card': '#FFFFFF', '--card-alt': '#F0EAF5', '--danger': '#E0A8C0', '--danger-dark': '#CC90A8', '--primary': '#C4B0E0', '--primary-dark': '#B098D4', '--primary-rgb': '196, 176, 224', '--accent': '#D4A8DC', '--accent-dark': '#C090CA', '--accent-rgb': '212, 168, 220', '--danger-rgb': '224, 168, 192', '--overlay': 'rgba(0, 0, 0, 0.2)', '--toast-bg': '#6A4C93', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.08)', '--hover': '#F0EAF6', '--border': '#D8CCE8', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#6A4C93', '--sidebar-text': '#F3E5F5', '--sidebar-text-rgb': '243, 229, 245' },
   turquesa: { '--bg': '#E6F7F5', '--card': '#F5FFFE', '--card-alt': '#EAF8F5', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#4DB8AC', '--primary-dark': '#3A9A8E', '--primary-rgb': '77, 184, 172', '--accent': '#80D0C4', '--accent-dark': '#60B8AA', '--accent-rgb': '128, 208, 196', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.2)', '--toast-bg': '#1A4A44', '--shadow': '0 2px 12px rgba(26, 74, 68, 0.08)', '--hover': '#E8F5F2', '--border': '#C0E0DA', '--text': '#1A4A44', '--text-light': '#5A7A74', '--text-secondary': '#5A7A74', '--sidebar-bg': '#B0E0D6', '--sidebar-text': '#1A4A44', '--sidebar-text-rgb': '26, 74, 68' },
-  naranja: { '--bg': '#FDF0E8', '--card': '#FFF8F0', '--card-alt': '#F5EDE0', '--danger': '#D97050', '--danger-dark': '#C06040', '--primary': '#D47A4A', '--primary-dark': '#C06030', '--primary-rgb': '212, 122, 74', '--accent': '#E8A060', '--accent-dark': '#D48540', '--accent-rgb': '232, 160, 96', '--danger-rgb': '217, 112, 80', '--overlay': 'rgba(0, 0, 0, 0.2)', '--toast-bg': '#5C2A0A', '--shadow': '0 2px 12px rgba(74, 42, 16, 0.08)', '--hover': '#F8EDE0', '--border': '#E8D0B8', '--text': '#4A2A10', '--text-light': '#8A6A4A', '--text-secondary': '#8A6A4A', '--sidebar-bg': '#F0C8A8', '--sidebar-text': '#5C2A0A', '--sidebar-text-rgb': '92, 42, 10' }
+  naranja: { '--bg': '#FDF0E8', '--card': '#FFF8F0', '--card-alt': '#F5EDE0', '--danger': '#D97050', '--danger-dark': '#C06040', '--primary': '#D47A4A', '--primary-dark': '#C06030', '--primary-rgb': '212, 122, 74', '--accent': '#E8A060', '--accent-dark': '#D48540', '--accent-rgb': '232, 160, 96', '--danger-rgb': '217, 112, 80', '--overlay': 'rgba(0, 0, 0, 0.2)', '--toast-bg': '#5C2A0A', '--shadow': '0 2px 12px rgba(74, 42, 16, 0.08)', '--hover': '#F8EDE0', '--border': '#E8D0B8', '--text': '#4A2A10', '--text-light': '#8A6A4A', '--text-secondary': '#8A6A4A', '--sidebar-bg': '#F0C8A8', '--sidebar-text': '#5C2A0A', '--sidebar-text-rgb': '92, 42, 10' },
+  menta: { '--bg': '#EEF7EE', '--card': '#FFFFFF', '--card-alt': '#E8F5E8', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#6BAF8D', '--primary-dark': '#4A8F6D', '--primary-rgb': '107, 175, 141', '--accent': '#8FC1A8', '--accent-dark': '#6DA88A', '--accent-rgb': '143, 193, 168', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.15)', '--toast-bg': '#3A6A4A', '--shadow': '0 2px 12px rgba(58, 106, 74, 0.08)', '--hover': '#E6F5E6', '--border': '#D0E0D0', '--text': '#2A3A2A', '--text-light': '#5A7A6A', '--text-secondary': '#5A7A6A', '--sidebar-bg': '#B0D0B8', '--sidebar-text': '#2A4A3A', '--sidebar-text-rgb': '42, 74, 58' }
 };
 
 let prevThemeKeys = null;
@@ -1877,7 +2097,7 @@ function applyTheme(theme) {
     Object.entries(t).forEach(([key, val]) => {
       document.documentElement.style.setProperty(key, val);
     });
-    try { localStorage.setItem('tema', theme); } catch (e) {}
+    try { localStorage.setItem(CFG_TEMA, theme); } catch (e) {}
   } else {
     prevThemeKeys = null;
   }
@@ -1887,7 +2107,7 @@ async function handleThemeClick(theme) {
   applyTheme(theme);
   qsa('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
   try {
-    await invoke('set_config_value', { key: CFG_TEMA, value: theme });
+    await setUserConfig(CFG_TEMA, theme);
     showToast('Tema cambiado a ' + theme);
   } catch (e) { showToast('Error al guardar tema', 'error'); }
 }
@@ -1904,7 +2124,7 @@ function applyFontSize(pct) {
 
 async function loadFontSize() {
   try {
-    const saved = await invoke('get_config_value', { key: CFG_FONT_SIZE });
+    const saved = await getUserConfig(CFG_FONT_SIZE);
     const pct = parseInt(saved) || FONT_SIZE_DEFAULT;
     applyFontSize(pct);
   } catch (e) { applyFontSize(FONT_SIZE_DEFAULT); }
@@ -1912,7 +2132,7 @@ async function loadFontSize() {
 
 async function saveFontSize(pct) {
   try {
-    await invoke('set_config_value', { key: CFG_FONT_SIZE, value: String(pct) });
+    await setUserConfig(CFG_FONT_SIZE, String(pct));
   } catch (e) {}
 }
 
@@ -1920,7 +2140,7 @@ async function saveFontSize(pct) {
 async function loadUserList() {
   try {
     const users = await invoke('list_usuarios');
-    const tbody = document.getElementById('user-list-body');
+    const tbody = qs(SEL.userListBody);
     if (!tbody) return;
     tbody.innerHTML = '';
     if (!users || users.length === 0) {
@@ -1938,58 +2158,58 @@ async function loadUserList() {
 }
 
 async function handleCreateUser() {
-  const name = document.getElementById('new-user-name').value.trim();
-  const password = document.getElementById('new-user-password').value;
-  const rol = document.getElementById('new-user-rol').value;
+  const name = qs(SEL.newUserName).value.trim();
+  const password = qs(SEL.newUserPassword).value;
+  const rol = qs(SEL.newUserRol).value;
   if (!name || !password) { showToast('Complete todos los campos', 'error'); return; }
   if (password.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
   try {
     await invoke('create_usuario', { username: name, password, rol });
     showToast('Usuario creado exitosamente');
-    document.getElementById('new-user-name').value = '';
-    document.getElementById('new-user-password').value = '';
+    qs(SEL.newUserName).value = '';
+    qs(SEL.newUserPassword).value = '';
     loadUserList();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 /* ========== CHANGE PASSWORD ========== */
 async function handleChangePassword() {
-  const old = document.getElementById('change-pwd-old').value;
-  const newPwd = document.getElementById('change-pwd-new').value;
-  const confirm = document.getElementById('change-pwd-confirm').value;
+  const old = qs(SEL.changePwdOld).value;
+  const newPwd = qs(SEL.changePwdNew).value;
+  const confirm = qs(SEL.changePwdConfirm).value;
   if (!old || !newPwd || !confirm) { showToast('Complete todos los campos', 'error'); return; }
   if (newPwd !== confirm) { showToast('Las contrase\u00f1as nuevas no coinciden', 'error'); return; }
   if (newPwd.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
   try {
     await invoke('change_password', { request: { old_password: old, new_password: newPwd } });
     showToast('Contrase\u00f1a cambiada exitosamente');
-    document.getElementById('change-pwd-old').value = '';
-    document.getElementById('change-pwd-new').value = '';
-    document.getElementById('change-pwd-confirm').value = '';
+    qs(SEL.changePwdOld).value = '';
+    qs(SEL.changePwdNew).value = '';
+    qs(SEL.changePwdConfirm).value = '';
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 /* ========== REPORTS ========== */
 async function loadReports() {
-  const startDate = document.getElementById('report-start-date').value;
-  const endDate = document.getElementById('report-end-date').value;
+  const startDate = qs(SEL.reportStartDate).value;
+  const endDate = qs(SEL.reportEndDate).value;
   if (!startDate || !endDate) { showToast('Seleccione fecha de inicio y fin', 'error'); return; }
-  const searchBtn = document.getElementById('report-search-btn');
+  const searchBtn = qs(SEL.reportSearchBtn);
   const btnHtml = searchBtn.innerHTML;
   try {
     showLoading(searchBtn);
     const filter = {
       start_date: startDate + ' 00:00:00',
       end_date: endDate + ' 23:59:59',
-      producto_codigo: document.getElementById('report-product-filter').value.trim() || null,
-      username: document.getElementById('report-vendor-filter').value.trim() || null,
+      producto_codigo: qs(SEL.reportProductFilter).value.trim() || null,
+      username: qs(SEL.reportVendorFilter).value.trim() || null,
     };
     const result = await invoke('get_sales_report', { filter });
-    document.getElementById('report-total-count').textContent = result.total_ventas;
-    document.getElementById('report-total-usd').textContent = formatUSD(result.total_usd);
-    document.getElementById('report-total-bs').textContent = formatBS(result.total_bs);
+    qs(SEL.reportTotalCount).textContent = result.total_ventas;
+    qs(SEL.reportTotalUsd).textContent = formatUSD(result.total_usd);
+    qs(SEL.reportTotalBs).textContent = formatBS(result.total_bs);
 
-    const tbody = document.getElementById('report-sales-body');
+    const tbody = qs(SEL.reportSalesBody);
     tbody.innerHTML = '';
     if (!result.ventas || result.ventas.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7">' + emptyState('<i class="nf nf-fa-bar_chart"></i>', 'Sin ventas en el per\u00edodo', '') + '</td></tr>';
@@ -2012,13 +2232,13 @@ async function loadReportsAndTopProducts() {
 }
 
 async function loadTopProducts() {
-  const startDate = document.getElementById('report-start-date').value;
-  const endDate = document.getElementById('report-end-date').value;
-  const section = document.getElementById('top-products-section');
-  const grid = document.getElementById('top-products-grid');
+  const startDate = qs(SEL.reportStartDate).value;
+  const endDate = qs(SEL.reportEndDate).value;
+  const section = qs(SEL.topProductsSection);
+  const grid = qs(SEL.topProductsGrid);
   if (!section || !grid) return;
   if (!startDate || !endDate) { section.style.display = 'none'; return; }
-  const limit = parseInt(document.getElementById('top-products-limit')?.value || '10');
+  const limit = parseInt(qs(SEL.topProductsLimit)?.value || '10');
   try {
     const products = await invoke('get_top_products', {
       startDate: startDate + ' 00:00:00',
@@ -2043,7 +2263,7 @@ async function loadTopProducts() {
 let dashboardChartType = 'bar';
 
 async function loadDashboard() {
-  const body = document.getElementById('dashboard-body');
+  const body = qs(SEL.dashboardBody);
   if (!body) return;
   try {
     const data = await invoke('get_dashboard_summary');
@@ -2092,7 +2312,7 @@ async function loadDashboard() {
 var piePeriod = 'day';
 
 function showChartTooltip(clientX, clientY, text) {
-  var el = document.getElementById('chart-tooltip');
+  var el = qs(SEL.chartTooltip);
   if (!el) {
     el = document.createElement('div');
     el.id = 'chart-tooltip';
@@ -2110,13 +2330,13 @@ function showChartTooltip(clientX, clientY, text) {
 }
 
 function hideChartTooltip() {
-  var el = document.getElementById('chart-tooltip');
+  var el = qs(SEL.chartTooltip);
   if (el) el.style.display = 'none';
 }
 
 /* ========== BAR CHART ========== */
 function drawDashboardBarChart(body, data, periods) {
-  var canvas = document.getElementById('dashboard-canvas');
+  var canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
   var rect = canvas.parentElement.getBoundingClientRect();
   var isMobile = rect.width < 500;
@@ -2249,7 +2469,7 @@ function drawDashboardPieChart(body, paymentMethods) {
     });
   }
 
-  var canvas = document.getElementById('dashboard-canvas');
+  var canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
   var rect = canvas.parentElement.getBoundingClientRect();
   var isMobile = rect.width < 500;
@@ -2416,12 +2636,12 @@ function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
 
 /* ========== PRODUCT HISTORY ========== */
 async function showProductHistory(codigo, nombre) {
-  const title = document.getElementById('product-history-title');
-  const tbody = document.getElementById('product-history-body');
+  const title = qs(SEL.productHistoryTitle);
+  const tbody = qs(SEL.productHistoryBody);
   if (title) title.textContent = 'Producto: ' + escapeHtml(nombre) + ' (C\u00f3digo: ' + escapeHtml(codigo) + ')';
   if (tbody) {
     tbody.innerHTML = '<tr><td colspan="7">Cargando...</td></tr>';
-    showModal(document.getElementById('product-history-modal'));
+    showModal(qs(SEL.productHistoryModal));
     try {
       const items = await invoke('get_product_history', { productoCodigo: codigo });
       tbody.innerHTML = '';
@@ -2436,22 +2656,22 @@ async function showProductHistory(codigo, nombre) {
       }
     } catch (e) { tbody.innerHTML = '<tr><td colspan="7">Error: ' + escapeHtml(e) + '</td></tr>'; }
   } else {
-    showModal(document.getElementById('product-history-modal'));
+    showModal(qs(SEL.productHistoryModal));
   }
 }
 
 /* ========== EXPORT REPORT ========== */
 async function handleExportReport() {
-  const startDate = document.getElementById('report-start-date').value;
-  const endDate = document.getElementById('report-end-date').value;
+  const startDate = qs(SEL.reportStartDate).value;
+  const endDate = qs(SEL.reportEndDate).value;
   if (!startDate || !endDate) { showToast('Seleccione fecha de inicio y fin', 'error'); return; }
   try {
     const b64 = await invoke('export_report_xlsx', {
       filter: {
         start_date: startDate + ' 00:00:00',
         end_date: endDate + ' 23:59:59',
-        producto_codigo: document.getElementById('report-product-filter').value.trim() || null,
-        username: document.getElementById('report-vendor-filter').value.trim() || null,
+        producto_codigo: qs(SEL.reportProductFilter).value.trim() || null,
+        username: qs(SEL.reportVendorFilter).value.trim() || null,
       }
     });
     var url = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + b64;
@@ -2474,7 +2694,7 @@ async function handleVoidSale(ventaId) {
     showToast(msg);
     playSound('remove');
     if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
-    if (qs('#view-reports')?.classList.contains('active')) loadReportsAndTopProducts();
+    if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
@@ -2482,18 +2702,18 @@ async function handleVoidSale(ventaId) {
 async function showSaleDetail(ventaId, btn) {
   try {
     const detalles = await invoke('get_sale_detail', { ventaId });
-    document.getElementById('sale-detail-id').textContent = ventaId;
+    qs(SEL.saleDetailId).textContent = ventaId;
     if (btn) {
-      document.getElementById('sale-detail-total').textContent = formatUSD(parseFloat(btn.dataset.total));
-      document.getElementById('sale-detail-metodo').textContent = btn.dataset.metodo;
-      document.getElementById('sale-detail-usuario').textContent = btn.dataset.usuario;
-      document.getElementById('sale-detail-fecha').textContent = btn.dataset.fecha;
+      qs(SEL.saleDetailTotal).textContent = formatUSD(parseFloat(btn.dataset.total));
+      qs(SEL.saleDetailMetodo).textContent = btn.dataset.metodo;
+      qs(SEL.saleDetailUsuario).textContent = btn.dataset.usuario;
+      qs(SEL.saleDetailFecha).textContent = btn.dataset.fecha;
     }
-    const list = document.getElementById('sale-detail-list');
+    const list = qs(SEL.saleDetailList);
     list.innerHTML = '';
     if (detalles.length === 0) {
       list.innerHTML = '<p class="text-muted">No hay detalles.</p>';
-      showModal(document.getElementById('sale-detail-modal'));
+      showModal(qs(SEL.saleDetailModal));
       return;
     }
     const allVoided = detalles.every(function(d) { return d.anulado; });
@@ -2512,7 +2732,7 @@ async function showSaleDetail(ventaId, btn) {
     });
     table.appendChild(tbody);
     list.appendChild(table);
-    showModal(document.getElementById('sale-detail-modal'));
+    showModal(qs(SEL.saleDetailModal));
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
@@ -2525,15 +2745,15 @@ async function handleVoidItem(ventaId, detalleId) {
     playSound('remove');
     showSaleDetail(ventaId);
     if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
-    if (qs('#view-reports')?.classList.contains('active')) loadReportsAndTopProducts();
+    if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 /* ========== SET TODAY ON REPORT DATES ========== */
 function setDefaultReportDates() {
   const today = new Date().toISOString().split('T')[0];
-  const startInput = document.getElementById('report-start-date');
-  const endInput = document.getElementById('report-end-date');
+  const startInput = qs(SEL.reportStartDate);
+  const endInput = qs(SEL.reportEndDate);
   if (startInput && !startInput.value) startInput.value = today;
   if (endInput && !endInput.value) endInput.value = today;
 }
@@ -2551,7 +2771,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.loginPassword).addEventListener('keydown', e => {
     if (e.key === 'Enter') handleLogin();
   });
-  document.getElementById('toggle-password')?.addEventListener('click', function() {
+  qs(SEL.togglePassword)?.addEventListener('click', function() {
     const input = qs(SEL.loginPassword);
     const isPassword = input.type === 'password';
     input.type = isPassword ? 'text' : 'password';
@@ -2559,7 +2779,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     this.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
   });
   qs(SEL.logoutBtn).addEventListener('click', handleLogout);
-  document.getElementById('mobile-logout-btn')?.addEventListener('click', handleLogout);
+  qs(SEL.mobileLogoutBtn)?.addEventListener('click', handleLogout);
 
   // Navigation
   qsa('.nav-btn').forEach(btn => {
@@ -2609,8 +2829,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   // Payment modal
-  qs('#payment-modal-close').addEventListener('click', closePaymentModal);
-  qs('#payment-cancel-btn').addEventListener('click', closePaymentModal);
+  qs(SEL.paymentModalClose).addEventListener('click', closePaymentModal);
+  qs(SEL.paymentCancelBtn).addEventListener('click', closePaymentModal);
   qs(SEL.mixtoAddRow).addEventListener('click', function() { addMixtoRow('mixto-items'); });
   qs(SEL.cambioRecibido)?.addEventListener('input', function() {
     const recibido = parseFloat(this.value) || 0;
@@ -2630,7 +2850,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       cambioEl.classList.add('hidden');
     }
   });
-  qs('#abono-mixto-add-row').addEventListener('click', function() { addMixtoRow('abono-mixto-items'); });
+  qs(SEL.abonoMixtoAddRow).addEventListener('click', function() { addMixtoRow('abono-mixto-items'); });
   qs(SEL.paymentConfirmBtn).addEventListener('click', confirmPayment);
   qsa('.payment-method-btn').forEach(btn => {
     btn.addEventListener('click', () => selectPaymentMethod(btn.dataset.method));
@@ -2673,24 +2893,24 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   // Product modal
-  qs('#product-modal-close').addEventListener('click', closeProductModal);
-  qs('#product-cancel-btn').addEventListener('click', closeProductModal);
-  qs('#product-save-btn').addEventListener('click', saveProduct);
+  qs(SEL.productModalClose).addEventListener('click', closeProductModal);
+  qs(SEL.productCancelBtn).addEventListener('click', closeProductModal);
+  qs(SEL.productSaveBtn).addEventListener('click', saveProduct);
   qs(SEL.productDeleteBtn).addEventListener('click', deleteProduct);
   qs(SEL.productPrecio).addEventListener('input', function() { applyComaAutomatica(this); });
 
   // Product detail modal
-  qs('#product-detail-close').addEventListener('click', closeProductDetail);
-  qs('#product-detail-ok-btn').addEventListener('click', closeProductDetail);
+  qs(SEL.productDetailClose).addEventListener('click', closeProductDetail);
+  qs(SEL.productDetailOkBtn).addEventListener('click', closeProductDetail);
 
   // Creditos
   qs(SEL.creditoAddBtn).addEventListener('click', () => openCreditoModal());
-  qs('#client-modal-close').addEventListener('click', closeClientModal);
-  qs('#client-cancel-btn').addEventListener('click', closeClientModal);
-  qs('#client-save-btn').addEventListener('click', saveClient);
+  qs(SEL.clientModalClose).addEventListener('click', closeClientModal);
+  qs(SEL.clientCancelBtn).addEventListener('click', closeClientModal);
+  qs(SEL.clientSaveBtn).addEventListener('click', saveClient);
 
   // Creditos search
-  const creditosSearch = document.getElementById('creditos-search');
+  const creditosSearch = qs(SEL.creditosSearch);
   if (creditosSearch) {
     creditosSearch.addEventListener('input', function() {
       const term = this.value.toLowerCase().trim();
@@ -2737,11 +2957,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Cashier
   qs(SEL.openCashierBtn).addEventListener('click', handleOpenCashier);
   qs(SEL.closeCashierBtn).addEventListener('click', openCloseCashier);
-  qs('#close-cashier-close').addEventListener('click', closeCloseCashier);
-  qs('#close-cashier-cancel-btn').addEventListener('click', closeCloseCashier);
-  qs('#close-cashier-confirm-btn').addEventListener('click', confirmCloseCashier);
-  qs('#close-report-close').addEventListener('click', closeReport);
-  qs('#close-report-ok-btn').addEventListener('click', closeReport);
+  qs(SEL.closeCashierClose).addEventListener('click', closeCloseCashier);
+  qs(SEL.closeCashierCancelBtn).addEventListener('click', closeCloseCashier);
+  qs(SEL.closeCashierConfirmBtn).addEventListener('click', confirmCloseCashier);
+  qs(SEL.closeReportClose).addEventListener('click', closeReport);
+  qs(SEL.closeReportOkBtn).addEventListener('click', closeReport);
 
   // Event delegation: close report print button
   qs(SEL.closeReportBody).addEventListener('click', e => {
@@ -2750,7 +2970,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* ========== USER MANAGEMENT ========== */
-  const createUserBtn = document.getElementById('create-user-btn');
+  const createUserBtn = qs(SEL.createUserBtn);
   if (createUserBtn) createUserBtn.addEventListener('click', handleCreateUser);
   document.addEventListener('click', function(e) {
     const delBtn = e.target.closest('.delete-user-btn');
@@ -2764,38 +2984,38 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* ========== COLLAPSIBLE CARDS ========== */
-  document.getElementById('view-config').addEventListener('click', function(e) {
+  qs(SEL.viewConfig).addEventListener('click', function(e) {
     const header = e.target.closest('.config-card-header');
     if (header) header.classList.toggle('collapsed');
   });
-  document.getElementById('view-reports')?.addEventListener('click', function(e) {
+  qs(SEL.viewReports)?.addEventListener('click', function(e) {
     const header = e.target.closest('.config-card-header');
     if (header) header.classList.toggle('collapsed');
   });
-  document.getElementById('view-sync')?.addEventListener('click', function(e) {
+  qs(SEL.viewSync)?.addEventListener('click', function(e) {
     const header = e.target.closest('.config-card-header');
     if (header) header.classList.toggle('collapsed');
   });
 
   /* ========== CHANGE PASSWORD ========== */
-  const changePwdBtn = document.getElementById('change-pwd-btn');
+  const changePwdBtn = qs(SEL.changePwdBtn);
   if (changePwdBtn) changePwdBtn.addEventListener('click', handleChangePassword);
 
   /* ========== ADMIN CHANGE PASSWORD MODAL ========== */
   let adminPwdUserId = null;
-  const adminPwdModal = document.getElementById('admin-pwd-modal');
-  const adminPwdInput = document.getElementById('admin-pwd-input');
+  const adminPwdModal = qs(SEL.adminPwdModal);
+  const adminPwdInput = qs(SEL.adminPwdInput);
   function openAdminPwdModal(id, username) {
     adminPwdUserId = id;
-    document.getElementById('admin-pwd-user-info').textContent = 'Cambiar contrase\u00f1a de: ' + escapeHtml(username);
+    qs(SEL.adminPwdUserInfo).textContent = 'Cambiar contrase\u00f1a de: ' + escapeHtml(username);
     adminPwdInput.value = '';
     showModal(adminPwdModal);
     setTimeout(function() { adminPwdInput.focus(); }, 100);
   }
   function closeAdminPwdModal() { adminPwdUserId = null; closeModal(adminPwdModal); }
-  document.getElementById('admin-pwd-modal-close').addEventListener('click', closeAdminPwdModal);
-  document.getElementById('admin-pwd-cancel-btn').addEventListener('click', closeAdminPwdModal);
-  document.getElementById('admin-pwd-save-btn').addEventListener('click', async function() {
+  qs(SEL.adminPwdModalClose).addEventListener('click', closeAdminPwdModal);
+  qs(SEL.adminPwdCancelBtn).addEventListener('click', closeAdminPwdModal);
+  qs(SEL.adminPwdSaveBtn).addEventListener('click', async function() {
     const pwd = adminPwdInput.value.trim();
     if (!pwd || pwd.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
     try {
@@ -2812,7 +3032,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* ========== BACKUP DATABASE ========== */
-  const backupBtn = document.getElementById('backup-db-btn');
+  const backupBtn = qs(SEL.backupDbBtn);
   if (backupBtn) {
     backupBtn.addEventListener('click', async function() {
       try {
@@ -2841,12 +3061,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* Registrar dispositivo */
-  const registerBtn = document.getElementById('register-device-btn');
+  const registerBtn = qs(SEL.registerDeviceBtn);
   if (registerBtn) {
     registerBtn.addEventListener('click', async function() {
       const name = 'PC Jotapemece';
-      const urlEl = document.getElementById('sync-url');
-      const keyEl = document.getElementById('sync-key');
+      const urlEl = qs(SEL.syncUrl);
+      const keyEl = qs(SEL.syncKey);
       if (urlEl && urlEl.value) await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
       if (keyEl && keyEl.value) await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
       try {
@@ -2864,11 +3084,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   /* Subir productos */
-  const uploadBtn = document.getElementById('upload-products-btn');
+  const uploadBtn = qs(SEL.uploadProductsBtn);
   if (uploadBtn) {
     uploadBtn.addEventListener('click', async function() {
-      const urlEl = document.getElementById('sync-url');
-      const keyEl = document.getElementById('sync-key');
+      const urlEl = qs(SEL.syncUrl);
+      const keyEl = qs(SEL.syncKey);
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
       await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
@@ -2888,11 +3108,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   /* Descargar productos */
-  const downloadBtn = document.getElementById('download-products-btn');
+  const downloadBtn = qs(SEL.downloadProductsBtn);
   if (downloadBtn) {
     downloadBtn.addEventListener('click', async function() {
-      const urlEl = document.getElementById('sync-url');
-      const keyEl = document.getElementById('sync-key');
+      const urlEl = qs(SEL.syncUrl);
+      const keyEl = qs(SEL.syncKey);
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
       await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
@@ -2917,11 +3137,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   /* Subir ventas */
-  const uploadSalesBtn = document.getElementById('upload-sales-btn');
+  const uploadSalesBtn = qs(SEL.uploadSalesBtn);
   if (uploadSalesBtn) {
     uploadSalesBtn.addEventListener('click', async function() {
-      const urlEl = document.getElementById('sync-url');
-      const keyEl = document.getElementById('sync-key');
+      const urlEl = qs(SEL.syncUrl);
+      const keyEl = qs(SEL.syncKey);
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
       await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
@@ -2941,11 +3161,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   /* Descargar ventas */
-  const downloadSalesBtn = document.getElementById('download-sales-btn');
+  const downloadSalesBtn = qs(SEL.downloadSalesBtn);
   if (downloadSalesBtn) {
     downloadSalesBtn.addEventListener('click', async function() {
-      const urlEl = document.getElementById('sync-url');
-      const keyEl = document.getElementById('sync-key');
+      const urlEl = qs(SEL.syncUrl);
+      const keyEl = qs(SEL.syncKey);
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
       await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
@@ -2968,11 +3188,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   /* Subir clientes */
-  const uploadClientesBtn = document.getElementById('upload-clientes-btn');
+  const uploadClientesBtn = qs(SEL.uploadClientesBtn);
   if (uploadClientesBtn) {
     uploadClientesBtn.addEventListener('click', async function() {
-      const urlEl = document.getElementById('sync-url');
-      const keyEl = document.getElementById('sync-key');
+      const urlEl = qs(SEL.syncUrl);
+      const keyEl = qs(SEL.syncKey);
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
       await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
@@ -2992,11 +3212,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   /* Descargar clientes */
-  const downloadClientesBtn = document.getElementById('download-clientes-btn');
+  const downloadClientesBtn = qs(SEL.downloadClientesBtn);
   if (downloadClientesBtn) {
     downloadClientesBtn.addEventListener('click', async function() {
-      const urlEl = document.getElementById('sync-url');
-      const keyEl = document.getElementById('sync-key');
+      const urlEl = qs(SEL.syncUrl);
+      const keyEl = qs(SEL.syncKey);
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
       await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
@@ -3018,7 +3238,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   /* Conflictos: botones de resolución delegados */
-  document.getElementById('conflict-modal')?.addEventListener('click', async function(e) {
+  qs(SEL.conflictModal)?.addEventListener('click', async function(e) {
     const btn = e.target.closest('.conflict-keep-local, .conflict-use-remote');
     if (!btn) return;
     const id = parseInt(btn.dataset.id);
@@ -3034,12 +3254,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* Ver conflictos */
-  document.getElementById('view-conflicts-btn')?.addEventListener('click', openConflictModal);
+  qs(SEL.viewConflictsBtn)?.addEventListener('click', openConflictModal);
 
   /* Sync all progress UI */
-  const syncProgressModal = document.getElementById('sync-progress-modal');
-  const syncProgressText = document.getElementById('sync-progress-text');
-  const syncProgressBar = document.getElementById('sync-progress-bar');
+  const syncProgressModal = qs(SEL.syncProgressModal);
+  const syncProgressText = qs(SEL.syncProgressText);
+  const syncProgressBar = qs(SEL.syncProgressBar);
   function showSyncProgress() { syncProgressModal.classList.remove('hidden'); }
   function hideSyncProgress() { syncProgressModal.classList.add('hidden'); syncProgressBar.style.width = '0%'; }
   function updateSyncProgress(step, current, total) {
@@ -3053,14 +3273,14 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   function syncSaveConfig() {
-    var urlEl = document.getElementById('sync-url');
-    var keyEl = document.getElementById('sync-key');
+    var urlEl = qs(SEL.syncUrl);
+    var keyEl = qs(SEL.syncKey);
     if (urlEl && urlEl.value) invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(function(){});
     if (keyEl && keyEl.value) invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(function(){});
   }
 
   /* Subir todo */
-  document.getElementById('upload-all-btn')?.addEventListener('click', function() {
+  qs(SEL.uploadAllBtn)?.addEventListener('click', function() {
     confirmModal('¿Subir productos, clientes y ventas a Supabase?', 'Subir todo', 'Subir').then(function(ok) {
       if (!ok) return;
       syncSaveConfig();
@@ -3077,7 +3297,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* Descargar todo */
-  document.getElementById('download-all-btn')?.addEventListener('click', function() {
+  qs(SEL.downloadAllBtn)?.addEventListener('click', function() {
     confirmModal('¿Descargar productos, clientes y ventas desde Supabase?', 'Descargar todo', 'Descargar').then(function(ok) {
       if (!ok) return;
       syncSaveConfig();
@@ -3095,7 +3315,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* Sincronizar todo */
-  document.getElementById('sync-all-btn')?.addEventListener('click', function() {
+  qs(SEL.syncAllBtn)?.addEventListener('click', function() {
     confirmModal('¿Sincronizar completamente (subir y descargar todo) con Supabase?', 'Sincronizar todo', 'Sincronizar').then(function(ok) {
       if (!ok) return;
       syncSaveConfig();
@@ -3113,8 +3333,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* Probar conexión */
-  document.getElementById('test-connection-btn')?.addEventListener('click', async function() {
-    var statusEl = document.getElementById('connection-status');
+  qs(SEL.testConnectionBtn)?.addEventListener('click', async function() {
+    var statusEl = qs(SEL.connectionStatus);
     if (!statusEl) return;
     var btn = this;
     btn.disabled = true;
@@ -3144,29 +3364,29 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* Cerrar modal conflictos */
-  document.getElementById('conflict-modal-close')?.addEventListener('click', function() { closeModal(document.getElementById('conflict-modal')); });
-  document.getElementById('conflict-close-btn')?.addEventListener('click', function() { closeModal(document.getElementById('conflict-modal')); });
+  qs(SEL.conflictModalClose)?.addEventListener('click', function() { closeModal(qs(SEL.conflictModal)); });
+  qs(SEL.conflictCloseBtn)?.addEventListener('click', function() { closeModal(qs(SEL.conflictModal)); });
 
   /* ========== REPORTS ========== */
-  const reportSearchBtn = document.getElementById('report-search-btn');
+  const reportSearchBtn = qs(SEL.reportSearchBtn);
   if (reportSearchBtn) reportSearchBtn.addEventListener('click', loadReportsAndTopProducts);
   ['report-start-date', 'report-end-date'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', setDefaultReportDates);
   });
-  const topLimitSelect = document.getElementById('top-products-limit');
+  const topLimitSelect = qs(SEL.topProductsLimit);
   if (topLimitSelect) topLimitSelect.addEventListener('change', loadTopProducts);
 
   /* ========== EXPORT REPORT ========== */
-  const exportBtn = document.getElementById('report-export-btn');
+  const exportBtn = qs(SEL.reportExportBtn);
   if (exportBtn) exportBtn.addEventListener('click', handleExportReport);
 
   /* ========== PRODUCT HISTORY MODAL ========== */
-  document.getElementById('product-history-modal-close')?.addEventListener('click', function() { closeModal(document.getElementById('product-history-modal')); });
-  document.getElementById('product-history-ok-btn')?.addEventListener('click', function() { closeModal(document.getElementById('product-history-modal')); });
+  qs(SEL.productHistoryModalClose)?.addEventListener('click', function() { closeModal(qs(SEL.productHistoryModal)); });
+  qs(SEL.productHistoryOkBtn)?.addEventListener('click', function() { closeModal(qs(SEL.productHistoryModal)); });
 
   /* ========== VOID SALE (delegation on daily sales table) ========== */
-  document.getElementById('daily-sales-body').addEventListener('click', function(e) {
+  qs(SEL.dailySalesBody).addEventListener('click', function(e) {
     const btn = e.target.closest('.void-sale-btn');
     if (btn) handleVoidSale(parseInt(btn.dataset.id));
     const detailBtn = e.target.closest('.sale-detail-btn');
@@ -3174,16 +3394,16 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   /* ========== SALE DETAIL MODAL ========== */
-  document.getElementById('sale-detail-close')?.addEventListener('click', function() { closeModal(document.getElementById('sale-detail-modal')); });
-  document.getElementById('sale-detail-ok-btn')?.addEventListener('click', function() { closeModal(document.getElementById('sale-detail-modal')); });
-  document.getElementById('sale-detail-list')?.addEventListener('click', function(e) {
+  qs(SEL.saleDetailClose)?.addEventListener('click', function() { closeModal(qs(SEL.saleDetailModal)); });
+  qs(SEL.saleDetailOkBtn)?.addEventListener('click', function() { closeModal(qs(SEL.saleDetailModal)); });
+  qs(SEL.saleDetailList)?.addEventListener('click', function(e) {
     const btn = e.target.closest('.void-item-btn');
     if (btn) handleVoidItem(parseInt(btn.dataset.ventaId), parseInt(btn.dataset.detalleId));
   });
 
   /* ========== VIEW-SPECIFIC LOAD ========== */
   // Reports: set default dates on show
-  const reportsView = document.getElementById('view-reports');
+  const reportsView = qs(SEL.viewReports);
   if (reportsView) {
     const observer = new MutationObserver(function() {
       if (reportsView.classList.contains('active')) {
@@ -3196,13 +3416,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Goto reports from cashier
-  const gotoReportsBtn = document.getElementById('goto-reports-btn');
+  const gotoReportsBtn = qs(SEL.gotoReportsBtn);
   if (gotoReportsBtn) gotoReportsBtn.addEventListener('click', function() { showView('reports'); });
 
   // Historial cierres
   qs(SEL.historialCierresBtn).addEventListener('click', openHistorialCierres);
-  qs('#historial-cierres-close').addEventListener('click', closeHistorialCierres);
-  qs('#historial-cierres-ok-btn').addEventListener('click', closeHistorialCierres);
+  qs(SEL.historialCierresClose).addEventListener('click', closeHistorialCierres);
+  qs(SEL.historialCierresOkBtn).addEventListener('click', closeHistorialCierres);
 
   // Event delegation: historial cierres list
   qs(SEL.historialCierresList).addEventListener('click', e => {
@@ -3210,16 +3430,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (btn) showCierreDetalle(parseInt(btn.dataset.id));
   });
 
-  qs('#historial-cierre-detalle-close').addEventListener('click', closeHistorialDetalle);
-  qs('#historial-cierre-detalle-ok-btn').addEventListener('click', closeHistorialDetalle);
+  qs(SEL.historialCierreDetalleClose).addEventListener('click', closeHistorialDetalle);
+  qs(SEL.historialCierreDetalleOkBtn).addEventListener('click', closeHistorialDetalle);
 
   // Debt detail
-  qs('#debt-detail-close').addEventListener('click', closeDebtDetail);
-  qs('#debt-detail-ok-btn').addEventListener('click', closeDebtDetail);
+  qs(SEL.debtDetailClose).addEventListener('click', closeDebtDetail);
+  qs(SEL.debtDetailOkBtn).addEventListener('click', closeDebtDetail);
 
   // Abono modal
-  qs('#abono-close').addEventListener('click', closeAbonoModal);
-  qs('#abono-cancel-btn').addEventListener('click', closeAbonoModal);
+  qs(SEL.abonoClose).addEventListener('click', closeAbonoModal);
+  qs(SEL.abonoCancelBtn).addEventListener('click', closeAbonoModal);
   qs(SEL.abonoConfirmBtn).addEventListener('click', confirmAbono);
   qs(SEL.abonoMonto).addEventListener('input', function() {
     updateAbonoSaldoRestante();
@@ -3277,13 +3497,20 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (soundToggle) {
     soundToggle.addEventListener('change', function() {
       soundEnabled = this.checked;
-      invoke('set_config_value', { key: CFG_SONIDO_HABILITADO, value: this.checked ? SOUND_ENABLED : SOUND_DISABLED }).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
+      setUserConfig(CFG_SONIDO_HABILITADO, this.checked ? SOUND_ENABLED : SOUND_DISABLED).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
     });
   }
   if (soundVolumeRange) {
     soundVolumeRange.addEventListener('input', function() {
       soundVolume = parseInt(this.value) / 100;
-      invoke('set_config_value', { key: CFG_SONIDO_VOLUMEN, value: String(this.value) }).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
+      setUserConfig(CFG_SONIDO_VOLUMEN, String(this.value)).catch(e => showToast('Error al guardar configuración de sonido', 'error'));
+    });
+  }
+  const sidebarToggle = qs(SEL.sidebarAutoHideToggle);
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener('change', function() {
+      setSidebarAutoHide(this.checked);
+      setUserConfig(CFG_SIDEBAR_AUTO_HIDE, this.checked ? 'true' : 'false').catch(e => showToast('Error al guardar configuración', 'error'));
     });
   }
 
@@ -3316,7 +3543,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   loadFontSize();
 
   // Coma automática
-  const comaToggle = document.getElementById('coma-automatica-toggle');
+  const comaToggle = qs(SEL.comaAutomaticaToggle);
   function updatePrecioInputType() {
     const input = qs(SEL.productPrecio);
     if (comaAutomaticaEnabled) {
@@ -3331,32 +3558,32 @@ document.addEventListener('DOMContentLoaded', async function() {
     comaToggle.addEventListener('change', async function() {
       comaAutomaticaEnabled = this.checked;
       updatePrecioInputType();
-      try { await invoke('set_config_value', { key: CFG_COMA_AUTOMATICA, value: this.checked ? '1' : '0' }); } catch (e) {}
+      try { await setUserConfig(CFG_COMA_AUTOMATICA, this.checked ? '1' : '0'); } catch (e) {}
     });
   }
-  const vueltoToggle = document.getElementById('calcular-vuelto-toggle');
+  const vueltoToggle = qs(SEL.calcularVueltoToggle);
   if (vueltoToggle) {
     vueltoToggle.addEventListener('change', async function() {
       calcularVuelto = this.checked;
-      try { await invoke('set_config_value', { key: CFG_CALCULAR_VUELTO, value: this.checked ? '1' : '0' }); } catch (e) {}
+      try { await setUserConfig(CFG_CALCULAR_VUELTO, this.checked ? '1' : '0'); } catch (e) {}
     });
   }
-  const redondeoToggle = document.getElementById('redondeo-bs-toggle');
+  const redondeoToggle = qs(SEL.redondeoBsToggle);
   if (redondeoToggle) {
     redondeoToggle.addEventListener('change', async function() {
       redondeoBs = this.checked;
-      try { await invoke('set_config_value', { key: CFG_REDONDEO_BS, value: this.checked ? '1' : '0' }); } catch (e) {}
+      try { await setUserConfig(CFG_REDONDEO_BS, this.checked ? '1' : '0'); } catch (e) {}
     });
   }
 
   // Load saved sound config
   try {
-    const savedSound = await invoke('get_config_value', { key: CFG_SONIDO_HABILITADO });
+    const savedSound = await getUserConfig(CFG_SONIDO_HABILITADO);
     if (savedSound !== null && savedSound !== undefined) {
       soundEnabled = savedSound === SOUND_ENABLED || savedSound === true;
       if (soundToggle) soundToggle.checked = soundEnabled;
     }
-    const savedVol = await invoke('get_config_value', { key: CFG_SONIDO_VOLUMEN });
+    const savedVol = await getUserConfig(CFG_SONIDO_VOLUMEN);
     if (savedVol !== null && savedVol !== undefined) {
       soundVolume = parseInt(savedVol) / 100 || 0.5;
       if (soundVolumeRange) soundVolumeRange.value = soundVolume * 100;
@@ -3365,7 +3592,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Load coma automática config
   try {
-    const savedComa = await invoke('get_config_value', { key: CFG_COMA_AUTOMATICA });
+    const savedComa = await getUserConfig(CFG_COMA_AUTOMATICA);
     comaAutomaticaEnabled = savedComa === '1' || savedComa === true;
     if (comaToggle) comaToggle.checked = comaAutomaticaEnabled;
     updatePrecioInputType();
@@ -3373,21 +3600,21 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Load calcular vuelto config
   try {
-    const savedVuelto = await invoke('get_config_value', { key: CFG_CALCULAR_VUELTO });
+    const savedVuelto = await getUserConfig(CFG_CALCULAR_VUELTO);
     calcularVuelto = savedVuelto !== '0';
     if (vueltoToggle) vueltoToggle.checked = calcularVuelto;
   } catch (e) {}
 
   // Load redondeo Bs config
   try {
-    const savedRedondeo = await invoke('get_config_value', { key: CFG_REDONDEO_BS });
+    const savedRedondeo = await getUserConfig(CFG_REDONDEO_BS);
     redondeoBs = savedRedondeo === '1' || savedRedondeo === true;
     if (redondeoToggle) redondeoToggle.checked = redondeoBs;
   } catch (e) {}
 
   // Load saved theme on startup
   try {
-    const savedTheme = await invoke('get_config_value', { key: CFG_TEMA });
+    const savedTheme = await getUserConfig(CFG_TEMA);
     if (savedTheme) applyTheme(savedTheme);
   } catch (e) {}
 
@@ -3462,7 +3689,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     var _prevVpHeight = window.visualViewport.height;
     window.visualViewport.addEventListener('resize', function() {
       var diff = _prevVpHeight - window.visualViewport.height;
-      var main = document.getElementById('main-app');
+      var main = qs(SEL.mainApp);
       if (!main) return;
       if (diff > 100) {
         // Keyboard opened

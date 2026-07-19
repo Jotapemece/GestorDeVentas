@@ -54,13 +54,8 @@ pub(crate) fn validar_pago_detalle(detalle: &[PagoItem], total_usd: f64) -> Resu
         if item.monto_usd <= 0.0 {
             return Err(format!("Monto inválido para {}", item.metodo));
         }
-        if item.metodo == "pago_movil"
-            && item.referencia.as_deref().unwrap_or("").len() != constants::PAGO_MOVIL_REF_LEN
-        {
-            return Err(
-                "Pago móvil requiere los últimos 4 dígitos de referencia"
-                    .to_string(),
-            );
+        if item.metodo == constants::METODO_PAGO_MOVIL {
+            crate::helpers::validate_pago_movil_ref(item.referencia.as_deref())?;
         }
         suma += item.monto_usd;
     }
@@ -80,10 +75,8 @@ fn validate_sale_request(request: &CreateSaleRequest) -> Result<(), String> {
     if request.tasa <= 0.0 {
         return Err("La tasa debe ser mayor a cero".to_string());
     }
-    if request.metodo_pago == constants::METODO_PAGO_MOVIL
-        && request.referencia_pago_movil.as_deref().unwrap_or("").len() != constants::PAGO_MOVIL_REF_LEN
-    {
-        return Err("Debe ingresar los últimos 4 dígitos de la referencia".to_string());
+    if request.metodo_pago == constants::METODO_PAGO_MOVIL {
+        crate::helpers::validate_pago_movil_ref(request.referencia_pago_movil.as_deref())?;
     }
     if request.metodo_pago == constants::METODO_CREDITO && request.cliente_id.is_none() {
         return Err("Debe seleccionar un cliente para la venta a crédito".to_string());
@@ -182,7 +175,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
     let mut db = state.lock_db()?;
     validate_sale_request(&request)?;
 
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = crate::helpers::fecha_hora_local();
     let current_username = state.get_username()?;
     let venta_sync_id = Uuid::new_v4().to_string();
     let dispositivo_origen = db.query_row(
@@ -488,7 +481,7 @@ fn get_sales_report_inner(
         where_clauses.push(format!("v.usuario_id IN (SELECT id FROM usuarios WHERE username = ?{})", if has_producto { 4 } else { 3 }));
     }
 
-    let end = crate::cashier::siguiente_dia(&filter.end_date);
+    let end = crate::helpers::siguiente_dia(&filter.end_date);
     let where_sql = where_clauses.join(" AND ");
 
     let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
@@ -638,10 +631,10 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64) -> Res
             params![venta_id],
             |row| row.get(0),
         )
-        .unwrap_or(0.0);
+        .map_err(|e| format!("Error al recalcular total: {}", e))?;
     let tasa: f64 = tx
         .query_row("SELECT tasa_aplicada FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
-        .unwrap_or(0.0);
+        .map_err(|e| format!("Error al obtener tasa: {}", e))?;
     let new_total_bs = (new_total_usd * tasa * 100.0).round() / 100.0;
 
     tx.execute("UPDATE ventas SET total_usd = ?1, total_bs = ?2 WHERE id = ?3",
@@ -655,7 +648,7 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64) -> Res
             params![venta_id],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .map_err(|e| format!("Error al contar items restantes: {}", e))?;
     if remaining == 0 {
         tx.execute("UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id])
             .map_err(|e| format!("Error al anular venta: {}", e))?;

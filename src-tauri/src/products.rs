@@ -420,7 +420,7 @@ pub(crate) fn parse_product_tsv_line(line: &str, line_no: usize, count: i64) -> 
     Ok((codigo, nombre, stock, precio_usd))
 }
 
-fn format_import_result(count: i64, errors: &[String]) -> String {
+pub(crate) fn format_import_result(count: i64, errors: &[String]) -> String {
     if errors.is_empty() {
         return format!("Importados {} productos sin errores.", count);
     }
@@ -519,4 +519,91 @@ pub fn get_top_products(
         .collect();
 
     Ok(products)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_tsv_7_columns() {
+        let line = "P001\tNombre, Producto\t100\t...\t...\t10.50\t...";
+        let result = parse_product_tsv_line(line, 0, 0);
+        assert!(result.is_ok());
+        let (codigo, nombre, stock, precio) = result.unwrap();
+        assert_eq!(codigo, "P001");
+        assert_eq!(nombre, "Nombre, Producto");
+        assert_eq!(stock, 100);
+        assert!((precio - 10.50).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_tsv_6_columns_autocode() {
+        let line = "Nombre\t50\t...\t...\t25.00\t...";
+        let result = parse_product_tsv_line(line, 0, 5);
+        assert!(result.is_ok());
+        let (codigo, nombre, stock, precio) = result.unwrap();
+        assert_eq!(codigo, "P0006");
+        assert_eq!(nombre, "Nombre");
+        assert_eq!(stock, 50);
+        assert!((precio - 25.00).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_tsv_3_columns() {
+        let line = "Nombre\t30\t15.50";
+        let result = parse_product_tsv_line(line, 1, 10);
+        assert!(result.is_ok());
+        let (codigo, nombre, stock, precio) = result.unwrap();
+        assert_eq!(codigo, "P0011");
+        assert_eq!(nombre, "Nombre");
+        assert_eq!(stock, 30);
+        assert!((precio - 15.50).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_tsv_insufficient_columns() {
+        let line = "P001\tSolo";
+        let result = parse_product_tsv_line(line, 0, 0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("columnas insuficientes"));
+    }
+
+    #[test]
+    fn test_parse_tsv_invalid_stock() {
+        let line = "P001\tNombre\tabc\t...\t...\t10.50\t...";
+        let result = parse_product_tsv_line(line, 2, 0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("stock inválido"));
+    }
+
+    #[test]
+    fn test_parse_tsv_invalid_precio() {
+        let line = "P001\tNombre\t10\t...\t...\txyz\t...";
+        let result = parse_product_tsv_line(line, 0, 0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("precio inválido"));
+    }
+
+    #[test]
+    fn test_format_import_result_no_errors() {
+        let result = format_import_result(10, &[]);
+        assert_eq!(result, "Importados 10 productos sin errores.");
+    }
+
+    #[test]
+    fn test_format_import_result_with_errors() {
+        let errors = vec!["Error 1".to_string(), "Error 2".to_string()];
+        let result = format_import_result(5, &errors);
+        assert!(result.contains("Importados 5 productos"));
+        assert!(result.contains("Error 1"));
+        assert!(result.contains("Error 2"));
+    }
+
+    #[test]
+    fn test_format_import_result_many_errors() {
+        let errors: Vec<String> = (0..15).map(|i| format!("Error {}", i)).collect();
+        let result = format_import_result(0, &errors);
+        assert!(result.contains("... y 5 más"));
+    }
 }

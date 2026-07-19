@@ -155,11 +155,34 @@ button:focus-visible,
   width: var(--sidebar-width); min-width: var(--sidebar-width);
   background: var(--sidebar-bg); display: flex; flex-direction: column;
   padding: 20px 0; height: 100vh;
+  transition: width 0.3s ease, min-width 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+  overflow: hidden; white-space: nowrap;
+  position: relative; z-index: 100;
+}
+#main-app.sidebar-hidden #sidebar {
+  width: 0; min-width: 0;
+  padding-left: 0; padding-right: 0;
+  opacity: 0.5;
+}
+#main-app.sidebar-hidden #sidebar .sidebar-header,
+#main-app.sidebar-hidden #sidebar .sidebar-nav,
+#main-app.sidebar-hidden #sidebar .sidebar-footer {
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 .sidebar-header { padding: 0 20px 16px; border-bottom: 1px solid rgba(var(--sidebar-text-rgb), 0.12); }
-.sidebar-logo { display: flex; align-items: center; gap: 8px; }
+.sidebar-logo { display: flex; align-items: center; gap: 8px; width: 100%; }
 .sidebar-title { font-size: 18px; font-weight: 700; color: var(--sidebar-text); letter-spacing: 0.3px; }
-.sidebar-user { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+.sidebar-clock { width: 42px; height: 42px; margin-left: auto; flex-shrink: 0; }
+.clock-face { fill: none; stroke: var(--sidebar-text); stroke-width: 2; opacity: 0.6; }
+.clock-ring { fill: none; stroke: var(--primary); stroke-width: 1.5; opacity: 0.7; }
+.clock-tick { stroke: var(--sidebar-text); stroke-width: 2; stroke-linecap: round; opacity: 0.7; }
+.clock-tick-minor { stroke-width: 1; opacity: 0.4; }
+.clock-center { fill: var(--sidebar-text); opacity: 0.8; }
+.clock-hour-hand { stroke: var(--sidebar-text); stroke-width: 4; stroke-linecap: round; }
+.clock-minute-hand { stroke: var(--sidebar-text); stroke-width: 2.5; stroke-linecap: round; }
+.clock-second-hand { stroke: #e74c3c; stroke-width: 1.5; stroke-linecap: round; }
+.sidebar-user { font-size: 12px; color: var(--sidebar-text); margin: 8px 0 0; padding: 6px 10px; background: rgba(var(--sidebar-text-rgb), 0.08); border-radius: 6px; font-weight: 600; }
 .sidebar-nav { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; }
 
 .nav-btn {
@@ -186,7 +209,7 @@ button:focus-visible,
 
 /* MAIN CONTENT */
 #main-content {
-  flex: 1; height: 100vh; overflow: hidden;
+  flex: 1; min-width: 0; height: 100vh; overflow: hidden;
   background: var(--bg); display: flex; flex-direction: column;
 }
 

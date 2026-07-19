@@ -16,7 +16,8 @@
         verde:{'--bg':'#F0F7F0','--card':'#FFFFFF','--card-alt':'#EAF3EA','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#A8C9A8','--primary-dark':'#8BB08B','--primary-rgb':'168,201,168','--accent':'#B8DCC8','--accent-dark':'#9CC8AC','--accent-rgb':'184,220,200','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--toast-bg':'#3A6A3A','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#E6F0E6','--border':'#D0E0D0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#3A6A3A','--sidebar-text':'#F0FFF0','--sidebar-text-rgb':'240,255,240'},
         morado:{'--bg':'#F5F0FA','--card':'#FFFFFF','--card-alt':'#F0EAF5','--danger':'#E0A8C0','--danger-dark':'#CC90A8','--primary':'#C4B0E0','--primary-dark':'#B098D4','--primary-rgb':'196,176,224','--accent':'#D4A8DC','--accent-dark':'#C090CA','--accent-rgb':'212,168,220','--danger-rgb':'224,168,192','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#6A4C93','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#F0EAF6','--border':'#D8CCE8','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#6A4C93','--sidebar-text':'#F3E5F5','--sidebar-text-rgb':'243,229,245'},
         turquesa:{'--bg':'#E6F7F5','--card':'#F5FFFE','--card-alt':'#EAF8F5','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#4DB8AC','--primary-dark':'#3A9A8E','--primary-rgb':'77,184,172','--accent':'#80D0C4','--accent-dark':'#60B8AA','--accent-rgb':'128,208,196','--danger-rgb':'212,176,160','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#1A4A44','--shadow':'0 2px 12px rgba(26,74,68,0.08)','--hover':'#E8F5F2','--border':'#C0E0DA','--text':'#1A4A44','--text-light':'#5A7A74','--text-secondary':'#5A7A74','--sidebar-bg':'#B0E0D6','--sidebar-text':'#1A4A44','--sidebar-text-rgb':'26,74,68'},
-        naranja:{'--bg':'#FDF0E8','--card':'#FFF8F0','--card-alt':'#F5EDE0','--danger':'#D97050','--danger-dark':'#C06040','--primary':'#D47A4A','--primary-dark':'#C06030','--primary-rgb':'212,122,74','--accent':'#E8A060','--accent-dark':'#D48540','--accent-rgb':'232,160,96','--danger-rgb':'217,112,80','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#5C2A0A','--shadow':'0 2px 12px rgba(74,42,16,0.08)','--hover':'#F8EDE0','--border':'#E8D0B8','--text':'#4A2A10','--text-light':'#8A6A4A','--text-secondary':'#8A6A4A','--sidebar-bg':'#F0C8A8','--sidebar-text':'#5C2A0A','--sidebar-text-rgb':'92,42,10'}
+        naranja:{'--bg':'#FDF0E8','--card':'#FFF8F0','--card-alt':'#F5EDE0','--danger':'#D97050','--danger-dark':'#C06040','--primary':'#D47A4A','--primary-dark':'#C06030','--primary-rgb':'212,122,74','--accent':'#E8A060','--accent-dark':'#D48540','--accent-rgb':'232,160,96','--danger-rgb':'217,112,80','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#5C2A0A','--shadow':'0 2px 12px rgba(74,42,16,0.08)','--hover':'#F8EDE0','--border':'#E8D0B8','--text':'#4A2A10','--text-light':'#8A6A4A','--text-secondary':'#8A6A4A','--sidebar-bg':'#F0C8A8','--sidebar-text':'#5C2A0A','--sidebar-text-rgb':'92,42,10'},
+        menta:{'--bg':'#EEF7EE','--card':'#FFFFFF','--card-alt':'#E8F5E8','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#6BAF8D','--primary-dark':'#4A8F6D','--primary-rgb':'107,175,141','--accent':'#8FC1A8','--accent-dark':'#6DA88A','--accent-rgb':'143,193,168','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--toast-bg':'#3A6A4A','--shadow':'0 2px 12px rgba(58,106,74,0.08)','--hover':'#E6F5E6','--border':'#D0E0D0','--text':'#2A3A2A','--text-light':'#5A7A6A','--text-secondary':'#5A7A6A','--sidebar-bg':'#B0D0B8','--sidebar-text':'#2A4A3A','--sidebar-text-rgb':'42,74,58'}
       },saved=localStorage.getItem('tema'),theme=t[saved]||t.claro;Object.keys(theme).forEach(function(k){document.documentElement.style.setProperty(k,theme[k])});}());
     } catch (e) {}
   </script>
@@ -70,6 +71,15 @@
           <div class="sidebar-header">
             <div class="sidebar-logo">
               <span class="sidebar-title">InariMarket</span>
+              <svg id="sidebar-clock" class="sidebar-clock" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="46" class="clock-face"/>
+                <circle cx="50" cy="50" r="49" class="clock-ring"/>
+                <g id="clock-ticks"><line x1="50" y1="6" x2="50" y2="14" class="clock-tick"/><line x1="75" y1="8.4" x2="71.2" y2="15.4" class="clock-tick clock-tick-minor"/><line x1="90" y1="25" x2="83.6" y2="28.8" class="clock-tick clock-tick-minor"/><line x1="86" y1="50" x2="94" y2="50" class="clock-tick"/><line x1="90" y1="75" x2="83.6" y2="71.2" class="clock-tick clock-tick-minor"/><line x1="75" y1="91.6" x2="71.2" y2="84.6" class="clock-tick clock-tick-minor"/><line x1="50" y1="86" x2="50" y2="94" class="clock-tick"/><line x1="25" y1="91.6" x2="28.8" y2="84.6" class="clock-tick clock-tick-minor"/><line x1="10" y1="75" x2="16.4" y2="71.2" class="clock-tick clock-tick-minor"/><line x1="6" y1="50" x2="14" y2="50" class="clock-tick"/><line x1="10" y1="25" x2="16.4" y2="28.8" class="clock-tick clock-tick-minor"/><line x1="25" y1="8.4" x2="28.8" y2="15.4" class="clock-tick clock-tick-minor"/></g>
+                <g id="clock-center"><circle cx="50" cy="50" r="3" class="clock-center"/></g>
+                <g id="clock-hour"><line x1="50" y1="50" x2="50" y2="30" class="clock-hour-hand"/></g>
+                <g id="clock-minute"><line x1="50" y1="50" x2="50" y2="18" class="clock-minute-hand"/></g>
+                <g id="clock-second"><line x1="50" y1="50" x2="50" y2="14" class="clock-second-hand"/></g>
+              </svg>
             </div>
           <p id="sidebar-user" class="sidebar-user"></p>
         </div>
@@ -361,8 +371,14 @@
                 <label>Vendedor</label>
                 <input type="text" id="report-vendor-filter" placeholder="Nombre de usuario">
               </div>
-              <button id="report-search-btn" class="btn btn-primary"><i class="nf nf-fa-search"></i> Buscar</button>
-              <button id="report-export-btn" class="btn btn-accent"><i class="nf nf-fa-download"></i> Exportar XLSX</button>
+              <div class="form-group">
+                <label>&nbsp;</label>
+                <button id="report-search-btn" class="btn btn-primary" style="width:auto"><i class="nf nf-fa-search"></i> Buscar</button>
+              </div>
+              <div class="form-group">
+                <label>&nbsp;</label>
+                <button id="report-export-btn" class="btn btn-accent" style="width:auto"><i class="nf nf-fa-download"></i> Exportar XLSX</button>
+              </div>
             </div>
           </div>
           <div class="report-summary-cards">
@@ -427,6 +443,7 @@
                 <button class="theme-btn" data-theme="morado"><i class="nf nf-fa-palette"></i><span>Morado</span></button>
                 <button class="theme-btn" data-theme="turquesa"><i class="nf nf-fa-palette"></i><span>Turquesa</span></button>
                 <button class="theme-btn" data-theme="naranja"><i class="nf nf-fa-palette"></i><span>Naranja</span></button>
+                <button class="theme-btn" data-theme="menta"><i class="nf nf-fa-palette"></i><span>Menta</span></button>
               </div>
             </div>
           </div>
@@ -460,36 +477,7 @@
               </div>
             </div>
           </div>
-          <div class="config-card">
-            <div class="config-card-header">
-              <i class="nf nf-fa-text_height"></i> Tama&ntilde;o de fuente
-              <span class="config-card-desc">Ajusta el tama&ntilde;o del texto en toda la aplicaci&oacute;n</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
-              <div class="font-size-control">
-                <button id="font-dec-btn" class="btn btn-sm btn-outline" title="Reducir">A-</button>
-                <span id="font-size-display" class="font-size-display">100%</span>
-                <button id="font-inc-btn" class="btn btn-sm btn-outline" title="Aumentar">A+</button>
-              </div>
-            </div>
-          </div>
-          <div class="config-card config-fullscreen">
-            <div class="config-card-header">
-              <i class="nf nf-fa-display"></i> Pantalla completa
-              <span class="config-card-desc">Maximiza el &aacute;rea de trabajo en pantalla</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
-              <div class="config-row">
-                <span class="config-label">Pantalla completa</span>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="fullscreen-toggle">
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
-          </div>
+
           <div class="config-card">
             <div class="config-card-header">
               <i class="nf nf-fa-music"></i> Sonidos
@@ -507,6 +495,40 @@
               <div class="config-row">
                 <span class="config-label">Volumen</span>
                 <input type="range" id="sound-volume" min="0" max="100" value="50">
+              </div>
+            </div>
+          </div>
+          <div class="config-card">
+            <div class="config-card-header">
+              <i class="nf nf-fa-heart"></i> Calidad de vida
+              <span class="config-card-desc">Opciones de interfaz para mejorar tu experiencia</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-text_height"></i> Tama&ntilde;o de fuente</span>
+                <div class="font-size-control" style="margin:0">
+                  <button id="font-dec-btn" class="btn btn-sm btn-outline" title="Reducir">A-</button>
+                  <span id="font-size-display" class="font-size-display">100%</span>
+                  <button id="font-inc-btn" class="btn btn-sm btn-outline" title="Aumentar">A+</button>
+                </div>
+              </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-display"></i> Pantalla completa</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="fullscreen-toggle">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-chevron_left"></i> Barra lateral auto-plegable</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="sidebar-auto-hide-toggle">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row" style="font-size:12px;color:var(--text-light);margin-top:4px">
+                La barra se oculta autom&aacute;ticamente y aparece al llevar el cursor al borde izquierdo de la ventana
               </div>
             </div>
           </div>
@@ -962,12 +984,12 @@
   </div>
 
   <div id="product-history-modal" class="modal hidden">
-    <div class="modal-content" style="max-width:600px">
+    <div class="modal-content modal-lg" style="max-width:800px">
       <div class="modal-header">
         <h3><i class="nf nf-fa-history"></i> Historial de Ventas</h3>
         <span class="modal-close" id="product-history-modal-close">&times;</span>
       </div>
-      <div class="modal-body">
+      <div class="modal-body" style="overflow-x:auto">
         <p id="product-history-title" style="font-weight:600;margin-bottom:12px"></p>
         <div class="table-container">
           <table class="table compact-table">

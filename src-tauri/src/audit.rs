@@ -1,7 +1,6 @@
 use crate::constants;
 use crate::db::AppState;
 use crate::models::HistorialAccion;
-use chrono;
 use rusqlite::params;
 use tauri::State;
 
@@ -22,9 +21,7 @@ pub(crate) fn log_action(
     usuario: &str,
     accion: &str,
 ) -> Result<(), String> {
-    let now = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
+    let now = crate::helpers::fecha_hora_local();
     db.execute(SQL_INSERT_HISTORIAL, rusqlite::params![now, usuario, accion])
         .map_err(|e| format!("Error al registrar auditoría: {}", e))?;
     Ok(())

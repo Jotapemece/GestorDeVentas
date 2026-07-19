@@ -31,6 +31,38 @@ pub fn set_config_value(
 }
 
 #[tauri::command]
+pub fn get_user_config_value(state: State<AppState>, key: String) -> Result<String, String> {
+    let db = state.lock_db()?;
+    let username = state.get_username()?;
+    let prefixed = format!("{}:{}", username, key);
+    match db.query_row(SQL_GET_CONFIG, params![prefixed], |row| row.get::<_, String>(0)) {
+        Ok(val) => Ok(val),
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            match db.query_row(SQL_GET_CONFIG, params![key], |row| row.get::<_, String>(0)) {
+                Ok(val) => Ok(val),
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(String::new()),
+                Err(e) => Err(format!("Error al leer configuración '{}': {}", key, e)),
+            }
+        }
+        Err(e) => Err(format!("Error al leer configuración '{}': {}", key, e)),
+    }
+}
+
+#[tauri::command]
+pub fn set_user_config_value(
+    state: State<AppState>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let db = state.lock_db()?;
+    let username = state.get_username()?;
+    let prefixed = format!("{}:{}", username, key);
+    db.execute(SQL_UPSERT_CONFIG, params![prefixed, value])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_theme_names() -> Vec<String> {
     crate::constants::TEMAS_DISPONIBLES.iter().map(|s| s.to_string()).collect()
 }
@@ -42,7 +74,7 @@ mod tests {
     #[test]
     fn test_list_theme_names_count() {
         let names = list_theme_names();
-        assert_eq!(names.len(), 7);
+        assert_eq!(names.len(), 8);
     }
 
     #[test]

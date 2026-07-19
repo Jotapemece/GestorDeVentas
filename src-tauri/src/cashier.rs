@@ -57,17 +57,6 @@ const SQL_LIST_DIARIAS: &str = "
     WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2
     ORDER BY v.id DESC";
 
-pub(crate) fn siguiente_dia(fecha: &str) -> String {
-    let parsed = chrono::NaiveDate::parse_from_str(fecha, "%Y-%m-%d").ok();
-    match parsed {
-        Some(d) => {
-            let next = d + chrono::Duration::days(1);
-            next.format("%Y-%m-%d").to_string()
-        }
-        None => constants::FECHA_MAXIMA.to_string(),
-    }
-}
-
 fn obtener_totales_del_dia(
     db: &rusqlite::Connection,
     today: &str,
@@ -205,7 +194,7 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
-    let tomorrow = siguiente_dia(&today);
+    let tomorrow = crate::helpers::siguiente_dia(&today);
     let tasa = obtener_tasa(&db);
 
     let (total_ventas, total_usd, total_bs, _) = obtener_totales_del_dia(&db, &today, &tomorrow)?;
@@ -266,10 +255,8 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
-    let tomorrow = siguiente_dia(&today);
-    let now = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
+    let tomorrow = crate::helpers::siguiente_dia(&today);
+    let now = crate::helpers::fecha_hora_local();
 
     let tx = db
         .transaction()
@@ -325,10 +312,8 @@ pub fn get_close_report_data(state: State<AppState>) -> Result<CloseReportData, 
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
-    let tomorrow = siguiente_dia(&today);
-    let now = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
+    let tomorrow = crate::helpers::siguiente_dia(&today);
+    let now = crate::helpers::fecha_hora_local();
     compute_report_data_range(&db, &today, &tomorrow, &now)
 }
 
@@ -419,7 +404,7 @@ pub fn get_dashboard_payment_methods(state: State<AppState>, period: String) -> 
     let db = state.lock_db()?;
     let now = chrono::Local::now();
     let today = now.format("%Y-%m-%d").to_string();
-    let tomorrow = siguiente_dia(&today);
+    let tomorrow = crate::helpers::siguiente_dia(&today);
 
     let (start, end) = match period.as_str() {
         "day" => (today.clone(), tomorrow),
@@ -429,7 +414,7 @@ pub fn get_dashboard_payment_methods(state: State<AppState>, period: String) -> 
         }
         "month" => {
             let month_start = now.format("%Y-%m-01").to_string();
-            let after_month = siguiente_dia(&now.format("%Y-%m-%d").to_string());
+            let after_month = crate::helpers::siguiente_dia(&now.format("%Y-%m-%d").to_string());
             (month_start, after_month)
         }
         _ => return Err("Periodo invalido. Use day, week o month".to_string()),
@@ -444,17 +429,17 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
     let db = state.lock_db()?;
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let tomorrow = siguiente_dia(&today);
+    let tomorrow = crate::helpers::siguiente_dia(&today);
 
     let week_ago = (chrono::Local::now() - chrono::Duration::days(6))
         .format("%Y-%m-%d")
         .to_string();
-    let after_week = siguiente_dia(&today);
+    let after_week = crate::helpers::siguiente_dia(&today);
 
     let month_start = chrono::Local::now()
         .format("%Y-%m-01")
         .to_string();
-    let after_month = siguiente_dia(&chrono::Local::now().format("%Y-%m-%d").to_string());
+    let after_month = crate::helpers::siguiente_dia(&chrono::Local::now().format("%Y-%m-%d").to_string());
 
     fn period(db: &rusqlite::Connection, start: &str, end: &str) -> Result<DashboardPeriod, String> {
         let cnt: i64 = db
@@ -476,27 +461,3 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_siguiente_dia_normal() {
-        assert_eq!(siguiente_dia("2024-01-15"), "2024-01-16");
-    }
-
-    #[test]
-    fn test_siguiente_dia_fin_mes() {
-        assert_eq!(siguiente_dia("2024-01-31"), "2024-02-01");
-    }
-
-    #[test]
-    fn test_siguiente_dia_fin_anio() {
-        assert_eq!(siguiente_dia("2024-12-31"), "2025-01-01");
-    }
-
-    #[test]
-    fn test_siguiente_dia_invalido() {
-        assert_eq!(siguiente_dia("invalid"), constants::FECHA_MAXIMA);
-    }
-}

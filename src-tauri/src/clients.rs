@@ -288,3 +288,64 @@ pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String,
     }
     Ok("Cliente eliminado exitosamente".to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{PayDebtRequest, PagoItem};
+
+    #[test]
+    fn test_validate_pay_debt_monto_cero() {
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: 0.0, metodo_pago: "efectivo_usd".to_string(),
+            referencia_pago_movil: None, usuario_id: 1, pago_detalle: None,
+        };
+        let result = validate_pay_debt_request(&req);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("mayor a cero"));
+    }
+
+    #[test]
+    fn test_validate_pay_debt_monto_negativo() {
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: -10.0, metodo_pago: "efectivo_usd".to_string(),
+            referencia_pago_movil: None, usuario_id: 1, pago_detalle: None,
+        };
+        let result = validate_pay_debt_request(&req);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_pay_debt_pago_movil_sin_ref() {
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: 50.0, metodo_pago: "pago_movil".to_string(),
+            referencia_pago_movil: Some("123".to_string()), usuario_id: 1, pago_detalle: None,
+        };
+        let result = validate_pay_debt_request(&req);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("4 dígitos"));
+    }
+
+    #[test]
+    fn test_validate_pay_debt_pago_movil_ok() {
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: 50.0, metodo_pago: "pago_movil".to_string(),
+            referencia_pago_movil: Some("1234".to_string()), usuario_id: 1, pago_detalle: None,
+        };
+        let result = validate_pay_debt_request(&req);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_pay_debt_pago_movil_con_detalle_ok() {
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: 50.0, metodo_pago: "pago_movil".to_string(),
+            referencia_pago_movil: None, usuario_id: 1,
+            pago_detalle: Some(vec![PagoItem {
+                metodo: "pago_movil".to_string(), monto_usd: 50.0, referencia: Some("1234".to_string()),
+            }]),
+        };
+        let result = validate_pay_debt_request(&req);
+        assert!(result.is_ok());
+    }
+}

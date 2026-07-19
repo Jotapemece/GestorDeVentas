@@ -93,6 +93,8 @@ pub fn run() {
             // Config
             config::get_config_value,
             config::set_config_value,
+            config::get_user_config_value,
+            config::set_user_config_value,
             config::list_theme_names,
             // Tasa BCV
             tasa_bcv::fetch_tasa_bcv,

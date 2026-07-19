@@ -172,7 +172,8 @@ pub fn download_sales_inner(
     );
 
     let cloud_ventas: Vec<serde_json::Value> =
-        supabase_get(&get_url, &supabase_key).unwrap_or_default();
+        supabase_get(&get_url, &supabase_key)
+            .map_err(|e| format!("Error al descargar ventas: {}", e))?;
 
     if cloud_ventas.is_empty() {
         return Ok("No hay ventas nuevas para descargar".to_string());
@@ -222,7 +223,8 @@ pub fn download_sales_inner(
         );
 
         let cloud_detalles: Vec<serde_json::Value> =
-            supabase_get(&det_url, &supabase_key).unwrap_or_default();
+            supabase_get(&det_url, &supabase_key)
+                .map_err(|e| format!("Error al descargar detalles de venta {}: {}", sync_id, e))?;
 
         for det in &cloud_detalles {
             let det_sync_id = det["sync_id"].as_str().unwrap_or("");

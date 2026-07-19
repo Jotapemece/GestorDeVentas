@@ -69,3 +69,21 @@
 .nf-fa-calendar_day::before { content: "\f783"; }
 .nf-fa-calendar_week::before { content: "\f784"; }
 .nf-fa-warning::before { content: "\f071"; }
+.nf-fa-database::before { content: "\f1c0"; }
+.nf-fa-link::before { content: "\f0c1"; }
+.nf-fa-plug::before { content: "\f1e6"; }
+.nf-fa-sync::before { content: "\f021"; }
+.nf-fa-tag::before { content: "\f02b"; }
+.nf-fa-trophy::before { content: "\f091"; }
+.nf-fa-heart::before { content: "\f004"; }
+.nf-fa-chevron_left::before { content: "\f053"; }
+.nf-fa-spin {
+  animation: nf-spin 2s linear infinite;
+}
+.nf-fa-pulse {
+  animation: nf-spin 1s steps(8) infinite;
+}
+@keyframes nf-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
