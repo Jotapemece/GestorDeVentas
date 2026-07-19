@@ -36,6 +36,10 @@ pub const CFG_DISPOSITIVO_ID: &str = "dispositivo_id";
 pub const CFG_SUPABASE_URL: &str = "supabase_url";
 pub const CFG_SUPABASE_KEY: &str = "supabase_key";
 
+// Roles
+pub const ROL_ADMIN: &str = "admin";
+pub const ROL_VENDEDOR: &str = "vendedor";
+
 // Default values
 pub const DB_FILENAME: &str = "gestor_ventas.db";
 pub const BACKUP_FILENAME_PREFIX: &str = "gestor_ventas_backup_";

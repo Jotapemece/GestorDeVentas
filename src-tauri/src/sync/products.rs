@@ -1,5 +1,5 @@
-use super::{api_url, get_config, now_iso, supabase_get, supabase_post, upsert_config, urlencoding};
-use super::conflicts::is_conflict;
+use super::conflicts::{check_and_record_conflict, is_conflict};
+use super::{api_url, get_config, now_iso, supabase_config, supabase_get, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
@@ -89,9 +89,8 @@ pub fn upload_products_inner(
 
 #[tauri::command]
 pub fn upload_products(state: State<AppState>) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
+    let db = state.lock_db()?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
     let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
     upload_products_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
@@ -161,8 +160,17 @@ pub fn download_products_inner(
             )
             .ok();
 
-        if local_ts.is_some() {
-            if is_conflict(local_ts.as_deref(), remote_ts, &last_sync) {
+        let remote_json = json!({
+            "codigo": &codigo,
+            "nombre": &nombre,
+            "precio_usd": precio_usd,
+            "stock_minimo": stock_minimo,
+            "activo": activo,
+            "categoria_id": cat_id,
+        });
+
+        if let Some(ref local) = local_ts {
+            if is_conflict(Some(local), remote_ts, &last_sync) {
                 let local_vals: (String, f64, i64, i64, Option<i64>) = db
                     .query_row(
                         "SELECT nombre, precio_usd, stock_minimo, activo, categoria_id \
@@ -179,30 +187,18 @@ pub fn download_products_inner(
                     .unwrap_or_else(|_| (String::new(), 0.0, 0, 1, None));
 
                 let local_json = json!({
-                    "codigo": codigo,
+                    "codigo": &codigo,
                     "nombre": local_vals.0,
                     "precio_usd": local_vals.1,
                     "stock_minimo": local_vals.2,
                     "activo": local_vals.3,
                     "categoria_id": local_vals.4,
                 });
-                let remote_json = json!({
-                    "codigo": codigo,
-                    "nombre": &nombre,
-                    "precio_usd": precio_usd,
-                    "stock_minimo": stock_minimo,
-                    "activo": activo,
-                    "categoria_id": cat_id,
-                });
-                db.execute(
-                    "INSERT INTO conflictos (tabla, item_id, local_json, remote_json) \
-                     VALUES ('productos', ?1, ?2, ?3)",
-                    params![
-                        codigo,
-                        local_json.to_string(),
-                        remote_json.to_string(),
-                    ],
-                ).ok();
+                check_and_record_conflict(
+                    db, "productos", &codigo,
+                    Some(local), remote_ts, &last_sync,
+                    local_json, remote_json,
+                );
                 conflicts += 1;
                 continue;
             }
@@ -251,8 +247,10 @@ pub fn download_products_inner(
 
 #[tauri::command]
 pub fn download_products(state: State<AppState>) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
-    download_products_inner(&db, &supabase_url, &supabase_key)
+    let mut db = state.secondary_conn()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let (supabase_url, supabase_key) = supabase_config(&tx)?;
+    let result = download_products_inner(&tx, &supabase_url, &supabase_key)?;
+    tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
+    Ok(result)
 }

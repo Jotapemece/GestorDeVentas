@@ -110,15 +110,15 @@ fn insert_default_admin(conn: &Connection) {
     if count == 0 {
         let admin_pw = crate::auth::hash_password(constants::DEFAULT_ADMIN_PASSWORD);
         conn.execute(
-            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, 'admin')",
-            rusqlite::params![constants::DEFAULT_ADMIN_USERNAME, admin_pw],
+            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
+            rusqlite::params![constants::DEFAULT_ADMIN_USERNAME, admin_pw, constants::ROL_ADMIN],
         )
         .ok();
 
         let jota_pw = crate::auth::hash_password(constants::DEFAULT_JOTA_PASSWORD);
         conn.execute(
-            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, 'admin')",
-            rusqlite::params![constants::DEFAULT_JOTA_USERNAME, jota_pw],
+            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
+            rusqlite::params![constants::DEFAULT_JOTA_USERNAME, jota_pw, constants::ROL_ADMIN],
         )
         .ok();
     }
@@ -133,8 +133,8 @@ fn insert_default_vendedor(conn: &Connection) {
     if !exists {
         let pw = crate::auth::hash_password(constants::DEFAULT_VENDEDOR_PASSWORD);
         conn.execute(
-            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, 'vendedor')",
-            rusqlite::params![constants::DEFAULT_VENDEDOR_USERNAME, pw],
+            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
+            rusqlite::params![constants::DEFAULT_VENDEDOR_USERNAME, pw, constants::ROL_VENDEDOR],
         )
         .ok();
     }

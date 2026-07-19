@@ -101,7 +101,7 @@ pub fn create_product(
     precio_usd: f64,
     stock: i64,
 ) -> Result<String, String> {
-    let db = state.lock_db()?;
+    let mut db = state.lock_db()?;
     let codigo = if codigo.is_empty() {
         let next_id: i64 = db
             .query_row(SQL_NEXT_CODIGO, [], |row| row.get(0))
@@ -111,22 +111,26 @@ pub fn create_product(
         codigo
     };
     let ts = crate::helpers::now_iso();
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
     crate::auth::require_admin(
         &state,
-        &db,
+        &tx,
         &format!("Creó producto '{}' (Código: {})", nombre, codigo),
     )?;
-    db.execute(
+    tx.execute(
         SQL_UPDATE_REACTIVATE,
         params![nombre, precio_usd, stock, ts, codigo],
     )
     .ok();
 
-    match db.execute(
+    match tx.execute(
         SQL_INSERT_PRODUCTO,
         params![codigo, nombre, precio_usd, stock, ts],
     ) {
-        Ok(_) => Ok("Producto creado exitosamente".to_string()),
+        Ok(_) => {
+            tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
+            Ok("Producto creado exitosamente".to_string())
+        }
         Err(e) => Err(format!("Error al crear producto: {}", e)),
     }
 }

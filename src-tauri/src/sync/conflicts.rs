@@ -1,7 +1,7 @@
 use super::now_iso;
 use crate::db::AppState;
 use chrono::NaiveDateTime;
-use rusqlite::params;
+use rusqlite::{params, Connection};
 use tauri::State;
 
 pub fn parse_ts(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
@@ -13,6 +13,30 @@ pub fn parse_ts(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
                 .ok()
                 .map(|d| d.and_utc())
         })
+}
+
+/// Checks for conflict and records it in the conflictos table. Returns true if conflict was detected.
+pub fn check_and_record_conflict(
+    db: &Connection,
+    table: &str,
+    item_id: &str,
+    local_ts: Option<&str>,
+    remote_ts: Option<&str>,
+    last_sync: &str,
+    local_json: serde_json::Value,
+    remote_json: serde_json::Value,
+) -> bool {
+    if let Some(local) = local_ts {
+        if is_conflict(Some(local), remote_ts, last_sync) {
+            let _ = db.execute(
+                "INSERT INTO conflictos (tabla, item_id, local_json, remote_json) \
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![table, item_id, local_json.to_string(), remote_json.to_string()],
+            );
+            return true;
+        }
+    }
+    false
 }
 
 pub fn is_conflict(local_ts: Option<&str>, remote_ts: Option<&str>, last_sync: &str) -> bool {
@@ -35,7 +59,7 @@ pub fn is_conflict(local_ts: Option<&str>, remote_ts: Option<&str>, last_sync: &
 
 #[tauri::command]
 pub fn get_conflictos(state: State<AppState>) -> Result<Vec<crate::models::Conflicto>, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
+    let db = state.lock_db()?;
     let mut stmt = db
         .prepare(
             "SELECT id, tabla, item_id, local_json, remote_json, resuelto, \
@@ -67,7 +91,7 @@ pub fn resolve_conflicto(
     conflicto_id: i64,
     use_remote: bool,
 ) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
+    let db = state.lock_db()?;
 
     let (tabla, item_id, remote_json): (String, String, String) = db
         .query_row(

@@ -1,5 +1,5 @@
-use super::{api_url, get_config, now_iso, supabase_get, supabase_post, upsert_config, urlencoding};
-use super::conflicts::is_conflict;
+use super::conflicts::{check_and_record_conflict, is_conflict};
+use super::{api_url, now_iso, supabase_config, supabase_get, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
@@ -91,9 +91,8 @@ pub fn upload_clientes_inner(
 
 #[tauri::command]
 pub fn upload_clientes(state: State<AppState>) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
+    let db = state.lock_db()?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
     upload_clientes_inner(&db, &supabase_url, &supabase_key)
 }
 
@@ -144,6 +143,13 @@ pub fn download_clientes_inner(
             )
             .ok();
 
+        let remote_json = json!({
+            "sync_id": sync_id,
+            "nombre": &nombre,
+            "credito_activo": credito_activo,
+            "saldo_deuda_usd": saldo,
+        });
+
         if let Some(ref local) = local_ts {
             if is_conflict(Some(local), remote_ts, &last_sync) {
                 let local_vals: (String, i64, f64) = db
@@ -165,17 +171,11 @@ pub fn download_clientes_inner(
                     "credito_activo": local_vals.1,
                     "saldo_deuda_usd": local_vals.2,
                 });
-                let remote_json = json!({
-                    "sync_id": sync_id,
-                    "nombre": &nombre,
-                    "credito_activo": credito_activo,
-                    "saldo_deuda_usd": saldo,
-                });
-                db.execute(
-                    "INSERT INTO conflictos (tabla, item_id, local_json, remote_json) \
-                     VALUES ('clientes', ?1, ?2, ?3)",
-                    params![sync_id, local_json.to_string(), remote_json.to_string()],
-                ).ok();
+                check_and_record_conflict(
+                    db, "clientes", sync_id,
+                    Some(local), remote_ts, &last_sync,
+                    local_json, remote_json,
+                );
                 conflicts += 1;
                 continue;
             }
@@ -228,8 +228,10 @@ pub fn download_clientes_inner(
 
 #[tauri::command]
 pub fn download_clientes(state: State<AppState>) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
-    download_clientes_inner(&db, &supabase_url, &supabase_key)
+    let mut db = state.secondary_conn()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let (supabase_url, supabase_key) = supabase_config(&tx)?;
+    let result = download_clientes_inner(&tx, &supabase_url, &supabase_key)?;
+    tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
+    Ok(result)
 }

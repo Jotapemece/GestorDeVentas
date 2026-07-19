@@ -1,4 +1,4 @@
-use super::{api_url, get_config, normalize_fecha, now_iso, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, get_config, normalize_fecha, now_iso, supabase_config, supabase_get, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
@@ -144,9 +144,8 @@ pub fn upload_sales_inner(
 
 #[tauri::command]
 pub fn upload_sales(state: State<AppState>) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
+    let db = state.lock_db()?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
     let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
     upload_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
@@ -246,13 +245,14 @@ pub fn download_sales_inner(
                 db.execute(
                     "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1",
                     params![cantidad, prod_codigo],
-                ).ok();
+                ).map_err(|e| format!("Error ajustando stock: {}", e))?;
                 adjusted_stock_items += cantidad;
             }
         }
 
         if venta_json["anulada"].as_i64().unwrap_or(0) != 0 {
-            db.execute("UPDATE ventas SET anulada = 1 WHERE id = ?1", params![venta_id]).ok();
+            db.execute("UPDATE ventas SET anulada = 1 WHERE id = ?1", params![venta_id])
+                .map_err(|e| format!("Error marcando venta como anulada: {}", e))?;
         }
     }
 
@@ -266,9 +266,11 @@ pub fn download_sales_inner(
 
 #[tauri::command]
 pub fn download_sales(state: State<AppState>) -> Result<String, String> {
-    let db = state.secondary_conn()?;
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
-    let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID).unwrap_or_default();
-    download_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
+    let mut db = state.secondary_conn()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let (supabase_url, supabase_key) = supabase_config(&tx)?;
+    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID).unwrap_or_default();
+    let result = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+    tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
+    Ok(result)
 }

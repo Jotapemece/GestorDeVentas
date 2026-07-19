@@ -1,7 +1,7 @@
 use super::clients::{download_clientes_inner, upload_clientes_inner};
 use super::products::{download_products_inner, upload_products_inner};
 use super::sales::{download_sales_inner, upload_sales_inner};
-use super::{api_url, emit_progress, get_config, upsert_config};
+use super::{api_url, emit_progress, get_config, supabase_config, upsert_config};
 use crate::constants;
 use crate::db::AppState;
 use serde::Serialize;
@@ -10,10 +10,9 @@ use tauri::State;
 
 #[tauri::command]
 pub fn register_device(state: State<AppState>, nombre: String) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
+    let db = state.lock_db()?;
 
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
 
     if let Ok(id) = super::get_config(&db, constants::CFG_DISPOSITIVO_ID) {
         return Ok(format!("Ya registrado: {}", id));
@@ -49,7 +48,7 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
 
 #[tauri::command]
 pub fn get_ultimo_upload(state: State<AppState>) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
+    let db = state.lock_db()?;
     match super::get_config(&db, constants::CFG_ULTIMO_UPLOAD) {
         Ok(v) => Ok(v),
         Err(_) => Ok("Nunca".to_string()),
@@ -58,7 +57,7 @@ pub fn get_ultimo_upload(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 pub fn get_ultimo_download(state: State<AppState>) -> Result<String, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
+    let db = state.lock_db()?;
     match super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD) {
         Ok(v) => Ok(v),
         Err(_) => Ok("Nunca".to_string()),
@@ -68,8 +67,7 @@ pub fn get_ultimo_download(state: State<AppState>) -> Result<String, String> {
 #[tauri::command]
 pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     let db = state.secondary_conn()?;
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
     let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
 
     let total = 3u32;
@@ -88,8 +86,7 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
     let mut db = state.secondary_conn()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
-    let supabase_url = get_config(&tx, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&tx, constants::CFG_SUPABASE_KEY)?;
+    let (supabase_url, supabase_key) = supabase_config(&tx)?;
     let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID).unwrap_or_default();
 
     let total = 3u32;
@@ -109,8 +106,7 @@ pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<
     let mut db = state.secondary_conn()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
-    let supabase_url = get_config(&tx, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&tx, constants::CFG_SUPABASE_KEY)?;
+    let (supabase_url, supabase_key) = supabase_config(&tx)?;
     let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
 
     let total = 6u32;
@@ -147,7 +143,7 @@ pub struct SyncStats {
 
 #[tauri::command]
 pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
+    let db = state.lock_db()?;
 
     let active_products: i64 = db
         .query_row("SELECT COUNT(*) FROM productos WHERE activo = 1", [], |r| r.get(0))
@@ -184,9 +180,8 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
 
 #[tauri::command]
 pub fn test_supabase_connection(state: State<AppState>) -> Result<bool, String> {
-    let db = state.db.lock().map_err(|e| format!("Error de acceso: {}", e))?;
-    let supabase_url = get_config(&db, constants::CFG_SUPABASE_URL)?;
-    let supabase_key = get_config(&db, constants::CFG_SUPABASE_KEY)?;
+    let db = state.lock_db()?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
 
     let test_url = api_url(&supabase_url, "/productos?select=codigo&limit=1");
 

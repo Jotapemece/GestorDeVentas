@@ -228,8 +228,32 @@ Optimizar y limpiar el código backend (Rust/Tauri): eliminar duplicación, lóg
 - **Fase 4**: `helpers.rs` con `now_iso()` integrado; `row_to_venta/pub(crate)` en sales.rs; `row_to_cliente` en clients.rs; `row_to_historial` en audit.rs; `row_to_producto` en products.rs; `lock_db()/get_username()` en AppState/db.rs; `state.get_username()` reemplaza `current_user.lock()` en auth, cashier, clients, sales; `state.lock_db()` en tasa_bcv.rs; 6 SQL format strings → `get_config()` en sync/; 5 URLs → `api_url()` en sync/; `get_ultimo_download` usa constante. ✅ 36 tests pasan
 
 ### Active
-- (ninguno)
+- Auditoría de código — Fase 1 (integridad de datos)
 
 ### Next Move
-- Revisar que upload/download ventas funcione correctamente con cambios Phase 4
-- Continuar con Fase 7 (Sync automático) o Fase 8 (Resolución conflictos)
+- Completar Fase 1 y pasar a Fase 2+ según resultados
+
+---
+
+## Auditoría Plan
+
+### Fase 1 — Integridad de datos (bugs)
+1. Revisar cada `#[tauri::command]` con ≥2 writes — ¿en transacción?
+2. Stock inconsistencies: `void_sale` sync, doble descarga, stock negativo paths
+3. Race conditions: read-then-write sin lock atómico
+4. Error paths silenciosos: `unwrap()`, `.ok()`, `catch(_)` que traguen errores
+
+### Fase 2 — Deuda técnica (normas)
+5. DRY Rust: lógica repetida sales/clients/sync
+6. Anti-hardcoding JS: strings remanentes
+7. SQL injection surface: `format!()` con input de usuario
+8. Selectores DOM fuera de `SEL`
+9. HTML templates inline vs `<template>`
+
+### Fase 3 — Performance
+10. N+1 queries (reportes, historial)
+11. Paginación faltante (list_sales)
+
+### Fase 4 — Seguridad
+12. Rate limiting faltante (create_usuario, change_password)
+13. Default passwords: forzar cambio

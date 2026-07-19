@@ -223,6 +223,8 @@ pub struct SalesReportFilter {
     pub end_date: String,
     pub producto_codigo: Option<String>,
     pub username: Option<String>,
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -237,6 +239,8 @@ pub struct SalesReportResult {
     pub total_usd: f64,
     pub total_bs: f64,
     pub ventas: Vec<SalesReportItem>,
+    pub page: i64,
+    pub page_size: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

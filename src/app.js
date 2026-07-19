@@ -39,6 +39,19 @@ const CFG_CALCULAR_VUELTO = 'calcular_vuelto';
 const CFG_REDONDEO_BS = 'redondeo_bs';
 
 // Payment method keys (deben coincidir con constants.rs)
+const METODO_EFECTIVO_BS = 'efectivo_bs';
+const METODO_EFECTIVO_USD = 'efectivo_usd';
+const METODO_BIOPAGO = 'biopago';
+const METODO_PUNTO = 'punto';
+const METODO_PAGO_MOVIL = 'pago_movil';
+const METODO_CREDITO = 'credito';
+const METODO_MIXTO = 'mixto';
+const ROL_ADMIN = 'admin';
+const PAGO_MOVIL_REF_LEN = 4;
+
+// Config keys (db::configuracion.clave) — back-end sync
+const CFG_SUPABASE_URL = 'supabase_url';
+const CFG_SUPABASE_KEY = 'supabase_key';
 
 const ICON = {
   UNLOCK: '<i class="nf nf-fa-unlock"></i>',
@@ -230,7 +243,7 @@ function createInventoryRow(p, editBtn) {
   return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '">Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
-  const isAdmin = currentUser && currentUser.rol === 'admin';
+  const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
   const adminBtns = isAdmin
     ? '<button class="btn btn-sm btn-outline" data-action="edit-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-pencil"></i></button> '
     + (c.saldo_deuda_usd === 0 ? '<button class="btn btn-sm btn-danger" data-action="delete-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-trash"></i></button>' : '')
@@ -241,7 +254,7 @@ function createAuditRow(log) {
   return '<td>' + log.id + '</td><td>' + escapeHtml(log.fecha_hora) + '</td><td>' + escapeHtml(log.usuario) + '</td><td>' + escapeHtml(log.accion) + '</td>';
 }
 function createDailySaleRow(v, metodoLabel) {
-  const isAdmin = currentUser && currentUser.rol === 'admin';
+  const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
   const voidBtn = v.anulada ? '<span class="text-muted">Anulada</span>' : (isAdmin ? '<button class="btn btn-sm btn-danger void-sale-btn" data-id="' + v.id + '" title="Anular venta"><i class="nf nf-fa-ban"></i></button>' : '');
   const detailBtn = '<button class="btn btn-sm btn-outline sale-detail-btn" data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i></button>';
   return '<td>' + v.id + '</td><td>' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td>' + escapeHtml(v.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td><td>' + detailBtn + ' ' + voidBtn + '</td>';
@@ -346,7 +359,7 @@ function closeModal(el) {
   el.classList.add('hidden');
 }
 
-function isBsMethod(m) { return m === 'efectivo_bs' || m === 'biopago' || m === 'punto' || m === 'pago_movil'; }
+function isBsMethod(m) { return m === METODO_EFECTIVO_BS || m === METODO_BIOPAGO || m === METODO_PUNTO || m === METODO_PAGO_MOVIL; }
 
 /* Focus trap for modals */
 let activeModal = null;
@@ -396,7 +409,7 @@ function applyComaAutomatica(input) {
   input.value = String(parseInt(intPart)) + ',' + decPart;
 }
 function applyRoleUI() {
-  const isAdmin = currentUser && currentUser.rol === 'admin';
+  const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
   document.querySelectorAll('.admin-only').forEach(el => {
     el.style.display = isAdmin ? '' : 'none';
     if (!isAdmin) el.title = 'Solo administradores';
@@ -526,9 +539,9 @@ async function loadSyncConfig() {
   const keyEl = qs(SEL.syncKey);
   if (!urlEl) return;
   try {
-    const url = await invoke('get_config_value', { key: 'supabase_url' });
+    const url = await invoke('get_config_value', { key: CFG_SUPABASE_URL });
     if (url) urlEl.value = url;
-    const key = await invoke('get_config_value', { key: 'supabase_key' });
+    const key = await invoke('get_config_value', { key: CFG_SUPABASE_KEY });
     if (key) keyEl.value = key;
   } catch (_) {}
   loadSyncStats();
@@ -849,7 +862,7 @@ function openPaymentModal() {
   qs(SEL.clienteSelect).innerHTML = '<option value="">Seleccione...</option>';
   qs(SEL.mixtoItems).innerHTML = '';
   qs(SEL.mixtoError).style.display = 'none';
-  selectPaymentMethod('efectivo_bs');
+  selectPaymentMethod(METODO_EFECTIVO_BS);
   loadClientesForSelect();
 }
 
@@ -866,16 +879,16 @@ function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
 
 function selectPaymentMethod(method) {
   qsa('.payment-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === method));
-  qs(SEL.referenciaGroup).style.display = method === 'pago_movil' ? 'block' : 'none';
-  qs(SEL.clienteGroup).style.display = method === 'credito' ? 'block' : 'none';
-  qs(SEL.mixtoGroup).style.display = method === 'mixto' ? 'block' : 'none';
-  const isCash = method === 'efectivo_bs' || method === 'efectivo_usd';
+  qs(SEL.referenciaGroup).style.display = method === METODO_PAGO_MOVIL ? 'block' : 'none';
+  qs(SEL.clienteGroup).style.display = method === METODO_CREDITO ? 'block' : 'none';
+  qs(SEL.mixtoGroup).style.display = method === METODO_MIXTO ? 'block' : 'none';
+  const isCash = method === METODO_EFECTIVO_BS || method === METODO_EFECTIVO_USD;
   const cambioGroup = qs(SEL.cambioGroup);
   if (cambioGroup) {
     cambioGroup.style.display = isCash ? 'block' : 'none';
     if (!isCash) { qs(SEL.cambioRecibido).value = ''; qs(SEL.cambioResultado).classList.add('hidden'); }
   }
-  if (method === 'mixto') {
+  if (method === METODO_MIXTO) {
     if (!qs(SEL.mixtoItems).querySelector('.mixto-row')) addMixtoRow('mixto-items');
     distributeMixto('mixto-items');
   }
@@ -909,7 +922,7 @@ function addMixtoRow(containerId, autoDistribute) {
 
   function updateConversion() {
     const val = parseFloat(montoInput.value) || 0;
-    if (sel.value === 'efectivo_usd') {
+    if (sel.value === METODO_EFECTIVO_USD) {
       convSpan.textContent = '= Bs. ' + formatBS(val * tasaActual);
       convSpan.style.display = 'inline';
       montoInput._usdValue = val;
@@ -927,9 +940,9 @@ function addMixtoRow(containerId, autoDistribute) {
 
   function updateMethodUI() {
     const method = sel.value;
-    refInput.style.display = method === 'pago_movil' ? 'block' : 'none';
-    if (method !== 'pago_movil') refInput.value = '';
-    if (method === 'efectivo_usd') {
+    refInput.style.display = method === METODO_PAGO_MOVIL ? 'block' : 'none';
+    if (method !== METODO_PAGO_MOVIL) refInput.value = '';
+    if (method === METODO_EFECTIVO_USD) {
       curLabel.textContent = '$';
     } else if (isBsMethod(method)) {
       curLabel.textContent = 'Bs.';
@@ -977,7 +990,7 @@ function distributeMixto(containerId) {
       input._usdValue = share;
     }
     const convSpan = row.querySelector('.mixto-conversion');
-    if (method === 'efectivo_usd') {
+    if (method === METODO_EFECTIVO_USD) {
       convSpan.textContent = '= Bs. ' + formatBS(share * tasaActual);
       convSpan.style.display = 'inline';
     } else if (isBsMethod(method)) {
@@ -1006,7 +1019,7 @@ function getMixtoData(containerId) {
       monto_usd = parseFloat(input.value) || 0;
     }
     if (monto_usd > 0) {
-      items.push({ metodo, monto_usd: monto_usd, referencia: metodo === 'pago_movil' ? ref : null });
+      items.push({ metodo, monto_usd: monto_usd, referencia: metodo === METODO_PAGO_MOVIL ? ref : null });
     }
   }
   return items;
@@ -1049,7 +1062,7 @@ function validarMixto(items, totalEsperado, errorId) {
       errEl.style.display = 'block';
       return false;
     }
-    if (item.metodo === 'pago_movil' && (!item.referencia || item.referencia.length !== 4)) {
+    if (item.metodo === METODO_PAGO_MOVIL && (!item.referencia || item.referencia.length !== PAGO_MOVIL_REF_LEN)) {
       errEl.textContent = 'Pago m\u00f3vil requiere referencia de 4 d\u00edgitos';
       errEl.style.display = 'block';
       return false;
@@ -1088,17 +1101,17 @@ async function confirmPayment() {
   if (!methodBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
   const metodo = methodBtn.dataset.method;
   let referencia = null, cliente_id = null, pago_detalle = null;
-  if (metodo === 'pago_movil') {
+  if (metodo === METODO_PAGO_MOVIL) {
     referencia = qs(SEL.referenciaInput).value.trim();
-    if (referencia.length !== 4) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
+    if (referencia.length !== PAGO_MOVIL_REF_LEN) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
   }
-  if (metodo === 'credito') {
+  if (metodo === METODO_CREDITO) {
     const sel = qs(SEL.clienteSelect);
     if (!sel.value) { showToast('Seleccione un cliente', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
     cliente_id = parseInt(sel.value);
   }
   const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
-  if (metodo === 'mixto') {
+  if (metodo === METODO_MIXTO) {
     pago_detalle = getMixtoData('mixto-items');
     if (!validarMixto(pago_detalle, total, 'mixto-error')) {
       processingPayment = false;
@@ -1108,7 +1121,7 @@ async function confirmPayment() {
   }
   const productos = cart.map(i => ({ codigo: i.codigo, cantidad: i.cantidad }));
   let total_bs_ingresado = null;
-  if (metodo === 'efectivo_bs') {
+  if (metodo === METODO_EFECTIVO_BS) {
     const totalMoneda = totalBsRedondeado(total);
     const recibido = parseFloat(qs(SEL.cambioRecibido).value) || 0;
     if (recibido > 0 && recibido !== totalMoneda) {
@@ -1164,7 +1177,7 @@ async function loadInventory() {
     const frag = document.createDocumentFragment();
     products.forEach(p => {
       const tr = document.createElement('tr');
-      const editBtn = (currentUser && currentUser.rol === 'admin') ? '<button data-action="edit-product" data-codigo="' + p.codigo + '">Editar</button>' : '';
+      const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button data-action="edit-product" data-codigo="' + p.codigo + '">Editar</button>' : '';
       tr.innerHTML = createInventoryRow(p, editBtn);
       frag.appendChild(tr);
     });
@@ -1427,7 +1440,7 @@ function openAbonoModal(id) {
   qs(SEL.abonoMixtoItems).innerHTML = '';
   qs(SEL.abonoMixtoError).style.display = 'none';
   qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: $0.00';
-  qsa('.abono-metodo-btn').forEach(b => b.classList.toggle('active', b.dataset.method === 'efectivo_bs'));
+  qsa('.abono-metodo-btn').forEach(b => b.classList.toggle('active', b.dataset.method === METODO_EFECTIVO_BS));
   loadAbonoClienteInfo(id);
   showModal(qs(SEL.abonoModal));
 }
@@ -1452,9 +1465,9 @@ function selectAbonoMethod(btn) {
   qsa('.abono-metodo-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const method = btn.dataset.method;
-  qs(SEL.abonoReferenciaGroup).style.display = method === 'pago_movil' ? 'block' : 'none';
-  qs(SEL.abonoMixtoGroup).style.display = method === 'mixto' ? 'block' : 'none';
-  if (method === 'mixto') {
+  qs(SEL.abonoReferenciaGroup).style.display = method === METODO_PAGO_MOVIL ? 'block' : 'none';
+  qs(SEL.abonoMixtoGroup).style.display = method === METODO_MIXTO ? 'block' : 'none';
+  if (method === METODO_MIXTO) {
     if (!qs(SEL.abonoMixtoItems).querySelector('.mixto-row')) addMixtoRow('abono-mixto-items');
     distributeMixto('abono-mixto-items');
   }
@@ -1479,11 +1492,11 @@ async function confirmAbono() {
   if (!metodoBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
   const metodo = metodoBtn.dataset.method;
   let referencia = null, pago_detalle = null;
-  if (metodo === 'pago_movil' && metodo !== 'mixto') {
+  if (metodo === METODO_PAGO_MOVIL && metodo !== METODO_MIXTO) {
     referencia = qs(SEL.abonoReferencia).value.trim();
-    if (referencia.length !== 4) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
+    if (referencia.length !== PAGO_MOVIL_REF_LEN) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
   }
-  if (metodo === 'mixto') {
+  if (metodo === METODO_MIXTO) {
     pago_detalle = getMixtoData('abono-mixto-items');
     if (!validarMixto(pago_detalle, monto, 'abono-mixto-error')) {
       processingAbono = false;
@@ -1524,7 +1537,7 @@ async function loadDailySummary() {
       summary.ventas.forEach(v => {
         const tr = document.createElement('tr');
         let metodoLabel = formatMetodoLabel(v.metodo_pago);
-        if (v.metodo_pago === 'pago_movil' && v.referencia_pago_movil) {
+        if (v.metodo_pago === METODO_PAGO_MOVIL && v.referencia_pago_movil) {
           metodoLabel += ' (' + v.referencia_pago_movil + ')';
         }
         tr.innerHTML = createDailySaleRow(v, metodoLabel);
@@ -2605,12 +2618,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (!methodBtn) return;
     const method = methodBtn.dataset.method;
     const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
-    const totalMoneda = method === 'efectivo_bs' ? totalBsRedondeado(total) : total;
+    const totalMoneda = method === METODO_EFECTIVO_BS ? totalBsRedondeado(total) : total;
     const cambioEl = qs(SEL.cambioResultado);
     const montoEl = qs(SEL.cambioMonto);
     if (recibido > 0 && recibido > totalMoneda && calcularVuelto) {
       const cambio = recibido - totalMoneda;
-      const cambioTexto = method === 'efectivo_bs' ? 'Bs. ' + cambio.toFixed(2).replace('.', ',') : formatUSD(cambio);
+      const cambioTexto = method === METODO_EFECTIVO_BS ? 'Bs. ' + cambio.toFixed(2).replace('.', ',') : formatUSD(cambio);
       montoEl.textContent = cambioTexto;
       cambioEl.classList.remove('hidden');
     } else {
@@ -2820,10 +2833,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   /* Guardar URL y Key al cambiar */
   document.addEventListener('change', function(e) {
     if (e.target.id === 'sync-url') {
-      invoke('set_config_value', { key: 'supabase_url', value: e.target.value }).catch(() => {});
+      invoke('set_config_value', { key: CFG_SUPABASE_URL, value: e.target.value }).catch(() => {});
     }
     if (e.target.id === 'sync-key') {
-      invoke('set_config_value', { key: 'supabase_key', value: e.target.value }).catch(() => {});
+      invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: e.target.value }).catch(() => {});
     }
   });
 
@@ -2834,8 +2847,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       const name = 'PC Jotapemece';
       const urlEl = document.getElementById('sync-url');
       const keyEl = document.getElementById('sync-key');
-      if (urlEl && urlEl.value) await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
-      if (keyEl && keyEl.value) await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      if (urlEl && urlEl.value) await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
+      if (keyEl && keyEl.value) await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
       try {
         registerBtn.disabled = true;
         registerBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Registrando...';
@@ -2858,8 +2871,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       const keyEl = document.getElementById('sync-key');
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
-      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
-      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
       try {
         uploadBtn.disabled = true;
         uploadBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Subiendo...';
@@ -2882,8 +2895,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       const keyEl = document.getElementById('sync-key');
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
-      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
-      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
       try {
         downloadBtn.disabled = true;
         downloadBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Descargando...';
@@ -2911,8 +2924,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       const keyEl = document.getElementById('sync-key');
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
-      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
-      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
       try {
         uploadSalesBtn.disabled = true;
         uploadSalesBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Subiendo...';
@@ -2935,8 +2948,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       const keyEl = document.getElementById('sync-key');
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
-      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
-      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
       try {
         downloadSalesBtn.disabled = true;
         downloadSalesBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Descargando...';
@@ -2962,8 +2975,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       const keyEl = document.getElementById('sync-key');
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
-      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
-      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
       try {
         uploadClientesBtn.disabled = true;
         uploadClientesBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Subiendo...';
@@ -2986,8 +2999,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       const keyEl = document.getElementById('sync-key');
       if (!urlEl || !urlEl.value) { showToast('Configura la URL de Supabase primero', 'error'); return; }
       if (!keyEl || !keyEl.value) { showToast('Configura la API Key primero', 'error'); return; }
-      await invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(() => {});
-      await invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
+      await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
       try {
         downloadClientesBtn.disabled = true;
         downloadClientesBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Descargando...';
@@ -3042,8 +3055,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   function syncSaveConfig() {
     var urlEl = document.getElementById('sync-url');
     var keyEl = document.getElementById('sync-key');
-    if (urlEl && urlEl.value) invoke('set_config_value', { key: 'supabase_url', value: urlEl.value }).catch(function(){});
-    if (keyEl && keyEl.value) invoke('set_config_value', { key: 'supabase_key', value: keyEl.value }).catch(function(){});
+    if (urlEl && urlEl.value) invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(function(){});
+    if (keyEl && keyEl.value) invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(function(){});
   }
 
   /* Subir todo */
@@ -3210,7 +3223,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.abonoConfirmBtn).addEventListener('click', confirmAbono);
   qs(SEL.abonoMonto).addEventListener('input', function() {
     updateAbonoSaldoRestante();
-    if (qs('.abono-metodo-btn.active')?.dataset.method === 'mixto') distributeMixto('abono-mixto-items');
+    if (qs('.abono-metodo-btn.active')?.dataset.method === METODO_MIXTO) distributeMixto('abono-mixto-items');
   });
   qsa('.abono-metodo-btn').forEach(btn => {
     btn.addEventListener('click', () => selectAbonoMethod(btn));

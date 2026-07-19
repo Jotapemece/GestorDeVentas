@@ -1,3 +1,4 @@
+use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
 use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
@@ -43,7 +44,7 @@ pub(crate) fn check_admin_role(state: &State<AppState>) -> Result<String, String
         .lock()
         .map_err(|e| format!("Error interno: {}", e))?;
     let user = current.clone().ok_or("No autenticado")?;
-    if user.rol != "admin" {
+    if user.rol != constants::ROL_ADMIN {
         return Err("Solo administradores pueden realizar esta acción".to_string());
     }
     Ok(user.username)
@@ -306,7 +307,7 @@ pub fn admin_change_password(
             .lock()
             .map_err(|_| "Error interno".to_string())?;
         lock.as_ref()
-            .filter(|u| u.rol == "admin")
+            .filter(|u| u.rol == constants::ROL_ADMIN)
             .map(|u| u.username.clone())
             .ok_or("Solo administradores pueden realizar esta acción")?
     };

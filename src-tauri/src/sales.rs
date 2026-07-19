@@ -1,4 +1,5 @@
 use base64::Engine;
+use std::collections::HashMap;
 use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
@@ -15,7 +16,6 @@ const SQL_INSERT_DETALLE: &str =
     "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
      VALUES (?1, ?2, ?3, ?4, ?5)";
 const SQL_UPDATE_STOCK: &str = "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1";
-const SQL_PRODUCTO_PRECIO: &str = "SELECT precio_usd FROM productos WHERE codigo = ?1";
 const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
 pub(crate) fn row_to_venta(row: &rusqlite::Row) -> rusqlite::Result<Venta> {
     Ok(Venta {
@@ -101,6 +101,7 @@ fn execute_sale_transaction(
     now_iso: &str,
 ) -> Result<(i64, String, f64, f64), String> {
     let mut total_usd = 0.0;
+    let mut producto_cache: HashMap<String, (f64, i64)> = HashMap::new();
 
     for pv in &request.productos {
         let (precio, stock): (f64, i64) = tx
@@ -115,6 +116,7 @@ fn execute_sale_transaction(
             ));
         }
         total_usd += precio * pv.cantidad as f64;
+        producto_cache.insert(pv.codigo.clone(), (precio, stock));
     }
 
     let pago_json = if request.metodo_pago == constants::METODO_MIXTO {
@@ -144,9 +146,8 @@ fn execute_sale_transaction(
     let venta_id = tx.last_insert_rowid();
 
     for pv in &request.productos {
-        let precio: f64 = tx
-            .query_row(SQL_PRODUCTO_PRECIO, params![pv.codigo], |row| row.get(0))
-            .map_err(|_| format!("Producto '{}' no encontrado al insertar detalle", pv.codigo))?;
+        let (precio, _) = producto_cache.get(&pv.codigo)
+            .ok_or_else(|| format!("Producto '{}' no encontrado en caché", pv.codigo))?;
         let detalle_sync_id = Uuid::new_v4().to_string();
         tx.execute(SQL_INSERT_DETALLE, params![venta_id, pv.codigo, pv.cantidad, precio, detalle_sync_id])
             .map_err(|e| format!("Error al insertar detalle: {}", e))?;
@@ -166,7 +167,8 @@ fn execute_sale_transaction(
 
     if request.metodo_pago == constants::METODO_CREDITO {
         if let Some(cliente_id) = request.cliente_id {
-            tx.execute(SQL_UPDATE_CLIENTE_DEUDA, params![total_usd, cliente_id]).ok();
+            tx.execute(SQL_UPDATE_CLIENTE_DEUDA, params![total_usd, cliente_id])
+                .map_err(|e| format!("Error al actualizar deuda del cliente: {}", e))?;
         }
     }
 
@@ -278,18 +280,20 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
     if tasa <= 0.0 {
         return Err("La tasa debe ser mayor a cero".to_string());
     }
-    let db = state.lock_db()?;
+    let mut db = state.lock_db()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
     let now = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
-    let _ = db.execute(
+    tx.execute(
         &format!("UPDATE configuracion SET valor = ?1 WHERE clave = '{}'", constants::CFG_TASA_DOLAR),
         params![tasa.to_string()],
-    );
-    let _ = db.execute(
+    ).map_err(|e| format!("Error al guardar tasa: {}", e))?;
+    tx.execute(
         &format!("INSERT INTO configuracion (clave, valor) VALUES ('{}', ?1) ON CONFLICT(clave) DO UPDATE SET valor = ?1", constants::CFG_TASA_UPDATED_AT),
         params![now],
-    );
+    ).map_err(|e| format!("Error al guardar fecha de tasa: {}", e))?;
+    tx.commit().map_err(|e| format!("Error al confirmar tasa: {}", e))?;
     Ok(())
 }
 
@@ -337,7 +341,7 @@ pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String
                 "UPDATE clientes SET saldo_deuda_usd = MAX(0, saldo_deuda_usd - ?1) WHERE id = ?2",
                 params![total, cliente_id],
             )
-            .ok();
+            .map_err(|e| format!("Error al revertir deuda: {}", e))?;
         }
     }
 
@@ -415,6 +419,8 @@ pub fn export_report_xlsx(
         end_date: filter.end_date.clone(),
         producto_codigo: filter.producto_codigo.clone(),
         username: filter.username.clone(),
+        page: None,
+        page_size: None,
     };
     let report = get_sales_report_inner(&db, s)?;
 
@@ -483,19 +489,7 @@ fn get_sales_report_inner(
     }
 
     let end = crate::cashier::siguiente_dia(&filter.end_date);
-    let sql = format!(
-        "SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
-                v.sync_id, v.dispositivo_origen
-         FROM ventas v
-         LEFT JOIN usuarios u ON v.usuario_id = u.id
-         LEFT JOIN clientes c ON v.cliente_id = c.id
-         WHERE {}
-         ORDER BY v.id DESC",
-        where_clauses.join(" AND ")
-    );
-
-    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+    let where_sql = where_clauses.join(" AND ");
 
     let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
         Box::new(filter.start_date.clone()),
@@ -508,43 +502,96 @@ fn get_sales_report_inner(
         if !username.is_empty() { params_vec.push(Box::new(username.clone())); }
     }
 
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+    let param_count = params_vec.len();
 
-    let ventas: Vec<Venta> = stmt
-        .query_map(params_refs.as_slice(), row_to_venta)
+    // Compute totals with a single aggregation query
+    let count_sql = format!(
+        "SELECT COUNT(*), COALESCE(SUM(v.total_usd),0), COALESCE(SUM(v.total_bs),0) \
+         FROM ventas v WHERE {}",
+        where_sql
+    );
+    let mut count_stmt = db.prepare(&count_sql).map_err(|e| e.to_string())?;
+    let count_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+    let (total_ventas, total_usd, total_bs): (i64, f64, f64) = count_stmt
+        .query_row(count_refs.as_slice(), |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map_err(|e| e.to_string())?;
+
+    // Pagination
+    let page = filter.page.unwrap_or(1).max(1);
+    let page_size = filter.page_size.unwrap_or(constants::VENTAS_LIMIT_DEFAULT).max(1).min(constants::PAGE_SIZE_MAX);
+    let offset = (page - 1) * page_size;
+
+    // Fetch ventas with LIMIT/OFFSET
+    let main_sql = format!(
+        "SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
+                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
+                v.sync_id, v.dispositivo_origen
+         FROM ventas v
+         LEFT JOIN usuarios u ON v.usuario_id = u.id
+         LEFT JOIN clientes c ON v.cliente_id = c.id
+         WHERE {}
+         ORDER BY v.id DESC LIMIT ?{} OFFSET ?{}",
+        where_sql,
+        param_count + 1,
+        param_count + 2,
+    );
+
+    let mut main_stmt = db.prepare(&main_sql).map_err(|e| e.to_string())?;
+    let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = params_vec;
+    all_params.push(Box::new(page_size));
+    all_params.push(Box::new(offset));
+    let main_refs: Vec<&dyn rusqlite::types::ToSql> = all_params.iter().map(|p| p.as_ref()).collect();
+
+    let ventas: Vec<Venta> = main_stmt
+        .query_map(main_refs.as_slice(), row_to_venta)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
 
-    let total_ventas = ventas.len() as i64;
-    let total_usd: f64 = ventas.iter().map(|v| v.total_usd).sum();
-    let total_bs: f64 = ventas.iter().map(|v| v.total_bs).sum();
-
-    let mut items = Vec::new();
-    let detail_sql = "SELECT dv.id, dv.venta_id, dv.producto_codigo, p.nombre, dv.cantidad, dv.precio_usd_unitario
-                      FROM detalles_ventas dv
-                      LEFT JOIN productos p ON dv.producto_codigo = p.codigo
-                      WHERE dv.venta_id = ?1
-                      ORDER BY dv.id ASC";
-    let mut detail_stmt = db.prepare(detail_sql).map_err(|e| e.to_string())?;
-    for v in ventas {
-        let productos: Vec<DetalleVenta> = detail_stmt
-            .query_map(params![v.id], |row| {
-                let cantidad: i64 = row.get(4)?;
-                let precio: f64 = row.get(5)?;
-                Ok(DetalleVenta {
-                    id: row.get(0)?, venta_id: row.get(1)?, producto_codigo: row.get(2)?,
-                    producto_nombre: row.get(3)?, cantidad, precio_usd_unitario: precio,
-                    subtotal_usd: cantidad as f64 * precio,
-                })
+    // Batch-fetch all detalles in one query
+    let ids: Vec<i64> = ventas.iter().map(|v| v.id).collect();
+    let detail_items: Vec<DetalleVenta> = if ids.is_empty() {
+        Vec::new()
+    } else {
+        let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+        let detail_sql = format!(
+            "SELECT dv.id, dv.venta_id, dv.producto_codigo, p.nombre, dv.cantidad, dv.precio_usd_unitario \
+             FROM detalles_ventas dv \
+             LEFT JOIN productos p ON dv.producto_codigo = p.codigo \
+             WHERE dv.venta_id IN ({}) \
+             ORDER BY dv.id ASC",
+            placeholders.join(",")
+        );
+        let mut detail_stmt = db.prepare(&detail_sql).map_err(|e| e.to_string())?;
+        let det_params: Vec<&dyn rusqlite::types::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+        let rows = match detail_stmt.query_map(det_params.as_slice(), |row| {
+            let cantidad: i64 = row.get(4)?;
+            let precio: f64 = row.get(5)?;
+            Ok(DetalleVenta {
+                id: row.get(0)?, venta_id: row.get(1)?, producto_codigo: row.get(2)?,
+                producto_nombre: row.get(3)?, cantidad, precio_usd_unitario: precio,
+                subtotal_usd: cantidad as f64 * precio,
             })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-        items.push(SalesReportItem { venta: v, productos });
+        }) {
+            Ok(r) => r,
+            Err(e) => return Err(e.to_string()),
+        };
+        let details: Vec<DetalleVenta> = rows.filter_map(|r| r.ok()).collect();
+        details
+    };
+
+    // Group detalles by venta_id
+    let mut detail_map: HashMap<i64, Vec<DetalleVenta>> = HashMap::new();
+    for det in detail_items {
+        detail_map.entry(det.venta_id).or_default().push(det);
     }
 
-    Ok(SalesReportResult { total_ventas, total_usd, total_bs, ventas: items })
+    let items: Vec<SalesReportItem> = ventas.into_iter().map(|v| {
+        let productos = detail_map.remove(&v.id).unwrap_or_default();
+        SalesReportItem { venta: v, productos }
+    }).collect();
+
+    Ok(SalesReportResult { total_ventas, total_usd, total_bs, ventas: items, page, page_size })
 }
 
 #[tauri::command]
@@ -598,7 +645,8 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64) -> Res
     let new_total_bs = (new_total_usd * tasa * 100.0).round() / 100.0;
 
     tx.execute("UPDATE ventas SET total_usd = ?1, total_bs = ?2 WHERE id = ?3",
-        params![new_total_usd, new_total_bs, venta_id]).ok();
+        params![new_total_usd, new_total_bs, venta_id])
+        .map_err(|e| format!("Error al actualizar totales: {}", e))?;
 
     let void_ts = crate::helpers::now_iso();
     let remaining: i64 = tx
@@ -609,9 +657,11 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64) -> Res
         )
         .unwrap_or(0);
     if remaining == 0 {
-        tx.execute("UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id]).ok();
+        tx.execute("UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id])
+            .map_err(|e| format!("Error al anular venta: {}", e))?;
     } else {
-        tx.execute("UPDATE ventas SET updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id]).ok();
+        tx.execute("UPDATE ventas SET updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id])
+            .map_err(|e| format!("Error al actualizar timestamp: {}", e))?;
     }
     Ok(())
 }

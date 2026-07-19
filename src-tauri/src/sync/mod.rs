@@ -10,6 +10,7 @@ pub use clients::*;
 pub use conflicts::*;
 pub use orchestrator::*;
 
+use crate::constants;
 use rusqlite::params;
 use serde_json::json;
 use tauri::Emitter;
@@ -63,6 +64,13 @@ pub fn supabase_get(url: &str, key: &str) -> Result<Vec<serde_json::Value>, Stri
         }
         Err(e) => Err(format!("Error de conexión: {}", e)),
     }
+}
+
+pub fn supabase_config(db: &rusqlite::Connection) -> Result<(String, String), String> {
+    Ok((
+        get_config(db, constants::CFG_SUPABASE_URL)?,
+        get_config(db, constants::CFG_SUPABASE_KEY)?,
+    ))
 }
 
 pub fn get_config(db: &rusqlite::Connection, key: &str) -> Result<String, String> {
