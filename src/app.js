@@ -58,7 +58,7 @@ const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
 const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
 
-const SYNC_SALE_DEBOUNCE_MS = 5 * 60 * 1000;
+const SYNC_SALE_DEBOUNCE_MS = 10 * 60 * 1000;
 
 async function getUserConfig(key) {
   return invoke('get_user_config_value', { key });
@@ -798,12 +798,12 @@ function loadSyncAutoConfig() {
   if (!input) return;
   invoke('get_config_value', { key: CFG_SYNC_AUTO_INTERVAL }).then(val => {
     const minutes = parseInt(val) || 30;
-    input.value = Math.max(10, Math.min(480, minutes));
+    input.value = Math.max(30, Math.min(480, minutes));
     startSyncAutoInterval(minutes);
   }).catch(() => {});
   input.addEventListener('change', () => {
     let minutes = parseInt(input.value) || 30;
-    minutes = Math.max(10, Math.min(480, minutes));
+    minutes = Math.max(30, Math.min(480, minutes));
     input.value = minutes;
     invoke('set_config_value', { key: CFG_SYNC_AUTO_INTERVAL, value: String(minutes) }).catch(() => {});
     startSyncAutoInterval(minutes);
