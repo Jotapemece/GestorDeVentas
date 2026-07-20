@@ -3,9 +3,10 @@ use super::{api_url, now_iso, supabase_config, supabase_get, supabase_post, upse
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
-use uuid::Uuid;
 use serde_json::json;
+use std::collections::HashMap;
 use tauri::State;
+use uuid::Uuid;
 
 pub(crate) fn upload_clientes_inner(
     db: &Connection,
@@ -42,7 +43,7 @@ pub(crate) fn upload_clientes_inner(
         return Ok("No hay clientes para subir".to_string());
     }
 
-    let mut uploaded = 0;
+    let mut clientes_json: Vec<serde_json::Value> = Vec::with_capacity(rows.len());
     for (id, nombre, credito_activo, saldo, sync_id_opt, updated_opt) in &rows {
         let sync_id = if let Some(sid) = sync_id_opt {
             if sid.is_empty() {
@@ -65,29 +66,27 @@ pub(crate) fn upload_clientes_inner(
         };
 
         let updated_at = updated_opt.as_deref().unwrap_or(&ts).to_string();
-        let body = json!([{
+        clientes_json.push(json!({
             "sync_id": sync_id,
             "local_id": id,
             "nombre": nombre,
             "credito_activo": credito_activo,
             "saldo_deuda_usd": saldo,
             "updated_at": updated_at,
-        }]);
-
-        let clientes_json = serde_json::to_string(&body)
-            .map_err(|e| format!("Error serializando clientes JSON: {}", e))?;
-        supabase_post(
-            &api_url(supabase_url, "/clientes?on_conflict=sync_id"),
-            supabase_key,
-            &clientes_json,
-        )?;
-
-        uploaded += 1;
+        }));
     }
+
+    let body = serde_json::to_string(&clientes_json)
+        .map_err(|e| format!("Error serializando clientes JSON: {}", e))?;
+    supabase_post(
+        &api_url(supabase_url, "/clientes?on_conflict=sync_id"),
+        supabase_key,
+        &body,
+    )?;
 
     upsert_config(db, constants::CFG_ULTIMO_UPLOAD_CLIENTES, &ts);
 
-    Ok(format!("Subida completada: {} cliente(s) subidos", uploaded))
+    Ok(format!("Subida completada: {} cliente(s) subidos", clientes_json.len()))
 }
 
 #[tauri::command]
@@ -121,6 +120,32 @@ pub(crate) fn download_clientes_inner(
         return Ok("No hay cambios nuevos para descargar".to_string());
     }
 
+    let local_map: HashMap<String, (String, String, i64, f64)> = {
+        let mut stmt = db
+            .prepare(
+                "SELECT sync_id, updated_at, nombre, credito_activo, saldo_deuda_usd \
+                 FROM clientes WHERE sync_id IS NOT NULL AND sync_id != ''",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, f64>(4)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok());
+        let mut map = HashMap::new();
+        for (sync_id, updated_at, nombre, credito, saldo) in rows {
+            map.insert(sync_id, (updated_at.unwrap_or_default(), nombre, credito, saldo));
+        }
+        map
+    };
+
     let mut inserted = 0;
     let mut updated = 0;
     let mut conflicts = 0;
@@ -136,14 +161,6 @@ pub(crate) fn download_clientes_inner(
         let saldo = cli["saldo_deuda_usd"].as_f64().unwrap_or(0.0);
         let remote_ts = cli["updated_at"].as_str();
 
-        let local_ts: Option<String> = db
-            .query_row(
-                "SELECT updated_at FROM clientes WHERE sync_id = ?1",
-                params![sync_id],
-                |row| row.get(0),
-            )
-            .ok();
-
         let remote_json = json!({
             "sync_id": sync_id,
             "nombre": &nombre,
@@ -151,30 +168,18 @@ pub(crate) fn download_clientes_inner(
             "saldo_deuda_usd": saldo,
         });
 
-        if let Some(ref local) = local_ts {
-            if is_conflict(Some(local), remote_ts, &last_sync) {
-                let local_vals: (String, i64, f64) = db
-                    .query_row(
-                        "SELECT nombre, credito_activo, saldo_deuda_usd \
-                         FROM clientes WHERE sync_id = ?1",
-                        params![sync_id],
-                        |row| Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, i64>(1)?,
-                            row.get::<_, f64>(2)?,
-                        )),
-                    )
-                    .unwrap_or_else(|_| (String::new(), 1, 0.0));
-
+        if let Some((local_ts, local_nombre, local_credito, local_saldo)) = local_map.get(sync_id) {
+            let local_ts_opt = if local_ts.is_empty() { None } else { Some(local_ts.as_str()) };
+            if is_conflict(local_ts_opt, remote_ts, &last_sync) {
                 let local_json = json!({
                     "sync_id": sync_id,
-                    "nombre": local_vals.0,
-                    "credito_activo": local_vals.1,
-                    "saldo_deuda_usd": local_vals.2,
+                    "nombre": local_nombre,
+                    "credito_activo": local_credito,
+                    "saldo_deuda_usd": local_saldo,
                 });
                 check_and_record_conflict(
                     db, "clientes", sync_id,
-                    Some(local), remote_ts, &last_sync,
+                    local_ts_opt, remote_ts, &last_sync,
                     local_json, remote_json,
                 );
                 conflicts += 1;

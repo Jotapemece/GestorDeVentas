@@ -41,6 +41,7 @@ const CFG_CALCULAR_VUELTO = 'calcular_vuelto';
 const CFG_REDONDEO_BS = 'redondeo_bs';
 const CFG_SIDEBAR_AUTO_HIDE = 'sidebar_auto_hide';
 const CFG_CONFIRMAR_VENTA = 'confirmar_venta';
+const CFG_ANIMACIONES = 'animaciones_habilitadas';
 
 // Payment method keys (deben coincidir con constants.rs)
 const METODO_EFECTIVO_BS = 'efectivo_bs';
@@ -59,6 +60,28 @@ const CFG_SUPABASE_KEY = 'supabase_key';
 const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
 
 const SYNC_SALE_DEBOUNCE_MS = 10 * 60 * 1000;
+const TOAST_FADE_MS = 300;
+const SYNC_AUTO_MIN = 30;
+const SYNC_AUTO_MAX = 480;
+const PRODUCT_CACHE_PAGE_SIZE = 5000;
+const MIN_PASSWORD_LEN = 4;
+const FONT_SIZE_STEP = 5;
+const HISTORIAL_MAX_DAYS = 365;
+const START_OF_DAY_SUFFIX = ' 00:00:00';
+const END_OF_DAY_SUFFIX = ' 23:59:59';
+const BREAKPOINT_DESKTOP = 768;
+const MOBILE_BREAKPOINT = 500;
+const BAR_CHART_HEIGHT = 280;
+const BAR_CHART_HEIGHT_MOBILE = 240;
+const DASHBOARD_CANVAS_MAX_WIDTH = 600;
+const BAR_CHART_ANIM_MS = 600;
+const PIE_CHART_ANIM_MS = 500;
+const KEYBOARD_THRESHOLD = 100;
+const KEYBOARD_PAD_OFFSET = 40;
+const KEYBOARD_SCROLL_DELAY_MS = 300;
+const DROPDOWN_MIN_PADDING = 4;
+const SIDEBAR_HOVER_MARGIN = 14;
+const SIDEBAR_HOVER_CHECK_MS = 350;
 
 async function getUserConfig(key) {
   return invoke('get_user_config_value', { key });
@@ -89,6 +112,30 @@ const PRINT_HEIGHT = 500;
 const PRINT_FRAME_CSS = 'position:fixed;top:-9999px;left:-9999px;width:' + PRINT_WIDTH + 'px;height:' + PRINT_HEIGHT + 'px;border:none;';
 const SOUND_ENABLED = '1';
 const SOUND_DISABLED = '0';
+
+/* ========== HELPERS ========== */
+function cssVar(name, fallback = '') {
+  const val = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return (val || '').trim() || fallback;
+}
+async function tryCatch(fn, errorMsg = 'Error') {
+  try { return await fn(); } catch (e) { showToast(errorMsg + ': ' + e, 'error'); }
+}
+function renderTableRows(tbody, data, rowFn) {
+  const frag = document.createDocumentFragment();
+  data.forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = rowFn(item);
+    frag.appendChild(tr);
+  });
+  tbody.appendChild(frag);
+}
+async function loadToggleConfig(key, defaultValue = false) {
+  try {
+    const val = await getUserConfig(key);
+    return val === '1';
+  } catch (e) { return defaultValue; }
+}
 
 /* ========== SELECTORS ========== */
 const SEL = {
@@ -211,6 +258,7 @@ const SEL = {
   fontSizeDisplay: '#font-size-display',
   fullscreenToggle: '#fullscreen-toggle',
   soundToggle: '#sound-toggle',
+  animationsToggle: '#animations-toggle',
   soundVolume: '#sound-volume',
   historialLimpiezaDias: '#historial-limpieza-dias',
   historialLimpiezaSave: '#historial-limpieza-save',
@@ -357,7 +405,135 @@ const SEL = {
   calcularVueltoToggle: '#calcular-vuelto-toggle',
   redondeoBsToggle: '#redondeo-bs-toggle',
   sidebarAutoHideToggle: '#sidebar-auto-hide-toggle',
+
+  // --- Calculator ---
+  calcModal: '#calculator-modal',
+  calcExpression: '#calc-expression',
+  calcResult: '#calc-result',
+  calcLastResult: '#calc-last-result',
+  calcHistoryPrev: '#calc-history-prev',
+  calcHistoryNext: '#calc-history-next',
+  calcTasaBtn: '#calc-tasa-btn',
+  calcBtn: '#calc-btn',
+  calcClose: '#calculator-close',
+  calcEquals: '#calc-equals',
 };
+
+/* ========== CALCULATOR ========== */
+const MAX_CALC_HISTORY = 25;
+const calcState = { expr: '', result: '0', memory: null, op: null, reset: false, history: [], historyIdx: -1, historyDate: '' };
+
+function initCalculator() {
+  if (IS_ANDROID) return;
+  qs(SEL.calcBtn).style.display = '';
+  qs(SEL.calcBtn).addEventListener('click', openCalculator);
+  qs(SEL.calcClose).addEventListener('click', closeCalculator);
+  document.querySelectorAll('[data-calc]').forEach(btn => btn.addEventListener('click', () => calcInput(btn.dataset.calc)));
+  qs(SEL.calcEquals).addEventListener('click', calcEquals);
+  qs(SEL.calcHistoryPrev).addEventListener('click', calcHistoryGo.bind(null, -1));
+  qs(SEL.calcHistoryNext).addEventListener('click', calcHistoryGo.bind(null, 1));
+  qs(SEL.calcTasaBtn).addEventListener('click', calcInsertTasa);
+  document.addEventListener('keydown', calcKeydown);
+}
+
+function openCalculator() {
+  showModal(qs(SEL.calcModal));
+  const today = new Date().toDateString();
+  if (calcState.historyDate !== today) { calcState.history = []; calcState.historyIdx = -1; calcState.historyDate = today; }
+  calcRender();
+  calcRenderLastResult();
+  setTimeout(() => qs(SEL.calcModal).querySelector('.calc-buttons').focus(), 100);
+}
+
+function closeCalculator() { closeModal(qs(SEL.calcModal)); }
+
+function calcInput(val) {
+  if (val === 'clear') { calcState.expr = ''; calcState.result = '0'; calcState.memory = null; calcState.op = null; calcState.reset = false; calcRender(); return; }
+  if (val === 'backspace') { calcState.expr = calcState.expr.slice(0, -1); calcRender(); return; }
+  if (val === 'negate') {
+    if (calcState.expr && !isNaN(parseFloat(calcState.expr))) {
+      if (calcState.expr.startsWith('-')) calcState.expr = calcState.expr.slice(1); else calcState.expr = '-' + calcState.expr;
+      calcRender();
+    }
+    return;
+  }
+  if (val === 'percent') {
+    const n = parseFloat(calcState.expr);
+    if (!isNaN(n)) { calcState.expr = String(n / 100); calcRender(); }
+    return;
+  }
+  if (['add', 'subtract', 'multiply', 'divide'].includes(val)) {
+    const opMap = { add: '+', subtract: '-', multiply: '*', divide: '/' };
+    if (calcState.expr && calcState.memory !== null && calcState.op) {
+      calcState.expr = String(eval(`${calcState.memory} ${calcState.op} ${parseFloat(calcState.expr) || 0}`));
+    }
+    calcState.memory = parseFloat(calcState.expr) || 0;
+    calcState.op = opMap[val];
+    calcState.expr += [' + ', ' − ', ' × ', ' ÷ '][['add', 'subtract', 'multiply', 'divide'].indexOf(val)];
+    calcState.reset = true;
+    calcRender();
+    return;
+  }
+  if (val === 'dot') { if (!calcState.expr.includes('.')) calcState.expr += '.'; calcRender(); return; }
+  if (calcState.reset && val !== 'dot') { calcState.expr = ''; calcState.reset = false; }
+  calcState.expr += val;
+  calcRender();
+}
+
+function calcEquals() {
+  const ops = { '+': (a, b) => a + b, '-': (a, b) => a - b, '*': (a, b) => a * b, '/': (a, b) => a / b };
+  if (!calcState.op || calcState.memory === null) return;
+  const right = parseFloat(calcState.expr.split(' ').pop()) || 0;
+  if (calcState.op === '/' && right === 0) { calcState.result = 'Error'; calcRender(); return; }
+  const result = ops[calcState.op](calcState.memory, right);
+  const prevExpr = calcState.expr;
+  calcState.result = String(Math.round(result * 1e10) / 1e10);
+  calcState.expr = calcState.result;
+  calcState.memory = null;
+  calcState.op = null;
+  calcState.reset = true;
+  const today = new Date().toDateString();
+  if (calcState.historyDate !== today) { calcState.history = []; calcState.historyIdx = -1; calcState.historyDate = today; }
+  calcState.history.push({ expr: prevExpr, result: calcState.result });
+  if (calcState.history.length > MAX_CALC_HISTORY) calcState.history.shift();
+  calcState.historyIdx = calcState.history.length;
+  calcRenderLastResult();
+  calcRender();
+}
+
+function calcHistoryGo(dir) { if (calcState.history.length === 0) return; calcState.historyIdx = Math.max(0, Math.min(calcState.history.length - 1, (calcState.historyIdx === -1 ? (dir > 0 ? 0 : calcState.history.length - 1) : calcState.historyIdx + dir))); const h = calcState.history[calcState.historyIdx]; if (h) { calcState.expr = h.expr; calcState.result = h.result; calcRender(); } }
+
+function calcInsertTasa() {
+  if (tasaActual && tasaActual > 0) {
+    if (calcState.expr === '0' || calcState.expr === '' || calcState.reset) { calcState.expr = ''; calcState.reset = false; }
+    calcState.expr += tasaActual.toString();
+    calcRender();
+  } else showToast('No hay tasa disponible', 'error');
+}
+
+function calcRender() { qs(SEL.calcExpression).textContent = calcState.expr || ''; qs(SEL.calcResult).textContent = calcState.result; }
+
+function calcRenderLastResult() {
+  const el = qs(SEL.calcLastResult);
+  if (calcState.history.length === 0) { el.textContent = ''; return; }
+  const last = calcState.history[calcState.history.length - 1];
+  el.textContent = last.expr + ' = ' + last.result;
+}
+
+function calcKeydown(e) {
+  const modal = qs(SEL.calcModal);
+  if (modal.classList.contains('hidden')) return;
+  if (e.key >= '0' && e.key <= '9') { calcInput(e.key); e.preventDefault(); }
+  else if (e.key === '.') { calcInput('dot'); e.preventDefault(); }
+  else if (e.key === '+') { calcInput('add'); e.preventDefault(); }
+  else if (e.key === '-') { calcInput('subtract'); e.preventDefault(); }
+  else if (e.key === '*') { calcInput('multiply'); e.preventDefault(); }
+  else if (e.key === '/') { calcInput('divide'); e.preventDefault(); }
+  else if (e.key === 'Enter' || e.key === '=') { calcEquals(); e.preventDefault(); }
+  else if (e.key === 'Backspace') { calcInput('backspace'); e.preventDefault(); }
+  else if (e.key === 'Escape') { closeCalculator(); e.preventDefault(); }
+  else if (e.key === 'c' || e.key === 'C') { calcInput('clear'); e.preventDefault(); }
+}
 
 /* ========== CLOCK ========== */
 function startClock() {
@@ -393,11 +569,11 @@ function initSidebarAutoHide() {
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
     if (!sidebarAutoHideEnabled) return;
-    if (e.clientX <= 14) {
+    if (e.clientX <= SIDEBAR_HOVER_MARGIN) {
       clearTimeout(sidebarHideTimeout);
       sidebarHideTimeout = null;
       mainApp.classList.remove('sidebar-hidden');
-      setTimeout(checkSidebarHover, 350);
+      setTimeout(checkSidebarHover, SIDEBAR_HOVER_CHECK_MS);
       return;
     }
     checkSidebarHover();
@@ -455,7 +631,13 @@ function createProductRow(p) {
 function createCartRow(item) {
   const displayName = item.nombre || item.codigo;
   const name = escapeHtml(displayName);
-  return '<td title="' + name + '">' + name + '</td><td><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + escapeHtml(item.codigo) + '"></td><td>' + formatUSD(item.cantidad * item.precio_usd) + '</td><td><button class="btn btn-sm btn-danger" data-action="remove-from-cart" data-codigo="' + escapeHtml(item.codigo) + '">\u00d7</button></td>';
+  const code = escapeHtml(item.codigo);
+  const totalUsd = item.cantidad * item.precio_usd;
+  const totalBs = totalUsd * tasaActual;
+  const showBs = cartShowBs;
+  const totalText = showBs ? formatBS(totalBs) : formatUSD(totalUsd);
+  const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
+  return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td><div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div></td><td class="' + cls + '">' + totalText + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
 }
 function createInventoryRow(p, editBtn) {
   return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
@@ -499,6 +681,7 @@ const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;paddin
 let currentUser = null;
 let cart = [];
 let tasaActual = 0;
+let cartShowBs = false;
 let editingProduct = null;
 let editingClienteId = null;
 let abonoClienteId = null;
@@ -518,7 +701,7 @@ function hideToast(el) {
   if (el._closing) return;
   el._closing = true;
   el.classList.add('fade-out');
-  setTimeout(() => { el.classList.add('hidden'); el.classList.remove('fade-out'); el._closing = false; }, 300);
+  setTimeout(() => { el.classList.add('hidden'); el.classList.remove('fade-out'); el._closing = false; }, TOAST_FADE_MS);
 }
 
 function showToast(msg, type = 'success') {
@@ -555,7 +738,7 @@ function confirmModal(msg, title, okText) {
 
 /* ========== LOADING / EMPTY STATES ========== */
 function showLoading(el) {
-  el.innerHTML = '<div class="loading-spinner"><i class="nf nf-fa-spinner spinner-icon"></i></div>';
+  el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
 }
 function showLoadingModal(text) {
   qs(SEL.loadingText).textContent = text || 'Cargando...';
@@ -792,12 +975,12 @@ function loadSyncAutoConfig() {
   if (!input) return;
   invoke('get_config_value', { key: CFG_SYNC_AUTO_INTERVAL }).then(val => {
     const minutes = parseInt(val) || 30;
-    input.value = Math.max(30, Math.min(480, minutes));
+    input.value = Math.max(SYNC_AUTO_MIN, Math.min(SYNC_AUTO_MAX, minutes));
     startSyncAutoInterval(minutes);
   }).catch(() => {});
   input.addEventListener('change', () => {
     let minutes = parseInt(input.value) || 30;
-    minutes = Math.max(30, Math.min(480, minutes));
+    minutes = Math.max(SYNC_AUTO_MIN, Math.min(SYNC_AUTO_MAX, minutes));
     input.value = minutes;
     invoke('set_config_value', { key: CFG_SYNC_AUTO_INTERVAL, value: String(minutes) }).catch(() => {});
     startSyncAutoInterval(minutes);
@@ -872,6 +1055,7 @@ async function handleLogin() {
       qs(SEL.sidebarUser).textContent = currentUser.username + ' (' + currentUser.rol + ')';
       startClock();
       initSidebarAutoHide();
+      initCalculator();
       loadSidebarAutoHideConfig();
       applyRoleUI();
       await loadTasa();
@@ -893,11 +1077,7 @@ async function handleLogin() {
 async function handleLogout() {
   const ok = await confirmModal('\u00bfEst\u00e1 seguro de cerrar sesi\u00f3n?', 'Cerrar Sesi\u00f3n', 'Salir');
   if (!ok) return;
-  try {
-    await invoke('logout');
-  } catch (e) {
-    showToast('Error al cerrar sesi\u00f3n: ' + e, 'error');
-  }
+  await tryCatch(() => invoke('logout'), 'Error al cerrar sesi\u00f3n');
   currentUser = null; cart = []; lastCloseReportData = null;
   qs(SEL.mainApp).style.display = 'none';
   qs(SEL.loginScreen).style.display = 'flex';
@@ -925,11 +1105,7 @@ async function handleTasaChange() {
     return;
   }
   tasaActual = val;
-  try {
-    await invoke('set_tasa', { tasa: tasaActual });
-  } catch (e) {
-    showToast('Error al guardar la tasa', 'error');
-  }
+  await tryCatch(() => invoke('set_tasa', { tasa: tasaActual }), 'Error al guardar la tasa');
   const warn = qs(SEL.tasaWarning);
   if (warn) warn.style.display = 'none';
   updateCartTotals();
@@ -970,7 +1146,7 @@ function refreshAllBsPrices() {
 
 async function loadProductCache() {
   try {
-    const result = await invoke('list_products', { search: null, page: 1, pageSize: 5000 });
+    const result = await invoke('list_products', { search: null, page: 1, pageSize: PRODUCT_CACHE_PAGE_SIZE });
     productCache = result.data || result;
   } catch (e) { showToast('Error al cargar productos', 'error'); }
 }
@@ -1495,7 +1671,7 @@ function toggleDropdown(btn) {
   closeAllDropdowns();
   if (!isOpen) {
     menu.classList.add('show');
-    if (window.innerWidth > 768) {
+    if (window.innerWidth > BREAKPOINT_DESKTOP) {
       const btnRect = btn.getBoundingClientRect();
       const mw = menu.offsetWidth;
       menu.style.position = 'fixed';
@@ -1728,14 +1904,14 @@ function openAbonoModal(id) {
 }
 
 async function loadAbonoClienteInfo(id) {
-  try {
+  await tryCatch(async () => {
     const clientes = await invoke('list_clientes');
     const c = clientes.find(x => x.id === id);
     if (!c) return;
     qs(SEL.abonoClienteNombre).textContent = c.nombre;
     qs(SEL.abonoDeudaUsd).textContent = formatUSD(c.saldo_deuda_usd);
     qs(SEL.abonoDeudaBs).textContent = formatBS(c.saldo_deuda_usd * tasaActual);
-  } catch (e) {}
+  });
 }
 
 function closeAbonoModal() {
@@ -1926,7 +2102,7 @@ function drawPieChart(canvasId, data) {
   const w = canvas.width, h = canvas.height;
   const cx = CHART_CENTER_X, cy = CHART_CENTER_Y, r = CHART_RADIUS;
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#fff';
+  ctx.fillStyle = cssVar('--card', '#fff');
   ctx.fillRect(0, 0, w, h);
   const total = data.por_metodo.reduce((s, m) => s + m.total_usd, 0);
   if (total <= 0) return;
@@ -1957,7 +2133,7 @@ function drawPieChart(canvasId, data) {
     const lx = LEGEND_X;
     ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
     ctx.fillRect(lx, ly, 10, 10);
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#333';
+    ctx.fillStyle = cssVar('--text', '#333');
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
@@ -2138,14 +2314,14 @@ async function loadThemeConfig() {
 }
 
 const themes = {
-  oscuro: { '--bg': '#2A2533', '--card': '#3D364A', '--card-alt': '#4A4258', '--danger': '#6B2E2A', '--danger-dark': '#55201C', '--primary': '#6C5C7A', '--primary-dark': '#544666', '--primary-rgb': '108, 92, 122', '--accent': '#4A7C65', '--accent-dark': '#3A6651', '--accent-rgb': '74, 124, 101', '--danger-rgb': '107, 46, 42', '--overlay': 'rgba(0, 0, 0, 0.6)', '--toast-bg': '#1F1A2E', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.3)', '--hover': '#352F44', '--border': '#4A4460', '--text': '#E0D8E8', '--text-light': '#A098B8', '--text-secondary': '#A098B8', '--sidebar-bg': '#1F1A2E', '--sidebar-text': '#C8C0D8', '--sidebar-text-rgb': '200, 192, 216' },
-  claro: { '--bg': '#FAFAFA', '--card': '#FFFFFF', '--card-alt': '#F2F2F2', '--danger': '#D97373', '--danger-dark': '#C05555', '--primary': '#6C8EBF', '--primary-dark': '#5070A0', '--primary-rgb': '108, 142, 191', '--accent': '#6BAF8D', '--accent-dark': '#4A8F6D', '--accent-rgb': '107, 175, 141', '--danger-rgb': '217, 115, 115', '--overlay': 'rgba(0, 0, 0, 0.15)', '--toast-bg': '#333333', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#F5F5F5', '--border': '#DDDDDD', '--text': '#333333', '--text-light': '#777777', '--text-secondary': '#777777', '--sidebar-bg': '#F0F0F0', '--sidebar-text': '#333333', '--sidebar-text-rgb': '51, 51, 51' },
-  azul: { '--bg': '#EDF2F7', '--card': '#FFFFFF', '--card-alt': '#F2F6FA', '--danger': '#E8A0A0', '--danger-dark': '#D48888', '--primary': '#7B9EBF', '--primary-dark': '#5A7D9E', '--primary-rgb': '123, 158, 191', '--accent': '#8FC1B5', '--accent-dark': '#6DA89A', '--accent-rgb': '143, 193, 181', '--danger-rgb': '232, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.2)', '--toast-bg': '#2C5282', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.08)', '--hover': '#E2E8F0', '--border': '#CBD5E0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#2C5282', '--sidebar-text': '#EBF4FF', '--sidebar-text-rgb': '235, 244, 255' },
-  verde: { '--bg': '#F0F7F0', '--card': '#FFFFFF', '--card-alt': '#EAF3EA', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#A8C9A8', '--primary-dark': '#8BB08B', '--primary-rgb': '168, 201, 168', '--accent': '#B8DCC8', '--accent-dark': '#9CC8AC', '--accent-rgb': '184, 220, 200', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.15)', '--toast-bg': '#3A6A3A', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#E6F0E6', '--border': '#D0E0D0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#3A6A3A', '--sidebar-text': '#F0FFF0', '--sidebar-text-rgb': '240, 255, 240' },
-  morado: { '--bg': '#F5F0FA', '--card': '#FFFFFF', '--card-alt': '#F0EAF5', '--danger': '#E0A8C0', '--danger-dark': '#CC90A8', '--primary': '#C4B0E0', '--primary-dark': '#B098D4', '--primary-rgb': '196, 176, 224', '--accent': '#D4A8DC', '--accent-dark': '#C090CA', '--accent-rgb': '212, 168, 220', '--danger-rgb': '224, 168, 192', '--overlay': 'rgba(0, 0, 0, 0.2)', '--toast-bg': '#6A4C93', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.08)', '--hover': '#F0EAF6', '--border': '#D8CCE8', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#6A4C93', '--sidebar-text': '#F3E5F5', '--sidebar-text-rgb': '243, 229, 245' },
-  turquesa: { '--bg': '#E6F7F5', '--card': '#F5FFFE', '--card-alt': '#EAF8F5', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#4DB8AC', '--primary-dark': '#3A9A8E', '--primary-rgb': '77, 184, 172', '--accent': '#80D0C4', '--accent-dark': '#60B8AA', '--accent-rgb': '128, 208, 196', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.2)', '--toast-bg': '#1A4A44', '--shadow': '0 2px 12px rgba(26, 74, 68, 0.08)', '--hover': '#E8F5F2', '--border': '#C0E0DA', '--text': '#1A4A44', '--text-light': '#5A7A74', '--text-secondary': '#5A7A74', '--sidebar-bg': '#B0E0D6', '--sidebar-text': '#1A4A44', '--sidebar-text-rgb': '26, 74, 68' },
-  naranja: { '--bg': '#FDF0E8', '--card': '#FFF8F0', '--card-alt': '#F5EDE0', '--danger': '#D97050', '--danger-dark': '#C06040', '--primary': '#D47A4A', '--primary-dark': '#C06030', '--primary-rgb': '212, 122, 74', '--accent': '#E8A060', '--accent-dark': '#D48540', '--accent-rgb': '232, 160, 96', '--danger-rgb': '217, 112, 80', '--overlay': 'rgba(0, 0, 0, 0.2)', '--toast-bg': '#5C2A0A', '--shadow': '0 2px 12px rgba(74, 42, 16, 0.08)', '--hover': '#F8EDE0', '--border': '#E8D0B8', '--text': '#4A2A10', '--text-light': '#8A6A4A', '--text-secondary': '#8A6A4A', '--sidebar-bg': '#F0C8A8', '--sidebar-text': '#5C2A0A', '--sidebar-text-rgb': '92, 42, 10' },
-  menta: { '--bg': '#EEF7EE', '--card': '#FFFFFF', '--card-alt': '#E8F5E8', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#6BAF8D', '--primary-dark': '#4A8F6D', '--primary-rgb': '107, 175, 141', '--accent': '#8FC1A8', '--accent-dark': '#6DA88A', '--accent-rgb': '143, 193, 168', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.15)', '--toast-bg': '#3A6A4A', '--shadow': '0 2px 12px rgba(58, 106, 74, 0.08)', '--hover': '#E6F5E6', '--border': '#D0E0D0', '--text': '#2A3A2A', '--text-light': '#5A7A6A', '--text-secondary': '#5A7A6A', '--sidebar-bg': '#B0D0B8', '--sidebar-text': '#2A4A3A', '--sidebar-text-rgb': '42, 74, 58' }
+  oscuro: { '--bg': '#2A2533', '--card': '#3D364A', '--card-alt': '#4A4258', '--danger': '#6B2E2A', '--danger-dark': '#55201C', '--primary': '#6C5C7A', '--primary-dark': '#544666', '--primary-rgb': '108, 92, 122', '--accent': '#4A7C65', '--accent-dark': '#3A6651', '--accent-rgb': '74, 124, 101', '--danger-rgb': '107, 46, 42', '--overlay': 'rgba(0, 0, 0, 0.6)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.3)', '--hover': '#352F44', '--border': '#4A4460', '--text': '#E0D8E8', '--text-light': '#A098B8', '--text-secondary': '#A098B8', '--sidebar-bg': '#1F1A2E', '--sidebar-text': '#C8C0D8', '--sidebar-text-rgb': '200, 192, 216' },
+  claro: { '--bg': '#FAFAFA', '--card': '#FFFFFF', '--card-alt': '#F2F2F2', '--danger': '#D97373', '--danger-dark': '#C05555', '--primary': '#6C8EBF', '--primary-dark': '#5070A0', '--primary-rgb': '108, 142, 191', '--accent': '#6BAF8D', '--accent-dark': '#4A8F6D', '--accent-rgb': '107, 175, 141', '--danger-rgb': '217, 115, 115', '--overlay': 'rgba(0, 0, 0, 0.15)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#F5F5F5', '--border': '#DDDDDD', '--text': '#333333', '--text-light': '#777777', '--text-secondary': '#777777', '--sidebar-bg': '#F0F0F0', '--sidebar-text': '#333333', '--sidebar-text-rgb': '51, 51, 51' },
+  azul: { '--bg': '#EDF2F7', '--card': '#FFFFFF', '--card-alt': '#F2F6FA', '--danger': '#E8A0A0', '--danger-dark': '#D48888', '--primary': '#7B9EBF', '--primary-dark': '#5A7D9E', '--primary-rgb': '123, 158, 191', '--accent': '#8FC1B5', '--accent-dark': '#6DA89A', '--accent-rgb': '143, 193, 181', '--danger-rgb': '232, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.2)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.08)', '--hover': '#E2E8F0', '--border': '#CBD5E0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#2C5282', '--sidebar-text': '#EBF4FF', '--sidebar-text-rgb': '235, 244, 255' },
+  verde: { '--bg': '#F0F7F0', '--card': '#FFFFFF', '--card-alt': '#EAF3EA', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#A8C9A8', '--primary-dark': '#8BB08B', '--primary-rgb': '168, 201, 168', '--accent': '#B8DCC8', '--accent-dark': '#9CC8AC', '--accent-rgb': '184, 220, 200', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.15)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#E6F0E6', '--border': '#D0E0D0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#3A6A3A', '--sidebar-text': '#F0FFF0', '--sidebar-text-rgb': '240, 255, 240' },
+  morado: { '--bg': '#F5F0FA', '--card': '#FFFFFF', '--card-alt': '#F0EAF5', '--danger': '#E0A8C0', '--danger-dark': '#CC90A8', '--primary': '#C4B0E0', '--primary-dark': '#B098D4', '--primary-rgb': '196, 176, 224', '--accent': '#D4A8DC', '--accent-dark': '#C090CA', '--accent-rgb': '212, 168, 220', '--danger-rgb': '224, 168, 192', '--overlay': 'rgba(0, 0, 0, 0.2)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.08)', '--hover': '#F0EAF6', '--border': '#D8CCE8', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#6A4C93', '--sidebar-text': '#F3E5F5', '--sidebar-text-rgb': '243, 229, 245' },
+  turquesa: { '--bg': '#E6F7F5', '--card': '#F5FFFE', '--card-alt': '#EAF8F5', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#4DB8AC', '--primary-dark': '#3A9A8E', '--primary-rgb': '77, 184, 172', '--accent': '#80D0C4', '--accent-dark': '#60B8AA', '--accent-rgb': '128, 208, 196', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.2)', '--shadow': '0 2px 12px rgba(26, 74, 68, 0.08)', '--hover': '#E8F5F2', '--border': '#C0E0DA', '--text': '#1A4A44', '--text-light': '#5A7A74', '--text-secondary': '#5A7A74', '--sidebar-bg': '#B0E0D6', '--sidebar-text': '#1A4A44', '--sidebar-text-rgb': '26, 74, 68' },
+  naranja: { '--bg': '#FDF0E8', '--card': '#FFF8F0', '--card-alt': '#F5EDE0', '--danger': '#D97050', '--danger-dark': '#C06040', '--primary': '#D47A4A', '--primary-dark': '#C06030', '--primary-rgb': '212, 122, 74', '--accent': '#E8A060', '--accent-dark': '#D48540', '--accent-rgb': '232, 160, 96', '--danger-rgb': '217, 112, 80', '--overlay': 'rgba(0, 0, 0, 0.2)', '--shadow': '0 2px 12px rgba(74, 42, 16, 0.08)', '--hover': '#F8EDE0', '--border': '#E8D0B8', '--text': '#4A2A10', '--text-light': '#8A6A4A', '--text-secondary': '#8A6A4A', '--sidebar-bg': '#F0C8A8', '--sidebar-text': '#5C2A0A', '--sidebar-text-rgb': '92, 42, 10' },
+  menta: { '--bg': '#EEF7EE', '--card': '#FFFFFF', '--card-alt': '#E8F5E8', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#6BAF8D', '--primary-dark': '#4A8F6D', '--primary-rgb': '107, 175, 141', '--accent': '#8FC1A8', '--accent-dark': '#6DA88A', '--accent-rgb': '143, 193, 168', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.15)', '--shadow': '0 2px 12px rgba(58, 106, 74, 0.08)', '--hover': '#E6F5E6', '--border': '#D0E0D0', '--text': '#2A3A2A', '--text-light': '#5A7A6A', '--text-secondary': '#5A7A6A', '--sidebar-bg': '#B0D0B8', '--sidebar-text': '#2A4A3A', '--sidebar-text-rgb': '42, 74, 58' }
 };
 
 let prevThemeKeys = null;
@@ -2225,7 +2401,7 @@ async function handleCreateUser() {
   const password = qs(SEL.newUserPassword).value;
   const rol = qs(SEL.newUserRol).value;
   if (!name || !password) { showToast('Complete todos los campos', 'error'); return; }
-  if (password.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
+  if (password.length < MIN_PASSWORD_LEN) { showToast(`La contrase\u00f1a debe tener al menos ${MIN_PASSWORD_LEN} caracteres`, 'error'); return; }
   try {
     await invoke('create_usuario', { username: name, password, rol });
     showToast('Usuario creado exitosamente');
@@ -2242,7 +2418,7 @@ async function handleChangePassword() {
   const confirm = qs(SEL.changePwdConfirm).value;
   if (!old || !newPwd || !confirm) { showToast('Complete todos los campos', 'error'); return; }
   if (newPwd !== confirm) { showToast('Las contrase\u00f1as nuevas no coinciden', 'error'); return; }
-  if (newPwd.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
+  if (newPwd.length < MIN_PASSWORD_LEN) { showToast(`La contrase\u00f1a debe tener al menos ${MIN_PASSWORD_LEN} caracteres`, 'error'); return; }
   try {
     await invoke('change_password', { request: { old_password: old, new_password: newPwd } });
     showToast('Contrase\u00f1a cambiada exitosamente');
@@ -2262,8 +2438,8 @@ async function loadReports() {
   try {
     showLoading(searchBtn);
     const filter = {
-      start_date: startDate + ' 00:00:00',
-      end_date: endDate + ' 23:59:59',
+      start_date: startDate + START_OF_DAY_SUFFIX,
+      end_date: endDate + END_OF_DAY_SUFFIX,
       producto_codigo: qs(SEL.reportProductFilter).value.trim() || null,
       username: qs(SEL.reportVendorFilter).value.trim() || null,
     };
@@ -2304,7 +2480,7 @@ async function loadTopProducts() {
   const limit = parseInt(qs(SEL.topProductsLimit)?.value || '10');
   try {
     const products = await invoke('get_top_products', {
-      startDate: startDate + ' 00:00:00',
+      startDate: startDate + START_OF_DAY_SUFFIX,
       endDate: endDate,
       limit: limit
     });
@@ -2332,7 +2508,7 @@ async function loadDashboard() {
     const data = await invoke('get_dashboard_summary');
     var paymentMethods = null;
     if (dashboardChartType === 'pie') {
-      try { paymentMethods = await invoke('get_dashboard_payment_methods', { period: piePeriod }); } catch (e) {}
+      paymentMethods = await tryCatch(() => invoke('get_dashboard_payment_methods', { period: piePeriod }));
     }
     const periods = [
       { label: 'Hoy', icon: 'calendar_day', key: 'today', color: '#4f46e5' },
@@ -2344,7 +2520,7 @@ async function loadDashboard() {
         '<button class="btn btn-sm ' + (dashboardChartType === 'bar' ? 'btn-primary' : 'btn-outline') + '" data-chart="bar"><i class="nf nf-fa-bar_chart"></i> Barras</button>' +
         '<button class="btn btn-sm ' + (dashboardChartType === 'pie' ? 'btn-primary' : 'btn-outline') + '" data-chart="pie"><i class="nf nf-fa-chart_pie"></i> Pastel</button>' +
       '</div>' +
-      '<div class="dashboard-chart-container"><canvas id="dashboard-canvas" width="600" height="280"></canvas></div>' +
+      '<div class="dashboard-chart-container"><canvas id="dashboard-canvas" width="' + DASHBOARD_CANVAS_MAX_WIDTH + '" height="' + BAR_CHART_HEIGHT + '"></canvas></div>' +
       '<div class="dashboard-grid">' +
         periods.map(function(p) {
           var d = data[p.key];
@@ -2399,41 +2575,41 @@ function hideChartTooltip() {
 
 /* ========== BAR CHART ========== */
 function drawDashboardBarChart(body, data, periods) {
-  var canvas = qs(SEL.dashboardCanvas);
+  const canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
-  var rect = canvas.parentElement.getBoundingClientRect();
-  var isMobile = rect.width < 500;
-  var w = Math.min(rect.width - 16, 600);
-  var h = isMobile ? 240 : 280;
-  var dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const isMobile = rect.width < MOBILE_BREAKPOINT;
+  const w = Math.min(rect.width - 16, DASHBOARD_CANVAS_MAX_WIDTH);
+  const h = isMobile ? BAR_CHART_HEIGHT_MOBILE : BAR_CHART_HEIGHT;
+  const dpr = window.devicePixelRatio || 1;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
   canvas.style.width = w + 'px';
   canvas.style.height = h + 'px';
-  var ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0d8e8';
-  var textLight = getComputedStyle(document.documentElement).getPropertyValue('--text-light').trim() || '#a098b8';
-  var pad = isMobile ? { top: 12, right: 8, bottom: 28, left: 40 } : { top: 20, right: 20, bottom: 35, left: 55 };
-  var chartW = w - pad.left - pad.right;
-  var chartH = h - pad.top - pad.bottom;
+  const textColor = cssVar('--text', '#e0d8e8');
+  const textLight = cssVar('--text-light', '#a098b8');
+  const pad = isMobile ? { top: 12, right: 8, bottom: 28, left: 40 } : { top: 20, right: 20, bottom: 35, left: 55 };
+  const chartW = w - pad.left - pad.right;
+  const chartH = h - pad.top - pad.bottom;
 
-  var metrics = [
+  const metrics = [
     { label: 'Ventas', key: 'total_ventas', values: [data.today.total_ventas, data.week.total_ventas, data.month.total_ventas] },
     { label: 'USD', key: 'total_usd', values: [data.today.total_usd, data.week.total_usd, data.month.total_usd] }
   ];
 
-  var barColors = ['#4f46e5', '#0891b2', '#059669'];
-  var periodLabels = ['Hoy', '7 d\u00edas', 'Mes'];
-  var groupW = chartW / metrics.length;
-  var barW = Math.min(groupW * (isMobile ? 0.24 : 0.28), isMobile ? 28 : 36);
-  var gap = (groupW - barW * 3) / 4;
-  var yMaxes = metrics.map(function(m) { return Math.max.apply(null, m.values) * 1.15 || 1; });
+  const barColors = ['#4f46e5', '#0891b2', '#059669'];
+  const periodLabels = ['Hoy', '7 d\u00edas', 'Mes'];
+  const groupW = chartW / metrics.length;
+  const barW = Math.min(groupW * (isMobile ? 0.24 : 0.28), isMobile ? 28 : 36);
+  const gap = (groupW - barW * 3) / 4;
+  const yMaxes = metrics.map(function(m) { return Math.max.apply(null, m.values) * 1.15 || 1; });
 
-  var bars = [];
-  var startTime = null;
-  var duration = 600;
+  let bars = [];
+  let startTime = null;
+  const duration = BAR_CHART_ANIM_MS;
 
   function drawBase(ease) {
     ctx.clearRect(0, 0, w, h);
@@ -2448,9 +2624,9 @@ function drawDashboardBarChart(body, data, periods) {
 
     ctx.strokeStyle = '#e5e7eb';
     ctx.setLineDash([4, 4]);
-    var gridLines = isMobile ? 3 : 4;
-    for (var gi = 1; gi <= gridLines; gi++) {
-      var gy = pad.top + chartH * (1 - gi / (gridLines + 1));
+    const gridLines = isMobile ? 3 : 4;
+    for (let gi = 1; gi <= gridLines; gi++) {
+      const gy = pad.top + chartH * (1 - gi / (gridLines + 1));
       ctx.beginPath();
       ctx.moveTo(pad.left, gy);
       ctx.lineTo(pad.left + chartW, gy);
@@ -2462,17 +2638,17 @@ function drawDashboardBarChart(body, data, periods) {
     ctx.font = isMobile ? '9px sans-serif' : '11px sans-serif';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    for (var yi = 0; yi <= gridLines + 1; yi++) {
+    for (let yi = 0; yi <= gridLines + 1; yi++) {
       ctx.fillText(Math.round(yi * 100 / (gridLines + 1)) + '%', pad.left - (isMobile ? 4 : 8), pad.top + chartH * (1 - yi / (gridLines + 1)));
     }
 
     bars = [];
-    for (var mi = 0; mi < metrics.length; mi++) {
-      var gx = pad.left + mi * groupW + gap;
-      for (var bi = 0; bi < 3; bi++) {
-        var barH = Math.max(1, (metrics[mi].values[bi] / yMaxes[mi]) * chartH * ease);
-        var bx = gx + bi * (barW + gap);
-        var by = pad.top + chartH - barH;
+    for (let mi = 0; mi < metrics.length; mi++) {
+      const gx = pad.left + mi * groupW + gap;
+      for (let bi = 0; bi < 3; bi++) {
+        const barH = Math.max(1, (metrics[mi].values[bi] / yMaxes[mi]) * chartH * ease);
+        const bx = gx + bi * (barW + gap);
+        const by = pad.top + chartH - barH;
         bars.push({ x: bx, y: by, w: barW, h: barH, metric: metrics[mi].label, period: periodLabels[bi] });
         ctx.fillStyle = barColors[bi];
         ctx.fillRect(bx, by, barW, barH);
@@ -2491,9 +2667,9 @@ function drawDashboardBarChart(body, data, periods) {
       ctx.fillText(metrics[mi].label, gx + groupW / 2, pad.top + chartH + 8);
     }
 
-    var legendX = w - (isMobile ? 130 : 160), legendY = isMobile ? 4 : 6;
-    var lSize = isMobile ? 8 : 10;
-    for (var li = 0; li < 3; li++) {
+    const legendX = w - (isMobile ? 130 : 160), legendY = isMobile ? 4 : 6;
+    const lSize = isMobile ? 8 : 10;
+    for (let li = 0; li < 3; li++) {
       ctx.fillStyle = barColors[li];
       ctx.fillRect(legendX + li * (isMobile ? 44 : 52), legendY, lSize, lSize);
       ctx.fillStyle = textColor;
@@ -2506,7 +2682,7 @@ function drawDashboardBarChart(body, data, periods) {
 
   function animate(timestamp) {
     if (!startTime) startTime = timestamp;
-    var progress = Math.min((timestamp - startTime) / duration, 1);
+    const progress = Math.min((timestamp - startTime) / duration, 1);
     drawBase(1 - Math.pow(1 - progress, 3));
     if (progress < 1) { requestAnimationFrame(animate); }
     else { attachChartHover(canvas, bars, dpr); }
@@ -2516,42 +2692,42 @@ function drawDashboardBarChart(body, data, periods) {
 
 /* ========== PIE CHART ========== */
 function drawDashboardPieChart(body, paymentMethods) {
-  var periodLabels = { day: 'Hoy', week: 'Semana', month: 'Mes' };
-  var periodBar = document.createElement('div');
+  const periodLabels = { day: 'Hoy', week: 'Semana', month: 'Mes' };
+  const periodBar = document.createElement('div');
   periodBar.className = 'dashboard-chart-toggle';
   periodBar.innerHTML = Object.keys(periodLabels).map(function(k) {
     return '<button class="btn btn-sm ' + (piePeriod === k ? 'btn-primary' : 'btn-outline') + '" data-pie-period="' + k + '">' + periodLabels[k] + '</button>';
   }).join('');
-  var container = body.querySelector('.dashboard-chart-container');
+  const container = body.querySelector('.dashboard-chart-container');
   if (container) body.insertBefore(periodBar, container);
-  var periodBtns = periodBar.querySelectorAll('[data-pie-period]');
-  for (var pi = 0; pi < periodBtns.length; pi++) {
+  const periodBtns = periodBar.querySelectorAll('[data-pie-period]');
+  for (let pi = 0; pi < periodBtns.length; pi++) {
     periodBtns[pi].addEventListener('click', function() {
       piePeriod = this.dataset.piePeriod;
       loadDashboard();
     });
   }
 
-  var canvas = qs(SEL.dashboardCanvas);
+  const canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
-  var rect = canvas.parentElement.getBoundingClientRect();
-  var isMobile = rect.width < 500;
-  var w = Math.min(rect.width - 16, 600);
-  var dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const isMobile = rect.width < MOBILE_BREAKPOINT;
+  const w = Math.min(rect.width - 16, DASHBOARD_CANVAS_MAX_WIDTH);
+  const dpr = window.devicePixelRatio || 1;
   canvas.width = w * dpr;
-  canvas.height = 280 * dpr;
+  canvas.height = BAR_CHART_HEIGHT * dpr;
   canvas.style.width = w + 'px';
-  canvas.style.height = '280px';
-  var ctx = canvas.getContext('2d');
+  canvas.style.height = BAR_CHART_HEIGHT + 'px';
+  const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
-  var h = 280;
+  const h = BAR_CHART_HEIGHT;
 
-  var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0d8e8';
-  var textLight = getComputedStyle(document.documentElement).getPropertyValue('--text-light').trim() || '#a098b8';
-  var cardColor = getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#1f2937';
+  const textColor = cssVar('--text', '#e0d8e8');
+  const textLight = cssVar('--text-light', '#a098b8');
+  const cardColor = cssVar('--card', '#1f2937');
 
-  var pieColors = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#7c3aed', '#dc2626'];
-  var methodLabels = {
+  const pieColors = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#7c3aed', '#dc2626'];
+  const methodLabels = {
     efectivo: 'Efectivo',
     punto: 'Punto',
     pago_movil: 'Pago M\u00f3vil',
@@ -2560,7 +2736,7 @@ function drawDashboardPieChart(body, paymentMethods) {
     efectivo_usd: 'Efectivo USD'
   };
 
-  var slices = [];
+  const slices = [];
   if (paymentMethods && paymentMethods.length) {
     paymentMethods.forEach(function(m, i) {
       if (m.total_usd > 0) {
@@ -2572,31 +2748,31 @@ function drawDashboardPieChart(body, paymentMethods) {
     slices.push({ label: 'Sin datos', value: 1, color: '#6b7280' });
   }
 
-  var total = slices.reduce(function(s, sl) { return s + sl.value; }, 0);
+  const total = slices.reduce(function(s, sl) { return s + sl.value; }, 0);
 
-  var legendW = isMobile ? 90 : 130;
-  var chartW = w - legendW;
-  var cx = chartW / 2;
-  var cy = h / 2;
-  var radius = Math.min(chartW, h) / 2 - (isMobile ? 20 : 40);
+  const legendW = isMobile ? 90 : 130;
+  const chartW = w - legendW;
+  const cx = chartW / 2;
+  const cy = h / 2;
+  const radius = Math.min(chartW, h) / 2 - (isMobile ? 20 : 40);
 
-  var acc = 0;
-  var angles = slices.map(function(sl) {
-    var a = (sl.value / total) * Math.PI * 2;
-    var seg = { start: acc, end: acc + a, slice: sl };
+  let acc = 0;
+  const angles = slices.map(function(sl) {
+    const a = (sl.value / total) * Math.PI * 2;
+    const seg = { start: acc, end: acc + a, slice: sl };
     acc += a;
     return seg;
   });
 
-  var duration = 500;
-  var startTime = null;
+  const duration = PIE_CHART_ANIM_MS;
+  let startTime = null;
 
   function drawBase(ease) {
     ctx.clearRect(0, 0, w, h);
 
-    for (var si = 0; si < angles.length; si++) {
-      var seg = angles[si];
-      var sweep = (seg.end - seg.start) * ease;
+    for (let si = 0; si < angles.length; si++) {
+      const seg = angles[si];
+      const sweep = (seg.end - seg.start) * ease;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, radius, seg.start, seg.start + sweep);
@@ -2619,10 +2795,10 @@ function drawDashboardPieChart(body, paymentMethods) {
     ctx.fillStyle = textLight;
     ctx.fillText(periodLabels[piePeriod] || 'Total', cx, cy + 14);
 
-    var legX = chartW + (isMobile ? 6 : 12);
-    var legY = 24;
-    var sq = isMobile ? 10 : 12;
-    for (var li = 0; li < slices.length; li++) {
+    const legX = chartW + (isMobile ? 6 : 12);
+    let legY = 24;
+    const sq = isMobile ? 10 : 12;
+    for (let li = 0; li < slices.length; li++) {
       ctx.fillStyle = slices[li].color;
       ctx.fillRect(legX, legY, sq, sq);
       ctx.fillStyle = textColor;
@@ -2630,7 +2806,7 @@ function drawDashboardPieChart(body, paymentMethods) {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(slices[li].label, legX + sq + (isMobile ? 4 : 6), legY);
-      var pct = ((slices[li].value / total) * 100).toFixed(1);
+      const pct = ((slices[li].value / total) * 100).toFixed(1);
       ctx.fillStyle = textLight;
       ctx.font = (isMobile ? '8px' : '11px') + ' sans-serif';
       ctx.fillText('$' + slices[li].value.toFixed(1) + ' (' + pct + '%)', legX + sq + (isMobile ? 4 : 6), legY + sq + 2);
@@ -2640,7 +2816,7 @@ function drawDashboardPieChart(body, paymentMethods) {
 
   function animate(timestamp) {
     if (!startTime) startTime = timestamp;
-    var progress = Math.min((timestamp - startTime) / duration, 1);
+    const progress = Math.min((timestamp - startTime) / duration, 1);
     drawBase(1 - Math.pow(1 - progress, 3));
     if (progress < 1) { requestAnimationFrame(animate); }
     else { attachPieHover(canvas, angles, cx, cy, radius, dpr); }
@@ -2650,10 +2826,10 @@ function drawDashboardPieChart(body, paymentMethods) {
 
 function attachChartHover(canvas, bars, dpr) {
   function onMove(e) {
-    var cr = canvas.getBoundingClientRect();
-    var mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr;
-    var my = (e.clientY - cr.top) * (canvas.height / cr.height) / dpr;
-    for (var i = 0; i < bars.length; i++) {
+    const cr = canvas.getBoundingClientRect();
+    const mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr;
+    const my = (e.clientY - cr.top) * (canvas.height / cr.height) / dpr;
+    for (let i = 0; i < bars.length; i++) {
       if (mx >= bars[i].x && mx <= bars[i].x + bars[i].w && my >= bars[i].y && my <= bars[i].y + bars[i].h) {
         showChartTooltip(e.clientX, e.clientY, bars[i].period + ' - ' + bars[i].metric);
         canvas.style.cursor = 'pointer';
@@ -2665,7 +2841,7 @@ function attachChartHover(canvas, bars, dpr) {
   }
   function onOut() { hideChartTooltip(); canvas.style.cursor = 'default'; }
   function onTouch(e) {
-    var t = e.touches[0];
+    const t = e.touches[0];
     onMove({ clientX: t.clientX, clientY: t.clientY });
   }
   canvas.addEventListener('mousemove', onMove);
@@ -2675,19 +2851,19 @@ function attachChartHover(canvas, bars, dpr) {
 
 function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
   function onMove(e) {
-    var cr = canvas.getBoundingClientRect();
-    var mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr - cx;
-    var my = (e.clientY - cr.top) * (canvas.height / cr.height) / dpr - cy;
-    var dist = Math.sqrt(mx * mx + my * my);
-    var innerR = radius * 0.45;
+    const cr = canvas.getBoundingClientRect();
+    const mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr - cx;
+    const my = (e.clientY - cr.top) * (canvas.height / cr.height) / dpr - cy;
+    const dist = Math.sqrt(mx * mx + my * my);
+    const innerR = radius * 0.45;
     if (dist < innerR || dist > radius) {
       hideChartTooltip();
       canvas.style.cursor = 'default';
       return;
     }
-    var angle = Math.atan2(my, mx);
+    let angle = Math.atan2(my, mx);
     if (angle < 0) angle += Math.PI * 2;
-    for (var i = 0; i < angles.length; i++) {
+    for (let i = 0; i < angles.length; i++) {
       if (angle >= angles[i].start && angle < angles[i].end) {
         showChartTooltip(e.clientX, e.clientY, angles[i].slice.label + ' - $' + angles[i].slice.value.toFixed(1));
         canvas.style.cursor = 'pointer';
@@ -2699,15 +2875,13 @@ function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
   }
   function onOut() { hideChartTooltip(); canvas.style.cursor = 'default'; }
   function onTouch(e) {
-    var t = e.touches[0];
+    const t = e.touches[0];
     onMove({ clientX: t.clientX, clientY: t.clientY });
   }
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseout', onOut);
   canvas.addEventListener('touchstart', onTouch);
 }
-
-function showChartTooltip(x, y, text) {
 
 /* ========== PRODUCT HISTORY ========== */
 async function showProductHistory(codigo, nombre) {
@@ -2743,8 +2917,8 @@ async function handleExportReport() {
   try {
     const b64 = await invoke('export_report_xlsx', {
       filter: {
-        start_date: startDate + ' 00:00:00',
-        end_date: endDate + ' 23:59:59',
+        start_date: startDate + START_OF_DAY_SUFFIX,
+        end_date: endDate + END_OF_DAY_SUFFIX,
         producto_codigo: qs(SEL.reportProductFilter).value.trim() || null,
         username: qs(SEL.reportVendorFilter).value.trim() || null,
       }
@@ -2888,6 +3062,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (btn) addToCart(btn.dataset.codigo);
   });
 
+  // Currency toggle for cart totals column
+  const currencyToggle = qs('#cart-currency-toggle');
+  if (currencyToggle) {
+    currencyToggle.addEventListener('click', function() {
+      cartShowBs = !cartShowBs;
+      this.textContent = cartShowBs ? 'Bs.' : '$';
+      this.classList.toggle('active', cartShowBs);
+      this.title = cartShowBs ? 'Cambiar a USD' : 'Cambiar a Bs';
+      renderCart();
+      updateCartTotals();
+    });
+  }
+
   // Event delegation: cart qty input and remove
   qs(SEL.cartBody).addEventListener('focusin', e => {
     const input = e.target.closest('.cart-qty-input');
@@ -2902,6 +3089,25 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (btn) {
       e.stopPropagation();
       removeFromCart(btn.dataset.codigo);
+      return;
+    }
+    const inc = e.target.closest('[data-action="qty-inc"]');
+    if (inc) {
+      const input = inc.parentElement.querySelector('.cart-qty-input');
+      if (input) {
+        input.value = Math.min(parseInt(input.value) + 1, parseInt(input.max));
+        handleCartQtyInput(input.dataset.codigo, input.value);
+      }
+      return;
+    }
+    const dec = e.target.closest('[data-action="qty-dec"]');
+    if (dec) {
+      const input = dec.parentElement.querySelector('.cart-qty-input');
+      if (input) {
+        input.value = Math.max(parseInt(input.value) - 1, parseInt(input.min));
+        handleCartQtyInput(input.dataset.codigo, input.value);
+      }
+      return;
     }
   });
 
@@ -3094,7 +3300,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.adminPwdCancelBtn).addEventListener('click', closeAdminPwdModal);
   qs(SEL.adminPwdSaveBtn).addEventListener('click', async function() {
     const pwd = adminPwdInput.value.trim();
-    if (!pwd || pwd.length < 4) { showToast('La contrase\u00f1a debe tener al menos 4 caracteres', 'error'); return; }
+    if (!pwd || pwd.length < MIN_PASSWORD_LEN) { showToast(`La contrase\u00f1a debe tener al menos ${MIN_PASSWORD_LEN} caracteres`, 'error'); return; }
     try {
       await invoke('admin_change_password', { usuarioId: adminPwdUserId, newPassword: pwd });
       showToast('Contrase\u00f1a cambiada exitosamente');
@@ -3263,22 +3469,22 @@ document.addEventListener('DOMContentLoaded', async function() {
     var btn = this;
     btn.disabled = true;
     btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Probando...';
-    statusEl.style.color = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+    statusEl.style.color = cssVar('--text-secondary');
     statusEl.title = 'Probando...';
     syncSaveConfig();
     try {
       var ok = await invoke('test_supabase_connection');
       if (ok) {
-        statusEl.style.color = getComputedStyle(document.documentElement).getPropertyValue('--success').trim();
+        statusEl.style.color = cssVar('--success');
         statusEl.title = 'Conectado';
         showToast('Conexión exitosa');
       } else {
-        statusEl.style.color = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim();
-        statusEl.title = 'Error de conexión';
+        statusEl.style.color = cssVar('--danger');
+        statusEl.title = 'Error de conexi\u00f3n';
         showToast('No se pudo conectar a Supabase', 'error');
       }
     } catch (e) {
-      statusEl.style.color = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim();
+      statusEl.style.color = cssVar('--danger');
       statusEl.title = 'Error: ' + e;
       showToast('Error: ' + e, 'error');
     }
@@ -3466,13 +3672,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   const fontDecBtn = qs(SEL.fontDecBtn);
   if (fontIncBtn) {
     fontIncBtn.addEventListener('click', function() {
-      applyFontSize(currentFontPct + 5);
+      applyFontSize(currentFontPct + FONT_SIZE_STEP);
       saveFontSize(currentFontPct);
     });
   }
   if (fontDecBtn) {
     fontDecBtn.addEventListener('click', function() {
-      applyFontSize(currentFontPct - 5);
+      applyFontSize(currentFontPct - FONT_SIZE_STEP);
       saveFontSize(currentFontPct);
     });
   }
@@ -3554,6 +3760,26 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (savedTheme) applyTheme(savedTheme);
   } catch (e) {}
 
+  // Animations toggle
+  const animToggle = qs('#animations-toggle');
+  function setAnimations(enabled) {
+    document.body.classList.toggle('no-animations', !enabled);
+  }
+  if (animToggle) {
+    animToggle.addEventListener('change', function() {
+      setAnimations(this.checked);
+      setUserConfig(CFG_ANIMACIONES, this.checked ? '1' : '0').catch(e => showToast('Error al guardar configuraci\u00f3n', 'error'));
+    });
+  }
+
+  // Load animations config
+  try {
+    const val = await getUserConfig(CFG_ANIMACIONES);
+    const enabled = val !== '0';
+    if (animToggle) animToggle.checked = enabled;
+    setAnimations(enabled);
+  } catch (e) {}
+
   // Load confirmar venta config
   try {
     const val = await getUserConfig(CFG_CONFIRMAR_VENTA);
@@ -3576,7 +3802,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       const input = qs(SEL.historialLimpiezaDias);
       let val = parseInt(input.value);
       if (isNaN(val) || val < 0) val = 0;
-      if (val > 365) val = 365;
+      if (val > HISTORIAL_MAX_DAYS) val = HISTORIAL_MAX_DAYS;
       input.value = val;
       try {
         await invoke('set_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS, value: String(val) });
@@ -3605,7 +3831,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Ensure sales panels are visible on desktop
   window.addEventListener('resize', function() {
-    if (window.innerWidth > 768) {
+    if (window.innerWidth > BREAKPOINT_DESKTOP) {
       document.querySelectorAll('.sales-left, .sales-center').forEach(el => el.style.display = '');
     }
   });
@@ -3634,7 +3860,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       var diff = _prevVpHeight - window.visualViewport.height;
       var main = qs(SEL.mainApp);
       if (!main) return;
-      if (diff > 100) {
+      if (diff > KEYBOARD_THRESHOLD) {
         // Keyboard opened
         var view = document.querySelector('.view.active');
         if (view) view.classList.add('mobile-keyboard');
@@ -3642,10 +3868,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (el) {
           setTimeout(function() {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 300);
+          }, KEYBOARD_SCROLL_DELAY_MS);
         }
-        main.style.paddingBottom = (diff - 40) + 'px';
-      } else if (diff < -100) {
+        main.style.paddingBottom = (diff - KEYBOARD_PAD_OFFSET) + 'px';
+      } else if (diff < -KEYBOARD_THRESHOLD) {
         // Keyboard closed
         var view2 = document.querySelector('.view.active');
         if (view2) view2.classList.remove('mobile-keyboard');

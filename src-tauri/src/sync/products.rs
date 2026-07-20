@@ -4,6 +4,7 @@ use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
 use serde_json::json;
+use std::collections::HashMap;
 use tauri::State;
 
 pub(crate) fn upload_products_inner(
@@ -138,6 +139,34 @@ pub(crate) fn download_products_inner(
         )
         .map_err(|e| e.to_string())?;
 
+    let local_map: HashMap<String, (String, String, f64, i64, i64, Option<i64>)> = {
+        let mut stmt = db
+            .prepare(
+                "SELECT codigo, updated_at, nombre, precio_usd, stock_minimo, activo, categoria_id \
+                 FROM productos",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, f64>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok());
+        let mut map = HashMap::new();
+        for (codigo, updated_at, nombre, precio, stock_min, activo, cat_id) in rows {
+            map.insert(codigo, (updated_at.unwrap_or_default(), nombre, precio, stock_min, activo, cat_id));
+        }
+        map
+    };
+
     let mut updated = 0i64;
     let mut inserted = 0i64;
     let mut conflicts = 0i64;
@@ -152,14 +181,6 @@ pub(crate) fn download_products_inner(
         let cat_id = prod["categoria_id"].as_i64();
         let remote_ts = prod["updated_at"].as_str();
 
-        let local_ts: Option<String> = db
-            .query_row(
-                "SELECT updated_at FROM productos WHERE codigo = ?1",
-                params![codigo],
-                |row| row.get(0),
-            )
-            .ok();
-
         let remote_json = json!({
             "codigo": &codigo,
             "nombre": &nombre,
@@ -169,34 +190,20 @@ pub(crate) fn download_products_inner(
             "categoria_id": cat_id,
         });
 
-        if let Some(ref local) = local_ts {
-            if is_conflict(Some(local), remote_ts, &last_sync) {
-                let local_vals: (String, f64, i64, i64, Option<i64>) = db
-                    .query_row(
-                        "SELECT nombre, precio_usd, stock_minimo, activo, categoria_id \
-                         FROM productos WHERE codigo = ?1",
-                        params![codigo],
-                        |row| Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, f64>(1)?,
-                            row.get::<_, i64>(2)?,
-                            row.get::<_, i64>(3)?,
-                            row.get::<_, Option<i64>>(4)?,
-                        )),
-                    )
-                    .unwrap_or_else(|_| (String::new(), 0.0, 0, 1, None));
-
+        if let Some((local_ts, local_nombre, local_precio, local_stock_min, local_activo, local_cat_id)) = local_map.get(&codigo) {
+            let local_ts = if local_ts.is_empty() { None } else { Some(local_ts.as_str()) };
+            if is_conflict(local_ts, remote_ts, &last_sync) {
                 let local_json = json!({
                     "codigo": &codigo,
-                    "nombre": local_vals.0,
-                    "precio_usd": local_vals.1,
-                    "stock_minimo": local_vals.2,
-                    "activo": local_vals.3,
-                    "categoria_id": local_vals.4,
+                    "nombre": local_nombre,
+                    "precio_usd": local_precio,
+                    "stock_minimo": local_stock_min,
+                    "activo": local_activo,
+                    "categoria_id": local_cat_id,
                 });
                 check_and_record_conflict(
                     db, "productos", &codigo,
-                    Some(local), remote_ts, &last_sync,
+                    local_ts, remote_ts, &last_sync,
                     local_json, remote_json,
                 );
                 conflicts += 1;

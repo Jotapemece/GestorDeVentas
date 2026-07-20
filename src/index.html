@@ -5,19 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Gestor de Ventas</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23D47A4A'/%3E%3Cstop offset='100%25' stop-color='%23C06030'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='96' fill='url(%23bg)'/%3E%3Cpolygon points='128,256 80,80 200,192' fill='%232D1B0E'/%3E%3Cpolygon points='384,256 432,80 312,192' fill='%232D1B0E'/%3E%3Cpolygon points='140,240 100,100 195,195' fill='%23D47A4A'/%3E%3Cpolygon points='372,240 412,100 317,195' fill='%23D47A4A'/%3E%3Cellipse cx='256' cy='280' rx='140' ry='120' fill='%23F5D6B8'/%3E%3Cellipse cx='200' cy='260' rx='22' ry='26' fill='%232D1B0E'/%3E%3Cellipse cx='312' cy='260' rx='22' ry='26' fill='%232D1B0E'/%3E%3Cellipse cx='204' cy='252' rx='10' ry='14' fill='white'/%3E%3Cellipse cx='316' cy='252' rx='10' ry='14' fill='white'/%3E%3Cellipse cx='256' cy='310' rx='10' ry='8' fill='%232D1B0E'/%3E%3Cpath d='M240 325 Q256 340 272 325' stroke='%232D1B0E' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="fa-local.css">
   <script>
     try {
       (function(){var t={
-        oscuro:{'--bg':'#2A2533','--card':'#3D364A','--card-alt':'#4A4258','--danger':'#6B2E2A','--danger-dark':'#55201C','--primary':'#6C5C7A','--primary-dark':'#544666','--primary-rgb':'108, 92, 122','--accent':'#4A7C65','--accent-dark':'#3A6651','--accent-rgb':'74, 124, 101','--danger-rgb':'107, 46, 42','--overlay':'rgba(0,0,0,0.6)','--toast-bg':'#1F1A2E','--shadow':'0 2px 12px rgba(0,0,0,0.3)','--hover':'#352F44','--border':'#4A4460','--text':'#E0D8E8','--text-light':'#A098B8','--text-secondary':'#A098B8','--sidebar-bg':'#1F1A2E','--sidebar-text':'#C8C0D8','--sidebar-text-rgb':'200,192,216'},
-        claro:{'--bg':'#FAFAFA','--card':'#FFFFFF','--card-alt':'#F2F2F2','--danger':'#D97373','--danger-dark':'#C05555','--primary':'#6C8EBF','--primary-dark':'#5070A0','--primary-rgb':'108,142,191','--accent':'#6BAF8D','--accent-dark':'#4A8F6D','--accent-rgb':'107,175,141','--danger-rgb':'217,115,115','--overlay':'rgba(0,0,0,0.15)','--toast-bg':'#333333','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#F5F5F5','--border':'#DDDDDD','--text':'#333333','--text-light':'#777777','--text-secondary':'#777777','--sidebar-bg':'#F0F0F0','--sidebar-text':'#333333','--sidebar-text-rgb':'51,51,51'},
-        azul:{'--bg':'#EDF2F7','--card':'#FFFFFF','--card-alt':'#F2F6FA','--danger':'#E8A0A0','--danger-dark':'#D48888','--primary':'#7B9EBF','--primary-dark':'#5A7D9E','--primary-rgb':'123,158,191','--accent':'#8FC1B5','--accent-dark':'#6DA89A','--accent-rgb':'143,193,181','--danger-rgb':'232,160,160','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#2C5282','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#E2E8F0','--border':'#CBD5E0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#2C5282','--sidebar-text':'#EBF4FF','--sidebar-text-rgb':'235,244,255'},
-        verde:{'--bg':'#F0F7F0','--card':'#FFFFFF','--card-alt':'#EAF3EA','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#A8C9A8','--primary-dark':'#8BB08B','--primary-rgb':'168,201,168','--accent':'#B8DCC8','--accent-dark':'#9CC8AC','--accent-rgb':'184,220,200','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--toast-bg':'#3A6A3A','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#E6F0E6','--border':'#D0E0D0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#3A6A3A','--sidebar-text':'#F0FFF0','--sidebar-text-rgb':'240,255,240'},
-        morado:{'--bg':'#F5F0FA','--card':'#FFFFFF','--card-alt':'#F0EAF5','--danger':'#E0A8C0','--danger-dark':'#CC90A8','--primary':'#C4B0E0','--primary-dark':'#B098D4','--primary-rgb':'196,176,224','--accent':'#D4A8DC','--accent-dark':'#C090CA','--accent-rgb':'212,168,220','--danger-rgb':'224,168,192','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#6A4C93','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#F0EAF6','--border':'#D8CCE8','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#6A4C93','--sidebar-text':'#F3E5F5','--sidebar-text-rgb':'243,229,245'},
-        turquesa:{'--bg':'#E6F7F5','--card':'#F5FFFE','--card-alt':'#EAF8F5','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#4DB8AC','--primary-dark':'#3A9A8E','--primary-rgb':'77,184,172','--accent':'#80D0C4','--accent-dark':'#60B8AA','--accent-rgb':'128,208,196','--danger-rgb':'212,176,160','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#1A4A44','--shadow':'0 2px 12px rgba(26,74,68,0.08)','--hover':'#E8F5F2','--border':'#C0E0DA','--text':'#1A4A44','--text-light':'#5A7A74','--text-secondary':'#5A7A74','--sidebar-bg':'#B0E0D6','--sidebar-text':'#1A4A44','--sidebar-text-rgb':'26,74,68'},
-        naranja:{'--bg':'#FDF0E8','--card':'#FFF8F0','--card-alt':'#F5EDE0','--danger':'#D97050','--danger-dark':'#C06040','--primary':'#D47A4A','--primary-dark':'#C06030','--primary-rgb':'212,122,74','--accent':'#E8A060','--accent-dark':'#D48540','--accent-rgb':'232,160,96','--danger-rgb':'217,112,80','--overlay':'rgba(0,0,0,0.2)','--toast-bg':'#5C2A0A','--shadow':'0 2px 12px rgba(74,42,16,0.08)','--hover':'#F8EDE0','--border':'#E8D0B8','--text':'#4A2A10','--text-light':'#8A6A4A','--text-secondary':'#8A6A4A','--sidebar-bg':'#F0C8A8','--sidebar-text':'#5C2A0A','--sidebar-text-rgb':'92,42,10'},
-        menta:{'--bg':'#EEF7EE','--card':'#FFFFFF','--card-alt':'#E8F5E8','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#6BAF8D','--primary-dark':'#4A8F6D','--primary-rgb':'107,175,141','--accent':'#8FC1A8','--accent-dark':'#6DA88A','--accent-rgb':'143,193,168','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--toast-bg':'#3A6A4A','--shadow':'0 2px 12px rgba(58,106,74,0.08)','--hover':'#E6F5E6','--border':'#D0E0D0','--text':'#2A3A2A','--text-light':'#5A7A6A','--text-secondary':'#5A7A6A','--sidebar-bg':'#B0D0B8','--sidebar-text':'#2A4A3A','--sidebar-text-rgb':'42,74,58'}
+        oscuro:{'--bg':'#2A2533','--card':'#3D364A','--card-alt':'#4A4258','--danger':'#6B2E2A','--danger-dark':'#55201C','--primary':'#6C5C7A','--primary-dark':'#544666','--primary-rgb':'108, 92, 122','--accent':'#4A7C65','--accent-dark':'#3A6651','--accent-rgb':'74, 124, 101','--danger-rgb':'107, 46, 42','--overlay':'rgba(0,0,0,0.6)','--shadow':'0 2px 12px rgba(0,0,0,0.3)','--hover':'#352F44','--border':'#4A4460','--text':'#E0D8E8','--text-light':'#A098B8','--text-secondary':'#A098B8','--sidebar-bg':'#1F1A2E','--sidebar-text':'#C8C0D8','--sidebar-text-rgb':'200,192,216'},
+        claro:{'--bg':'#FAFAFA','--card':'#FFFFFF','--card-alt':'#F2F2F2','--danger':'#D97373','--danger-dark':'#C05555','--primary':'#6C8EBF','--primary-dark':'#5070A0','--primary-rgb':'108,142,191','--accent':'#6BAF8D','--accent-dark':'#4A8F6D','--accent-rgb':'107,175,141','--danger-rgb':'217,115,115','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#F5F5F5','--border':'#DDDDDD','--text':'#333333','--text-light':'#777777','--text-secondary':'#777777','--sidebar-bg':'#F0F0F0','--sidebar-text':'#333333','--sidebar-text-rgb':'51,51,51'},
+        azul:{'--bg':'#EDF2F7','--card':'#FFFFFF','--card-alt':'#F2F6FA','--danger':'#E8A0A0','--danger-dark':'#D48888','--primary':'#7B9EBF','--primary-dark':'#5A7D9E','--primary-rgb':'123,158,191','--accent':'#8FC1B5','--accent-dark':'#6DA89A','--accent-rgb':'143,193,181','--danger-rgb':'232,160,160','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#E2E8F0','--border':'#CBD5E0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#2C5282','--sidebar-text':'#EBF4FF','--sidebar-text-rgb':'235,244,255'},
+        verde:{'--bg':'#F0F7F0','--card':'#FFFFFF','--card-alt':'#EAF3EA','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#A8C9A8','--primary-dark':'#8BB08B','--primary-rgb':'168,201,168','--accent':'#B8DCC8','--accent-dark':'#9CC8AC','--accent-rgb':'184,220,200','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#E6F0E6','--border':'#D0E0D0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#3A6A3A','--sidebar-text':'#F0FFF0','--sidebar-text-rgb':'240,255,240'},
+        morado:{'--bg':'#F5F0FA','--card':'#FFFFFF','--card-alt':'#F0EAF5','--danger':'#E0A8C0','--danger-dark':'#CC90A8','--primary':'#C4B0E0','--primary-dark':'#B098D4','--primary-rgb':'196,176,224','--accent':'#D4A8DC','--accent-dark':'#C090CA','--accent-rgb':'212,168,220','--danger-rgb':'224,168,192','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#F0EAF6','--border':'#D8CCE8','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#6A4C93','--sidebar-text':'#F3E5F5','--sidebar-text-rgb':'243,229,245'},
+        turquesa:{'--bg':'#E6F7F5','--card':'#F5FFFE','--card-alt':'#EAF8F5','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#4DB8AC','--primary-dark':'#3A9A8E','--primary-rgb':'77,184,172','--accent':'#80D0C4','--accent-dark':'#60B8AA','--accent-rgb':'128,208,196','--danger-rgb':'212,176,160','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(26,74,68,0.08)','--hover':'#E8F5F2','--border':'#C0E0DA','--text':'#1A4A44','--text-light':'#5A7A74','--text-secondary':'#5A7A74','--sidebar-bg':'#B0E0D6','--sidebar-text':'#1A4A44','--sidebar-text-rgb':'26,74,68'},
+        naranja:{'--bg':'#FDF0E8','--card':'#FFF8F0','--card-alt':'#F5EDE0','--danger':'#D97050','--danger-dark':'#C06040','--primary':'#D47A4A','--primary-dark':'#C06030','--primary-rgb':'212,122,74','--accent':'#E8A060','--accent-dark':'#D48540','--accent-rgb':'232,160,96','--danger-rgb':'217,112,80','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(74,42,16,0.08)','--hover':'#F8EDE0','--border':'#E8D0B8','--text':'#4A2A10','--text-light':'#8A6A4A','--text-secondary':'#8A6A4A','--sidebar-bg':'#F0C8A8','--sidebar-text':'#5C2A0A','--sidebar-text-rgb':'92,42,10'},
+        menta:{'--bg':'#EEF7EE','--card':'#FFFFFF','--card-alt':'#E8F5E8','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#6BAF8D','--primary-dark':'#4A8F6D','--primary-rgb':'107,175,141','--accent':'#8FC1A8','--accent-dark':'#6DA88A','--accent-rgb':'143,193,168','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(58,106,74,0.08)','--hover':'#E6F5E6','--border':'#D0E0D0','--text':'#2A3A2A','--text-light':'#5A7A6A','--text-secondary':'#5A7A6A','--sidebar-bg':'#B0D0B8','--sidebar-text':'#2A4A3A','--sidebar-text-rgb':'42,74,58'}
       },saved=localStorage.getItem('tema'),theme=t[saved]||t.claro;Object.keys(theme).forEach(function(k){document.documentElement.style.setProperty(k,theme[k])});}());
     } catch (e) {}
   </script>
@@ -26,22 +29,24 @@
   <div id="app">
     <div id="login-screen">
       <div class="login-card">
-        <div class="login-icon">
-          <svg viewBox="0 0 100 100" width="64" height="64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M30 20 L10 45 L25 55 L30 45 L45 50 L50 35 L30 20Z" fill="#D47A4A"/>
-            <path d="M70 20 L90 45 L75 55 L70 45 L55 50 L50 35 L70 20Z" fill="#D47A4A"/>
-            <path d="M25 30 L10 20 L20 35 L25 30Z" fill="#C06030"/>
-            <path d="M75 30 L90 20 L80 35 L75 30Z" fill="#C06030"/>
-            <ellipse cx="38" cy="42" rx="3" ry="3.5" fill="#2D1B0E"/>
-            <ellipse cx="62" cy="42" rx="3" ry="3.5" fill="#2D1B0E"/>
-            <ellipse cx="38" cy="41" rx="1.5" ry="2" fill="#fff"/>
-            <ellipse cx="62" cy="41" rx="1.5" ry="2" fill="#fff"/>
-            <ellipse cx="50" cy="55" rx="6" ry="4" fill="#2D1B0E"/>
-            <ellipse cx="50" cy="54" rx="3.5" ry="2.5" fill="#D47A4A"/>
-          </svg>
+        <div class="login-brand">
+          <div class="login-icon">
+            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M30 20 L10 45 L25 55 L30 45 L45 50 L50 35 L30 20Z" fill="currentColor"/>
+              <path d="M70 20 L90 45 L75 55 L70 45 L55 50 L50 35 L70 20Z" fill="currentColor"/>
+              <path d="M25 30 L10 20 L20 35 L25 30Z" fill="currentColor" opacity="0.7"/>
+              <path d="M75 30 L90 20 L80 35 L75 30Z" fill="currentColor" opacity="0.7"/>
+              <ellipse cx="38" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+              <ellipse cx="62" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+              <ellipse cx="38" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+              <ellipse cx="62" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+              <ellipse cx="50" cy="55" rx="6" ry="4" fill="currentColor" opacity="0.6"/>
+              <ellipse cx="50" cy="54" rx="3.5" ry="2.5" fill="currentColor" opacity="0.8"/>
+            </svg>
+          </div>
+          <h1>InariMarket</h1>
+          <p class="login-subtitle">Sistema de Punto de Venta</p>
         </div>
-        <h1>InariMarket</h1>
-        <p class="login-subtitle">Sistema de Punto de Venta</p>
         <div class="form-group">
           <label for="login-username">Usuario</label>
           <input type="text" id="login-username" name="username" placeholder="Nombre de usuario" autocomplete="off" autofocus>
@@ -119,7 +124,7 @@
         </nav>
         <div class="sidebar-footer">
           <div class="sidebar-version">InariMarket v1.0</div>
-          <button id="logout-btn" class="btn btn-outline btn-full"><i class="nf nf-fa-sign_out"></i> Salir</button>
+          <button id="logout-btn"><i class="nf nf-fa-sign_out"></i> Salir</button>
         </div>
       </aside>
 
@@ -168,6 +173,7 @@
               <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal">
               <span id="tasa-warning" class="tasa-warning hidden" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
               <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV"><i class="nf nf-fa-refresh"></i></button>
+              <button id="calc-btn" class="btn tasa-fetch-btn" title="Calculadora" style="display:none"><i class="nf nf-fa-calculator"></i></button>
             </div>
           </div>
           <div class="sales-body">
@@ -191,12 +197,12 @@
             <div class="sales-panel sales-center" id="sales-center">
               <div class="panel-header">Carrito de Ventas <span id="cart-badge" class="cart-badge hidden">0</span></div>
               <div class="cart-container">
-                <table class="table" id="cart-table">
+                <table class="table cart-table" id="cart-table">
                   <thead>
                     <tr>
                       <th>Producto</th>
                       <th>Cant.</th>
-                      <th>Total</th>
+                      <th><span class="th-with-toggle">Total <button id="cart-currency-toggle" class="currency-toggle-btn" title="Cambiar a Bs">$</button></span></th>
                       <th>Acci&oacute;n</th>
                     </tr>
                   </thead>
@@ -540,6 +546,16 @@
               <div class="config-row" style="font-size:12px;color:var(--text-light);margin-top:4px">
                 Muestra una confirmaci&oacute;n antes de completar cada venta
               </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-film"></i> Animaciones de interfaz</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="animations-toggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row" style="font-size:12px;color:var(--text-light);margin-top:4px">
+                Desactivar reduce movimientos y mejora rendimiento en dispositivos lentos
+              </div>
             </div>
           </div>
           <div class="config-card">
@@ -739,13 +755,15 @@
         <span class="modal-close" id="payment-modal-close">&times;</span>
       </div>
       <div class="modal-body">
-        <div class="payment-total">
-          <span>Total USD:</span>
-          <span id="payment-total-usd">$0.00</span>
-        </div>
-        <div class="payment-total">
-          <span>Total Bs.:</span>
-          <span id="payment-total-bs">Bs. 0,00</span>
+        <div class="payment-totals">
+          <div class="payment-total">
+            <span>Total USD</span>
+            <span id="payment-total-usd">$0.00</span>
+          </div>
+          <div class="payment-total">
+            <span>Total Bs.</span>
+            <span id="payment-total-bs">Bs. 0,00</span>
+          </div>
         </div>
           <div class="form-group">
           <label>M&eacute;todo de Pago</label>
@@ -1087,8 +1105,51 @@
 
   <div id="loading-modal" class="loading-overlay hidden">
     <div class="loading-modal">
-      <div class="loading-spinner-large"><i class="nf nf-fa-refresh spinner-icon"></i></div>
+      <div class="spinner"></div>
       <p id="loading-text">Cargando...</p>
+    </div>
+  </div>
+
+  <div id="calculator-modal" class="modal hidden">
+    <div class="modal-content calculator-content">
+      <div class="modal-header">
+        <h3>Calculadora</h3>
+        <span class="modal-close" id="calculator-close">&times;</span>
+      </div>
+      <div class="modal-body calculator-body">
+        <div class="calc-display">
+          <div class="calc-expression" id="calc-expression"></div>
+          <div class="calc-result" id="calc-result">0</div>
+          <div class="calc-display-actions">
+            <button id="calc-history-prev" class="calc-nav-btn" title="Resultado anterior">&triangle;</button>
+            <button id="calc-history-next" class="calc-nav-btn" title="Siguiente resultado">&triangledown;</button>
+            <button id="calc-tasa-btn" class="calc-tasa-btn" title="Insertar tasa del d\u00eda">$</button>
+          </div>
+        </div>
+        <div class="calc-buttons">
+          <button class="calc-btn calc-op" data-calc="clear">C</button>
+          <button class="calc-btn calc-op" data-calc="backspace">&larr;</button>
+          <button class="calc-btn calc-op" data-calc="percent">%</button>
+          <button class="calc-btn calc-op" data-calc="divide">&divide;</button>
+          <button class="calc-btn calc-num" data-calc="7">7</button>
+          <button class="calc-btn calc-num" data-calc="8">8</button>
+          <button class="calc-btn calc-num" data-calc="9">9</button>
+          <button class="calc-btn calc-op" data-calc="multiply">&times;</button>
+          <button class="calc-btn calc-num" data-calc="4">4</button>
+          <button class="calc-btn calc-num" data-calc="5">5</button>
+          <button class="calc-btn calc-num" data-calc="6">6</button>
+          <button class="calc-btn calc-op" data-calc="subtract">&minus;</button>
+          <button class="calc-btn calc-num" data-calc="1">1</button>
+          <button class="calc-btn calc-num" data-calc="2">2</button>
+          <button class="calc-btn calc-num" data-calc="3">3</button>
+          <button class="calc-btn calc-op" data-calc="add">+</button>
+          <button class="calc-btn calc-num" data-calc="0">0</button>
+          <button class="calc-btn calc-num" data-calc="dot">.</button>
+          <button class="calc-btn calc-op" data-calc="negate">&plusmn;</button>
+          <button id="calc-equals" class="calc-btn calc-equals">=</button>
+        </div>
+        <div class="calc-last-result" id="calc-last-result"></div>
+      </div>
     </div>
   </div>
 

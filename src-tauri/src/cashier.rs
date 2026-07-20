@@ -298,11 +298,20 @@ pub fn get_close_report_data(state: State<AppState>) -> Result<CloseReportData, 
 }
 
 #[tauri::command]
-pub fn list_cierres(state: State<AppState>) -> Result<Vec<CierreListItem>, String> {
+pub fn list_cierres(
+    state: State<AppState>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<CierreListItem>, String> {
     let db = state.lock_db()?;
-    let mut stmt = db
-        .prepare(SQL_LIST_CIERRES)
-        .map_err(|e| e.to_string())?;
+    let query = if let (Some(p), Some(ps)) = (page, page_size) {
+        let offset = (p.max(1) - 1) * ps;
+        format!("{} LIMIT {} OFFSET {}", SQL_LIST_CIERRES, ps, offset)
+    } else {
+        SQL_LIST_CIERRES.to_string()
+    };
+
+    let mut stmt = db.prepare(&query).map_err(|e| e.to_string())?;
 
     let cierres: Vec<CierreListItem> = stmt
         .query_map([], |row| {

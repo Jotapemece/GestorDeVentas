@@ -54,11 +54,20 @@ fn row_to_cliente(row: &rusqlite::Row) -> rusqlite::Result<Cliente> {
 }
 
 #[tauri::command]
-pub fn list_clientes(state: State<AppState>) -> Result<Vec<Cliente>, String> {
+pub fn list_clientes(
+    state: State<AppState>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<Cliente>, String> {
     let db = state.lock_db()?;
-    let mut stmt = db
-        .prepare(SQL_LIST_CLIENTES)
-        .map_err(|e| e.to_string())?;
+    let query = if let (Some(p), Some(ps)) = (page, page_size) {
+        let offset = (p.max(1) - 1) * ps;
+        format!("{} LIMIT {} OFFSET {}", SQL_LIST_CLIENTES, ps, offset)
+    } else {
+        SQL_LIST_CLIENTES.to_string()
+    };
+
+    let mut stmt = db.prepare(&query).map_err(|e| e.to_string())?;
 
     let clientes: Vec<Cliente> = stmt
         .query_map([], row_to_cliente)

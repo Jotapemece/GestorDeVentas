@@ -56,14 +56,17 @@ pub(crate) fn upload_sales_inner(
         return Ok("No hay ventas nuevas para subir".to_string());
     }
 
-    let mut uploaded = 0;
+    let mut all_ventas: Vec<serde_json::Value> = Vec::with_capacity(rows.len());
+    let mut all_detalles: Vec<serde_json::Value> = Vec::new();
+    let sale_ids: Vec<i64> = rows.iter().map(|(id, ..)| *id).collect();
+
     for (id, sync_id, fecha, uid, metodo, refe, pago_det, cliente_id, total_usd, tasa, total_bs, anulada, disp_origen) in &rows {
         let fecha_iso = fecha.replace(' ', "T");
-        let venta_body = json!({
+        all_ventas.push(json!({
             "id": sync_id,
             "sync_id": sync_id,
             "local_id": id,
-            "dispositivo_id": &dispositivo_id,
+            "dispositivo_id": dispositivo_id,
             "fecha_hora": fecha_iso,
             "usuario_id": uid,
             "metodo_pago": metodo,
@@ -76,70 +79,85 @@ pub(crate) fn upload_sales_inner(
             "anulada": if *anulada { 1i64 } else { 0i64 },
             "dispositivo_origen": disp_origen,
             "updated_at": &ts,
-        });
+        }));
+    }
 
-        let venta_array = vec![venta_body];
-        let ventas_json = serde_json::to_string(&venta_array)
-            .map_err(|e| format!("Error serializando ventas JSON: {}", e))?;
-        supabase_post(
-            &api_url(supabase_url, "/ventas?on_conflict=sync_id"),
-            supabase_key,
-            &ventas_json,
-        )?;
+    let placeholders: Vec<String> = sale_ids.iter().map(|_| "?1".to_string()).collect();
+    let placeholder_str = placeholders.join(",");
 
-        let mut d_stmt = db
-            .prepare(
-                "SELECT dv.producto_codigo, dv.cantidad, dv.precio_usd_unitario, dv.sync_id, dv.id \
-                 FROM detalles_ventas dv WHERE dv.venta_id = ?1",
-            )
-            .map_err(|e| e.to_string())?;
-        let dets: Vec<(String, i64, f64, Option<String>, i64)> = d_stmt
-            .query_map(params![id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, f64>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, i64>(4)?,
-                ))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-        drop(d_stmt);
+    let mut d_stmt = db
+        .prepare(
+            &format!(
+                "SELECT dv.venta_id, dv.producto_codigo, dv.cantidad, \
+                 dv.precio_usd_unitario, dv.sync_id, dv.id \
+                 FROM detalles_ventas dv WHERE dv.venta_id IN ({})",
+                placeholder_str,
+            ),
+        )
+        .map_err(|e| e.to_string())?;
 
-        if !dets.is_empty() {
-            let detalle_bodies: Vec<serde_json::Value> = dets
-                .iter()
-                .map(|(codigo, cantidad, precio, det_sync_id, local_det_id)| {
-                    json!({
-                        "venta_id": sync_id,
-                        "local_id": local_det_id,
-                        "producto_codigo": codigo,
-                        "cantidad": cantidad,
-                        "precio_usd_unitario": precio,
-                        "sync_id": det_sync_id,
-                        "anulado": 0,
-                        "updated_at": &ts,
-                    })
-                })
-                .collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = sale_ids
+        .iter()
+        .map(|id| id as &dyn rusqlite::types::ToSql)
+        .collect();
 
-            let detalles_json = serde_json::to_string(&detalle_bodies)
-                .map_err(|e| format!("Error serializando detalles JSON: {}", e))?;
-            supabase_post(
-                &api_url(supabase_url, "/detalles_ventas?on_conflict=sync_id"),
-                supabase_key,
-                &detalles_json,
-            )?;
+    let dets: Vec<(i64, String, i64, f64, Option<String>, i64)> = d_stmt
+        .query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, f64>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(d_stmt);
+
+    let sale_sync_map: std::collections::HashMap<i64, &str> = rows
+        .iter()
+        .map(|(id, sync_id, ..)| (*id, sync_id.as_str()))
+        .collect();
+
+    for (venta_id, codigo, cantidad, precio, det_sync_id, local_det_id) in &dets {
+        if let Some(sync_id) = sale_sync_map.get(venta_id) {
+            all_detalles.push(json!({
+                "venta_id": sync_id,
+                "local_id": local_det_id,
+                "producto_codigo": codigo,
+                "cantidad": cantidad,
+                "precio_usd_unitario": precio,
+                "sync_id": det_sync_id,
+                "anulado": 0,
+                "updated_at": &ts,
+            }));
         }
+    }
 
-        uploaded += 1;
+    let ventas_body = serde_json::to_string(&all_ventas)
+        .map_err(|e| format!("Error serializando ventas JSON: {}", e))?;
+    supabase_post(
+        &api_url(supabase_url, "/ventas?on_conflict=sync_id"),
+        supabase_key,
+        &ventas_body,
+    )?;
+
+    if !all_detalles.is_empty() {
+        let detalles_body = serde_json::to_string(&all_detalles)
+            .map_err(|e| format!("Error serializando detalles JSON: {}", e))?;
+        supabase_post(
+            &api_url(supabase_url, "/detalles_ventas?on_conflict=sync_id"),
+            supabase_key,
+            &detalles_body,
+        )?;
     }
 
     upsert_config(db, constants::CFG_ULTIMO_UPLOAD_VENTAS, &ts);
 
-    Ok(format!("Subida completada: {} venta(s) subidas", uploaded))
+    Ok(format!("Subida completada: {} venta(s) subidas", all_ventas.len()))
 }
 
 #[tauri::command]
