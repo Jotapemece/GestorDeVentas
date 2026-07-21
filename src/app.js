@@ -778,12 +778,18 @@ function confirmModal(msg, title, okText) {
 }
 
 /* ========== LOADING / EMPTY STATES ========== */
+function forcePaint() {
+  void document.body.offsetHeight;
+  return new Promise(r => setTimeout(r, 0));
+}
 function showLoading(el) {
   el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
 }
 function showLoadingModal(text) {
+  var el = qs(SEL.loadingModal);
   qs(SEL.loadingText).textContent = text || 'Cargando...';
-  qs(SEL.loadingModal).classList.remove('hidden');
+  el.classList.remove('hidden');
+  void el.offsetHeight;
 }
 function hideLoadingModal() {
   qs(SEL.loadingModal).classList.add('hidden');
@@ -1223,6 +1229,7 @@ async function fetchTasaBcv() {
   btn.textContent = '...';
   btn.classList.add('loading');
   showLoadingModal('Buscando tasa del BCV...');
+  await forcePaint();
   try {
     const rate = await invoke('fetch_tasa_bcv');
     tasaActual = rate;
@@ -3500,23 +3507,27 @@ document.addEventListener('DOMContentLoaded', async function() {
   const syncProgressModal = qs(SEL.syncProgressModal);
   const syncProgressText = qs(SEL.syncProgressText);
   const syncProgressBar = qs(SEL.syncProgressBar);
-  function showSyncProgress() { syncProgressModal.classList.remove('hidden'); }
+  function showSyncProgress() {
+    syncProgressModal.classList.remove('hidden');
+    void syncProgressModal.offsetHeight;
+  }
   function hideSyncProgress() { syncProgressModal.classList.add('hidden'); syncProgressBar.style.width = '0%'; }
   function updateSyncProgress(step, current, total) {
     const pct = Math.round((current / total) * 100);
     syncProgressText.textContent = step + ' (' + current + '/' + total + ')';
     syncProgressBar.style.width = pct + '%';
   }
-  window.addEventListener('sync-progress', function(e) {
-    var d = e.detail || e;
+  window.__TAURI__.event.listen('sync-progress', function(e) {
+    var d = e.payload;
     updateSyncProgress(d.step, d.current, d.total);
   });
 
   /* Subir todo */
   qs(SEL.uploadAllBtn)?.addEventListener('click', function() {
-    confirmModal('¿Subir productos, clientes y ventas a Supabase?', 'Subir todo', 'Subir').then(function(ok) {
+    confirmModal('¿Subir productos, clientes y ventas a Supabase?', 'Subir todo', 'Subir').then(async function(ok) {
       if (!ok) return;
       showSyncProgress();
+      await forcePaint();
       invoke('upload_all').then(function(r) {
         hideSyncProgress();
         showToast('Subida completa');
@@ -3530,9 +3541,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   /* Descargar todo */
   qs(SEL.downloadAllBtn)?.addEventListener('click', function() {
-    confirmModal('¿Descargar productos, clientes y ventas desde Supabase?', 'Descargar todo', 'Descargar').then(function(ok) {
+    confirmModal('¿Descargar productos, clientes y ventas desde Supabase?', 'Descargar todo', 'Descargar').then(async function(ok) {
       if (!ok) return;
       showSyncProgress();
+      await forcePaint();
       invoke('download_all').then(function(r) {
         hideSyncProgress();
         showToast('Descarga completa');
@@ -3547,9 +3559,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   /* Sincronizar todo */
   qs(SEL.syncAllBtn)?.addEventListener('click', function() {
-    confirmModal('¿Sincronizar completamente (subir y descargar todo) con Supabase?', 'Sincronizar todo', 'Sincronizar').then(function(ok) {
+    confirmModal('¿Sincronizar completamente (subir y descargar todo) con Supabase?', 'Sincronizar todo', 'Sincronizar').then(async function(ok) {
       if (!ok) return;
       showSyncProgress();
+      await forcePaint();
       invoke('sync_all').then(function(r) {
         hideSyncProgress();
         showToast('Sincronización completa');
@@ -3571,6 +3584,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Probando...';
     statusEl.style.color = cssVar('--text-secondary');
     statusEl.title = 'Probando...';
+    showLoadingModal('Probando conexión con Supabase...');
+    await forcePaint();
     try {
       var ok = await invoke('test_supabase_connection');
       if (ok) {
@@ -3586,6 +3601,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       statusEl.style.color = cssVar('--danger');
       statusEl.title = 'Error: ' + e;
       showToast('Error: ' + e, 'error');
+    } finally {
+      hideLoadingModal();
     }
     btn.disabled = false;
     btn.innerHTML = '<i class="nf nf-fa-plug"></i> Probar conexión';
