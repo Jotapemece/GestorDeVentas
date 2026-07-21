@@ -2412,7 +2412,10 @@ async function loadAuditMore() {
 /* ========== CONFIG ========== */
 async function loadThemeConfig() {
   try {
-    const currentTheme = await getUserConfig(CFG_TEMA);
+    let currentTheme = await getUserConfig(CFG_TEMA);
+    if (!currentTheme) {
+      try { currentTheme = localStorage.getItem(CFG_TEMA); } catch (_) {}
+    }
     const theme = currentTheme || 'claro';
     applyTheme(theme);
     qsa('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
@@ -3862,7 +3865,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Load saved theme on startup
   try {
-    const savedTheme = await getUserConfig(CFG_TEMA);
+    let savedTheme = await getUserConfig(CFG_TEMA);
+    if (!savedTheme) {
+      try { savedTheme = localStorage.getItem(CFG_TEMA); } catch (_) {}
+    }
     if (savedTheme) applyTheme(savedTheme);
   } catch (e) {}
 
