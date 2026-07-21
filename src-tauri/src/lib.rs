@@ -113,6 +113,7 @@ pub fn run() {
             sync::upload_clientes,
             sync::download_clientes,
             sync::register_device,
+            sync::list_dispositivos,
             sync::get_ultimo_upload,
             sync::get_ultimo_download,
             sync::get_conflictos,

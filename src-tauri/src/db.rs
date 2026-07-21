@@ -2,13 +2,16 @@ use crate::constants;
 use rusqlite::{Connection, params};
 use tauri::State;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "android"))]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 use tauri::AppHandle;
 #[cfg(target_os = "android")]
 use tauri::Manager;
 
+#[cfg(not(target_os = "android"))]
 const DEFAULT_PATH: &str = ".";
 pub const LOGIN_MAX_ATTEMPTS: i32 = 5;
 pub const LOGIN_BLOCK_SECS: u64 = 300;
@@ -51,7 +54,12 @@ fn get_db_path(_app_handle: &AppHandle) -> PathBuf {
         return data_dir.join(constants::DB_FILENAME);
     }
 
-    // Desktop: usar directorio del ejecutable (portable-friendly)
+    #[cfg(not(target_os = "android"))]
+    desktop_db_path()
+}
+
+#[cfg(not(target_os = "android"))]
+fn desktop_db_path() -> PathBuf {
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             return exe_dir.join(constants::DB_FILENAME);

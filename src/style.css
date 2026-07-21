@@ -131,6 +131,9 @@ button:focus-visible,
   outline-offset: 2px;
 }
 
+/* DEVICE REGISTRATION */
+#device-reg-screen { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: var(--sidebar-bg); }
+
 /* LOGIN */
 #login-screen {
   display: flex; align-items: center; justify-content: center;
@@ -226,6 +229,10 @@ button:focus-visible,
   box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.2);
 }
 .login-error { color: var(--danger-dark); font-size: 13px; margin-top: 12px; min-height: 20px; font-weight: 500; }
+.reg-desc { font-size: 14px; color: var(--text); text-align: center; line-height: 1.6; margin: 16px 0; }
+.reg-check { text-align: center; font-size: 48px; color: var(--accent-dark); margin: 8px 0; animation: regCheckIn 0.4s ease-out; }
+@keyframes regCheckIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+#reg-success { animation: fadeIn 0.3s ease-out; }
 .password-group { position: relative; }
 .password-wrapper { position: relative; display: flex; align-items: center; }
 .password-wrapper input { padding-right: 44px; }
@@ -482,23 +489,28 @@ body.no-animations *::after {
 .search-box input { flex: 1; min-width: 0; }
 
 .tasa-input-group {
-  display: flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--card); overflow: hidden;
 }
 .tasa-icon { font-size: 16px; color: var(--text-light); }
-.tasa-input-group input { width: 130px; padding: 8px 12px; height: 40px; }
-.tasa-warning { font-size: 18px; color: var(--danger-dark); cursor: pointer; animation: pulse 1.5s infinite; }
+.tasa-input-group input {
+  flex: 1; min-width: 80px; width: auto;
+  padding: 8px 12px; height: 40px;
+  border: none; outline: none; background: transparent; color: var(--text);
+}
+.tasa-warning { font-size: 18px; color: var(--danger-dark); cursor: pointer; animation: pulse 1.5s infinite; padding: 0 2px; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .tasa-fetch-btn {
-  padding: 6px 8px; height: 40px; font-size: 14px;
-  border: 1.5px solid var(--primary); border-radius: 8px;
-  background: transparent; color: var(--primary); cursor: pointer;
+  padding: 6px 12px; height: 40px; font-size: 14px; font-weight: 600;
+  border: none; border-left: 1.5px solid var(--border); border-radius: 0;
+  background: var(--card-alt); color: var(--primary); cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   transition: all 0.2s; min-width: 40px;
 }
 .tasa-fetch-btn:hover { background: var(--primary); color: #fff; }
 .tasa-fetch-btn:active { transform: scale(0.95); }
 .tasa-fetch-btn.loading { pointer-events: none; opacity: 0.6; }
-.tasa-fetch-btn.loading i { animation: spin 0.8s linear infinite; }
 .tasa-fetch-btn.tasa-nueva {
   position: relative; box-shadow: 0 0 10px var(--accent);
   animation: pulse-tasa 2s ease-in-out infinite;
@@ -729,6 +741,7 @@ body.no-animations *::after {
 
 /* MODAL */
 .modal.hidden { display: none !important; }
+#confirm-modal.transparent-bg { background: transparent !important; }
 .modal {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background: var(--overlay); display: flex; align-items: center;
@@ -915,6 +928,34 @@ body.no-animations *::after {
 .calc-equals { background: var(--accent-dark); color: #fff; grid-column: 4; }
 .calc-equals:hover { background: var(--accent); }
 .calc-last-result { border-top: 1px solid var(--border); padding: 10px 4px 0; margin-top: 6px; font-size: 13px; color: var(--text-light); text-align: center; min-height: 20px; }
+
+/* GUIDE */
+.guide-content { width: 780px; animation: bookOpen 0.35s ease-out; }
+@keyframes bookOpen {
+  from { transform: perspective(800px) rotateY(-6deg); opacity: 0; transform-origin: left center; }
+  to { transform: perspective(800px) rotateY(0); opacity: 1; }
+}
+.guide-body { display: flex; gap: 0; padding: 0; min-height: 380px; }
+.guide-sidebar { width: 180px; flex-shrink: 0; background: var(--card-alt); padding: 12px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid var(--border); border-radius: 0 0 0 16px; }
+.guide-tab { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: none; border-radius: 8px; background: none; color: var(--text); font-size: 13px; cursor: pointer; text-align: left; transition: all 0.15s; }
+.guide-tab:hover { background: var(--hover); }
+.guide-tab.active { background: var(--primary); color: #fff; font-weight: 600; }
+.guide-tab i { font-size: 15px; width: 18px; text-align: center; }
+.guide-pages { flex: 1; padding: 20px 24px; overflow-y: auto; max-height: 420px; position: relative; background: var(--card); box-shadow: inset 3px 0 8px rgba(0,0,0,0.06); }
+.guide-page { display: none; animation: pageFlip 0.3s ease-out; }
+.guide-page.active { display: block; }
+@keyframes pageFlip {
+  from { opacity: 0; transform: perspective(600px) rotateY(-4deg); transform-origin: left center; }
+  to { opacity: 1; transform: perspective(600px) rotateY(0); }
+}
+.guide-page h4 { font-size: 18px; margin: 0 0 16px; display: flex; align-items: center; gap: 8px; }
+.guide-page h4 i { color: var(--primary); }
+.guide-section p { margin: 0 0 12px; line-height: 1.6; color: var(--text); }
+.guide-section ul { margin: 0 0 16px; padding-left: 20px; }
+.guide-section ul li { margin-bottom: 6px; line-height: 1.5; color: var(--text); }
+.guide-tip { display: flex; gap: 10px; padding: 12px 14px; background: var(--accent); border-radius: 10px; color: #fff; font-size: 13px; line-height: 1.5; margin-top: 12px; }
+.guide-tip i { font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+.guide-tip kbd { display: inline-block; padding: 1px 6px; font-size: 12px; font-family: inherit; background: rgba(255,255,255,0.2); border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); }
 
 /* TOAST */
 .toast {
@@ -1359,6 +1400,8 @@ body.no-animations *::after {
 
   /* View headers: stack */
   .view-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  #view-config .view-header { flex-direction: row; align-items: center; }
+  #view-config .view-header h2 { flex: 1; }
   .view-header h2 { font-size: 17px; }
   .inventory-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .inventory-actions .btn { font-size: 11px; padding: 8px 6px; min-height: 44px; }
@@ -1391,6 +1434,17 @@ body.no-animations *::after {
   #view-sync > div > div { grid-template-columns: 1fr !important; }
   /* Card separation when stacked */
   #view-sync > div > div > div[style*="background"] { border: 1px solid var(--border); }
+
+  /* Guide modal: horizontal tabs + scrollable pages */
+  .guide-body { flex-direction: column; min-height: auto; }
+  .guide-sidebar { width: 100%; flex-direction: row; overflow-x: auto; border-radius: 0; padding: 8px; gap: 4px; border-right: none; border-bottom: 1px solid var(--border); }
+  .guide-tab { flex-shrink: 0; padding: 8px 12px; font-size: 13px; white-space: nowrap; }
+  .guide-tab i { font-size: 14px; width: 16px; }
+  .guide-pages { max-height: none; padding: 16px; }
+
+  /* Device registration: fit screen */
+  #device-reg-screen .login-card { max-width: 100%; margin: 0 16px; padding: 24px 20px; }
+  #device-reg-screen .reg-desc { font-size: 14px; margin: 12px 0; }
 }
 
 @media (max-width: 480px) {

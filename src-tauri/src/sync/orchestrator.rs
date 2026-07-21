@@ -1,7 +1,7 @@
 use super::clients::{download_clientes_inner, upload_clientes_inner};
 use super::products::{download_products_inner, upload_products_inner};
 use super::sales::{download_sales_inner, upload_sales_inner};
-use super::{api_url, emit_progress, get_config, supabase_config, upsert_config};
+use super::{api_url, emit_progress, get_config, supabase_config, supabase_get, upsert_config};
 use crate::constants;
 use crate::db::AppState;
 use serde::Serialize;
@@ -176,6 +176,14 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
         ultimo_download_clientes: gc(constants::CFG_ULTIMO_DOWNLOAD_CLIENTES),
         dispositivo_id: gc(constants::CFG_DISPOSITIVO_ID),
     })
+}
+
+#[tauri::command]
+pub fn list_dispositivos(state: State<AppState>) -> Result<Vec<serde_json::Value>, String> {
+    let db = state.lock_db()?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
+    let get_url = api_url(&supabase_url, "/dispositivos?select=*");
+    supabase_get(&get_url, &supabase_key)
 }
 
 #[tauri::command]

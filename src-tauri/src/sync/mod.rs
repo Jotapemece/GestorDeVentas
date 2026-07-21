@@ -68,8 +68,10 @@ pub(crate) fn supabase_get(url: &str, key: &str) -> Result<Vec<serde_json::Value
 
 pub(crate) fn supabase_config(db: &rusqlite::Connection) -> Result<(String, String), String> {
     Ok((
-        get_config(db, constants::CFG_SUPABASE_URL)?,
-        get_config(db, constants::CFG_SUPABASE_KEY)?,
+        get_config(db, constants::CFG_SUPABASE_URL)
+            .unwrap_or_else(|_| constants::SUPABASE_URL.to_string()),
+        get_config(db, constants::CFG_SUPABASE_KEY)
+            .unwrap_or_else(|_| constants::SUPABASE_KEY.to_string()),
     ))
 }
 

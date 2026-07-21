@@ -43,6 +43,7 @@ pub const ROL_VENDEDOR: &str = "vendedor";
 // Default values
 pub const DB_FILENAME: &str = "gestor_ventas.db";
 pub const BACKUP_FILENAME_PREFIX: &str = "gestor_ventas_backup_";
+#[cfg(not(target_os = "android"))]
 pub const AUTO_IMPORT_FILENAME: &str = "productos";
 pub const DEFAULT_ADMIN_USERNAME: &str = "admin";
 pub const DEFAULT_ADMIN_PASSWORD: &str = "admin";
@@ -50,6 +51,10 @@ pub const DEFAULT_JOTA_USERNAME: &str = "jota";
 pub const DEFAULT_JOTA_PASSWORD: &str = "1234";
 pub const DEFAULT_VENDEDOR_USERNAME: &str = "vendedor";
 pub const DEFAULT_VENDEDOR_PASSWORD: &str = "1234";
+
+// Supabase
+pub const SUPABASE_URL: &str = "https://xryvxaslbtouihbulonw.supabase.co";
+pub const SUPABASE_KEY: &str = "sb_publishable_3XXhx5ktfhrUvngJDYAQAA_xPCRMFzh";
 
 // Pagination
 pub const PAGE_SIZE_DEFAULT: i64 = 200;

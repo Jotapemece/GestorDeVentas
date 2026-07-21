@@ -27,7 +27,39 @@
 </head>
 <body class="compact">
   <div id="app">
-    <div id="login-screen">
+    <div id="device-reg-screen" class="hidden">
+      <div class="login-card">
+        <div class="login-brand">
+          <div class="login-icon">
+            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M30 20 L10 45 L25 55 L30 45 L45 50 L50 35 L30 20Z" fill="currentColor"/>
+              <path d="M70 20 L90 45 L75 55 L70 45 L55 50 L50 35 L70 20Z" fill="currentColor"/>
+              <path d="M25 30 L10 20 L20 35 L25 30Z" fill="currentColor" opacity="0.7"/>
+              <path d="M75 30 L90 20 L80 35 L75 30Z" fill="currentColor" opacity="0.7"/>
+              <ellipse cx="38" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+              <ellipse cx="62" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+              <ellipse cx="38" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+              <ellipse cx="62" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+              <ellipse cx="50" cy="55" rx="6" ry="4" fill="currentColor" opacity="0.6"/>
+              <ellipse cx="50" cy="54" rx="3.5" ry="2.5" fill="currentColor" opacity="0.8"/>
+            </svg>
+          </div>
+          <h1>InariMarket</h1>
+          <p class="login-subtitle">Sistema de Punto de Venta</p>
+        </div>
+        <div id="reg-pending">
+          <p class="reg-desc">Para usar la aplicación, primero debes registrar este dispositivo.</p>
+          <button id="reg-device-btn" class="btn btn-primary btn-full">Registrar dispositivo</button>
+        </div>
+        <div id="reg-success" class="hidden">
+          <div class="reg-check"><i class="nf nf-fa-check"></i></div>
+          <p class="reg-desc">Dispositivo registrado correctamente</p>
+        </div>
+        <p id="reg-error" class="login-error"></p>
+      </div>
+    </div>
+
+    <div id="login-screen" style="display:none">
       <div class="login-card">
         <div class="login-brand">
           <div class="login-icon">
@@ -169,10 +201,9 @@
               <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo..." aria-label="Buscar producto">
             </div>
             <div class="tasa-input-group">
-              <i class="nf nf-fa-dollar tasa-icon"></i>
               <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal">
               <span id="tasa-warning" class="tasa-warning hidden" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
-              <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV"><i class="nf nf-fa-refresh"></i></button>
+              <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV">Tasa</button>
               <button id="calc-btn" class="btn tasa-fetch-btn" title="Calculadora" style="display:none"><i class="nf nf-fa-calculator"></i></button>
             </div>
           </div>
@@ -305,8 +336,8 @@
               <div class="summary-value" id="daily-tasa">Bs. 0,00</div>
             </div>
           </div>
+          <h3>Ventas del D&iacute;a</h3>
           <div class="table-container">
-            <h3>Ventas del D&iacute;a</h3>
             <table class="table" id="daily-sales-table">
               <thead>
                 <tr>
@@ -433,6 +464,7 @@
         <section id="view-config" class="view">
           <div class="view-header">
             <h2><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</h2>
+            <button id="guide-btn" class="btn btn-outline btn-sm" title="Gu&iacute;a r&aacute;pida"><i class="nf nf-fa-file_text"></i></button>
           </div>
           <div class="config-card">
             <div class="config-card-header">
@@ -533,9 +565,6 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
-              <div class="config-row" style="font-size:12px;color:var(--text-light);margin-top:4px">
-                La barra se oculta autom&aacute;ticamente y aparece al llevar el cursor al borde izquierdo de la ventana
-              </div>
               <div class="config-row">
                 <span class="config-label"><i class="nf nf-fa-check_circle"></i> Confirmar antes de cobrar</span>
                 <label class="toggle-switch">
@@ -543,18 +572,12 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
-              <div class="config-row" style="font-size:12px;color:var(--text-light);margin-top:4px">
-                Muestra una confirmaci&oacute;n antes de completar cada venta
-              </div>
               <div class="config-row">
                 <span class="config-label"><i class="nf nf-fa-film"></i> Animaciones de interfaz</span>
                 <label class="toggle-switch">
                   <input type="checkbox" id="animations-toggle" checked>
                   <span class="toggle-slider"></span>
                 </label>
-              </div>
-              <div class="config-row" style="font-size:12px;color:var(--text-light);margin-top:4px">
-                Desactivar reduce movimientos y mejora rendimiento en dispositivos lentos
               </div>
             </div>
           </div>
@@ -589,6 +612,18 @@
               <div class="config-row">
                 <span class="config-label"><i class="nf nf-fa-database"></i> Base de datos</span>
                 <button id="backup-db-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Descargar respaldo</button>
+              </div>
+            </div>
+          </div>
+          <div class="config-card">
+            <div class="config-card-header">
+              <i class="nf nf-fa-display"></i> Dispositivos vinculados
+              <span class="config-card-desc">Dispositivos registrados en tu cuenta de Supabase</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div id="linked-devices-container">
+                <p class="text-muted text-sm">Cargando...</p>
               </div>
             </div>
           </div>
@@ -1107,6 +1142,171 @@
     <div class="loading-modal">
       <div class="spinner"></div>
       <p id="loading-text">Cargando...</p>
+    </div>
+  </div>
+
+  <div id="guide-modal" class="modal hidden">
+    <div class="modal-content modal-lg guide-content">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-file_text"></i> Gu&iacute;a r&aacute;pida</h3>
+        <span class="modal-close" id="guide-close">&times;</span>
+      </div>
+      <div class="modal-body guide-body">
+        <aside class="guide-sidebar">
+          <button class="guide-tab active" data-section="ventas"><i class="nf nf-fa-shopping_cart"></i> Ventas</button>
+          <button class="guide-tab" data-section="caja"><i class="nf nf-fa-database"></i> Caja</button>
+          <button class="guide-tab" data-section="credito"><i class="nf nf-fa-credit_card"></i> Cr&eacute;dito</button>
+          <button class="guide-tab" data-section="inventario"><i class="nf nf-fa-archive"></i> Inventario</button>
+          <button class="guide-tab" data-section="tasa"><i class="nf nf-fa-dollar"></i> Tasa BCV</button>
+          <button class="guide-tab" data-section="reportes"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
+          <button class="guide-tab" data-section="sync"><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</button>
+          <button class="guide-tab" data-section="config"><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</button>
+          <button class="guide-tab" data-section="calculadora"><i class="nf nf-fa-calculator"></i> Calculadora</button>
+        </aside>
+        <div class="guide-pages">
+          <div class="guide-page active" id="guide-ventas">
+            <h4><i class="nf nf-fa-shopping_cart"></i> Ventas (POS)</h4>
+            <div class="guide-section">
+              <p>El panel de ventas es la pantalla principal. Est&aacute; dividido en tres zonas:</p>
+              <ul>
+                <li><strong>Buscar producto:</strong> escribe el nombre o c&oacute;digo. Los resultados aparecen abajo en tiempo real.</li>
+                <li><strong>Carrito:</strong> a la derecha, con los productos agregados, cantidades y totales.</li>
+                <li><strong>Tasa:</strong> ingresa la tasa del d&iacute;a manualmente o presiona el bot&oacute;n de actualizaci&oacute;n autom&aacute;tica.</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-keyboard"></i>
+              <span><strong>Tip:</strong> Presiona <kbd>F5</kbd> para enfocar la b&uacute;squeda, <kbd>Enter</kbd> para agregar el producto seleccionado al carrito y <kbd>F8</kbd> para abrir el modal de pago.</span>
+            </div>
+          </div>
+          <div class="guide-page" id="guide-caja">
+            <h4><i class="nf nf-fa-database"></i> Caja</h4>
+            <div class="guide-section">
+              <p>Gestiona el estado de la caja y los cierres diarios:</p>
+              <ul>
+                <li><strong>Abrir caja:</strong> al iniciar el d&iacute;a, abre la caja para registrar las operaciones.</li>
+                <li><strong>Cerrar caja:</strong> al finalizar, cierra la caja para obtener un resumen de ventas, totales por m&eacute;todo de pago y un consolidado del d&iacute;a.</li>
+                <li><strong>Historial de cierres:</strong> consulta los cierres anteriores con sus detalles y totales.</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-info_circle"></i>
+              <span><strong>Info:</strong> No se puede realizar una venta si la caja no est&aacute; abierta. El cierre de caja es obligatorio al final de la jornada.</span>
+            </div>
+          </div>
+          <div class="guide-page" id="guide-credito">
+            <h4><i class="nf nf-fa-credit_card"></i> Cr&eacute;dito</h4>
+            <div class="guide-section">
+              <p>Administra clientes y ventas a cr&eacute;dito:</p>
+              <ul>
+                <li><strong>Clientes:</strong> registra nuevos clientes con sus datos de contacto.</li>
+                <li><strong>Ventas a cr&eacute;dito:</strong> al cobrar, selecciona "Cr&eacute;dito" como m&eacute;todo de pago y elige el cliente.</li>
+                <li><strong>Abonos:</strong> registra pagos parciales de los clientes para reducir su deuda.</li>
+                <li><strong>Historial de cr&eacute;dito:</strong> consulta las deudas pendientes y los abonos realizados.</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-search"></i>
+              <span><strong>Tip:</strong> Usa el campo de b&uacute;squeda en la vista de Cr&eacute;dito para filtrar clientes por nombre o n&uacute;mero de tel&eacute;fono.</span>
+            </div>
+          </div>
+          <div class="guide-page" id="guide-inventario">
+            <h4><i class="nf nf-fa-archive"></i> Inventario</h4>
+            <div class="guide-section">
+              <p>Gestiona los productos del negocio:</p>
+              <ul>
+                <li><strong>Agregar:</strong> completa c&oacute;digo, nombre, precio en USD y stock.</li>
+                <li><strong>Editar:</strong> haz clic en el &iacute;cono de acciones (&ctdot;) junto a cada producto.</li>
+                <li><strong>Importar:</strong> desde Config puedes importar productos desde un archivo TSV.</li>
+                <li><strong>Paginaci&oacute;n:</strong> la tabla se pagina autom&aacute;ticamente (50 productos por p&aacute;gina).</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-archive"></i>
+              <span><strong>Tip:</strong> Define un stock m&iacute;nimo para recibir alertas visuales cuando un producto est&eacute; por debajo de ese l&iacute;mite.</span>
+            </div>
+          </div>
+          <div class="guide-page" id="guide-tasa">
+            <h4><i class="nf nf-fa-dollar"></i> Tasa BCV</h4>
+            <div class="guide-section">
+              <p>La tasa de cambio se usa para convertir precios entre USD y Bs. en toda la aplicaci&oacute;n.</p>
+              <ul>
+                <li><strong>Manual:</strong> escribe el valor directamente en el campo de tasa y presiona <kbd>Enter</kbd>.</li>
+                <li><strong>Autom&aacute;tico:</strong> presiona el bot&oacute;n de refresco para obtener la tasa oficial del BCV.</li>
+                <li>Un icono de advertencia aparece cuando la tasa difiere de la oficial.</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-sync"></i>
+              <span><strong>Tip:</strong> La tasa se actualiza autom&aacute;ticamente al iniciar sesi&oacute;n. Tambi&eacute;n puedes actualizarla manualmente cuando quieras.</span>
+            </div>
+          </div>
+          <div class="guide-page" id="guide-reportes">
+            <h4><i class="nf nf-fa-bar_chart"></i> Reportes</h4>
+            <div class="guide-section">
+              <p>Tres herramientas para analizar las ventas:</p>
+              <ul>
+                <li><strong>Dashboard:</strong> resumen visual con gr&aacute;ficos de barras y pastel. Ventas totales, m&eacute;todos de pago y comparativas por per&iacute;odo.</li>
+                <li><strong>Historial:</strong> listado completo de ventas con filtros por fecha, usuario y m&eacute;todo de pago.</li>
+                <li><strong>Cierres:</strong> registros de cierre de caja diarios con totales consolidados.</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-download"></i>
+              <span><strong>Tip:</strong> Puedes exportar el historial de ventas a Excel (.xlsx) con el bot&oacute;n de exportaci&oacute;n.</span>
+            </div>
+          </div>
+          <div class="guide-page" id="guide-sync">
+            <h4><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</h4>
+            <div class="guide-section">
+              <p>Sincroniza productos, clientes y ventas con Supabase para mantener los datos consistentes entre dispositivos.</p>
+              <ul>
+                <li><strong>Subir:</strong> env&iacute;a los datos locales a la nube.</li>
+                <li><strong>Descargar:</strong> trae los datos de otros dispositivos.</li>
+                <li><strong>Sync completo:</strong> hace ambas operaciones en secuencia.</li>
+                <li>Los conflictos se resuelven con &uacute;ltimo escritor (last-write-wins).</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-info_circle"></i>
+              <span><strong>Info:</strong> Cada venta se marca con el dispositivo de origen para evitar duplicados al descargar.</span>
+            </div>
+          </div>
+          <div class="guide-page" id="guide-config">
+            <h4><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</h4>
+            <div class="guide-section">
+              <p>Ajusta la aplicaci&oacute;n a tu gusto:</p>
+              <ul>
+                <li><strong>Tema:</strong> elige entre 8 combinaciones de colores.</li>
+                <li><strong>Entrada de datos:</strong> coma autom&aacute;tica, c&aacute;lculo de vuelto, redondeo.</li>
+                <li><strong>Interfaz:</strong> barra lateral auto-plegable, confirmaci&oacute;n de venta, animaciones.</li>
+                <li><strong>Limpieza:</strong> retenci&oacute;n autom&aacute;tica del historial de acciones.</li>
+                <li><strong>Respaldos:</strong> crea copias de seguridad de la base de datos.</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-lock"></i>
+              <span><strong>Tip:</strong> Solo los usuarios administradores pueden acceder a Configuraci&oacute;n y Sincronizaci&oacute;n.</span>
+            </div>
+          </div>
+          <div class="guide-page" id="guide-calculadora">
+            <h4><i class="nf nf-fa-calculator"></i> Calculadora</h4>
+            <div class="guide-section">
+              <p>Calculadora integrada disponible desde el POS:</p>
+              <ul>
+                <li><strong>Abrir:</strong> presiona el bot&oacute;n <i class="nf nf-fa-calculator"></i> en el header de ventas.</li>
+                <li><strong>Atajos:</strong> <kbd>0-9</kbd> para n&uacute;meros, <kbd>+</kbd> <kbd>-</kbd> <kbd>*</kbd> <kbd>/</kbd> para operaciones, <kbd>Enter</kbd> para el resultado.</li>
+                <li><strong>Tasa:</strong> presiona el bot&oacute;n <kbd>$</kbd> para insertar la tasa actual en la expresi&oacute;n.</li>
+                <li><strong>Historial:</strong> navega con las flechas <kbd>&#9651;</kbd> <kbd>&#9661;</kbd> para ver resultados anteriores.</li>
+              </ul>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-keyboard"></i>
+              <span><strong>Tip:</strong> Presiona <kbd>C</kbd> para limpiar, <kbd>Backspace</kbd> para borrar el &uacute;ltimo d&iacute;gito y <kbd>Escape</kbd> para cerrar.</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

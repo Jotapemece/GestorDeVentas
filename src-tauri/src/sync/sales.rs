@@ -82,7 +82,7 @@ pub(crate) fn upload_sales_inner(
         }));
     }
 
-    let placeholders: Vec<String> = sale_ids.iter().map(|_| "?1".to_string()).collect();
+    let placeholders: Vec<String> = sale_ids.iter().map(|_| "?".to_string()).collect();
     let placeholder_str = placeholders.join(",");
 
     let mut d_stmt = db

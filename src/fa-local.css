@@ -80,6 +80,7 @@
 .nf-fa-spin {
   animation: nf-spin 2s linear infinite;
 }
+.nf-fa-mobile::before { content: "\f10b"; }
 .nf-fa-pulse {
   animation: nf-spin 1s steps(8) infinite;
 }

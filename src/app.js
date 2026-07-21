@@ -151,6 +151,14 @@ const SEL = {
   loginError: '#login-error',
   rememberMe: '#remember-me',
   loginBtn: '#login-btn',
+
+  // --- Device Registration ---
+  deviceRegScreen: '#device-reg-screen',
+  regDeviceBtn: '#reg-device-btn',
+  regPending: '#reg-pending',
+  regSuccess: '#reg-success',
+  regError: '#reg-error',
+
   mainApp: '#main-app',
   sidebarUser: '#sidebar-user',
   logoutBtn: '#logout-btn',
@@ -417,6 +425,16 @@ const SEL = {
   calcBtn: '#calc-btn',
   calcClose: '#calculator-close',
   calcEquals: '#calc-equals',
+
+  // --- Guide ---
+  guideModal: '#guide-modal',
+  guideBtn: '#guide-btn',
+  guideClose: '#guide-close',
+  guideTabs: '.guide-tab',
+  guidePages: '.guide-page',
+
+  // --- Linked Devices ---
+  linkedDevicesContainer: '#linked-devices-container',
 };
 
 /* ========== CALCULATOR ========== */
@@ -533,6 +551,28 @@ function calcKeydown(e) {
   else if (e.key === 'Backspace') { calcInput('backspace'); e.preventDefault(); }
   else if (e.key === 'Escape') { closeCalculator(); e.preventDefault(); }
   else if (e.key === 'c' || e.key === 'C') { calcInput('clear'); e.preventDefault(); }
+}
+
+/* ========== GUIDE ========== */
+function initGuide() {
+  qs(SEL.guideBtn).addEventListener('click', openGuide);
+  qs(SEL.guideClose).addEventListener('click', closeGuide);
+  qsa(SEL.guideTabs).forEach(tab => tab.addEventListener('click', () => switchGuideTab(tab.dataset.section)));
+}
+
+function openGuide() {
+  showModal(qs(SEL.guideModal));
+  const active = qs('.guide-tab.active');
+  if (!active) switchGuideTab('ventas');
+}
+
+function closeGuide() { closeModal(qs(SEL.guideModal)); }
+
+function switchGuideTab(section) {
+  qsa(SEL.guideTabs).forEach(t => t.classList.remove('active'));
+  qsa(SEL.guidePages).forEach(p => p.classList.remove('active'));
+  qs(`.guide-tab[data-section="${section}"]`).classList.add('active');
+  qs(`#guide-${section}`).classList.add('active');
 }
 
 /* ========== CLOCK ========== */
@@ -890,6 +930,42 @@ function getViewEl(name) {
 }
 
 /* ========== CONFLICTOS ========== */
+async function loadLinkedDevices() {
+  const container = qs(SEL.linkedDevicesContainer);
+  if (!container) return;
+  container.innerHTML = '<p class="text-muted text-sm">Cargando...</p>';
+  try {
+    const devices = await invoke('list_dispositivos');
+    if (!devices || devices.length === 0) {
+      container.innerHTML = '<p class="text-muted text-sm">No hay dispositivos vinculados.</p>';
+      return;
+    }
+    let html = '<div style="display:flex;flex-direction:column;gap:8px">';
+    for (const d of devices) {
+      const nombre = d.nombre || 'Sin nombre';
+      const id = d.id || '';
+      const created = d.created_at || '';
+      const shortId = id.length > 8 ? id.substring(0, 8) + '...' : id;
+      const isPhone = nombre === 'Tel\u00e9fono' || nombre.includes('Tel\u00e9fono') || nombre.includes('Android');
+      const icon = isPhone ? 'nf-fa-mobile' : 'nf-fa-display';
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card-alt);border-radius:8px;border:1px solid var(--border)">' +
+        '<i class="nf ' + icon + '" style="font-size:20px;color:var(--primary)"></i>' +
+        '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600;font-size:14px;color:var(--text)">' + escapeHtml(nombre) + '</div>' +
+        '<div style="font-size:11px;color:var(--text-light);word-break:break-all">ID: ' + escapeHtml(shortId) + '</div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--text-secondary);text-align:right">' +
+        '<div>Registrado</div>' +
+        '<div>' + escapeHtml(created) + '</div>' +
+        '</div>' +
+        '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<p class="text-muted text-sm" style="color:var(--danger)">Error: ' + escapeHtml(e) + '</p>';
+  }
+}
 async function loadConflictCount() {
   const countEl = qs(SEL.conflictCount);
   if (!countEl) return;
@@ -1023,7 +1099,7 @@ function showView(name) {
     cashier: loadDailySummary,
     audit: loadAudit,
     reports: () => { loadUserList(); setDefaultReportDates(); },
-    config: () => { loadThemeConfig(); loadConflictCount(); },
+    config: () => { loadThemeConfig(); loadConflictCount(); loadLinkedDevices(); },
     sync: () => { loadSyncConfig(); loadConflictCount(); },
   };
   if (loaders[name]) loaders[name]();
@@ -1036,6 +1112,29 @@ function showView(name) {
 }
 
 /* ========== AUTH ========== */
+async function handleDeviceRegister() {
+  const btn = qs(SEL.regDeviceBtn);
+  const errEl = qs(SEL.regError);
+  btn.disabled = true;
+  btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Registrando...';
+  errEl.textContent = '';
+  try {
+    const nombre = IS_ANDROID ? 'Tel\u00e9fono' : 'PC';
+    const res = await invoke('register_device', { nombre });
+    qs(SEL.regPending).classList.add('hidden');
+    qs(SEL.regSuccess).classList.remove('hidden');
+    setTimeout(() => {
+      qs(SEL.deviceRegScreen).style.display = 'none';
+      qs(SEL.loginScreen).style.display = 'flex';
+      qs(SEL.loginUsername).focus();
+    }, 1500);
+  } catch (e) {
+    errEl.textContent = 'Error: ' + e;
+    btn.disabled = false;
+    btn.innerHTML = 'Registrar dispositivo';
+  }
+}
+
 async function handleLogin() {
   const username = qs(SEL.loginUsername).value.trim();
   const password = qs(SEL.loginPassword).value;
@@ -1056,6 +1155,7 @@ async function handleLogin() {
       startClock();
       initSidebarAutoHide();
       initCalculator();
+      initGuide();
       loadSidebarAutoHideConfig();
       applyRoleUI();
       await loadTasa();
@@ -1075,7 +1175,9 @@ async function handleLogin() {
 }
 
 async function handleLogout() {
+  qs(SEL.confirmModal).classList.add('transparent-bg');
   const ok = await confirmModal('\u00bfEst\u00e1 seguro de cerrar sesi\u00f3n?', 'Cerrar Sesi\u00f3n', 'Salir');
+  qs(SEL.confirmModal).classList.remove('transparent-bg');
   if (!ok) return;
   await tryCatch(() => invoke('logout'), 'Error al cerrar sesi\u00f3n');
   currentUser = null; cart = []; lastCloseReportData = null;
@@ -1089,7 +1191,7 @@ async function handleLogout() {
 async function loadTasa() {
   try {
     tasaActual = await invoke('get_tasa');
-    qs(SEL.tasaInput).value = tasaActual;
+    qs(SEL.tasaInput).value = tasaActual.toFixed(2);
     const updatedAt = await invoke('get_config_value', { key: CFG_TASA_UPDATED_AT });
     const today = new Date().toLocaleDateString('en-CA');
     const warn = qs(SEL.tasaWarning);
@@ -1100,11 +1202,12 @@ async function loadTasa() {
 async function handleTasaChange() {
   const val = parseFloat(qs(SEL.tasaInput).value);
   if (isNaN(val) || val <= 0) {
-    qs(SEL.tasaInput).value = tasaActual;
+    qs(SEL.tasaInput).value = tasaActual.toFixed(2);
     showToast('La tasa debe ser mayor a cero', 'error');
     return;
   }
   tasaActual = val;
+  qs(SEL.tasaInput).value = tasaActual.toFixed(2);
   await tryCatch(() => invoke('set_tasa', { tasa: tasaActual }), 'Error al guardar la tasa');
   const warn = qs(SEL.tasaWarning);
   if (warn) warn.style.display = 'none';
@@ -1115,13 +1218,15 @@ async function handleTasaChange() {
 
 async function fetchTasaBcv() {
   const btn = qs(SEL.tasaFetchBtn);
+  const origText = btn.textContent;
+  btn.textContent = '...';
   btn.classList.add('loading');
   showLoadingModal('Buscando tasa del BCV...');
   try {
     const rate = await invoke('fetch_tasa_bcv');
     tasaActual = rate;
     await invoke('set_tasa', { tasa: tasaActual });
-    qs(SEL.tasaInput).value = tasaActual;
+    qs(SEL.tasaInput).value = tasaActual.toFixed(2);
     const warn = qs(SEL.tasaWarning);
     if (warn) warn.style.display = 'none';
     updateCartTotals();
@@ -1132,6 +1237,7 @@ async function fetchTasaBcv() {
     showToast('Error al obtener tasa: ' + e, 'error');
   } finally {
     btn.classList.remove('loading');
+    btn.textContent = origText;
     hideLoadingModal();
   }
 }
@@ -3838,6 +3944,22 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Audit load more
   qs(SEL.auditLoadMore).addEventListener('click', loadAuditMore);
+
+  // Device registration
+  qs(SEL.regDeviceBtn).addEventListener('click', handleDeviceRegister);
+
+  // Check if device is already registered
+  try {
+    const devId = await invoke('get_config_value', { key: 'dispositivo_id' });
+    if (devId) {
+      qs(SEL.deviceRegScreen).style.display = 'none';
+      qs(SEL.loginScreen).style.display = 'flex';
+    } else {
+      qs(SEL.deviceRegScreen).style.display = 'flex';
+    }
+  } catch (e) {
+    qs(SEL.deviceRegScreen).style.display = 'flex';
+  }
 
   // Restore remembered username
   const savedUser = localStorage.getItem('recordar_usuario');
