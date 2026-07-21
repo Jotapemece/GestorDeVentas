@@ -1,12 +1,111 @@
 use super::clients::{download_clientes_inner, upload_clientes_inner};
 use super::products::{download_products_inner, upload_products_inner};
 use super::sales::{download_sales_inner, upload_sales_inner};
-use super::{api_url, emit_progress, get_config, supabase_config, supabase_get, upsert_config};
+use super::{api_url, emit_progress, get_config, supabase_config, supabase_get, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use serde::Serialize;
 use serde_json::json;
 use tauri::State;
+
+fn get_fingerprint() -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let id = std::fs::read_to_string("/etc/machine-id")
+            .map_err(|e| format!("Error leyendo machine-id: {}", e))?;
+        Ok(format!("linux-{}", id.trim()))
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        use std::process::Command;
+        let serial = Command::new("getprop")
+            .arg("ro.serialno")
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            })
+            .filter(|s| !s.is_empty());
+
+        if let Some(s) = serial {
+            return Ok(format!("android-{}", s));
+        }
+
+        let model = Command::new("getprop")
+            .arg("ro.product.model")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .unwrap_or_default();
+        let board = Command::new("getprop")
+            .arg("ro.product.board")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .unwrap_or_default();
+        let dev = Command::new("getprop")
+            .arg("ro.product.device")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .unwrap_or_default();
+
+        let raw = format!("{}-{}-{}", model.trim(), board.trim(), dev.trim());
+        if raw.len() > 3 {
+            Ok(format!("android-{}", short_hash(&raw)))
+        } else {
+            Err("No se pudo obtener huella del dispositivo".to_string())
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let output = Command::new("wmic")
+            .args(["csproduct", "get", "uuid"])
+            .output()
+            .map_err(|e| format!("Error obteniendo UUID: {}", e))?;
+        let text = String::from_utf8_lossy(&output.stdout);
+        let uuid = text.lines().nth(1).unwrap_or("").trim();
+        if uuid.is_empty() {
+            return Err("No se pudo obtener UUID del hardware".to_string());
+        }
+        Ok(format!("windows-{}", uuid))
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let output = Command::new("ioreg")
+            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+            .output()
+            .map_err(|e| format!("Error obteniendo UUID: {}", e))?;
+        let text = String::from_utf8_lossy(&output.stdout);
+        for line in text.lines() {
+            if line.contains("IOPlatformUUID") {
+                if let Some(val) = line.split('=').nth(1) {
+                    let uuid = val.trim().trim_matches('"');
+                    if !uuid.is_empty() {
+                        return Ok(format!("macos-{}", uuid));
+                    }
+                }
+            }
+        }
+        Err("No se encontró IOPlatformUUID".to_string())
+    }
+}
+
+#[cfg(target_os = "android")]
+fn short_hash(input: &str) -> String {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(input.as_bytes());
+    digest[..8].iter().map(|b| format!("{:02x}", b)).collect()
+}
 
 #[tauri::command]
 pub fn register_device(state: State<AppState>, nombre: String) -> Result<String, String> {
@@ -18,7 +117,25 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
         return Ok(format!("Ya registrado: {}", id));
     }
 
-    let body = json!({"nombre": nombre}).to_string();
+    let huella = get_fingerprint()?;
+    let encoded_huella = urlencoding(&huella);
+
+    let search_url = api_url(
+        &supabase_url,
+        &format!("/dispositivos?huella=eq.{}&select=id", encoded_huella),
+    );
+
+    let existing = supabase_get(&search_url, &supabase_key)
+        .unwrap_or_default();
+
+    if let Some(device) = existing.first() {
+        if let Some(existing_id) = device["id"].as_str() {
+            upsert_config(&db, constants::CFG_DISPOSITIVO_ID, existing_id);
+            return Ok(format!("Dispositivo recuperado: {}", existing_id));
+        }
+    }
+
+    let body = json!({"nombre": nombre, "huella": huella}).to_string();
     let resp = ureq::post(&api_url(&supabase_url, "/dispositivos"))
         .set("apikey", &supabase_key)
         .set("Authorization", &format!("Bearer {}", &supabase_key))
