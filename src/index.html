@@ -708,9 +708,10 @@
                 <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
                   <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-link"></i> Conexi&oacute;n</h3>
                   <div style="display:flex;flex-direction:column;gap:10px">
-                    <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co">
-                    <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_...">
-                    <button id="register-device-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-tag"></i> Registrar / Ver ID</button>
+                    <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co" readonly>
+                    <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_..." readonly>
+                    <button id="view-device-id-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-tag"></i> Ver ID</button>
+                    <div id="device-id-display" style="font-size:12px;color:var(--text-light);word-break:break-all;display:none"></div>
                     <div style="display:flex;gap:8px;align-items:center">
                       <button id="test-connection-btn" class="btn btn-outline btn-sm" style="flex:1;justify-content:center"><i class="nf nf-fa-plug"></i> Probar conexi&oacute;n</button>
                       <span id="connection-status" style="font-size:20px" title="Sin probar">&bull;</span>

@@ -361,7 +361,8 @@ const SEL = {
 
   // --- Sync buttons ---
   backupDbBtn: '#backup-db-btn',
-  registerDeviceBtn: '#register-device-btn',
+  viewDeviceIdBtn: '#view-device-id-btn',
+  deviceIdDisplay: '#device-id-display',
   viewConflictsBtn: '#view-conflicts-btn',
   syncProgressModal: '#sync-progress-modal',
   syncProgressText: '#sync-progress-text',
@@ -3452,26 +3453,26 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  /* Registrar dispositivo */
-  const registerBtn = qs(SEL.registerDeviceBtn);
-  if (registerBtn) {
-    registerBtn.addEventListener('click', async function() {
-      const name = 'PC Jotapemece';
-      const urlEl = qs(SEL.syncUrl);
-      const keyEl = qs(SEL.syncKey);
-      if (urlEl && urlEl.value) await invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(() => {});
-      if (keyEl && keyEl.value) await invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(() => {});
-      try {
-        registerBtn.disabled = true;
-        registerBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Registrando...';
-        const result = await invoke('register_device', { nombre: name });
-        showToast(result);
-        loadSyncConfig();
-      } catch (e) { showToast('Error: ' + e, 'error'); }
-      finally {
-        registerBtn.disabled = false;
-        registerBtn.innerHTML = '<i class="nf nf-fa-tag"></i> Registrar dispositivo';
+  /* Ver ID del dispositivo */
+  const viewIdBtn = qs(SEL.viewDeviceIdBtn);
+  if (viewIdBtn) {
+    viewIdBtn.addEventListener('click', async function() {
+      const display = qs(SEL.deviceIdDisplay);
+      if (display && display.style.display !== 'none') {
+        display.style.display = 'none';
+        return;
       }
+      try {
+        const stats = await invoke('get_sync_stats');
+        if (stats.dispositivo_id) {
+          if (display) {
+            display.textContent = 'ID: ' + stats.dispositivo_id;
+            display.style.display = 'block';
+          }
+        } else {
+          showToast('No hay dispositivo registrado', 'error');
+        }
+      } catch (e) { showToast('Error: ' + e, 'error'); }
     });
   }
 
@@ -3511,18 +3512,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     updateSyncProgress(d.step, d.current, d.total);
   });
 
-  function syncSaveConfig() {
-    var urlEl = qs(SEL.syncUrl);
-    var keyEl = qs(SEL.syncKey);
-    if (urlEl && urlEl.value) invoke('set_config_value', { key: CFG_SUPABASE_URL, value: urlEl.value }).catch(function(){});
-    if (keyEl && keyEl.value) invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: keyEl.value }).catch(function(){});
-  }
-
   /* Subir todo */
   qs(SEL.uploadAllBtn)?.addEventListener('click', function() {
     confirmModal('¿Subir productos, clientes y ventas a Supabase?', 'Subir todo', 'Subir').then(function(ok) {
       if (!ok) return;
-      syncSaveConfig();
       showSyncProgress();
       invoke('upload_all').then(function(r) {
         hideSyncProgress();
@@ -3539,7 +3532,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.downloadAllBtn)?.addEventListener('click', function() {
     confirmModal('¿Descargar productos, clientes y ventas desde Supabase?', 'Descargar todo', 'Descargar').then(function(ok) {
       if (!ok) return;
-      syncSaveConfig();
       showSyncProgress();
       invoke('download_all').then(function(r) {
         hideSyncProgress();
@@ -3557,7 +3549,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.syncAllBtn)?.addEventListener('click', function() {
     confirmModal('¿Sincronizar completamente (subir y descargar todo) con Supabase?', 'Sincronizar todo', 'Sincronizar').then(function(ok) {
       if (!ok) return;
-      syncSaveConfig();
       showSyncProgress();
       invoke('sync_all').then(function(r) {
         hideSyncProgress();
@@ -3580,7 +3571,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Probando...';
     statusEl.style.color = cssVar('--text-secondary');
     statusEl.title = 'Probando...';
-    syncSaveConfig();
     try {
       var ok = await invoke('test_supabase_connection');
       if (ok) {
