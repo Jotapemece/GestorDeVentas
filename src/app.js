@@ -205,10 +205,12 @@ const SEL = {
   productNombre: '#product-nombre',
   productPrecio: '#product-precio',
   productStock: '#product-stock',
+  productStockMinimo: '#product-stock-minimo',
   productDetailModal: '#product-detail-modal',
   detailNombre: '#detail-nombre',
   detailPrecio: '#detail-precio',
   detailStock: '#detail-stock',
+  detailStockMinimo: '#detail-stock-minimo',
   detailCreated: '#detail-created',
 
   // --- Creditos / Clientes ---
@@ -436,6 +438,25 @@ const SEL = {
 
   // --- Linked Devices ---
   linkedDevicesContainer: '#linked-devices-container',
+
+  // --- OpenRouter / Sugerencias ---
+  openrouterApiKey: '#openrouter-api-key',
+  openrouterSaveKeyBtn: '#openrouter-save-key-btn',
+  openrouterModel: '#openrouter-model',
+  generateOrderBtn: '#generate-order-btn',
+  suggestionModal: '#suggestion-modal',
+  suggestionContent: '#suggestion-content',
+  suggestionCopyBtn: '#suggestion-copy-btn',
+  suggestionModalClose: '#suggestion-modal-close',
+  suggestionCloseBtn: '#suggestion-close-btn',
+
+  // --- Chat IA ---
+  chatFab: '#chat-fab',
+  chatPanel: '#chat-panel',
+  chatCloseBtn: '#chat-close-btn',
+  chatMessages: '#chat-messages',
+  chatInput: '#chat-input',
+  chatSendBtn: '#chat-send-btn',
 };
 
 /* ========== CALCULATOR ========== */
@@ -681,7 +702,9 @@ function createCartRow(item) {
   return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td><div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div></td><td class="' + cls + '">' + totalText + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
 }
 function createInventoryRow(p, editBtn) {
-  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
+  var stockClass = (p.stock < p.stock_minimo) ? ' class="low-stock"' : '';
+  var stockBadge = (p.stock < p.stock_minimo) ? '<span class="badge badge-danger" title="Debajo del stock mínimo">!</span>' : '';
+  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
@@ -822,8 +845,9 @@ document.querySelectorAll('.modal').forEach(modal => {
     if (!modal.classList.contains('hidden')) trapFocus(modal);
     else if (activeModal === modal) releaseFocus();
   });
-  obs.observe(modal, { attributes: true, attributeFilter: ['class'] });
+  obs.observe(modal, { attributes: true, attributeFilter: ['class']   });
 });
+
 document.addEventListener('keydown', (e) => {
   if (!activeModal) return;
   if (e.key === 'Escape') {
@@ -1106,16 +1130,22 @@ function showView(name) {
     cashier: loadDailySummary,
     audit: loadAudit,
     reports: () => { loadUserList(); setDefaultReportDates(); },
-    config: () => { loadThemeConfig(); loadConflictCount(); loadLinkedDevices(); },
+    config: () => { loadThemeConfig(); loadConflictCount(); },
     sync: () => { loadSyncConfig(); loadConflictCount(); },
   };
   if (loaders[name]) loaders[name]();
   if (name === 'sales') {
-    qs(SEL.productSearch).focus();
+    if (!IS_ANDROID) qs(SEL.productSearch).focus();
     renderProductSearch();
     renderCart();
   }
   document.dispatchEvent(new CustomEvent('viewChanged', { detail: name }));
+  if (IS_ANDROID) {
+    const panel = qs(SEL.chatPanel);
+    if (panel && !panel.classList.contains('hidden')) {
+      panel.classList.add('hidden');
+    }
+  }
 }
 
 /* ========== AUTH ========== */
@@ -1188,10 +1218,9 @@ async function handleLogout() {
   if (!ok) return;
   await tryCatch(() => invoke('logout'), 'Error al cerrar sesi\u00f3n');
   currentUser = null; cart = []; lastCloseReportData = null;
-  qs(SEL.mainApp).style.display = 'none';
-  qs(SEL.loginScreen).style.display = 'flex';
   qs(SEL.loginPassword).value = '';
   qs(SEL.loginError).textContent = '';
+  qs(SEL.loginScreen).style.display = 'flex';
 }
 
 /* ========== TASA ========== */
@@ -1740,7 +1769,7 @@ async function loadInventory() {
     const products = result.data || result;
     tbody.innerHTML = '';
     if (products.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-archive"></i>', query ? 'Sin resultados' : 'No hay productos', query ? 'Pruebe con otro t\u00e9rmino de b\u00fasqueda' : 'Agregue productos desde el bot\u00f3n superior') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6">' + emptyState('<i class="nf nf-fa-archive"></i>', query ? 'Sin resultados' : 'No hay productos', query ? 'Pruebe con otro t\u00e9rmino de b\u00fasqueda' : 'Agregue productos desde el bot\u00f3n superior') + '</td></tr>';
       renderInventoryPagination(result.total || 0);
       return;
     }
@@ -1820,6 +1849,7 @@ function showProductDetail(codigo) {
   qs(SEL.detailNombre).textContent = p.nombre;
   qs(SEL.detailPrecio).textContent = formatUSD(p.precio_usd);
   qs(SEL.detailStock).textContent = p.stock;
+  qs(SEL.detailStockMinimo).textContent = p.stock_minimo;
   qs(SEL.detailCreated).textContent = p.created_at || 'No disponible';
   showModal(qs(SEL.productDetailModal));
 }
@@ -1832,7 +1862,7 @@ function openNewProductModal() {
   editingProduct = null;
   qs(SEL.productModalTitle).textContent = 'Registrar Nuevo Producto';
   qs(SEL.productSaveText).textContent = 'Registrar';
-  [SEL.productNombre, SEL.productPrecio, SEL.productStock].forEach(id => qs(id).value = '');
+  [SEL.productNombre, SEL.productPrecio, SEL.productStock, SEL.productStockMinimo].forEach(id => qs(id).value = '');
   qs(SEL.productDeleteBtn).style.display = 'none';
   showModal(qs(SEL.productModal));
 }
@@ -1846,6 +1876,7 @@ function editProduct(codigo) {
   qs(SEL.productNombre).value = p.nombre;
   qs(SEL.productPrecio).value = comaAutomaticaEnabled ? p.precio_usd.toFixed(2).replace('.', ',') : p.precio_usd;
   qs(SEL.productStock).value = p.stock;
+  qs(SEL.productStockMinimo).value = p.stock_minimo;
   qs(SEL.productDeleteBtn).style.display = 'inline-flex';
   showModal(qs(SEL.productModal));
 }
@@ -1856,15 +1887,20 @@ function closeProductModal() {
 
 async function saveProduct() {
   const codigo = editingProduct || '';
-  const nombre = qs(SEL.productNombre).value.trim();
+  const nombre = stripEmojis(qs(SEL.productNombre).value.trim());
   const precio = parsePrecio(qs(SEL.productPrecio).value);
   const stock = parseInt(qs(SEL.productStock).value) || 0;
+  const stockMinimo = parseInt(qs(SEL.productStockMinimo).value) || 0;
   if (!nombre || isNaN(precio) || precio < 0) { showToast('Complete todos los campos', 'error'); return; }
   try {
     if (editingProduct) {
       await invoke('update_product', { codigo, nombre, precioUsd: precio, stock });
+      await invoke('update_stock_minimo', { codigo, stockMinimo });
     } else {
       await invoke('create_product', { codigo, nombre, precioUsd: precio, stock });
+      if (stockMinimo > 0) {
+        await invoke('update_stock_minimo', { codigo, stockMinimo });
+      }
     }
     showToast(editingProduct ? 'Producto actualizado con \u00e9xito' : 'Producto registrado con \u00e9xito');
     playSound('success');
@@ -3126,6 +3162,248 @@ function setDefaultReportDates() {
   if (endInput && !endInput.value) endInput.value = today;
 }
 
+/* ========== OPENROUTER / SUGERENCIAS ========== */
+async function saveOpenRouterKey() {
+  const key = qs(SEL.openrouterApiKey).value.trim();
+  if (!key) { showToast('Ingresa una API key', 'error'); return; }
+  try {
+    await invoke('set_config_value', { key: 'openrouter_api_key', value: key });
+    showToast('API key guardada');
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+async function loadOpenRouterKey() {
+  try {
+    const key = await invoke('get_config_value', { key: 'openrouter_api_key' });
+    if (key) qs(SEL.openrouterApiKey).value = key;
+    const model = await invoke('get_config_value', { key: 'openrouter_model' });
+    if (model) qs(SEL.openrouterModel).value = model;
+  } catch (_) {}
+}
+
+async function generateOrder() {
+  const apiKey = qs(SEL.openrouterApiKey).value.trim();
+  if (!apiKey) { showToast('Configura la API key de OpenRouter primero', 'error'); return; }
+  const model = qs(SEL.openrouterModel).value;
+  showLoadingModal('Generando orden de compra...');
+  await forcePaint();
+  try {
+    const content = await invoke('generate_purchase_suggestion', { apiKey, model });
+    hideLoadingModal();
+    qs(SEL.suggestionContent).textContent = content;
+    showModal(qs(SEL.suggestionModal));
+  } catch (e) {
+    hideLoadingModal();
+    showToast('Error: ' + e, 'error');
+  }
+}
+
+async function copySuggestion() {
+  const text = qs(SEL.suggestionContent).textContent;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copiado al portapapeles');
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Copiado al portapapeles');
+  }
+}
+
+/* ========== CHAT IA ========== */
+const CHAT_SYSTEM_PROMPT = 'Eres Enar, un zorro experto asistente de un sistema POS (Punto de Venta) llamado "Gestor de Ventas". Tu nombre es Enar, si te preguntan preséntate como Enar. Solo respondes preguntas relacionadas con el sistema: ventas, inventario de productos, clientes, créditos, reportes, configuración, caja, sincronización. Si te preguntan algo fuera de este tema (historia, matemáticas, cultura general, etc.), responde cordialmente que solo puedes ayudar con el uso del POS. Responde en español, sé conciso y útil. Puedes usar **negrita**, *cursiva* y emojis en tus respuestas.';
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function renderMarkdown(text) {
+  var html = escapeHtml(text);
+  // code blocks (```...```)
+  html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  // inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // bold
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // italic
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  // line breaks
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+function stripEmojis(str) {
+  return str.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '').trim();
+}
+
+let chatHistory = [];
+
+function addChatMessage(role, content) {
+  var r = role === 'ai' ? 'assistant' : role;
+  chatHistory.push({ role: r, content });
+}
+
+function appendChatBubble(role, content) {
+  const container = qs(SEL.chatMessages);
+  const div = document.createElement('div');
+  div.className = 'chat-msg chat-msg-' + role;
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'chat-msg-content';
+  contentDiv.innerHTML = renderMarkdown(content);
+  div.appendChild(contentDiv);
+
+  if (role === 'ai') {
+    const footer = document.createElement('div');
+    footer.className = 'chat-msg-footer';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'chat-copy-btn';
+    copyBtn.innerHTML = '<i class="nf nf-fa-copy"></i> Copiar';
+    copyBtn.addEventListener('click', function() {
+      navigator.clipboard.writeText(content).catch(() => {});
+      showToast('Copiado');
+    });
+    footer.appendChild(copyBtn);
+    div.appendChild(footer);
+  }
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showChatThinking() {
+  const container = qs(SEL.chatMessages);
+  const div = document.createElement('div');
+  div.className = 'chat-msg chat-msg-ai';
+  div.id = 'chat-thinking';
+  div.innerHTML = '<div class="chat-thinking"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></div>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function hideChatThinking() {
+  const el = document.getElementById('chat-thinking');
+  if (el) el.remove();
+}
+
+async function handleChatSend() {
+  const input = qs(SEL.chatInput);
+  const text = input.value.trim();
+  if (!text) return;
+
+  const btn = qs(SEL.chatSendBtn);
+  btn.disabled = true;
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  addChatMessage('user', text);
+  appendChatBubble('user', text);
+  showChatThinking();
+
+  // Get live context
+  var contextLines = [];
+  try {
+    var prodResult = await invoke('list_products', { search: null, page: 1, pageSize: 1 });
+    var totalProds = prodResult.total || 0;
+    contextLines.push('- Productos activos: ' + totalProds);
+    // Fetch a few product names so the AI knows what exists
+    var namesResult = await invoke('list_products', { search: null, page: 1, pageSize: 20 });
+    if (namesResult && namesResult.data && namesResult.data.length > 0) {
+      var names = namesResult.data.map(function(p) { return p.nombre + ' ($' + p.precio_usd.toFixed(2) + ')'; }).join(', ');
+      contextLines.push('- Nombres de productos: ' + names + (totalProds > 20 ? '...' : ''));
+    }
+  } catch (_) {}
+  try {
+    var cfg = await invoke('get_config_value', { key: 'tasa_dolar' });
+    if (cfg) contextLines.push('- Tasa del dólar: Bs. ' + parseFloat(cfg).toFixed(2));
+  } catch (_) {}
+  try {
+    var todayRes = await invoke('get_daily_summary');
+    if (todayRes) {
+      contextLines.push('- Ventas hoy: ' + (todayRes.total_ventas || 0) + ' por $' + (todayRes.total_usd || 0).toFixed(2));
+    }
+  } catch (_) {}
+  try {
+    var top = await invoke('get_top_products', { limit: 3 });
+    if (top && top.length > 0) {
+      var topStr = top.map(function(p) { return p.nombre + ' (' + p.cantidad_vendida + ' uds, $' + p.total_usd.toFixed(2) + ')'; }).join(', ');
+      contextLines.push('- Productos más vendidos: ' + topStr);
+    }
+  } catch (_) {}
+  try {
+    var lowStock = await invoke('list_products', { search: null, page: 1, pageSize: 200 });
+    if (lowStock && lowStock.data) {
+      var low = lowStock.data.filter(function(p) { return p.stock < p.stock_minimo; });
+      if (low.length > 0) {
+        var lowStr = low.slice(0, 5).map(function(p) { return p.nombre + ' (stock: ' + p.stock + ', mínimo: ' + p.stock_minimo + ')'; }).join(', ');
+        contextLines.push('- Productos bajos de stock (' + low.length + '): ' + lowStr);
+      }
+    }
+  } catch (_) {}
+  try {
+    var clients = await invoke('list_clientes');
+    if (clients && clients.length > 0) {
+      var debtClients = clients.filter(function(c) { return c.saldo_deuda_usd > 0; });
+      contextLines.push('- Clientes registrados: ' + clients.length);
+      if (debtClients.length > 0) {
+        var debtStr = debtClients.slice(0, 5).map(function(c) { return c.nombre + ' ($' + c.saldo_deuda_usd.toFixed(2) + ')'; }).join(', ');
+        contextLines.push('- Clientes con deuda (' + debtClients.length + '): ' + debtStr + (debtClients.length > 5 ? '...' : ''));
+      }
+    }
+  } catch (_) {}
+
+  var systemPrompt = CHAT_SYSTEM_PROMPT;
+  if (contextLines.length > 0) {
+    systemPrompt += '\n\nDatos actuales del sistema:\n' + contextLines.join('\n');
+  }
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...chatHistory,
+  ];
+
+  try {
+    const apiKey = qs(SEL.openrouterApiKey).value.trim();
+    if (!apiKey) {
+      hideChatThinking();
+      appendChatBubble('ai', 'Primero configura la API key de OpenRouter en Configuración → IA.');
+      return;
+    }
+    const model = qs(SEL.openrouterModel).value;
+    const reply = await invoke('chat_with_ai', { messages, apiKey, model });
+    hideChatThinking();
+    addChatMessage('ai', reply);
+    appendChatBubble('ai', reply);
+  } catch (e) {
+    hideChatThinking();
+    appendChatBubble('ai', 'Error: ' + e);
+  } finally {
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
+function toggleChat() {
+  const panel = qs(SEL.chatPanel);
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) {
+    if (chatHistory.length === 0) {
+      addChatMessage('ai', '¡Hola! Soy Enar, tu asistente del POS. Pregúntame sobre productos, ventas, clientes o lo que necesites del sistema.');
+      appendChatBubble('ai', '¡Hola! Soy Enar, tu asistente del POS. Pregúntame sobre productos, ventas, clientes o lo que necesites del sistema.');
+    }
+    if (!IS_ANDROID) qs(SEL.chatInput).focus();
+    qs(SEL.chatMessages).scrollTop = qs(SEL.chatMessages).scrollHeight;
+  }
+}
+
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
   // Collapse all config cards by default
@@ -3503,6 +3781,9 @@ document.addEventListener('DOMContentLoaded', async function() {
   /* Ver conflictos */
   qs(SEL.viewConflictsBtn)?.addEventListener('click', openConflictModal);
 
+  /* Refrescar dispositivos vinculados */
+  qs('#refresh-devices-btn')?.addEventListener('click', loadLinkedDevices);
+
   /* Sync all progress UI */
   const syncProgressModal = qs(SEL.syncProgressModal);
   const syncProgressText = qs(SEL.syncProgressText);
@@ -3719,8 +4000,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       case 'F7': e.preventDefault(); showView('config'); break;
       case 'F8':
         e.preventDefault();
-        if (viewId === 'view-sales') qs(SEL.productSearch).focus();
-        else if (viewId === 'view-inventory') qs(SEL.inventorySearch).focus();
+        if (!IS_ANDROID && viewId === 'view-sales') qs(SEL.productSearch).focus();
+        else if (!IS_ANDROID && viewId === 'view-inventory') qs(SEL.inventorySearch).focus();
         break;
       case 'F12':
         e.preventDefault();
@@ -3997,6 +4278,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (!main) return;
       if (diff > KEYBOARD_THRESHOLD) {
         // Keyboard opened
+        document.body.classList.add('keyboard-open');
         var view = document.querySelector('.view.active');
         if (view) view.classList.add('mobile-keyboard');
         var el = document.activeElement;
@@ -4008,6 +4290,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         main.style.paddingBottom = (diff - KEYBOARD_PAD_OFFSET) + 'px';
       } else if (diff < -KEYBOARD_THRESHOLD) {
         // Keyboard closed
+        document.body.classList.remove('keyboard-open');
         var view2 = document.querySelector('.view.active');
         if (view2) view2.classList.remove('mobile-keyboard');
         main.style.paddingBottom = '';
@@ -4016,4 +4299,30 @@ document.addEventListener('DOMContentLoaded', async function() {
       _prevVpHeight = window.visualViewport.height;
     });
   }
+
+  /* ========== OPENROUTER / SUGERENCIAS ========== */
+  qs(SEL.openrouterSaveKeyBtn).addEventListener('click', saveOpenRouterKey);
+  qs(SEL.openrouterModel).addEventListener('change', async function() {
+    try { await invoke('set_config_value', { key: 'openrouter_model', value: this.value }); } catch (_) {}
+  });
+  qs(SEL.generateOrderBtn).addEventListener('click', generateOrder);
+  qs(SEL.suggestionCopyBtn).addEventListener('click', copySuggestion);
+  qs(SEL.suggestionModalClose).addEventListener('click', function() { closeModal(qs(SEL.suggestionModal)); });
+  qs(SEL.suggestionCloseBtn).addEventListener('click', function() { closeModal(qs(SEL.suggestionModal)); });
+  loadOpenRouterKey();
+
+  /* ========== CHAT IA ========== */
+  qs(SEL.chatFab).addEventListener('click', toggleChat);
+  qs(SEL.chatCloseBtn).addEventListener('click', toggleChat);
+  qs(SEL.chatSendBtn).addEventListener('click', handleChatSend);
+  qs(SEL.chatInput).addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleChatSend();
+    }
+  });
+  qs(SEL.chatInput).addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+  });
 });

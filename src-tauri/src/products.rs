@@ -479,6 +479,24 @@ pub fn import_products_from_file(
 }
 
 #[tauri::command]
+pub fn update_stock_minimo(
+    state: State<AppState>,
+    codigo: String,
+    stock_minimo: i64,
+) -> Result<String, String> {
+    if stock_minimo < 0 {
+        return Err("El stock mínimo no puede ser negativo".to_string());
+    }
+    let db = state.lock_db()?;
+    db.execute(
+        "UPDATE productos SET stock_minimo = ?1 WHERE codigo = ?2",
+        params![stock_minimo, codigo],
+    )
+    .map_err(|e| format!("Error al actualizar stock mínimo: {}", e))?;
+    Ok("Stock mínimo actualizado".to_string())
+}
+
+#[tauri::command]
 pub fn get_top_products(
     state: State<AppState>,
     start_date: Option<String>,

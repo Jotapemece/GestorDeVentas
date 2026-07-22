@@ -35,6 +35,10 @@ pub const CFG_ULTIMO_DOWNLOAD_CLIENTES: &str = "ultimo_download_clientes";
 pub const CFG_DISPOSITIVO_ID: &str = "dispositivo_id";
 pub const CFG_SUPABASE_URL: &str = "supabase_url";
 pub const CFG_SUPABASE_KEY: &str = "supabase_key";
+#[allow(dead_code)]
+pub const CFG_OPENROUTER_API_KEY: &str = "openrouter_api_key";
+#[allow(dead_code)]
+pub const CFG_OPENROUTER_MODEL: &str = "openrouter_model";
 
 // Roles
 pub const ROL_ADMIN: &str = "admin";

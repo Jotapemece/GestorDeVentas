@@ -81,6 +81,7 @@
   animation: nf-spin 2s linear infinite;
 }
 .nf-fa-mobile::before { content: "\f10b"; }
+.nf-fa-paper_plane::before { content: "\f1d8"; }
 .nf-fa-pulse {
   animation: nf-spin 1s steps(8) infinite;
 }

@@ -8,6 +8,7 @@ mod db;
 mod helpers;
 mod migrations;
 mod models;
+mod openrouter;
 mod products;
 mod sales;
 mod sync;
@@ -105,6 +106,7 @@ pub fn run() {
             auth::admin_change_password,
             // Products
             products::get_top_products,
+            products::update_stock_minimo,
             // Sync
             sync::upload_products,
             sync::download_products,
@@ -123,6 +125,9 @@ pub fn run() {
             sync::sync_all,
             sync::get_sync_stats,
             sync::test_supabase_connection,
+            // OpenRouter
+            openrouter::generate_purchase_suggestion,
+            openrouter::chat_with_ai,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

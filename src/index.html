@@ -275,6 +275,7 @@
                     <th>Precio ($)</th>
                     <th>Precio (Bs.)</th>
                     <th>Stock</th>
+                    <th>Stock Mín</th>
                     <th>Acciones</th>
                   </tr>
               </thead>
@@ -615,18 +616,6 @@
               </div>
             </div>
           </div>
-          <div class="config-card">
-            <div class="config-card-header">
-              <i class="nf nf-fa-display"></i> Dispositivos vinculados
-              <span class="config-card-desc">Dispositivos registrados en tu cuenta de Supabase</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
-              <div id="linked-devices-container">
-                <p class="text-muted text-sm">Cargando...</p>
-              </div>
-            </div>
-          </div>
           <div class="config-card admin-only" id="user-management-card">
             <div class="config-card-header">
               <i class="nf nf-fa-users"></i> Usuarios
@@ -666,6 +655,34 @@
                 <input type="password" id="change-pwd-new" placeholder="Nueva" class="form-input">
                 <input type="password" id="change-pwd-confirm" placeholder="Confirmar" class="form-input">
                 <button id="change-pwd-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Cambiar</button>
+              </div>
+            </div>
+          </div>
+          <div class="config-card admin-only">
+            <div class="config-card-header">
+              <i class="nf nf-fa-robot"></i> IA / Sugerencias de Compra
+              <span class="config-card-desc">Configura la integraci&oacute;n con OpenRouter para generar &oacute;rdenes de compra autom&aacute;ticas</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-field">
+                <label>API Key de OpenRouter</label>
+                <div style="display:flex;gap:8px">
+                  <input type="password" id="openrouter-api-key" class="form-input" placeholder="sk-or-v1-..." style="flex:1">
+                  <button id="openrouter-save-key-btn" class="btn btn-primary">Guardar</button>
+                </div>
+              </div>
+              <div class="config-field">
+                <label>Modelo</label>
+                <select id="openrouter-model" class="form-input">
+                  <option value="nvidia/nemotron-3-nano-30b-a3b:free">Nemotron Nano 30B (r&aacute;pido)</option>
+                  <option value="nvidia/nemotron-3-super-120b-a12b:free" selected>Nemotron Super 120B (balance)</option>
+                  <option value="nvidia/nemotron-3-ultra-550b-a55b:free">Nemotron Ultra 550B (potente)</option>
+                  <option value="openai/gpt-oss-20b:free">GPT-OSS 20B</option>
+                </select>
+              </div>
+              <div style="margin-top:12px">
+                <button id="generate-order-btn" class="btn btn-accent"><i class="nf nf-fa-shopping_cart"></i> Generar orden de compra</button>
               </div>
             </div>
           </div>
@@ -768,12 +785,22 @@
                       <div style="display:flex;align-items:center;gap:6px">
                         <input type="number" id="sync-auto-interval" min="30" max="480" value="30" style="width:56px;padding:4px 8px;border:2px solid var(--accent);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:center;font-weight:600">
                         <span style="font-size:12px;color:var(--text-light);min-width:28px">min</span>
-                      </div>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:color-mix(in srgb,var(--accent) 8%,var(--card));border-radius:8px">
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:color-mix(in srgb,var(--accent) 8%,var(--card));border-radius:8px">
                       <i class="nf nf-fa-info_circle" style="font-size:12px;color:var(--accent);flex-shrink:0"></i>
                       <span style="font-size:11px;color:var(--text-light);line-height:1.4">Despu&eacute;s de cada venta se sube autom&aacute;ticamente. Este timer descarga datos de otros dispositivos en segundo plano.</span>
                     </div>
+                  </div>
+                </div>
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text);display:flex;align-items:center;gap:8px">
+                    <i class="nf nf-fa-display" style="color:var(--primary)"></i> Dispositivos vinculados
+                    <button id="refresh-devices-btn" class="btn btn-outline btn-sm" style="margin-left:auto;padding:2px 10px;font-size:12px" title="Actualizar lista">
+                      <i class="nf nf-fa-refresh"></i>
+                    </button>
+                  </h3>
+                  <div id="linked-devices-container">
+                    <p class="text-muted text-sm" style="font-size:12px">Presiona <i class="nf nf-fa-refresh" style="font-size:11px"></i> para cargar.</p>
                   </div>
                 </div>
               </div>
@@ -863,6 +890,10 @@
           <label>Stock</label>
           <input type="number" id="product-stock" step="1" min="0" placeholder="0">
         </div>
+        <div class="form-group">
+          <label>Stock Mínimo</label>
+          <input type="number" id="product-stock-minimo" step="1" min="0" placeholder="0">
+        </div>
       </div>
       <div class="modal-footer">
         <button id="product-delete-btn" class="btn btn-danger hidden"><i class="nf nf-fa-trash"></i> Eliminar</button>
@@ -883,6 +914,7 @@
           <div class="detail-field"><span class="detail-label">Nombre</span><span class="detail-value" id="detail-nombre"></span></div>
           <div class="detail-field"><span class="detail-label">Precio ($)</span><span class="detail-value" id="detail-precio"></span></div>
           <div class="detail-field"><span class="detail-label">Stock</span><span class="detail-value" id="detail-stock"></span></div>
+          <div class="detail-field"><span class="detail-label">Stock Mínimo</span><span class="detail-value" id="detail-stock-minimo"></span></div>
           <div class="detail-field"><span class="detail-label">Fecha de Creaci&oacute;n</span><span class="detail-value" id="detail-created"></span></div>
         </div>
       </div>
@@ -1146,6 +1178,22 @@
     </div>
   </div>
 
+  <div id="suggestion-modal" class="modal hidden">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-shopping_cart"></i> Orden de Compra Sugerida</h3>
+        <span class="modal-close" id="suggestion-modal-close">&times;</span>
+      </div>
+      <div class="modal-body" style="max-height:60vh;overflow-y:auto">
+        <div id="suggestion-content" style="font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="suggestion-close-btn" class="btn btn-outline">Cerrar</button>
+        <button id="suggestion-copy-btn" class="btn btn-primary"><i class="nf nf-fa-copy"></i> Copiar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="guide-modal" class="modal hidden">
     <div class="modal-content modal-lg guide-content">
       <div class="modal-header">
@@ -1355,6 +1403,48 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
+
+  <!-- Chat IA -->
+  <button id="chat-fab" class="chat-fab" title="Enar IA">
+    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="chat-fab-icon">
+      <path d="M30 20 L10 45 L25 55 L30 45 L45 50 L50 35 L30 20Z" fill="currentColor"/>
+      <path d="M70 20 L90 45 L75 55 L70 45 L55 50 L50 35 L70 20Z" fill="currentColor"/>
+      <path d="M25 30 L10 20 L20 35 L25 30Z" fill="currentColor" opacity="0.7"/>
+      <path d="M75 30 L90 20 L80 35 L75 30Z" fill="currentColor" opacity="0.7"/>
+      <ellipse cx="38" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+      <ellipse cx="62" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+      <ellipse cx="38" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+      <ellipse cx="62" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+      <ellipse cx="50" cy="55" rx="6" ry="4" fill="currentColor" opacity="0.6"/>
+      <ellipse cx="50" cy="54" rx="3.5" ry="2.5" fill="currentColor" opacity="0.8"/>
+    </svg>
+  </button>
+  <div id="chat-panel" class="chat-panel hidden">
+    <div class="chat-header">
+      <div class="chat-header-brand">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="chat-header-icon">
+          <path d="M30 20 L10 45 L25 55 L30 45 L45 50 L50 35 L30 20Z" fill="currentColor"/>
+          <path d="M70 20 L90 45 L75 55 L70 45 L55 50 L50 35 L70 20Z" fill="currentColor"/>
+          <path d="M25 30 L10 20 L20 35 L25 30Z" fill="currentColor" opacity="0.7"/>
+          <path d="M75 30 L90 20 L80 35 L75 30Z" fill="currentColor" opacity="0.7"/>
+          <ellipse cx="38" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+          <ellipse cx="62" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+          <ellipse cx="38" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+          <ellipse cx="62" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+          <ellipse cx="50" cy="55" rx="6" ry="4" fill="currentColor" opacity="0.6"/>
+          <ellipse cx="50" cy="54" rx="3.5" ry="2.5" fill="currentColor" opacity="0.8"/>
+        </svg>
+        <span>Enar</span>
+      </div>
+      <button id="chat-close-btn" class="chat-close">&times;</button>
+    </div>
+    <div id="chat-messages" class="chat-messages">
+    </div>
+    <div class="chat-input-area">
+      <textarea id="chat-input" class="chat-input" placeholder="Escribe tu mensaje..." rows="1"></textarea>
+      <button id="chat-send-btn" class="chat-send-btn"><i class="nf nf-fa-paper_plane"></i></button>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
