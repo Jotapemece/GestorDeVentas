@@ -219,19 +219,26 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 ## Work State
 
 ### Objective
-Optimizar y limpiar el código backend (Rust/Tauri): eliminar duplicación, lógica mágica, extraer helpers y refactorizar funciones grandes.
+Features POS: roles de vendedor, cifrado backups, mejoras mobile, tema oscuro, fix modelo OpenRouter.
 
-### Completed
-- **Fase 1**: `serde_json.unwrap()` → `?` (3x), `"dispositivo_id"` → `constants::CFG_DISPOSITIVO_ID` (6x), constantes, tema crema eliminado
-- **Fase 2**: `create_sale` → `validate_sale_request + execute_sale_transaction`; `get_sales_report` → `get_sales_report_inner`; `import_products_from_file` → `parse_product_tsv_line + format_import_result`; `void_sale_items` → `recalculate_sale_after_void`
-- **Fase 3**: `sync.rs` (1310 líneas) dividido en `sync/mod.rs + products.rs + sales.rs + clients.rs + conflicts.rs + orchestrator.rs`
-- **Fase 4**: `helpers.rs` con `now_iso()` integrado; `row_to_venta/pub(crate)` en sales.rs; `row_to_cliente` en clients.rs; `row_to_historial` en audit.rs; `row_to_producto` en products.rs; `lock_db()/get_username()` en AppState/db.rs; `state.get_username()` reemplaza `current_user.lock()` en auth, cashier, clients, sales; `state.lock_db()` en tasa_bcv.rs; 6 SQL format strings → `get_config()` en sync/; 5 URLs → `api_url()` en sync/; `get_ultimo_download` usa constante. ✅ 36 tests pasan
+### Completed (this session)
+- **Path en Android**: quitado `#[cfg(not(target_os = "android"))]` de `use std::path::Path` en `db.rs`
+- **Reportes para vendedor**: `loadUserList()` eliminado del loader de reports
+- **Sync auto para todos**: `loadSyncAutoConfig()` movido a `handleLogin()`
+- **Config para vendedor**: nav buttons config + IA card sin `admin-only`
+- **Tema oscuro**: `--border #5A5270`, `--primary #7E6B90`, even-row `0.08`, +10 shadow overrides
+- **Mobile**: bottom tabs 4+More, pull-to-refresh, swipe-to-delete, share receipt, cart 44px, FAB 44px
+- **Icono ellipsis**: `.nf-fa-ellipsis_h` en `fa-local.css`
+- **Bug fixes**: `getUserConfig`/`setUserConfig` restauradas, constantes duplicadas eliminadas, `fabEnd` corregido
+- **Modelos OpenRouter**: actualizados con 6 modelos gratuitos actuales (Gemma 4, Nemotron 3, GPT-OSS, Qwen3 Next)
+- **Rust compila**: `cargo check` ✅
 
 ### Active
-- Auditoría de código — Fase 1 (integridad de datos)
+- (ninguno)
 
 ### Next Move
-- Completar Fase 1 y pasar a Fase 2+ según resultados
+- Probar build Android / Windows
+- Según feedback del usuario
 
 ---
 

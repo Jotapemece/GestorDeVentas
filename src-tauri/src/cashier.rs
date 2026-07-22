@@ -54,6 +54,20 @@ const SQL_LIST_DIARIAS: &str = "
     WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2
     ORDER BY v.id DESC";
 
+fn obtener_costo_periodo(
+    db: &rusqlite::Connection,
+    start: &str,
+    end: &str,
+) -> Result<f64, String> {
+    let sql = "SELECT COALESCE(SUM(COALESCE(p.costo,0) * dv.cantidad), 0)
+               FROM detalles_ventas dv
+               JOIN productos p ON dv.producto_codigo = p.codigo
+               JOIN ventas v ON dv.venta_id = v.id
+               WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.anulada = 0";
+    db.query_row(sql, params![start, end], |row| row.get(0))
+        .map_err(|e| format!("Error al obtener costo del período: {}", e))
+}
+
 fn obtener_totales_del_dia(
     db: &rusqlite::Connection,
     today: &str,
@@ -431,14 +445,19 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
     let after_month = crate::helpers::siguiente_dia(&chrono::Local::now().format("%Y-%m-%d").to_string());
 
     fn period(db: &rusqlite::Connection, start: &str, end: &str) -> Result<DashboardPeriod, String> {
-        db.query_row(SQL_SUM_VENTAS_RANGE, params![start, end], |row| {
-            Ok(DashboardPeriod {
-                total_ventas: row.get(0)?,
-                total_usd: row.get(1)?,
-                total_bs: row.get(2)?,
+        let (cnt, usd, bs): (i64, f64, f64) = db
+            .query_row(SQL_SUM_VENTAS_RANGE, params![start, end], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
             })
+            .map_err(|e| format!("Error al obtener totales del período: {}", e))?;
+        let costo = obtener_costo_periodo(db, start, end)?;
+        Ok(DashboardPeriod {
+            total_ventas: cnt,
+            total_usd: usd,
+            total_bs: bs,
+            total_costo_usd: costo,
+            total_ganancia_usd: if usd > costo { usd - costo } else { 0.0 },
         })
-        .map_err(|e| format!("Error al obtener totales del período: {}", e))
     }
 
     Ok(DashboardSummary {
@@ -446,6 +465,49 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
         week: period(&db, &week_ago, &after_week)?,
         month: period(&db, &month_start, &after_month)?,
     })
+}
+
+#[tauri::command]
+pub fn get_profit_series(
+    state: State<AppState>,
+    filter: crate::models::ProfitSeriesFilter,
+) -> Result<Vec<crate::models::ProfitDataPoint>, String> {
+    let db = state.lock_db()?;
+
+    let start = filter.start_date;
+    let end = if filter.end_date.contains(' ') {
+        filter.end_date
+    } else {
+        crate::helpers::siguiente_dia(&filter.end_date)
+    };
+
+    let mut stmt = db.prepare(
+        "SELECT date(v.fecha_hora) as dia,
+                COALESCE(SUM(v.total_usd), 0),
+                COALESCE(SUM(COALESCE(p.costo, 0) * dv.cantidad), 0)
+         FROM ventas v
+         JOIN detalles_ventas dv ON dv.venta_id = v.id
+         JOIN productos p ON p.codigo = dv.producto_codigo
+         WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.anulada = 0
+         GROUP BY dia ORDER BY dia ASC",
+    ).map_err(|e| e.to_string())?;
+
+    let points: Vec<crate::models::ProfitDataPoint> = stmt
+        .query_map(params![start, end], |row| {
+            let revenue: f64 = row.get(1)?;
+            let cost: f64 = row.get(2)?;
+            Ok(crate::models::ProfitDataPoint {
+                date: row.get(0)?,
+                revenue_usd: revenue,
+                cost_usd: cost,
+                profit_usd: if revenue > cost { revenue - cost } else { 0.0 },
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(points)
 }
 
 #[cfg(test)]

@@ -1,5 +1,7 @@
 // Shared constants
 
+pub const PASSWORD_MIN_LENGTH: usize = 6;
+
 pub const PAGO_MOVIL_REF_LEN: usize = 4;
 pub const MONTO_TOLERANCIA: f64 = 0.01;
 pub const FECHA_MAXIMA: &str = "9999-12-31";
@@ -39,6 +41,7 @@ pub const CFG_SUPABASE_KEY: &str = "supabase_key";
 pub const CFG_OPENROUTER_API_KEY: &str = "openrouter_api_key";
 #[allow(dead_code)]
 pub const CFG_OPENROUTER_MODEL: &str = "openrouter_model";
+pub const CFG_BACKUP_KEY: &str = "backup_encryption_key";
 
 // Roles
 pub const ROL_ADMIN: &str = "admin";

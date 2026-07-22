@@ -40,14 +40,14 @@ fn build_request(model: &str, messages: Vec<serde_json::Value>) -> serde_json::V
         "model": model,
         "messages": messages,
         "max_tokens": 1024,
-        "frequency_penalty": 0.5,
+        "frequency_penalty": 1.0,
         "reasoning": {"max_tokens": 0}
     })
 }
 
 fn default_model(model: &str) -> String {
     if model.is_empty() {
-        "nvidia/nemotron-3-super-120b-a12b:free".to_string()
+        "openrouter/free".to_string()
     } else {
         model.to_string()
     }

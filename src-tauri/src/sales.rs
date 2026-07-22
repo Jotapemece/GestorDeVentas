@@ -298,6 +298,7 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
 #[tauri::command]
 pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String> {
     let mut db = state.lock_db()?;
+    crate::auth::require_admin(&state, &db, &format!("Anuló venta #{}", venta_id))?;
     let current_username = state.get_username()?;
 
     let (metodo, cliente_id): (String, Option<i64>) = db
@@ -436,20 +437,40 @@ pub fn export_report_xlsx(
     sheet.set_column_width(4, 18).ok();
     sheet.set_column_width(5, 15).ok();
 
-    for (col, h) in ["#", "Fecha", "Usuario", "Método", "Total ($)", "Total (Bs.)"].iter().enumerate() {
+    let costo_by_code: std::collections::HashMap<String, f64> = {
+        let mut stmt = db.prepare("SELECT codigo, COALESCE(costo,0) FROM productos WHERE activo = 1")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    for (col, h) in ["#", "Fecha", "Usuario", "Método", "Total ($)", "Costo ($)", "Ganancia ($)", "Total (Bs.)"].iter().enumerate() {
         sheet.write_string_with_format(0, col as u16, *h, &hf).ok();
     }
 
     for (i, item) in report.ventas.iter().enumerate() {
         let r = (i + 1) as u32;
+        let costo_total: f64 = item.productos.iter()
+            .map(|d| costo_by_code.get(&d.producto_codigo).unwrap_or(&0.0) * d.cantidad as f64)
+            .sum();
+        let ganancia = item.venta.total_usd - costo_total;
+
         sheet.write_number(r, 0, item.venta.id as f64).ok();
         sheet.write_string(r, 1, &item.venta.fecha_hora).ok();
         sheet.write_string(r, 2, &item.venta.username).ok();
         let ml = format_metodo_label(&item.venta.metodo_pago);
         sheet.write_string(r, 3, &ml).ok();
         sheet.write_number_with_format(r, 4, item.venta.total_usd, &nf).ok();
-        sheet.write_number_with_format(r, 5, item.venta.total_bs, &nf).ok();
+        sheet.write_number_with_format(r, 5, costo_total, &nf).ok();
+        sheet.write_number_with_format(r, 6, ganancia, &nf).ok();
+        sheet.write_number_with_format(r, 7, item.venta.total_bs, &nf).ok();
     }
+
+    sheet.set_column_width(5, 15).ok();
+    sheet.set_column_width(6, 15).ok();
 
     let buffer = workbook.save_to_buffer().map_err(|e| format!("Error al exportar: {}", e))?;
     Ok(base64::engine::general_purpose::STANDARD.encode(&buffer))
@@ -553,7 +574,7 @@ fn get_sales_report_inner(
     } else {
         let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
         let detail_sql = format!(
-            "SELECT dv.id, dv.venta_id, dv.producto_codigo, p.nombre, dv.cantidad, dv.precio_usd_unitario \
+            "SELECT dv.id, dv.venta_id, dv.producto_codigo, p.nombre, dv.cantidad, dv.precio_usd_unitario, COALESCE(p.costo,0) \
              FROM detalles_ventas dv \
              LEFT JOIN productos p ON dv.producto_codigo = p.codigo \
              WHERE dv.venta_id IN ({}) \
@@ -565,10 +586,11 @@ fn get_sales_report_inner(
         let rows = match detail_stmt.query_map(det_params.as_slice(), |row| {
             let cantidad: i64 = row.get(4)?;
             let precio: f64 = row.get(5)?;
+            let costo: f64 = row.get(6)?;
             Ok(DetalleVenta {
                 id: row.get(0)?, venta_id: row.get(1)?, producto_codigo: row.get(2)?,
                 producto_nombre: row.get(3)?, cantidad, precio_usd_unitario: precio,
-                subtotal_usd: cantidad as f64 * precio,
+                subtotal_usd: cantidad as f64 * precio, costo,
             })
         }) {
             Ok(r) => r,
@@ -589,7 +611,13 @@ fn get_sales_report_inner(
         SalesReportItem { venta: v, productos }
     }).collect();
 
-    Ok(SalesReportResult { total_ventas, total_usd, total_bs, ventas: items, page, page_size })
+    let total_costo_usd: f64 = items.iter()
+        .flat_map(|item| &item.productos)
+        .map(|d| d.costo * d.cantidad as f64)
+        .sum();
+    let total_ganancia_usd = total_usd - total_costo_usd;
+
+    Ok(SalesReportResult { total_ventas, total_usd, total_bs, total_costo_usd, total_ganancia_usd, ventas: items, page, page_size })
 }
 
 #[tauri::command]
@@ -598,6 +626,7 @@ pub fn void_sale_items(
     request: VoidItemRequest,
 ) -> Result<String, String> {
     let mut db = state.lock_db()?;
+    crate::auth::require_admin(&state, &db, &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id))?;
     let current_username = state.get_username()?;
 
     let tx = db.transaction().map_err(|e| e.to_string())?;

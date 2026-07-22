@@ -1,8 +1,10 @@
 use crate::constants;
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
+use rand::Rng;
 use rusqlite::{Connection, params};
 use tauri::State;
 use std::collections::HashMap;
-#[cfg(not(target_os = "android"))]
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
@@ -202,20 +204,131 @@ pub fn get_tasa_from_db(db: &Connection) -> Result<f64, String> {
         .map_err(|e| format!("Error al obtener tasa de cambio: {}", e))
 }
 
+fn get_backup_key_from_db(db: &Connection) -> Result<Vec<u8>, String> {
+    let hex_key: String = db.query_row(
+        &format!("SELECT valor FROM configuracion WHERE clave = '{}'", constants::CFG_BACKUP_KEY),
+        [],
+        |row| row.get(0),
+    ).map_err(|_| "Clave de cifrado de backups no encontrada".to_string())?;
+    hex::decode(&hex_key).map_err(|e| format!("Error al decodificar clave: {}", e))
+}
+
+fn ensure_backup_key(db: &Connection) -> Result<Vec<u8>, String> {
+    let exists: bool = db.query_row(
+        &format!("SELECT COUNT(*) > 0 FROM configuracion WHERE clave = '{}'", constants::CFG_BACKUP_KEY),
+        [],
+        |row| row.get(0),
+    ).unwrap_or(false);
+
+    if exists {
+        return get_backup_key_from_db(db);
+    }
+
+    let key_bytes: [u8; 32] = rand::thread_rng().gen();
+    let hex_key = hex::encode(key_bytes);
+    db.execute(
+        &format!("INSERT INTO configuracion (clave, valor) VALUES ('{}', ?1)", constants::CFG_BACKUP_KEY),
+        params![hex_key],
+    ).map_err(|e| format!("Error al guardar clave de cifrado: {}", e))?;
+    Ok(key_bytes.to_vec())
+}
+
+fn encrypt_file(src: &Path, dest: &Path, key: &[u8]) -> Result<(), String> {
+    let data = std::fs::read(src).map_err(|e| format!("Error al leer archivo: {}", e))?;
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let nonce_bytes: [u8; 12] = rand::thread_rng().gen();
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    let encrypted = cipher.encrypt(nonce, data.as_ref())
+        .map_err(|e| format!("Error al cifrar: {}", e))?;
+
+    let mut out = Vec::with_capacity(12 + encrypted.len());
+    out.extend_from_slice(&nonce_bytes);
+    out.extend_from_slice(&encrypted);
+    std::fs::write(dest, &out).map_err(|e| format!("Error al escribir archivo cifrado: {}", e))?;
+    Ok(())
+}
+
+fn decrypt_file(src: &Path, key: &[u8]) -> Result<Vec<u8>, String> {
+    let data = std::fs::read(src).map_err(|e| format!("Error al leer archivo cifrado: {}", e))?;
+    if data.len() < 12 {
+        return Err("Archivo cifrado inválido".to_string());
+    }
+    let (nonce_bytes, encrypted) = data.split_at(12);
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let nonce = Nonce::from_slice(nonce_bytes);
+    cipher.decrypt(nonce, encrypted)
+        .map_err(|_| "Error al descifrar: clave incorrecta o archivo dañado".to_string())
+}
+
 #[tauri::command]
 pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<String, String> {
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
+    let db = state.lock_db()?;
+    let _admin = crate::auth::require_admin(&state, &db, "Respaldó la base de datos")?;
+    let key = ensure_backup_key(&db)?;
+    drop(db);
 
     let backup_path = if dest_path.is_empty() {
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
         let parent = db_path.parent().unwrap_or(std::path::Path::new("."));
-        parent.join(format!("{}_{}.db", constants::BACKUP_FILENAME_PREFIX, timestamp))
+        parent.join(format!("{}_{}.enc", constants::BACKUP_FILENAME_PREFIX, timestamp))
     } else {
         std::path::PathBuf::from(&dest_path)
     };
 
-    std::fs::copy(&db_path, &backup_path)
+    let temp_path = backup_path.with_extension("tmp");
+    std::fs::copy(&db_path, &temp_path)
         .map_err(|e| format!("Error al copiar BD: {}", e))?;
+    encrypt_file(&temp_path, &backup_path, &key)?;
+    std::fs::remove_file(&temp_path).ok();
 
-    Ok(format!("Base de datos respaldada en: {}", backup_path.display()))
+    Ok(format!("Base de datos respaldada y cifrada en: {}", backup_path.display()))
+}
+
+#[tauri::command]
+pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<String, String> {
+    let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
+    let src = PathBuf::from(&backup_path);
+    if !src.exists() {
+        return Err("Archivo de backup no encontrado".to_string());
+    }
+
+    let db = state.lock_db()?;
+    let _admin = crate::auth::require_admin(&state, &db, "Restauró backup desde archivo")?;
+    let key = get_backup_key_from_db(&db)?;
+    drop(db);
+
+    let decrypted = decrypt_file(&src, &key)?;
+
+    let mut temp_src = db_path.clone();
+    temp_src.set_extension("db.restore");
+    std::fs::write(&temp_src, &decrypted)
+        .map_err(|e| format!("Error al escribir archivo temporal: {}", e))?;
+
+    // Validate it's a valid SQLite DB
+    let test_conn = Connection::open(&temp_src)
+        .map_err(|_| "El archivo descifrado no es una base de datos válida".to_string())?;
+    test_conn.query_row("SELECT COUNT(*) FROM sqlite_master", [], |_| Ok(()))
+        .map_err(|_| "El archivo descifrado no contiene una base de datos válida".to_string())?;
+    drop(test_conn);
+
+    // Close current connection and replace
+    let db = state.lock_db()?;
+    let _ = db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+    drop(db);
+    drop(state.db.lock()); // force all locks released
+
+    std::fs::copy(&temp_src, &db_path)
+        .map_err(|e| format!("Error al restaurar BD: {}", e))?;
+    std::fs::remove_file(&temp_src).ok();
+
+    Ok("Base de datos restaurada exitosamente. Reinicie la aplicación para aplicar los cambios.".to_string())
+}
+
+#[tauri::command]
+pub fn get_backup_key(state: State<AppState>) -> Result<String, String> {
+    let db = state.lock_db()?;
+    let _admin = crate::auth::check_admin_role(&state)?;
+    let key = get_backup_key_from_db(&db)?;
+    Ok(hex::encode(key))
 }

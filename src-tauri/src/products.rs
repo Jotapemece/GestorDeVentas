@@ -9,13 +9,13 @@ use tauri::State;
 fn row_to_producto(row: &rusqlite::Row) -> rusqlite::Result<Producto> {
     Ok(Producto {
         codigo: row.get(0)?, nombre: row.get(1)?, precio_usd: row.get(2)?,
-        stock: row.get(3)?, stock_minimo: row.get(4)?, created_at: row.get(5)?,
-        updated_at: row.get(6)?,
+        costo: row.get(3)?, stock: row.get(4)?, stock_minimo: row.get(5)?,
+        created_at: row.get(6)?, updated_at: row.get(7)?,
     })
 }
 
 const SQL_BASE_PRODUCTOS: &str =
-    "SELECT p.codigo, p.nombre, p.precio_usd, p.stock, COALESCE(p.stock_minimo,0), \
+    "SELECT p.codigo, p.nombre, p.precio_usd, COALESCE(p.costo,0), p.stock, COALESCE(p.stock_minimo,0), \
      COALESCE(p.created_at,''), p.updated_at \
      FROM productos p WHERE p.activo = 1";
 
@@ -24,15 +24,15 @@ const SQL_NEXT_CODIGO: &str =
      FROM productos WHERE activo = 1 AND codigo GLOB 'P[0-9]*'";
 
 const SQL_UPDATE_REACTIVATE: &str =
-    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, stock = ?3, updated_at = ?4 \
-     WHERE codigo = ?5";
+    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, costo = ?3, stock = ?4, updated_at = ?5 \
+     WHERE codigo = ?6";
 
 const SQL_INSERT_PRODUCTO: &str =
-    "INSERT INTO productos (codigo, nombre, precio_usd, stock, created_at, updated_at) \
-     VALUES (?1, ?2, ?3, ?4, datetime('now','localtime'), ?5) ON CONFLICT(codigo) DO NOTHING";
+    "INSERT INTO productos (codigo, nombre, precio_usd, costo, stock, created_at, updated_at) \
+     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6) ON CONFLICT(codigo) DO NOTHING";
 
 const SQL_UPDATE_PRODUCTO: &str =
-    "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock = ?3, updated_at = ?4 WHERE codigo = ?5";
+    "UPDATE productos SET nombre = ?1, precio_usd = ?2, costo = ?3, stock = ?4, updated_at = ?5 WHERE codigo = ?6";
 
 const SQL_HAS_SALES: &str = "SELECT COUNT(*) > 0 FROM detalles_ventas WHERE producto_codigo = ?1";
 
@@ -41,8 +41,8 @@ const SQL_SOFT_DELETE: &str = "UPDATE productos SET activo = 0, stock = 0 WHERE 
 const SQL_DELETE_PRODUCTO: &str = "DELETE FROM productos WHERE codigo = ?1";
 
 const SQL_IMPORT_PRODUCTO: &str =
-    "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, created_at, updated_at) \
-     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6)";
+    "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, costo, stock, stock_minimo, created_at, updated_at) \
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now','localtime'), ?7)";
 
 #[tauri::command]
 pub fn list_products(
@@ -99,6 +99,7 @@ pub fn create_product(
     codigo: String,
     nombre: String,
     precio_usd: f64,
+    costo: f64,
     stock: i64,
 ) -> Result<String, String> {
     if precio_usd <= 0.0 {
@@ -123,15 +124,16 @@ pub fn create_product(
         &tx,
         &format!("Creó producto '{}' (Código: {})", nombre, codigo),
     )?;
+    let costo_real = if costo > 0.0 { costo } else { 0.0 };
     tx.execute(
         SQL_UPDATE_REACTIVATE,
-        params![nombre, precio_usd, stock, ts, codigo],
+        params![nombre, precio_usd, costo_real, stock, ts, codigo],
     )
     .ok();
 
     match tx.execute(
         SQL_INSERT_PRODUCTO,
-        params![codigo, nombre, precio_usd, stock, ts],
+        params![codigo, nombre, precio_usd, costo_real, stock, ts],
     ) {
         Ok(_) => {
             tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
@@ -147,6 +149,7 @@ pub fn update_product(
     codigo: String,
     nombre: String,
     precio_usd: f64,
+    costo: f64,
     stock: i64,
 ) -> Result<String, String> {
     if precio_usd <= 0.0 {
@@ -165,7 +168,7 @@ pub fn update_product(
 
     match db.execute(
         SQL_UPDATE_PRODUCTO,
-        params![nombre, precio_usd, stock, ts, codigo],
+        params![nombre, precio_usd, costo, stock, ts, codigo],
     ) {
         Ok(_) => Ok("Producto actualizado exitosamente".to_string()),
         Err(e) => Err(format!("Error al actualizar producto: {}", e)),
@@ -251,7 +254,7 @@ pub fn import_products_from_db(
     for (codigo, nombre, precio_usd, stock, stock_minimo) in &products {
         if let Ok(n) = tx.execute(
             SQL_IMPORT_PRODUCTO,
-            params![codigo, nombre, precio_usd, stock, stock_minimo, ts],
+            params![codigo, nombre, precio_usd, 0.0, stock, stock_minimo, ts],
         ) {
             if n > 0 {
                 imported += 1;
@@ -294,6 +297,8 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
         "Código",
         "Nombre",
         "Precio USD ($)",
+        "Costo USD ($)",
+        "Margen",
         "Precio Bs.",
         "Stock",
     ];
@@ -302,6 +307,7 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
     }
 
     let number_format = Format::new().set_num_format("#,##0.00");
+    let pct_format = Format::new().set_num_format("0.0%");
     let bs_format = Format::new().set_num_format("'#,##0.00");
 
     for (row, product) in products.iter().enumerate() {
@@ -312,9 +318,16 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
             .write_number_with_format(r, 2, product.precio_usd, &number_format)
             .ok();
         sheet
-            .write_number_with_format(r, 3, product.precio_usd * tasa, &bs_format)
+            .write_number_with_format(r, 3, product.costo, &number_format)
             .ok();
-        sheet.write_number(r, 4, product.stock as f64).ok();
+        let margen = if product.costo > 0.0 { (product.precio_usd - product.costo) / product.precio_usd } else { 0.0 };
+        sheet
+            .write_number_with_format(r, 4, margen, &pct_format)
+            .ok();
+        sheet
+            .write_number_with_format(r, 5, product.precio_usd * tasa, &bs_format)
+            .ok();
+        sheet.write_number(r, 6, product.stock as f64).ok();
     }
 
     sheet.set_column_width(0, 15).ok();
@@ -322,6 +335,8 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
     sheet.set_column_width(2, 15).ok();
     sheet.set_column_width(3, 15).ok();
     sheet.set_column_width(4, 10).ok();
+    sheet.set_column_width(5, 15).ok();
+    sheet.set_column_width(6, 10).ok();
 
     let buffer = workbook.save_to_buffer()
         .map_err(|e| format!("Error al exportar: {}", e))?;
@@ -372,7 +387,7 @@ pub fn replace_all_products(
         let codigo = format!("P{:04}", count + 1);
 
         let ts = crate::helpers::now_iso();
-        tx.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, stock, 0, ts])
+        tx.execute(SQL_IMPORT_PRODUCTO, params![codigo, nombre, precio_usd, 0.0, stock, 0, ts])
             .map_err(|e| errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e)))
             .ok();
         count += 1;
@@ -464,7 +479,7 @@ pub fn import_products_from_file(
             Ok((codigo, nombre, stock, precio_usd)) => {
                 if let Err(e) = db.execute(
                     SQL_IMPORT_PRODUCTO,
-                    params![codigo, nombre, precio_usd, stock, 0, ts],
+                    params![codigo, nombre, precio_usd, 0.0, stock, 0, ts],
                 ) {
                     errors.push(format!("Línea {}: '{}' - {}", line_no + 1, nombre, e));
                     continue;
@@ -488,6 +503,7 @@ pub fn update_stock_minimo(
         return Err("El stock mínimo no puede ser negativo".to_string());
     }
     let db = state.lock_db()?;
+    crate::auth::require_admin(&state, &db, &format!("Actualizó stock mínimo de '{}' a {}", codigo, stock_minimo))?;
     db.execute(
         "UPDATE productos SET stock_minimo = ?1 WHERE codigo = ?2",
         params![stock_minimo, codigo],

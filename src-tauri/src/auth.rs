@@ -207,17 +207,52 @@ pub fn create_usuario(
     password: String,
     rol: String,
 ) -> Result<String, String> {
+    if password.len() < constants::PASSWORD_MIN_LENGTH {
+        return Err(format!(
+            "La contrase\u{00f1}a debe tener al menos {} caracteres",
+            constants::PASSWORD_MIN_LENGTH
+        ));
+    }
+    {
+        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
+        if let Some(&(count, until)) = attempts.get("create_usuario") {
+            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
+                return Err(format!(
+                    "Demasiados intentos. Intente de nuevo en {} segundos.",
+                    until.duration_since(Instant::now()).as_secs()
+                ));
+            }
+            if Instant::now() >= until {
+                attempts.remove("create_usuario");
+            }
+        }
+    }
+
     let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
-        &format!("Creó usuario '{}' con rol '{}'", username, rol),
+        &format!("Cre\u{00f3} usuario '{}' con rol '{}'", username, rol),
     )?;
     let hashed = hash_password(&password);
 
     match db.execute(SQL_INSERT_USUARIO, rusqlite::params![username, hashed, rol]) {
-        Ok(_) => Ok("Usuario creado exitosamente".to_string()),
-        Err(e) => Err(format!("Error al crear usuario: {}", e)),
+        Ok(_) => {
+            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+                attempts.remove("create_usuario");
+            }
+            Ok("Usuario creado exitosamente".to_string())
+        }
+        Err(e) => {
+            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+                let entry = attempts.entry("create_usuario".to_string()).or_insert((0, Instant::now()));
+                entry.0 += 1;
+                if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                    entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
+                }
+            }
+            Err(format!("Error al crear usuario: {}", e))
+        }
     }
 }
 
@@ -264,13 +299,37 @@ pub fn change_password(
     state: State<AppState>,
     request: ChangePasswordRequest,
 ) -> Result<String, String> {
-    let db = state.lock_db()?;
+    if request.new_password.len() < constants::PASSWORD_MIN_LENGTH {
+        return Err(format!(
+            "La contrasena debe tener al menos {} caracteres",
+            constants::PASSWORD_MIN_LENGTH
+        ));
+    }
+
     let user = state
         .current_user
         .lock()
         .map_err(|_| "Error interno".to_string())?
         .clone()
         .ok_or("No autenticado")?;
+
+    let rate_key = format!("change_password_{}", user.id);
+    {
+        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
+        if let Some(&(count, until)) = attempts.get(&rate_key) {
+            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
+                return Err(format!(
+                    "Demasiados intentos. Intente de nuevo en {} segundos.",
+                    until.duration_since(Instant::now()).as_secs()
+                ));
+            }
+            if Instant::now() >= until {
+                attempts.remove(&rate_key);
+            }
+        }
+    }
+
+    let db = state.lock_db()?;
 
     // Verify old password
     let stored_hash: String = db
@@ -282,7 +341,14 @@ pub fn change_password(
         .map_err(|_| "Usuario no encontrado".to_string())?;
 
     if !verify_password(&request.old_password, &stored_hash) {
-        return Err("La contraseña actual no es correcta".to_string());
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            let entry = attempts.entry(rate_key.clone()).or_insert((0, Instant::now()));
+            entry.0 += 1;
+            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
+            }
+        }
+        return Err("La contrasena actual no es correcta".to_string());
     }
 
     let new_hashed = hash_password(&request.new_password);
@@ -290,9 +356,13 @@ pub fn change_password(
         "UPDATE usuarios SET password = ?1 WHERE id = ?2",
         params![new_hashed, user.id],
     )
-    .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
+    .map_err(|e| format!("Error al cambiar contrasena: {}", e))?;
 
-    Ok("Contraseña cambiada exitosamente".to_string())
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        attempts.remove(&rate_key);
+    }
+
+    Ok("Contrasena cambiada exitosamente".to_string())
 }
 
 #[tauri::command]

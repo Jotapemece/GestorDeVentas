@@ -105,6 +105,7 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("014_add_sync_fields", add_sync_fields),
     ("015_add_client_sync_fields", add_client_sync_fields),
     ("016_add_product_updated_at_conflictos", add_product_updated_at_conflictos),
+    ("017_add_costo_productos", add_costo_productos),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -315,6 +316,14 @@ fn add_client_sync_fields(conn: &Connection) {
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_sync_id ON clientes(sync_id)", []).ok();
 }
 
+
+fn add_costo_productos(conn: &Connection) {
+    if !column_exists(conn, "productos", "costo") {
+        conn.execute_batch(
+            "ALTER TABLE productos ADD COLUMN costo REAL NOT NULL DEFAULT 0.0;"
+        ).ok();
+    }
+}
 
 fn add_product_updated_at_conflictos(conn: &Connection) {
     if !column_exists(conn, "productos", "updated_at") {

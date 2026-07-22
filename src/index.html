@@ -145,7 +145,7 @@
             <span class="nav-icon"><i class="nf nf-fa-bar_chart"></i></span>
             <span class="nav-text">Reportes</span>
           </button>
-          <button class="nav-btn admin-only" data-view="config">
+          <button class="nav-btn" data-view="config">
             <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
             <span class="nav-text">Config.</span>
           </button>
@@ -177,22 +177,20 @@
           <span class="nav-icon"><i class="nf nf-fa-money"></i></span>
           <span class="nav-text">Caja</span>
         </button>
-        <button class="nav-btn" data-view="audit">
-          <span class="nav-icon"><i class="nf nf-fa-history"></i></span>
-          <span class="nav-text">Historial</span>
-        </button>
-        <button class="nav-btn admin-only" data-view="config">
-          <span class="nav-icon"><i class="nf nf-fa-cog"></i></span>
-          <span class="nav-text">Config.</span>
-        </button>
-        <button class="nav-btn admin-only" data-view="sync">
-          <span class="nav-icon"><i class="nf nf-fa-cloud_upload"></i></span>
-          <span class="nav-text">Sync</span>
-        </button>
-        <button id="mobile-logout-btn" class="nav-btn danger-text">
-          <span class="nav-icon"><i class="nf nf-fa-sign_out"></i></span>
-          <span class="nav-text">Salir</span>
-        </button>
+        <div id="more-wrap" class="more-wrap">
+          <button id="more-btn" class="nav-btn">
+            <span class="nav-icon"><i class="nf nf-fa-ellipsis_h"></i></span>
+            <span class="nav-text">Más</span>
+          </button>
+          <div id="more-menu" class="more-menu hidden">
+            <button class="more-menu-item" data-view="reports"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
+            <button class="more-menu-item" data-view="audit"><i class="nf nf-fa-history"></i> Historial</button>
+            <button class="more-menu-item" data-view="config"><i class="nf nf-fa-cog"></i> Config.</button>
+            <button class="more-menu-item admin-only" data-view="sync"><i class="nf nf-fa-cloud_upload"></i> Sync</button>
+            <div class="more-menu-divider"></div>
+            <button id="mobile-logout-btn" class="more-menu-item danger-text"><i class="nf nf-fa-sign_out"></i> Salir</button>
+          </div>
+        </div>
       </nav>
       <main id="main-content">
         <section id="view-sales" class="view active">
@@ -201,6 +199,7 @@
               <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo..." aria-label="Buscar producto">
             </div>
             <div class="tasa-input-group">
+              <span class="tasa-label">Bs.</span>
               <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal">
               <span id="tasa-warning" class="tasa-warning hidden" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
               <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV">Tasa</button>
@@ -268,19 +267,21 @@
             <input type="text" id="inventory-search" placeholder="Buscar en inventario..." class="inventory-search-input" aria-label="Buscar en inventario">
           </div>
           <div class="table-container">
-            <table class="table" id="inventory-table">
-              <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Precio ($)</th>
-                    <th>Precio (Bs.)</th>
-                    <th>Stock</th>
-                    <th>Stock Mín</th>
-                    <th>Acciones</th>
-                  </tr>
-              </thead>
-              <tbody id="inventory-body"></tbody>
-            </table>
+              <table class="table" id="inventory-table">
+                <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Precio ($)</th>
+                      <th>Costo ($)</th>
+                      <th>Margen</th>
+                      <th>Precio (Bs.)</th>
+                      <th>Stock</th>
+                      <th>Stock Mín</th>
+                      <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-body"></tbody>
+              </table>
           </div>
         </section>
 
@@ -429,6 +430,14 @@
               <div class="summary-value" id="report-total-usd">$0.00</div>
             </div>
             <div class="summary-card">
+              <div class="summary-label">Costo ($)</div>
+              <div class="summary-value" id="report-total-costo">$0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Ganancia ($)</div>
+              <div class="summary-value" id="report-total-ganancia">$0.00</div>
+            </div>
+            <div class="summary-card">
               <div class="summary-label">Total Bs.</div>
               <div class="summary-value" id="report-total-bs">Bs. 0,00</div>
             </div>
@@ -454,6 +463,8 @@
                   <th>M&eacute;todo</th>
                   <th>Productos</th>
                   <th>Total ($)</th>
+                  <th>Costo ($)</th>
+                  <th>Ganancia ($)</th>
                   <th>Total (Bs.)</th>
                 </tr>
               </thead>
@@ -580,6 +591,13 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-robot"></i> Asistente IA (Enar)</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="ia-toggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
           <div class="config-card">
@@ -613,6 +631,14 @@
               <div class="config-row">
                 <span class="config-label"><i class="nf nf-fa-database"></i> Base de datos</span>
                 <button id="backup-db-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Descargar respaldo</button>
+              </div>
+              <div class="config-row" style="margin-top:8px">
+                <span class="config-label"><i class="nf nf-fa-upload"></i> Restaurar respaldo</span>
+                <button id="restore-backup-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-upload"></i> Restaurar</button>
+              </div>
+              <div class="config-row" style="margin-top:8px">
+                <span class="config-label"><i class="nf nf-fa-key"></i> Clave de cifrado</span>
+                <button id="show-backup-key-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-eye"></i> Mostrar clave</button>
               </div>
             </div>
           </div>
@@ -658,7 +684,7 @@
               </div>
             </div>
           </div>
-          <div class="config-card admin-only">
+          <div class="config-card">
             <div class="config-card-header">
               <i class="nf nf-fa-robot"></i> IA / Sugerencias de Compra
               <span class="config-card-desc">Configura la integraci&oacute;n con OpenRouter para generar &oacute;rdenes de compra autom&aacute;ticas</span>
@@ -674,12 +700,20 @@
               </div>
               <div class="config-field">
                 <label>Modelo</label>
-                <select id="openrouter-model" class="form-input">
-                  <option value="nvidia/nemotron-3-nano-30b-a3b:free">Nemotron Nano 30B (r&aacute;pido)</option>
-                  <option value="nvidia/nemotron-3-super-120b-a12b:free" selected>Nemotron Super 120B (balance)</option>
-                  <option value="nvidia/nemotron-3-ultra-550b-a55b:free">Nemotron Ultra 550B (potente)</option>
-                  <option value="openai/gpt-oss-20b:free">GPT-OSS 20B</option>
-                </select>
+                <div class="custom-select" id="openrouter-model-wrap">
+                  <button class="custom-select-btn" id="openrouter-model-btn">
+                    <span id="openrouter-model-value" class="custom-select-value">Auto (router gratuito)</span>
+                    <i class="nf nf-fa-chevron_down"></i>
+                  </button>
+                  <div class="custom-select-menu" id="openrouter-model-menu">
+                    <button data-value="openrouter/free">Auto (router gratuito)</button>
+                    <button data-value="google/gemma-4-31b-it:free">Gemma 4 31B — Google</button>
+                    <button data-value="nvidia/nemotron-3-super-120b-a12b:free">Nemotron 3 Super 120B — NVIDIA</button>
+                    <button data-value="openai/gpt-oss-20b:free">GPT-OSS 20B — OpenAI</button>
+                    <button data-value="qwen/qwen3-next-80b-a3b-instruct:free">Qwen3 Next 80B — Alibaba</button>
+                    <button data-value="google/gemma-4-26b-a4b-it:free">Gemma 4 26B — Google</button>
+                  </div>
+                </div>
               </div>
               <div style="margin-top:12px">
                 <button id="generate-order-btn" class="btn btn-accent"><i class="nf nf-fa-shopping_cart"></i> Generar orden de compra</button>
@@ -705,7 +739,7 @@
           <div class="view-header">
             <h2><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</h2>
           </div>
-          <div style="max-width:960px;margin:20px auto 0;padding:0 16px;width:100%">
+          <div style="max-width:960px;margin:0 auto;padding:0 16px">
             <div id="sync-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
               <div style="background:var(--card);border-radius:10px;padding:14px;box-shadow:var(--shadow);text-align:center">
                 <div style="font-size:24px;font-weight:700;color:var(--text)" id="stat-products">-</div>
@@ -771,23 +805,24 @@
                     </details>
                   </div>
                 </div>
-                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow);border-left:4px solid var(--accent);background:linear-gradient(135deg,var(--card) 0%,color-mix(in srgb,var(--accent) 6%,var(--card)) 100%)">
+                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
                   <h3 style="margin:0 0 12px;font-size:15px;color:var(--text);display:flex;align-items:center;gap:8px">
-                    <i class="nf nf-fa-clock" style="color:var(--accent)"></i> Sincronización automática
-                    <span style="margin-left:auto;font-size:11px;background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-weight:500">Activo</span>
+                    <i class="nf nf-fa-clock" style="color:var(--primary)"></i> Sincronizaci&oacute;n autom&aacute;tica
+                    <span style="margin-left:auto;font-size:11px;background:var(--primary);color:#fff;padding:2px 8px;border-radius:10px;font-weight:500">Activo</span>
                   </h3>
                   <div style="display:flex;flex-direction:column;gap:12px">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
                       <div style="display:flex;align-items:center;gap:6px">
-                        <i class="nf nf-fa-refresh" style="font-size:14px;color:var(--accent)"></i>
+                        <i class="nf nf-fa-refresh" style="font-size:14px;color:var(--primary)"></i>
                         <span style="font-size:13px;color:var(--text)">Intervalo de descarga</span>
                       </div>
                       <div style="display:flex;align-items:center;gap:6px">
-                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" style="width:56px;padding:4px 8px;border:2px solid var(--accent);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:center;font-weight:600">
+                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" style="width:56px;padding:4px 8px;border:2px solid var(--primary);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:center;font-weight:600">
                         <span style="font-size:12px;color:var(--text-light);min-width:28px">min</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:color-mix(in srgb,var(--accent) 8%,var(--card));border-radius:8px">
-                      <i class="nf nf-fa-info_circle" style="font-size:12px;color:var(--accent);flex-shrink:0"></i>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:color-mix(in srgb,var(--primary) 8%,var(--card));border-radius:8px">
+                      <i class="nf nf-fa-info_circle" style="font-size:12px;color:var(--primary);flex-shrink:0"></i>
                       <span style="font-size:11px;color:var(--text-light);line-height:1.4">Despu&eacute;s de cada venta se sube autom&aacute;ticamente. Este timer descarga datos de otros dispositivos en segundo plano.</span>
                     </div>
                   </div>
@@ -887,6 +922,10 @@
           <input type="number" id="product-precio" step="any" min="0" placeholder="0.00">
         </div>
         <div class="form-group">
+          <label>Costo en USD ($)</label>
+          <input type="number" id="product-costo" step="any" min="0" placeholder="0.00">
+        </div>
+        <div class="form-group">
           <label>Stock</label>
           <input type="number" id="product-stock" step="1" min="0" placeholder="0">
         </div>
@@ -913,6 +952,8 @@
         <div class="detail-grid">
           <div class="detail-field"><span class="detail-label">Nombre</span><span class="detail-value" id="detail-nombre"></span></div>
           <div class="detail-field"><span class="detail-label">Precio ($)</span><span class="detail-value" id="detail-precio"></span></div>
+          <div class="detail-field"><span class="detail-label">Costo ($)</span><span class="detail-value" id="detail-costo"></span></div>
+          <div class="detail-field"><span class="detail-label">Margen</span><span class="detail-value" id="detail-margen"></span></div>
           <div class="detail-field"><span class="detail-label">Stock</span><span class="detail-value" id="detail-stock"></span></div>
           <div class="detail-field"><span class="detail-label">Stock Mínimo</span><span class="detail-value" id="detail-stock-minimo"></span></div>
           <div class="detail-field"><span class="detail-label">Fecha de Creaci&oacute;n</span><span class="detail-value" id="detail-created"></span></div>
@@ -1210,7 +1251,7 @@
           <button class="guide-tab" data-section="reportes"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
           <button class="guide-tab" data-section="sync"><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</button>
           <button class="guide-tab" data-section="config"><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</button>
-          <button class="guide-tab" data-section="calculadora"><i class="nf nf-fa-calculator"></i> Calculadora</button>
+          <button class="guide-tab" data-section="ia"><i class="nf nf-fa-robot"></i> IA / Asistente</button>
         </aside>
         <div class="guide-pages">
           <div class="guide-page active" id="guide-ventas">
@@ -1338,20 +1379,38 @@
               <span><strong>Tip:</strong> Solo los usuarios administradores pueden acceder a Configuraci&oacute;n y Sincronizaci&oacute;n.</span>
             </div>
           </div>
-          <div class="guide-page" id="guide-calculadora">
-            <h4><i class="nf nf-fa-calculator"></i> Calculadora</h4>
+          <div class="guide-page" id="guide-ia">
+            <h4><i class="nf nf-fa-robot"></i> Asistente IA (Enar)</h4>
             <div class="guide-section">
-              <p>Calculadora integrada disponible desde el POS:</p>
+              <p>El sistema cuenta con un asistente de inteligencia artificial llamado <strong>Enar</strong> (el zorro), integrado para ayudarte con el uso del POS. Est&aacute; potenciado por <strong>OpenRouter</strong> y puedes configurar tu propia API key en Configuraci&oacute;n &rarr; IA.</p>
+              <h5>C&oacute;mo funciona</h5>
               <ul>
-                <li><strong>Abrir:</strong> presiona el bot&oacute;n <i class="nf nf-fa-calculator"></i> en el header de ventas.</li>
-                <li><strong>Atajos:</strong> <kbd>0-9</kbd> para n&uacute;meros, <kbd>+</kbd> <kbd>-</kbd> <kbd>*</kbd> <kbd>/</kbd> para operaciones, <kbd>Enter</kbd> para el resultado.</li>
-                <li><strong>Tasa:</strong> presiona el bot&oacute;n <kbd>$</kbd> para insertar la tasa actual en la expresi&oacute;n.</li>
-                <li><strong>Historial:</strong> navega con las flechas <kbd>&#9651;</kbd> <kbd>&#9661;</kbd> para ver resultados anteriores.</li>
+                <li>Haz clic en el bot&oacute;n flotante del zorro <i class="nf nf-fa-robot"></i> para abrir el chat.</li>
+                <li>Escribe tu pregunta sobre productos, ventas, clientes o configuraci&oacute;n.</li>
+                <li>Enar consulta los datos en vivo del sistema (productos activos, tasa, ventas del d&iacute;a, stock bajo, clientes con deuda) para darte respuestas precisas.</li>
+                <li>Usa los <strong>prompts r&aacute;pidos</strong> (Stock bajo, Ventas hoy, Deudas) para consultas frecuentes.</li>
+                <li>El FAB del chat se puede arrastrar a cualquier posici&oacute;n de la pantalla.</li>
+              </ul>
+              <h5>Qu&eacute; est&aacute; permitido preguntar</h5>
+              <ul>
+                <li>Productos: precios, stock, stock m&iacute;nimo, historial.</li>
+                <li>Ventas: resumen del d&iacute;a, ventas por per&iacute;odo, productos m&aacute;s vendidos.</li>
+                <li>Clientes: saldos, deudas, historial de cr&eacute;dito.</li>
+                <li>Configuraci&oacute;n: tasa del d&iacute;a, par&aacute;metros del sistema.</li>
+                <li>Generar &oacute;rdenes de compra sugeridas basadas en stock bajo.</li>
+              </ul>
+              <h5>Tips de uso</h5>
+              <ul>
+                <li><strong>API Key:</strong> obt&eacute;n una key gratuita en <a href="https://openrouter.ai" target="_blank">openrouter.ai</a> (sin tarjeta de cr&eacute;dito).</li>
+                <li><strong>Modelo:</strong> usa el router autom&aacute;tico <kbd>openrouter/free</kbd> para mejor disponibilidad, o selecciona un modelo espec&iacute;fico.</li>
+                <li><strong>Contexto en vivo:</strong> Enar siempre ve los datos actuales del sistema, no necesitas escribir contexto t&uacute; mismo.</li>
+                <li><strong>Chat persistente:</strong> el historial de la sesi&oacute;n se mantiene mientras no recargues la p&aacute;gina.</li>
+                <li><strong>Desactivar:</strong> puedes desactivar el asistente desde Configuraci&oacute;n &rarr; Calidad de vida.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-keyboard"></i>
-              <span><strong>Tip:</strong> Presiona <kbd>C</kbd> para limpiar, <kbd>Backspace</kbd> para borrar el &uacute;ltimo d&iacute;gito y <kbd>Escape</kbd> para cerrar.</span>
+              <span><strong>Tip:</strong> Si el asistente no responde, verifica que la API key sea correcta en Configuraci&oacute;n &rarr; IA. Los modelos gratuitos tienen l&iacute;mites de 20-60 requests por minuto.</span>
             </div>
           </div>
         </div>
@@ -1436,9 +1495,24 @@
         </svg>
         <span>Enar</span>
       </div>
-      <button id="chat-close-btn" class="chat-close">&times;</button>
+      <div style="display:flex;align-items:center;gap:4px">
+        <button id="chat-expand-btn" class="chat-header-btn" title="Expandir"><i class="nf nf-fa-expand"></i></button>
+        <button id="chat-close-btn" class="chat-close">&times;</button>
+      </div>
     </div>
     <div id="chat-messages" class="chat-messages">
+      <div id="chat-thinking" class="chat-msg chat-msg-ai" style="display:none">
+        <div class="chat-thinking">
+          <svg class="chat-thinking-icon" viewBox="0 0 100 100" fill="none"><path d="M50 10 C35 10 15 20 15 45 C15 65 30 78 35 82 L35 90 C35 93 37 95 40 95 L60 95 C63 95 65 93 65 90 L65 82 C70 78 85 65 85 45 C85 20 65 10 50 10Z" fill="#e87d3e"/><path d="M35 50 A3 3 0 1 0 35 49.9" fill="#2d2d2d"/><path d="M65 50 A3 3 0 1 0 65 49.9" fill="#2d2d2d"/><path d="M42 60 Q50 66 58 60" stroke="#2d2d2d" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M30 30 Q25 22 18 25" stroke="#f5f5f5" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M70 30 Q75 22 82 25" stroke="#f5f5f5" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+          <span class="chat-thinking-text">Pensando</span>
+          <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+        </div>
+      </div>
+    </div>
+    <div class="chat-quick-prompts">
+      <button class="chat-prompt-btn" data-prompt="Dime los productos que est&eacute;n en el stock m&iacute;nimo o agotados"><i class="nf nf-fa-cube"></i> Stock bajo</button>
+      <button class="chat-prompt-btn" data-prompt="Resume las ventas de hoy"><i class="nf nf-fa-bar_chart"></i> Ventas hoy</button>
+      <button class="chat-prompt-btn" data-prompt="Dime los clientes con deuda pendiente"><i class="nf nf-fa-credit_card"></i> Deudas</button>
     </div>
     <div class="chat-input-area">
       <textarea id="chat-input" class="chat-input" placeholder="Escribe tu mensaje..." rows="1"></textarea>

@@ -3,7 +3,6 @@ const invoke = window.__TAURI__.core.invoke;
 const IS_ANDROID = navigator.userAgent.includes('Android');
 
 /* ========== CONSTANTS ========== */
-const TOAST_DURATION = 3000;
 const AUDIO = {
   FREQ: {
     ADD: 880,
@@ -21,8 +20,6 @@ const AUDIO = {
   },
   VOLUME_BASE: 0.3,
 };
-const SEARCH_DEBOUNCE_MS = 200;
-const AUDIT_LIMIT_DEFAULT = 50;
 const FONT_SIZE_MIN = 75;
 const FONT_SIZE_MAX = 150;
 const FONT_SIZE_DEFAULT = 100;
@@ -42,6 +39,11 @@ const CFG_REDONDEO_BS = 'redondeo_bs';
 const CFG_SIDEBAR_AUTO_HIDE = 'sidebar_auto_hide';
 const CFG_CONFIRMAR_VENTA = 'confirmar_venta';
 const CFG_ANIMACIONES = 'animaciones_habilitadas';
+const CFG_IA_HABILITADO = 'ia_habilitado';
+const CFG_OPENROUTER_API_KEY = 'openrouter_api_key';
+const CFG_OPENROUTER_MODEL = 'openrouter_model';
+const CFG_TASA_DOLAR = 'tasa_dolar';
+const CFG_DISPOSITIVO_ID = 'dispositivo_id';
 
 // Payment method keys (deben coincidir con constants.rs)
 const METODO_EFECTIVO_BS = 'efectivo_bs';
@@ -52,43 +54,64 @@ const METODO_PAGO_MOVIL = 'pago_movil';
 const METODO_CREDITO = 'credito';
 const METODO_MIXTO = 'mixto';
 const ROL_ADMIN = 'admin';
-const PAGO_MOVIL_REF_LEN = 4;
 
 // Config keys (db::configuracion.clave) — back-end sync
 const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
 const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
 
-const SYNC_SALE_DEBOUNCE_MS = 10 * 60 * 1000;
-const TOAST_FADE_MS = 300;
-const SYNC_AUTO_MIN = 30;
-const SYNC_AUTO_MAX = 480;
+// UI Timing & Layout Constants
+const TOAST = { DURATION: 3000, FADE_MS: 300 };
+const KEYBOARD = { THRESHOLD: 100, PAD_OFFSET: 40, SCROLL_DELAY_MS: 300 };
+const SIDEBAR = { HIDE_DELAY: 250, HOVER_MARGIN: 14, HOVER_CHECK_MS: 350 };
+const DROPDOWN = { MIN_PADDING: 4 };
+const FONT = { SIZE_STEP: 5, SIZE_MIN: 75, SIZE_MAX: 150, SIZE_DEFAULT: 100 };
+const BREAKPOINT = { DESKTOP: 768, MOBILE: 500 };
+
+// Chart Constants
+const CHART = {
+  COLORS: ['#6C63AC', '#A8D5BA', '#F5B7B1', '#85C1E9', '#F9E79F', '#D7BDE2', '#A3E4D7', '#F5CBA7', '#AED6F1', '#ABEBC6'],
+  BAR_HEIGHT: 280,
+  BAR_HEIGHT_MOBILE: 240,
+  CANVAS_MAX_WIDTH: 600,
+  BAR_ANIM_MS: 600,
+  PIE_ANIM_MS: 500,
+  CANVAS_WIDTH: 260,
+  CANVAS_HEIGHT: 200,
+  CENTER_X: 90,
+  CENTER_Y: 100,
+  RADIUS: 72,
+  LEGEND_X: 175,
+  LEGEND_Y_START: 10,
+  LEGEND_LINE_HEIGHT: 18,
+};
+
+// Print Constants
+const PRINT = {
+  WIDTH: 700,
+  HEIGHT: 500,
+  FRAME_CSS: 'position:fixed;top:-9999px;left:-9999px;width:700px;height:500px;border:none;',
+};
+
+// Sync Constants
+const SYNC = {
+  AUTO_MIN: 30,
+  AUTO_MAX: 480,
+  SALE_DEBOUNCE_MS: 10 * 60 * 1000,
+};
+
+// General Constants
 const PRODUCT_CACHE_PAGE_SIZE = 5000;
-const MIN_PASSWORD_LEN = 4;
-const FONT_SIZE_STEP = 5;
+const MIN_PASSWORD_LEN = 6;
 const HISTORIAL_MAX_DAYS = 365;
 const START_OF_DAY_SUFFIX = ' 00:00:00';
 const END_OF_DAY_SUFFIX = ' 23:59:59';
-const BREAKPOINT_DESKTOP = 768;
-const MOBILE_BREAKPOINT = 500;
-const BAR_CHART_HEIGHT = 280;
-const BAR_CHART_HEIGHT_MOBILE = 240;
-const DASHBOARD_CANVAS_MAX_WIDTH = 600;
-const BAR_CHART_ANIM_MS = 600;
-const PIE_CHART_ANIM_MS = 500;
-const KEYBOARD_THRESHOLD = 100;
-const KEYBOARD_PAD_OFFSET = 40;
-const KEYBOARD_SCROLL_DELAY_MS = 300;
-const DROPDOWN_MIN_PADDING = 4;
-const SIDEBAR_HOVER_MARGIN = 14;
-const SIDEBAR_HOVER_CHECK_MS = 350;
-
-async function getUserConfig(key) {
-  return invoke('get_user_config_value', { key });
-}
-async function setUserConfig(key, value) {
-  return invoke('set_user_config_value', { key, value });
-}
+const SEARCH_DEBOUNCE_MS = 200;
+const AUDIT_LIMIT_DEFAULT = 50;
+const INVENTORY_PAGE_SIZE = 50;
+const PAGO_MOVIL_REF_LEN = 4;
+const SOUND_ENABLED = '1';
+const SOUND_DISABLED = '0';
 
 const ICON = {
   UNLOCK: '<i class="nf nf-fa-unlock"></i>',
@@ -97,21 +120,6 @@ const ICON = {
   EYE: '<i class="nf nf-fa-eye"></i>',
   EYE_SLASH: '<i class="nf nf-fa-eye_slash"></i>',
 };
-
-const CHART_COLORS = ['#6C63AC', '#A8D5BA', '#F5B7B1', '#85C1E9', '#F9E79F', '#D7BDE2', '#A3E4D7', '#F5CBA7', '#AED6F1', '#ABEBC6'];
-const CANVAS_WIDTH = 260;
-const CANVAS_HEIGHT = 200;
-const CHART_CENTER_X = 90;
-const CHART_CENTER_Y = 100;
-const CHART_RADIUS = 72;
-const LEGEND_X = 175;
-const LEGEND_Y_START = 10;
-const LEGEND_LINE_HEIGHT = 18;
-const PRINT_WIDTH = 700;
-const PRINT_HEIGHT = 500;
-const PRINT_FRAME_CSS = 'position:fixed;top:-9999px;left:-9999px;width:' + PRINT_WIDTH + 'px;height:' + PRINT_HEIGHT + 'px;border:none;';
-const SOUND_ENABLED = '1';
-const SOUND_DISABLED = '0';
 
 /* ========== HELPERS ========== */
 function cssVar(name, fallback = '') {
@@ -130,11 +138,39 @@ function renderTableRows(tbody, data, rowFn) {
   });
   tbody.appendChild(frag);
 }
+
+async function getUserConfig(key) {
+  return invoke('get_user_config_value', { key });
+}
+async function setUserConfig(key, value) {
+  return invoke('set_user_config_value', { key, value });
+}
+
 async function loadToggleConfig(key, defaultValue = false) {
   try {
     const val = await getUserConfig(key);
     return val === '1';
   } catch (e) { return defaultValue; }
+}
+
+function setCustomSelectValue(wrap, value) {
+  if (!wrap) return;
+  var btn = wrap.querySelector('.custom-select-btn');
+  var valSpan = wrap.querySelector('.custom-select-value');
+  var menu = wrap.querySelector('.custom-select-menu');
+  if (!menu) return;
+  var options = menu.querySelectorAll('button');
+  for (var i = 0; i < options.length; i++) {
+    var opt = options[i];
+    if (opt.dataset.value === value) {
+      opt.classList.add('selected');
+      if (valSpan) valSpan.textContent = opt.textContent;
+    } else {
+      opt.classList.remove('selected');
+    }
+  }
+  wrap.dataset.value = value;
+  if (btn) btn.dataset.value = value;
 }
 
 /* ========== SELECTORS ========== */
@@ -206,9 +242,12 @@ const SEL = {
   productPrecio: '#product-precio',
   productStock: '#product-stock',
   productStockMinimo: '#product-stock-minimo',
+  productCosto: '#product-costo',
   productDetailModal: '#product-detail-modal',
   detailNombre: '#detail-nombre',
   detailPrecio: '#detail-precio',
+  detailCosto: '#detail-costo',
+  detailMargen: '#detail-margen',
   detailStock: '#detail-stock',
   detailStockMinimo: '#detail-stock-minimo',
   detailCreated: '#detail-created',
@@ -306,6 +345,8 @@ const SEL = {
   reportVendorFilter: '#report-vendor-filter',
   reportTotalCount: '#report-total-count',
   reportTotalUsd: '#report-total-usd',
+  reportTotalCosto: '#report-total-costo',
+  reportTotalGanancia: '#report-total-ganancia',
   reportTotalBs: '#report-total-bs',
   reportSalesBody: '#report-sales-body',
   reportExportBtn: '#report-export-btn',
@@ -442,7 +483,10 @@ const SEL = {
   // --- OpenRouter / Sugerencias ---
   openrouterApiKey: '#openrouter-api-key',
   openrouterSaveKeyBtn: '#openrouter-save-key-btn',
-  openrouterModel: '#openrouter-model',
+  openrouterModelWrap: '#openrouter-model-wrap',
+  openrouterModelBtn: '#openrouter-model-btn',
+  openrouterModelValue: '#openrouter-model-value',
+  openrouterModelMenu: '#openrouter-model-menu',
   generateOrderBtn: '#generate-order-btn',
   suggestionModal: '#suggestion-modal',
   suggestionContent: '#suggestion-content',
@@ -457,6 +501,29 @@ const SEL = {
   chatMessages: '#chat-messages',
   chatInput: '#chat-input',
   chatSendBtn: '#chat-send-btn',
+  chatThinking: '#chat-thinking',
+  chatExpandBtn: '#chat-expand-btn',
+
+  // --- Mobile ---
+  moreBtn: '#more-btn',
+  moreMenu: '#more-menu',
+  moreWrap: '#more-wrap',
+
+  // --- Misc missing ---
+  sidebar: '#sidebar',
+  syncAutoInterval: '#sync-auto-interval',
+  viewCashier: '#view-cashier',
+  cartCurrencyToggle: '#cart-currency-toggle',
+  restoreBackupBtn: '#restore-backup-btn',
+  showBackupKeyBtn: '#show-backup-key-btn',
+  refreshDevicesBtn: '#refresh-devices-btn',
+  confirmarVentaToggle: '#confirmar-venta-toggle',
+  iaToggle: '#ia-toggle',
+  auditClearBtn: '#audit-clear-btn',
+  auditClearConfigBtn: '#audit-clear-config-btn',
+  clockHour: '#clock-hour',
+  clockMinute: '#clock-minute',
+  clockSecond: '#clock-second',
 };
 
 /* ========== CALCULATOR ========== */
@@ -599,9 +666,9 @@ function switchGuideTab(section) {
 
 /* ========== CLOCK ========== */
 function startClock() {
-  const hourHand = document.querySelector('#clock-hour');
-  const minuteHand = document.querySelector('#clock-minute');
-  const secondHand = document.querySelector('#clock-second');
+  const hourHand = qs(SEL.clockHour);
+  const minuteHand = qs(SEL.clockMinute);
+  const secondHand = qs(SEL.clockSecond);
   if (!hourHand) return;
   function update() {
     const now = new Date();
@@ -617,12 +684,11 @@ function startClock() {
 /* ========== SIDEBAR AUTO-HIDE ========== */
 let sidebarAutoHideEnabled = false;
 let sidebarHideTimeout = null;
-const SIDEBAR_HIDE_DELAY = 250;
 
 function initSidebarAutoHide() {
   if (IS_ANDROID) return;
-  const sidebar = document.getElementById('sidebar');
-  const mainApp = document.getElementById('main-app');
+  const sidebar = qs(SEL.sidebar);
+  const mainApp = qs(SEL.mainApp);
   if (!sidebar || !mainApp) return;
 
   let lastMouseX = -1, lastMouseY = -1;
@@ -631,11 +697,11 @@ function initSidebarAutoHide() {
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
     if (!sidebarAutoHideEnabled) return;
-    if (e.clientX <= SIDEBAR_HOVER_MARGIN) {
+    if (e.clientX <= SIDEBAR.HOVER_MARGIN) {
       clearTimeout(sidebarHideTimeout);
       sidebarHideTimeout = null;
       mainApp.classList.remove('sidebar-hidden');
-      setTimeout(checkSidebarHover, SIDEBAR_HOVER_CHECK_MS);
+      setTimeout(checkSidebarHover, SIDEBAR.HOVER_CHECK_MS);
       return;
     }
     checkSidebarHover();
@@ -654,7 +720,7 @@ function initSidebarAutoHide() {
       sidebarHideTimeout = setTimeout(() => {
         mainApp.classList.add('sidebar-hidden');
         sidebarHideTimeout = null;
-      }, SIDEBAR_HIDE_DELAY);
+      }, SIDEBAR.HIDE_DELAY);
     }
   }
 }
@@ -662,7 +728,7 @@ function initSidebarAutoHide() {
 function setSidebarAutoHide(enabled) {
   if (IS_ANDROID) return;
   sidebarAutoHideEnabled = enabled;
-  const mainApp = document.getElementById('main-app');
+  const mainApp = qs(SEL.mainApp);
   if (!mainApp) return;
   if (enabled) {
     mainApp.classList.add('sidebar-hidden');
@@ -676,7 +742,7 @@ async function loadSidebarAutoHideConfig() {
     const val = await getUserConfig(CFG_SIDEBAR_AUTO_HIDE);
     const enabled = val === 'true';
     setSidebarAutoHide(enabled);
-    const toggle = document.getElementById('sidebar-auto-hide-toggle');
+    const toggle = qs(SEL.sidebarAutoHideToggle);
     if (toggle) toggle.checked = enabled;
   } catch (e) {
     setSidebarAutoHide(false);
@@ -704,7 +770,9 @@ function createCartRow(item) {
 function createInventoryRow(p, editBtn) {
   var stockClass = (p.stock < p.stock_minimo) ? ' class="low-stock"' : '';
   var stockBadge = (p.stock < p.stock_minimo) ? '<span class="badge badge-danger" title="Debajo del stock mínimo">!</span>' : '';
-  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
+  var costo = p.costo || 0;
+  var margen = (costo > 0 && p.precio_usd > 0) ? ((p.precio_usd - costo) / p.precio_usd * 100).toFixed(1) + '%' : '—';
+  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
@@ -737,7 +805,12 @@ function createReportRow(v) {
   const metodoLabel = formatMetodoLabel(v.venta.metodo_pago);
   const prodCount = v.productos ? v.productos.reduce(function(s, p) { return s + p.cantidad; }, 0) : 0;
   const badge = v.venta.anulada ? ' <span class="text-muted">(Anulada)</span>' : '';
-  return '<td>' + v.venta.id + '</td><td>' + escapeHtml(v.venta.fecha_hora) + '</td><td>' + escapeHtml(v.venta.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + prodCount + '</td><td>' + formatUSD(v.venta.total_usd) + '</td><td>' + formatBS(v.venta.total_bs) + badge + '</td>';
+  var costoTotal = 0;
+  if (v.productos) {
+    v.productos.forEach(function(d) { costoTotal += (d.costo || 0) * d.cantidad; });
+  }
+  var ganancia = v.venta.total_usd - costoTotal;
+  return '<td>' + v.venta.id + '</td><td>' + escapeHtml(v.venta.fecha_hora) + '</td><td>' + escapeHtml(v.venta.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + prodCount + '</td><td>' + formatUSD(v.venta.total_usd) + '</td><td>' + formatUSD(costoTotal) + '</td><td>' + formatUSD(Math.max(0, ganancia)) + '</td><td>' + formatBS(v.venta.total_bs) + badge + '</td>';
 }
 
 const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
@@ -765,7 +838,7 @@ function hideToast(el) {
   if (el._closing) return;
   el._closing = true;
   el.classList.add('fade-out');
-  setTimeout(() => { el.classList.add('hidden'); el.classList.remove('fade-out'); el._closing = false; }, TOAST_FADE_MS);
+  setTimeout(() => { el.classList.add('hidden'); el.classList.remove('fade-out'); el._closing = false; }, TOAST.FADE_MS);
 }
 
 function showToast(msg, type = 'success') {
@@ -775,7 +848,7 @@ function showToast(msg, type = 'success') {
   t.classList.remove('hidden', 'fade-out');
   t._closing = false;
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => hideToast(t), TOAST_DURATION);
+  t._timer = setTimeout(() => hideToast(t), TOAST.DURATION);
   t.onclick = () => { clearTimeout(t._timer); hideToast(t); };
 }
 
@@ -1078,16 +1151,16 @@ let saleUploadTimer = null;
 let isSyncing = false;
 
 function loadSyncAutoConfig() {
-  const input = qs('#sync-auto-interval');
+  const input = qs(SEL.syncAutoInterval);
   if (!input) return;
   invoke('get_config_value', { key: CFG_SYNC_AUTO_INTERVAL }).then(val => {
     const minutes = parseInt(val) || 30;
-    input.value = Math.max(SYNC_AUTO_MIN, Math.min(SYNC_AUTO_MAX, minutes));
+    input.value = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
     startSyncAutoInterval(minutes);
   }).catch(() => {});
   input.addEventListener('change', () => {
     let minutes = parseInt(input.value) || 30;
-    minutes = Math.max(SYNC_AUTO_MIN, Math.min(SYNC_AUTO_MAX, minutes));
+    minutes = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
     input.value = minutes;
     invoke('set_config_value', { key: CFG_SYNC_AUTO_INTERVAL, value: String(minutes) }).catch(() => {});
     startSyncAutoInterval(minutes);
@@ -1114,7 +1187,7 @@ function scheduleSaleUpload() {
       invoke('sync_all').then(() => { isSyncing = false; }).catch(() => { isSyncing = false; });
     }
     saleUploadTimer = null;
-  }, SYNC_SALE_DEBOUNCE_MS);
+  }, SYNC.SALE_DEBOUNCE_MS);
 }
 
 function showView(name) {
@@ -1129,7 +1202,7 @@ function showView(name) {
     creditos: loadCreditos,
     cashier: loadDailySummary,
     audit: loadAudit,
-    reports: () => { loadUserList(); setDefaultReportDates(); },
+    reports: () => { setDefaultReportDates(); },
     config: () => { loadThemeConfig(); loadConflictCount(); },
     sync: () => { loadSyncConfig(); loadConflictCount(); },
   };
@@ -1195,6 +1268,7 @@ async function handleLogin() {
       initGuide();
       loadSidebarAutoHideConfig();
       applyRoleUI();
+      loadSyncAutoConfig();
       await loadTasa();
       await loadProductCache();
       try { lastViewName = localStorage.getItem('last_view') || 'sales'; } catch (e) {}
@@ -1747,6 +1821,8 @@ async function confirmPayment() {
     await loadProductCache();
     renderCart(); updateCheckoutBtn(); closePaymentModal();
     scheduleSaleUpload();
+    /* Share receipt on mobile */
+    shareReceipt(venta);
   } catch (e) { showToast('Error: ' + e, 'error'); playSound('error'); }
   finally {
     processingPayment = false;
@@ -1758,7 +1834,6 @@ async function confirmPayment() {
 
 /* ========== INVENTORY ========== */
 let inventoryPage = 1;
-const INVENTORY_PAGE_SIZE = 50;
 
 async function loadInventory() {
   const query = qs(SEL.inventorySearch).value.trim();
@@ -1769,7 +1844,7 @@ async function loadInventory() {
     const products = result.data || result;
     tbody.innerHTML = '';
     if (products.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6">' + emptyState('<i class="nf nf-fa-archive"></i>', query ? 'Sin resultados' : 'No hay productos', query ? 'Pruebe con otro t\u00e9rmino de b\u00fasqueda' : 'Agregue productos desde el bot\u00f3n superior') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8">' + emptyState('<i class="nf nf-fa-archive"></i>', query ? 'Sin resultados' : 'No hay productos', query ? 'Pruebe con otro t\u00e9rmino de b\u00fasqueda' : 'Agregue productos desde el bot\u00f3n superior') + '</td></tr>';
       renderInventoryPagination(result.total || 0);
       return;
     }
@@ -1814,7 +1889,7 @@ function toggleDropdown(btn) {
   closeAllDropdowns();
   if (!isOpen) {
     menu.classList.add('show');
-    if (window.innerWidth > BREAKPOINT_DESKTOP) {
+    if (window.innerWidth > BREAKPOINT.DESKTOP) {
       const btnRect = btn.getBoundingClientRect();
       const mw = menu.offsetWidth;
       menu.style.position = 'fixed';
@@ -1848,6 +1923,9 @@ function showProductDetail(codigo) {
   if (!p) { showToast('Producto no encontrado', 'error'); return; }
   qs(SEL.detailNombre).textContent = p.nombre;
   qs(SEL.detailPrecio).textContent = formatUSD(p.precio_usd);
+  qs(SEL.detailCosto).textContent = formatUSD(p.costo || 0);
+  const margen = (p.costo > 0 && p.precio_usd > 0) ? ((p.precio_usd - p.costo) / p.precio_usd * 100).toFixed(1) + '%' : '—';
+  qs(SEL.detailMargen).textContent = margen;
   qs(SEL.detailStock).textContent = p.stock;
   qs(SEL.detailStockMinimo).textContent = p.stock_minimo;
   qs(SEL.detailCreated).textContent = p.created_at || 'No disponible';
@@ -1862,7 +1940,7 @@ function openNewProductModal() {
   editingProduct = null;
   qs(SEL.productModalTitle).textContent = 'Registrar Nuevo Producto';
   qs(SEL.productSaveText).textContent = 'Registrar';
-  [SEL.productNombre, SEL.productPrecio, SEL.productStock, SEL.productStockMinimo].forEach(id => qs(id).value = '');
+  [SEL.productNombre, SEL.productPrecio, SEL.productCosto, SEL.productStock, SEL.productStockMinimo].forEach(id => qs(id).value = '');
   qs(SEL.productDeleteBtn).style.display = 'none';
   showModal(qs(SEL.productModal));
 }
@@ -1875,6 +1953,7 @@ function editProduct(codigo) {
   qs(SEL.productSaveText).textContent = 'Guardar';
   qs(SEL.productNombre).value = p.nombre;
   qs(SEL.productPrecio).value = comaAutomaticaEnabled ? p.precio_usd.toFixed(2).replace('.', ',') : p.precio_usd;
+  qs(SEL.productCosto).value = p.costo || 0;
   qs(SEL.productStock).value = p.stock;
   qs(SEL.productStockMinimo).value = p.stock_minimo;
   qs(SEL.productDeleteBtn).style.display = 'inline-flex';
@@ -1889,15 +1968,16 @@ async function saveProduct() {
   const codigo = editingProduct || '';
   const nombre = stripEmojis(qs(SEL.productNombre).value.trim());
   const precio = parsePrecio(qs(SEL.productPrecio).value);
+  const costo = parsePrecio(qs(SEL.productCosto).value) || 0;
   const stock = parseInt(qs(SEL.productStock).value) || 0;
   const stockMinimo = parseInt(qs(SEL.productStockMinimo).value) || 0;
   if (!nombre || isNaN(precio) || precio < 0) { showToast('Complete todos los campos', 'error'); return; }
   try {
     if (editingProduct) {
-      await invoke('update_product', { codigo, nombre, precioUsd: precio, stock });
+      await invoke('update_product', { codigo, nombre, precioUsd: precio, costo, stock });
       await invoke('update_stock_minimo', { codigo, stockMinimo });
     } else {
-      await invoke('create_product', { codigo, nombre, precioUsd: precio, stock });
+      await invoke('create_product', { codigo, nombre, precioUsd: precio, costo, stock });
       if (stockMinimo > 0) {
         await invoke('update_stock_minimo', { codigo, stockMinimo });
       }
@@ -2209,7 +2289,7 @@ async function confirmCloseCashier() {
     html += '<p><strong>Total Bs.:</strong> ' + formatBS(reportData.total_bs) + '</p>';
     if (reportData.por_metodo && reportData.por_metodo.length) {
       html += '<hr class="close-report-hr"><h4>Totales por M\u00e9todo de Pago</h4>';
-      html += '<canvas id="close-pie-chart" class="chart-canvas" width="' + CANVAS_WIDTH + '" height="' + CANVAS_HEIGHT + '"></canvas>';
+      html += '<canvas id="close-pie-chart" class="chart-canvas" width="' + CHART.CANVAS_WIDTH + '" height="' + CHART.CANVAS_HEIGHT + '"></canvas>';
       reportData.por_metodo.forEach(m => {
         const label = formatMetodoLabel(m.metodo);
         let refStr = '';
@@ -2250,7 +2330,7 @@ function drawPieChart(canvasId, data) {
   if (!canvas || !data.por_metodo || !data.por_metodo.length) return;
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
-  const cx = CHART_CENTER_X, cy = CHART_CENTER_Y, r = CHART_RADIUS;
+  const cx = CHART.CENTER_X, cy = CHART.CENTER_Y, r = CHART.RADIUS;
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = cssVar('--card', '#fff');
   ctx.fillRect(0, 0, w, h);
@@ -2263,7 +2343,7 @@ function drawPieChart(canvasId, data) {
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, r, startAngle, startAngle + slice);
     ctx.closePath();
-    ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
+    ctx.fillStyle = CHART.COLORS[i % CHART.COLORS.length];
     ctx.fill();
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
@@ -2278,17 +2358,17 @@ function drawPieChart(canvasId, data) {
     }
     startAngle += slice;
   });
-  let ly = LEGEND_Y_START;
+  let ly = CHART.LEGEND_Y_START;
   data.por_metodo.forEach((m, i) => {
-    const lx = LEGEND_X;
-    ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
+    const lx = CHART.LEGEND_X;
+    ctx.fillStyle = CHART.COLORS[i % CHART.COLORS.length];
     ctx.fillRect(lx, ly, 10, 10);
     ctx.fillStyle = cssVar('--text', '#333');
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(formatMetodoLabel(m.metodo) + ' ' + formatUSD(m.total_usd), lx + 14, ly);
-    ly += LEGEND_LINE_HEIGHT;
+    ly += CHART.LEGEND_LINE_HEIGHT;
   });
 }
 
@@ -2301,7 +2381,7 @@ function printCloseReport() {
   if (!iframe) {
     iframe = document.createElement('iframe');
     iframe.id = 'print-frame';
-    iframe.style.cssText = PRINT_FRAME_CSS;
+    iframe.style.cssText = PRINT.FRAME_CSS;
     document.body.appendChild(iframe);
   }
   const doc = iframe.contentDocument || iframe.contentWindow.document;
@@ -2388,7 +2468,7 @@ async function showCierreDetalle(cierreId) {
     html += '<p><strong>Total Bs.:</strong> ' + formatBS(d.total_bs) + '</p>';
     if (d.por_metodo && d.por_metodo.length) {
       html += '<hr style="margin:8px 0;"><h4>Totales por M\u00e9todo de Pago</h4>';
-      html += '<canvas id="historial-pie-chart" width="' + CANVAS_WIDTH + '" height="' + CANVAS_HEIGHT + '" style="margin:4px auto;display:block;max-width:100%;"></canvas>';
+      html += '<canvas id="historial-pie-chart" width="' + CHART.CANVAS_WIDTH + '" height="' + CHART.CANVAS_HEIGHT + '" style="margin:4px auto;display:block;max-width:100%;"></canvas>';
       d.por_metodo.forEach(m => {
         let label = formatMetodoLabel(m.metodo);
         if (m.referencias && m.referencias.length) {
@@ -2467,7 +2547,7 @@ async function loadThemeConfig() {
 }
 
 const themes = {
-  oscuro: { '--bg': '#2A2533', '--card': '#3D364A', '--card-alt': '#4A4258', '--danger': '#6B2E2A', '--danger-dark': '#55201C', '--primary': '#6C5C7A', '--primary-dark': '#544666', '--primary-rgb': '108, 92, 122', '--accent': '#4A7C65', '--accent-dark': '#3A6651', '--accent-rgb': '74, 124, 101', '--danger-rgb': '107, 46, 42', '--overlay': 'rgba(0, 0, 0, 0.6)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.3)', '--hover': '#352F44', '--border': '#4A4460', '--text': '#E0D8E8', '--text-light': '#A098B8', '--text-secondary': '#A098B8', '--sidebar-bg': '#1F1A2E', '--sidebar-text': '#C8C0D8', '--sidebar-text-rgb': '200, 192, 216' },
+  oscuro: { '--bg': '#2A2533', '--card': '#3D364A', '--card-alt': '#4A4258', '--danger': '#6B2E2A', '--danger-dark': '#55201C', '--primary': '#7E6B90', '--primary-dark': '#665478', '--primary-rgb': '126, 107, 144', '--accent': '#4A7C65', '--accent-dark': '#3A6651', '--accent-rgb': '74, 124, 101', '--danger-rgb': '107, 46, 42', '--overlay': 'rgba(0, 0, 0, 0.6)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.3)', '--hover': '#352F44', '--border': '#5A5270', '--text': '#E0D8E8', '--text-light': '#A098B8', '--text-secondary': '#A098B8', '--sidebar-bg': '#1F1A2E', '--sidebar-text': '#C8C0D8', '--sidebar-text-rgb': '200, 192, 216' },
   claro: { '--bg': '#FAFAFA', '--card': '#FFFFFF', '--card-alt': '#F2F2F2', '--danger': '#D97373', '--danger-dark': '#C05555', '--primary': '#6C8EBF', '--primary-dark': '#5070A0', '--primary-rgb': '108, 142, 191', '--accent': '#6BAF8D', '--accent-dark': '#4A8F6D', '--accent-rgb': '107, 175, 141', '--danger-rgb': '217, 115, 115', '--overlay': 'rgba(0, 0, 0, 0.15)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#F5F5F5', '--border': '#DDDDDD', '--text': '#333333', '--text-light': '#777777', '--text-secondary': '#777777', '--sidebar-bg': '#F0F0F0', '--sidebar-text': '#333333', '--sidebar-text-rgb': '51, 51, 51' },
   azul: { '--bg': '#EDF2F7', '--card': '#FFFFFF', '--card-alt': '#F2F6FA', '--danger': '#E8A0A0', '--danger-dark': '#D48888', '--primary': '#7B9EBF', '--primary-dark': '#5A7D9E', '--primary-rgb': '123, 158, 191', '--accent': '#8FC1B5', '--accent-dark': '#6DA89A', '--accent-rgb': '143, 193, 181', '--danger-rgb': '232, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.2)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.08)', '--hover': '#E2E8F0', '--border': '#CBD5E0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#2C5282', '--sidebar-text': '#EBF4FF', '--sidebar-text-rgb': '235, 244, 255' },
   verde: { '--bg': '#F0F7F0', '--card': '#FFFFFF', '--card-alt': '#EAF3EA', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#A8C9A8', '--primary-dark': '#8BB08B', '--primary-rgb': '168, 201, 168', '--accent': '#B8DCC8', '--accent-dark': '#9CC8AC', '--accent-rgb': '184, 220, 200', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.15)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#E6F0E6', '--border': '#D0E0D0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#3A6A3A', '--sidebar-text': '#F0FFF0', '--sidebar-text-rgb': '240, 255, 240' },
@@ -2502,6 +2582,19 @@ async function handleThemeClick(theme) {
     await setUserConfig(CFG_TEMA, theme);
     showToast('Tema cambiado a ' + theme);
   } catch (e) { showToast('Error al guardar tema', 'error'); }
+}
+
+/* Share receipt via Web Share API */
+function shareReceipt(venta) {
+  if (!IS_ANDROID || !navigator.share) return;
+  var items = venta.detalles || [];
+  var lines = items.map(function(d) { return d.cantidad + 'x ' + d.nombre + ' = ' + formatUSD(d.subtotal); });
+  var text = 'Venta #' + venta.id + '\n' +
+    'Total: ' + formatUSD(venta.total_usd) + ' / ' + formatBS(venta.total_bs) + '\n' +
+    'Método: ' + formatMetodoLabel(venta.metodo_pago) + '\n' +
+    '---\n' + lines.join('\n') + '\n---\n' +
+    'Gracias por su compra!';
+  navigator.share({ title: 'Venta #' + venta.id, text: text }).catch(function() {});
 }
 
 /* ========== FONT SIZE ========== */
@@ -2599,12 +2692,14 @@ async function loadReports() {
     const result = await invoke('get_sales_report', { filter });
     qs(SEL.reportTotalCount).textContent = result.total_ventas;
     qs(SEL.reportTotalUsd).textContent = formatUSD(result.total_usd);
+    qs(SEL.reportTotalCosto).textContent = formatUSD(result.total_costo_usd || 0);
+    qs(SEL.reportTotalGanancia).textContent = formatUSD(result.total_ganancia_usd || 0);
     qs(SEL.reportTotalBs).textContent = formatBS(result.total_bs);
 
     const tbody = qs(SEL.reportSalesBody);
     tbody.innerHTML = '';
     if (!result.ventas || result.ventas.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7">' + emptyState('<i class="nf nf-fa-bar_chart"></i>', 'Sin ventas en el per\u00edodo', '') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9">' + emptyState('<i class="nf nf-fa-bar_chart"></i>', 'Sin ventas en el per\u00edodo', '') + '</td></tr>';
     } else {
       const frag = document.createDocumentFragment();
       result.ventas.forEach(item => {
@@ -2668,23 +2763,26 @@ async function loadDashboard() {
       { label: '\u00daltimos 7 d\u00edas', icon: 'calendar_week', key: 'week', color: '#0891b2' },
       { label: 'Este mes', icon: 'calendar', key: 'month', color: '#059669' }
     ];
-    body.innerHTML =
-      '<div class="dashboard-chart-toggle">' +
-        '<button class="btn btn-sm ' + (dashboardChartType === 'bar' ? 'btn-primary' : 'btn-outline') + '" data-chart="bar"><i class="nf nf-fa-bar_chart"></i> Barras</button>' +
-        '<button class="btn btn-sm ' + (dashboardChartType === 'pie' ? 'btn-primary' : 'btn-outline') + '" data-chart="pie"><i class="nf nf-fa-chart_pie"></i> Pastel</button>' +
-      '</div>' +
-      '<div class="dashboard-chart-container"><canvas id="dashboard-canvas" width="' + DASHBOARD_CANVAS_MAX_WIDTH + '" height="' + BAR_CHART_HEIGHT + '"></canvas></div>' +
-      '<div class="dashboard-grid">' +
-        periods.map(function(p) {
-          var d = data[p.key];
-          return '<div class="dashboard-period" style="border-left: 4px solid ' + p.color + '">' +
-            '<div class="dashboard-period-title"><i class="nf nf-fa-' + p.icon + '"></i> ' + p.label + '</div>' +
-            '<div class="dashboard-stat"><span>Ventas</span><strong>' + d.total_ventas + '</strong></div>' +
-            '<div class="dashboard-stat"><span>Total USD</span><strong>' + formatUSD(d.total_usd) + '</strong></div>' +
-            '<div class="dashboard-stat"><span>Total Bs.</span><strong>' + formatBS(d.total_bs) + '</strong></div>' +
-          '</div>';
-        }).join('') +
-      '</div>';
+      body.innerHTML =
+        '<div class="dashboard-chart-toggle">' +
+          '<button class="btn btn-sm ' + (dashboardChartType === 'bar' ? 'btn-primary' : 'btn-outline') + '" data-chart="bar"><i class="nf nf-fa-bar_chart"></i> Barras</button>' +
+          '<button class="btn btn-sm ' + (dashboardChartType === 'pie' ? 'btn-primary' : 'btn-outline') + '" data-chart="pie"><i class="nf nf-fa-chart_pie"></i> Pastel</button>' +
+          '<button class="btn btn-sm ' + (dashboardChartType === 'line' ? 'btn-primary' : 'btn-outline') + '" data-chart="line"><i class="nf nf-fa-line_chart"></i> Ganancias</button>' +
+        '</div>' +
+        '<div class="dashboard-chart-container"><canvas id="dashboard-canvas" width="' + CHART.CANVAS_MAX_WIDTH + '" height="' + CHART.BAR_HEIGHT + '"></canvas></div>' +
+        '<div class="dashboard-grid">' +
+          periods.map(function(p) {
+            var d = data[p.key];
+            return '<div class="dashboard-period" style="border-left: 4px solid ' + p.color + '">' +
+              '<div class="dashboard-period-title"><i class="nf nf-fa-' + p.icon + '"></i> ' + p.label + '</div>' +
+              '<div class="dashboard-stat"><span>Ventas</span><strong>' + d.total_ventas + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Total USD</span><strong>' + formatUSD(d.total_usd) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Costo</span><strong>' + formatUSD(d.total_costo_usd || 0) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Ganancia</span><strong>' + formatUSD(d.total_ganancia_usd || 0) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Total Bs.</span><strong>' + formatBS(d.total_bs) + '</strong></div>' +
+            '</div>';
+          }).join('') +
+        '</div>';
     var toggleBtns = body.querySelectorAll('.dashboard-chart-toggle button');
     for (var i = 0; i < toggleBtns.length; i++) {
       toggleBtns[i].addEventListener('click', function() {
@@ -2695,6 +2793,8 @@ async function loadDashboard() {
     }
     if (dashboardChartType === 'pie') {
       requestAnimationFrame(function() { drawDashboardPieChart(body, paymentMethods); });
+    } else if (dashboardChartType === 'line') {
+      requestAnimationFrame(function() { drawProfitLineChart(body); });
     } else {
       requestAnimationFrame(function() { drawDashboardBarChart(body, data, periods); });
     }
@@ -2731,9 +2831,9 @@ function drawDashboardBarChart(body, data, periods) {
   const canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
   const rect = canvas.parentElement.getBoundingClientRect();
-  const isMobile = rect.width < MOBILE_BREAKPOINT;
-  const w = Math.min(rect.width - 16, DASHBOARD_CANVAS_MAX_WIDTH);
-  const h = isMobile ? BAR_CHART_HEIGHT_MOBILE : BAR_CHART_HEIGHT;
+  const isMobile = rect.width < BREAKPOINT.MOBILE;
+  const w = Math.min(rect.width - 16, CHART.CANVAS_MAX_WIDTH);
+  const h = isMobile ? CHART.BAR_HEIGHT_MOBILE : CHART.BAR_HEIGHT;
   const dpr = window.devicePixelRatio || 1;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
@@ -2762,7 +2862,7 @@ function drawDashboardBarChart(body, data, periods) {
 
   let bars = [];
   let startTime = null;
-  const duration = BAR_CHART_ANIM_MS;
+  const duration = CHART.BAR_ANIM_MS;
 
   function drawBase(ease) {
     ctx.clearRect(0, 0, w, h);
@@ -2864,16 +2964,16 @@ function drawDashboardPieChart(body, paymentMethods) {
   const canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
   const rect = canvas.parentElement.getBoundingClientRect();
-  const isMobile = rect.width < MOBILE_BREAKPOINT;
-  const w = Math.min(rect.width - 16, DASHBOARD_CANVAS_MAX_WIDTH);
+  const isMobile = rect.width < BREAKPOINT.MOBILE;
+  const w = Math.min(rect.width - 16, CHART.CANVAS_MAX_WIDTH);
   const dpr = window.devicePixelRatio || 1;
   canvas.width = w * dpr;
-  canvas.height = BAR_CHART_HEIGHT * dpr;
+  canvas.height = CHART.BAR_HEIGHT * dpr;
   canvas.style.width = w + 'px';
-  canvas.style.height = BAR_CHART_HEIGHT + 'px';
+  canvas.style.height = CHART.BAR_HEIGHT + 'px';
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
-  const h = BAR_CHART_HEIGHT;
+  const h = CHART.BAR_HEIGHT;
 
   const textColor = cssVar('--text', '#e0d8e8');
   const textLight = cssVar('--text-light', '#a098b8');
@@ -2917,7 +3017,7 @@ function drawDashboardPieChart(body, paymentMethods) {
     return seg;
   });
 
-  const duration = PIE_CHART_ANIM_MS;
+  const duration = CHART.PIE_ANIM_MS;
   let startTime = null;
 
   function drawBase(ease) {
@@ -3036,6 +3136,180 @@ function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
   canvas.addEventListener('touchstart', onTouch);
 }
 
+/* ========== PROFIT LINE CHART ========== */
+async function drawProfitLineChart(body) {
+  var canvas = qs(SEL.dashboardCanvas);
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var dpr = window.devicePixelRatio || 1;
+  var container = canvas.parentElement;
+  var rect = container.getBoundingClientRect();
+  var w = rect.width || CHART.CANVAS_MAX_WIDTH;
+  var maxW = CHART.CANVAS_MAX_WIDTH;
+  if (w > maxW) w = maxW;
+  var h = CHART.BAR_HEIGHT;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr);
+
+  var now = new Date();
+  var endDate = now.toISOString().slice(0, 10);
+  var startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  try {
+    var points = await invoke('get_profit_series', {
+      filter: { start_date: startDate, end_date: endDate }
+    });
+    if (!points || points.length < 2) {
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#999';
+      ctx.textAlign = 'center';
+      ctx.fillText('Datos insuficientes para el gr\u00e1fico de ganancias', w / 2, h / 2);
+      return;
+    }
+
+    var css = getComputedStyle(document.documentElement);
+    var textColor = css.getPropertyValue('--text').trim() || '#e0e0e0';
+    var mutedColor = css.getPropertyValue('--text-muted').trim() || '#888';
+    var lineColor = css.getPropertyValue('--primary').trim() || '#7E6B90';
+    var fillColor = lineColor + '33';
+    var gridColor = css.getPropertyValue('--border').trim() || '#3A3450';
+
+    var padding = { top: 20, right: 20, bottom: 40, left: 60 };
+    var chartW = w - padding.left - padding.right;
+    var chartH = h - padding.top - padding.bottom;
+
+    var maxVal = 0;
+    var minVal = Infinity;
+    points.forEach(function(p) {
+      if (p.profit_usd > maxVal) maxVal = p.profit_usd;
+      if (p.profit_usd < minVal) minVal = p.profit_usd;
+    });
+    var range = maxVal - minVal || 1;
+    var yPad = range * 0.1;
+    maxVal += yPad;
+    minVal = Math.max(0, minVal - yPad);
+    range = maxVal - minVal || 1;
+
+    // Grid lines
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    var gridLines = 5;
+    for (var i = 0; i <= gridLines; i++) {
+      var y = padding.top + (chartH / gridLines) * i;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(w - padding.right, y);
+      ctx.stroke();
+      var val = maxVal - (range / gridLines) * i;
+      ctx.fillStyle = mutedColor;
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('$' + val.toFixed(1), padding.left - 5, y + 4);
+    }
+
+    // X labels
+    ctx.textAlign = 'center';
+    ctx.font = '10px sans-serif';
+    var step = Math.max(1, Math.floor(points.length / 10));
+    points.forEach(function(p, idx) {
+      if (idx % step !== 0 && idx !== points.length - 1) return;
+      var x = padding.left + (idx / (points.length - 1)) * chartW;
+      ctx.fillStyle = mutedColor;
+      ctx.fillText(p.date.slice(5), x, h - padding.bottom + 15);
+    });
+
+    // Area fill
+    ctx.beginPath();
+    var firstX = padding.left;
+    var firstY = padding.top + chartH - ((points[0].profit_usd - minVal) / range) * chartH;
+    ctx.moveTo(firstX, padding.top + chartH);
+    ctx.lineTo(firstX, firstY);
+    for (var j = 1; j < points.length; j++) {
+      var x = padding.left + (j / (points.length - 1)) * chartW;
+      var y = padding.top + chartH - ((points[j].profit_usd - minVal) / range) * chartH;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(padding.left + chartW, padding.top + chartH);
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    for (var k = 0; k < points.length; k++) {
+      var x = padding.left + (k / (points.length - 1)) * chartW;
+      var y = padding.top + chartH - ((points[k].profit_usd - minVal) / range) * chartH;
+      if (k === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Dots
+    points.forEach(function(p, idx) {
+      var x = padding.left + (idx / (points.length - 1)) * chartW;
+      var y = padding.top + chartH - ((p.profit_usd - minVal) / range) * chartH;
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = lineColor;
+      ctx.fill();
+    });
+
+    // Labels
+    ctx.fillStyle = mutedColor;
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u00daltimos ' + points.length + ' d\u00edas', w / 2, 14);
+
+    // Hover tooltips
+    var profitPoints = points;
+    var hoverData = {
+      padding: padding, chartW: chartW, chartH: chartH,
+      minVal: minVal, range: range, points: points
+    };
+    attachLineHover(canvas, dpr, hoverData);
+
+  } catch (e) {
+    ctx.font = '14px sans-serif';
+    ctx.fillStyle = '#e74c3c';
+    ctx.textAlign = 'center';
+    ctx.fillText('Error: ' + e.message || e, w / 2, h / 2);
+  }
+}
+
+function attachLineHover(canvas, dpr, data) {
+  function onMove(e) {
+    var cr = canvas.getBoundingClientRect();
+    var mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr;
+    for (var i = 0; i < data.points.length; i++) {
+      var x = data.padding.left + (i / (data.points.length - 1)) * data.chartW;
+      if (Math.abs(mx - x) < 10) {
+        var p = data.points[i];
+        showChartTooltip(e.clientX, e.clientY,
+          p.date + ' | Ingreso: $' + p.revenue_usd.toFixed(2) +
+          ' | Costo: $' + p.cost_usd.toFixed(2) +
+          ' | Ganancia: $' + p.profit_usd.toFixed(2));
+        canvas.style.cursor = 'pointer';
+        return;
+      }
+    }
+    hideChartTooltip();
+    canvas.style.cursor = 'default';
+  }
+  function onOut() { hideChartTooltip(); canvas.style.cursor = 'default'; }
+  function onTouch(e) {
+    var t = e.touches[0];
+    onMove({ clientX: t.clientX, clientY: t.clientY });
+  }
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseout', onOut);
+  canvas.addEventListener('touchstart', onTouch);
+}
+
 /* ========== PRODUCT HISTORY ========== */
 async function showProductHistory(codigo, nombre) {
   const title = qs(SEL.productHistoryTitle);
@@ -3095,7 +3369,7 @@ async function handleVoidSale(ventaId) {
     const msg = await invoke('void_sale', { ventaId });
     showToast(msg);
     playSound('remove');
-    if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
+    if (qs(SEL.viewCashier)?.classList.contains('active')) loadDailySummary();
     if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
     scheduleSaleUpload();
   } catch (e) { showToast('Error: ' + e, 'error'); }
@@ -3147,7 +3421,7 @@ async function handleVoidItem(ventaId, detalleId) {
     showToast('Item anulado correctamente');
     playSound('remove');
     showSaleDetail(ventaId);
-    if (qs('#view-cashier')?.classList.contains('active')) loadDailySummary();
+    if (qs(SEL.viewCashier)?.classList.contains('active')) loadDailySummary();
     if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
     scheduleSaleUpload();
   } catch (e) { showToast('Error: ' + e, 'error'); }
@@ -3167,24 +3441,24 @@ async function saveOpenRouterKey() {
   const key = qs(SEL.openrouterApiKey).value.trim();
   if (!key) { showToast('Ingresa una API key', 'error'); return; }
   try {
-    await invoke('set_config_value', { key: 'openrouter_api_key', value: key });
+    await invoke('set_config_value', { key: CFG_OPENROUTER_API_KEY, value: key });
     showToast('API key guardada');
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 async function loadOpenRouterKey() {
   try {
-    const key = await invoke('get_config_value', { key: 'openrouter_api_key' });
+    const key = await invoke('get_config_value', { key: CFG_OPENROUTER_API_KEY });
     if (key) qs(SEL.openrouterApiKey).value = key;
-    const model = await invoke('get_config_value', { key: 'openrouter_model' });
-    if (model) qs(SEL.openrouterModel).value = model;
+    const model = await invoke('get_config_value', { key: CFG_OPENROUTER_MODEL });
+    if (model) setCustomSelectValue(qs(SEL.openrouterModelWrap), model);
   } catch (_) {}
 }
 
 async function generateOrder() {
   const apiKey = qs(SEL.openrouterApiKey).value.trim();
   if (!apiKey) { showToast('Configura la API key de OpenRouter primero', 'error'); return; }
-  const model = qs(SEL.openrouterModel).value;
+  const model = qs(SEL.openrouterModelWrap).dataset.value || '';
   showLoadingModal('Generando orden de compra...');
   await forcePaint();
   try {
@@ -3217,12 +3491,6 @@ async function copySuggestion() {
 
 /* ========== CHAT IA ========== */
 const CHAT_SYSTEM_PROMPT = 'Eres Enar, un zorro experto asistente de un sistema POS (Punto de Venta) llamado "Gestor de Ventas". Tu nombre es Enar, si te preguntan preséntate como Enar. Solo respondes preguntas relacionadas con el sistema: ventas, inventario de productos, clientes, créditos, reportes, configuración, caja, sincronización. Si te preguntan algo fuera de este tema (historia, matemáticas, cultura general, etc.), responde cordialmente que solo puedes ayudar con el uso del POS. Responde en español, sé conciso y útil. Puedes usar **negrita**, *cursiva* y emojis en tus respuestas.';
-
-function escapeHtml(str) {
-  var div = document.createElement('div');
-  div.appendChild(document.createTextNode(str));
-  return div.innerHTML;
-}
 
 function renderMarkdown(text) {
   var html = escapeHtml(text);
@@ -3279,25 +3547,28 @@ function appendChatBubble(role, content) {
 }
 
 function showChatThinking() {
+  const el = qs(SEL.chatThinking);
+  if (!el) return;
+  el.style.display = '';
+  el.offsetHeight; // force reflow to ensure paint before continuing
   const container = qs(SEL.chatMessages);
-  const div = document.createElement('div');
-  div.className = 'chat-msg chat-msg-ai';
-  div.id = 'chat-thinking';
-  div.innerHTML = '<div class="chat-thinking"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></div>';
-  container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }
 
 function hideChatThinking() {
-  const el = document.getElementById('chat-thinking');
-  if (el) el.remove();
+  const el = qs(SEL.chatThinking);
+  if (el) el.style.display = 'none';
 }
 
-async function handleChatSend() {
+var chatPending = false;
+
+async function handleChatSend(forcedText) {
+  if (chatPending) return;
   const input = qs(SEL.chatInput);
-  const text = input.value.trim();
+  const text = forcedText || input.value.trim();
   if (!text) return;
 
+  chatPending = true;
   const btn = qs(SEL.chatSendBtn);
   btn.disabled = true;
 
@@ -3308,57 +3579,58 @@ async function handleChatSend() {
   appendChatBubble('user', text);
   showChatThinking();
 
-  // Get live context
+  // Get live context (parallel)
   var contextLines = [];
-  try {
-    var prodResult = await invoke('list_products', { search: null, page: 1, pageSize: 1 });
-    var totalProds = prodResult.total || 0;
-    contextLines.push('- Productos activos: ' + totalProds);
-    // Fetch a few product names so the AI knows what exists
-    var namesResult = await invoke('list_products', { search: null, page: 1, pageSize: 20 });
-    if (namesResult && namesResult.data && namesResult.data.length > 0) {
-      var names = namesResult.data.map(function(p) { return p.nombre + ' ($' + p.precio_usd.toFixed(2) + ')'; }).join(', ');
-      contextLines.push('- Nombres de productos: ' + names + (totalProds > 20 ? '...' : ''));
-    }
-  } catch (_) {}
-  try {
-    var cfg = await invoke('get_config_value', { key: 'tasa_dolar' });
-    if (cfg) contextLines.push('- Tasa del dólar: Bs. ' + parseFloat(cfg).toFixed(2));
-  } catch (_) {}
-  try {
-    var todayRes = await invoke('get_daily_summary');
-    if (todayRes) {
-      contextLines.push('- Ventas hoy: ' + (todayRes.total_ventas || 0) + ' por $' + (todayRes.total_usd || 0).toFixed(2));
-    }
-  } catch (_) {}
-  try {
-    var top = await invoke('get_top_products', { limit: 3 });
-    if (top && top.length > 0) {
-      var topStr = top.map(function(p) { return p.nombre + ' (' + p.cantidad_vendida + ' uds, $' + p.total_usd.toFixed(2) + ')'; }).join(', ');
-      contextLines.push('- Productos más vendidos: ' + topStr);
-    }
-  } catch (_) {}
-  try {
-    var lowStock = await invoke('list_products', { search: null, page: 1, pageSize: 200 });
-    if (lowStock && lowStock.data) {
-      var low = lowStock.data.filter(function(p) { return p.stock < p.stock_minimo; });
-      if (low.length > 0) {
-        var lowStr = low.slice(0, 5).map(function(p) { return p.nombre + ' (stock: ' + p.stock + ', mínimo: ' + p.stock_minimo + ')'; }).join(', ');
-        contextLines.push('- Productos bajos de stock (' + low.length + '): ' + lowStr);
+  var results = await Promise.allSettled([
+    invoke('list_products', { search: null, page: 1, pageSize: 20 }).then(function(r) {
+      if (r && r.data) {
+        contextLines.push('- Productos activos: ' + (r.total || 0));
+        var names = r.data.map(function(p) { return p.nombre + ' ($' + p.precio_usd.toFixed(2) + ')'; }).join(', ');
+        contextLines.push('- Productos: ' + names + ((r.total || 0) > 20 ? '...' : ''));
       }
-    }
-  } catch (_) {}
-  try {
-    var clients = await invoke('list_clientes');
-    if (clients && clients.length > 0) {
-      var debtClients = clients.filter(function(c) { return c.saldo_deuda_usd > 0; });
-      contextLines.push('- Clientes registrados: ' + clients.length);
-      if (debtClients.length > 0) {
-        var debtStr = debtClients.slice(0, 5).map(function(c) { return c.nombre + ' ($' + c.saldo_deuda_usd.toFixed(2) + ')'; }).join(', ');
-        contextLines.push('- Clientes con deuda (' + debtClients.length + '): ' + debtStr + (debtClients.length > 5 ? '...' : ''));
+    }),
+    invoke('get_config_value', { key: CFG_TASA_DOLAR }).then(function(cfg) {
+      if (cfg) contextLines.push('- Tasa del dólar: Bs. ' + parseFloat(cfg).toFixed(2));
+    }),
+    invoke('get_daily_summary').then(function(todayRes) {
+      if (todayRes) contextLines.push('- Ventas hoy: ' + (todayRes.total_ventas || 0) + ' por $' + (todayRes.total_usd || 0).toFixed(2));
+    }),
+    invoke('get_dashboard_summary').then(function(dash) {
+      if (dash && dash.today) {
+        if (dash.today.total_ganancia_usd !== undefined) {
+          contextLines.push('- Ganancia hoy: $' + dash.today.total_ganancia_usd.toFixed(2) + ' (costo: $' + (dash.today.total_costo_usd || 0).toFixed(2) + ')');
+        }
+        if (dash.month && dash.month.total_ganancia_usd !== undefined) {
+          contextLines.push('- Ganancia del mes: $' + dash.month.total_ganancia_usd.toFixed(2) + ' (de $' + dash.month.total_usd.toFixed(2) + ' en ventas)');
+        }
       }
-    }
-  } catch (_) {}
+    }),
+    invoke('get_top_products', { limit: 3 }).then(function(top) {
+      if (top && top.length > 0) {
+        var topStr = top.map(function(p) { return p.nombre + ' (' + p.cantidad_vendida + ' uds, $' + p.total_usd.toFixed(2) + ')'; }).join(', ');
+        contextLines.push('- Más vendidos: ' + topStr);
+      }
+    }),
+    invoke('list_products', { search: null, page: 1, pageSize: 200 }).then(function(lowStock) {
+      if (lowStock && lowStock.data) {
+        var low = lowStock.data.filter(function(p) { return p.stock < p.stock_minimo; });
+        if (low.length > 0) {
+          var lowStr = low.slice(0, 5).map(function(p) { return p.nombre + ' (stock: ' + p.stock + ', mínimo: ' + p.stock_minimo + ')'; }).join(', ');
+          contextLines.push('- Stock bajo (' + low.length + '): ' + lowStr);
+        }
+      }
+    }),
+    invoke('list_clientes').then(function(clients) {
+      if (clients && clients.length > 0) {
+        var debtClients = clients.filter(function(c) { return c.saldo_deuda_usd > 0; });
+        contextLines.push('- Clientes: ' + clients.length);
+        if (debtClients.length > 0) {
+          var debtStr = debtClients.slice(0, 5).map(function(c) { return c.nombre + ' ($' + c.saldo_deuda_usd.toFixed(2) + ')'; }).join(', ');
+          contextLines.push('- Deudas (' + debtClients.length + '): ' + debtStr + (debtClients.length > 5 ? '...' : ''));
+        }
+      }
+    }),
+  ]);
 
   var systemPrompt = CHAT_SYSTEM_PROMPT;
   if (contextLines.length > 0) {
@@ -3377,7 +3649,7 @@ async function handleChatSend() {
       appendChatBubble('ai', 'Primero configura la API key de OpenRouter en Configuración → IA.');
       return;
     }
-    const model = qs(SEL.openrouterModel).value;
+  const model = qs(SEL.openrouterModelWrap).dataset.value || '';
     const reply = await invoke('chat_with_ai', { messages, apiKey, model });
     hideChatThinking();
     addChatMessage('ai', reply);
@@ -3387,21 +3659,36 @@ async function handleChatSend() {
     appendChatBubble('ai', 'Error: ' + e);
   } finally {
     btn.disabled = false;
+    chatPending = false;
     input.focus();
   }
 }
 
 function toggleChat() {
   const panel = qs(SEL.chatPanel);
+  const isOpening = panel.classList.contains('hidden');
+  if (isOpening) positionChatPanel();
   panel.classList.toggle('hidden');
-  if (!panel.classList.contains('hidden')) {
-    if (chatHistory.length === 0) {
-      addChatMessage('ai', '¡Hola! Soy Enar, tu asistente del POS. Pregúntame sobre productos, ventas, clientes o lo que necesites del sistema.');
-      appendChatBubble('ai', '¡Hola! Soy Enar, tu asistente del POS. Pregúntame sobre productos, ventas, clientes o lo que necesites del sistema.');
-    }
-    if (!IS_ANDROID) qs(SEL.chatInput).focus();
-    qs(SEL.chatMessages).scrollTop = qs(SEL.chatMessages).scrollHeight;
+  if (!isOpening) return;
+  if (chatHistory.length === 0) {
+    addChatMessage('ai', '\u00a1Hola! Soy Enar, tu asistente del POS. Preg\u00fantame sobre productos, ventas, clientes o lo que necesites del sistema.');
+    appendChatBubble('ai', '\u00a1Hola! Soy Enar, tu asistente del POS. Preg\u00fantame sobre productos, ventas, clientes o lo que necesites del sistema.');
   }
+  if (!IS_ANDROID) qs(SEL.chatInput).focus();
+  qs(SEL.chatMessages).scrollTop = qs(SEL.chatMessages).scrollHeight;
+}
+
+function positionChatPanel() {
+  var fab = qs(SEL.chatFab);
+  var panel = qs(SEL.chatPanel);
+  var fabRect = fab.getBoundingClientRect();
+  var panelW = window.innerWidth < 480 ? window.innerWidth - 16 : Math.min(360, window.innerWidth - 40);
+  var panelLeft = fabRect.right - panelW;
+  if (panelLeft < 8) panelLeft = 8;
+  if (panelLeft + panelW > window.innerWidth - 8) panelLeft = window.innerWidth - panelW - 8;
+  panel.style.left = panelLeft + 'px';
+  panel.style.bottom = (window.innerHeight - fabRect.top + 8) + 'px';
+  panel.style.maxHeight = Math.min(460, Math.max(200, fabRect.top - 16)) + 'px';
 }
 
 /* ========== INIT ========== */
@@ -3425,12 +3712,64 @@ document.addEventListener('DOMContentLoaded', async function() {
     this.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
   });
   qs(SEL.logoutBtn).addEventListener('click', handleLogout);
-  qs(SEL.mobileLogoutBtn)?.addEventListener('click', handleLogout);
 
   // Navigation
   qsa('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => showView(btn.dataset.view));
+    if (!btn.id) btn.addEventListener('click', () => showView(btn.dataset.view));
   });
+
+  /* More menu (mobile overflow) */
+  qs(SEL.moreBtn).addEventListener('click', function(e) {
+    e.stopPropagation();
+    qs(SEL.moreMenu).classList.toggle('hidden');
+  });
+  qsa('.more-menu-item[data-view]').forEach(function(item) {
+    item.addEventListener('click', function() {
+      qs(SEL.moreMenu).classList.add('hidden');
+      showView(this.dataset.view);
+    });
+  });
+  qs(SEL.moreWrap).addEventListener('click', function(e) { e.stopPropagation(); });
+  document.addEventListener('click', function() { qs(SEL.moreMenu).classList.add('hidden'); });
+  // Close More menu on view change
+  document.addEventListener('viewChanged', function() { qs(SEL.moreMenu).classList.add('hidden'); });
+
+  /* Swipe-to-delete on cart items (mobile) */
+  if (IS_ANDROID) {
+    var cartSwipeState = { el: null, startX: 0 };
+    qs(SEL.cartBody).addEventListener('touchstart', function(e) {
+      var row = e.target.closest('tr');
+      if (!row) return;
+      cartSwipeState.el = row;
+      cartSwipeState.startX = e.touches[0].clientX;
+      row.classList.add('cart-item-swipe');
+    }, { passive: true });
+    qs(SEL.cartBody).addEventListener('touchmove', function(e) {
+      if (!cartSwipeState.el) return;
+      var dx = cartSwipeState.startX - e.touches[0].clientX;
+      var pct = Math.min(dx / 120, 1);
+      cartSwipeState.el.style.transform = 'translateX(-' + (pct * 80) + 'px)';
+      cartSwipeState.el.classList.toggle('swiping', dx > 40);
+    }, { passive: true });
+    qs(SEL.cartBody).addEventListener('touchend', function() {
+      if (cartSwipeState.el && cartSwipeState.el.classList.contains('swiping')) {
+        var row = cartSwipeState.el;
+        row.style.transform = '';
+        row.classList.add('deleting');
+        setTimeout(function() {
+          var btn = row.querySelector('[data-action="remove-from-cart"]');
+          if (btn) btn.click();
+          row.classList.remove('deleting', 'swiping', 'cart-item-swipe');
+        }, 300);
+      } else {
+        if (cartSwipeState.el) {
+          cartSwipeState.el.style.transform = '';
+          cartSwipeState.el.classList.remove('swiping', 'cart-item-swipe');
+        }
+      }
+      cartSwipeState.el = null;
+    }, { passive: true });
+  }
 
   // Tasa
   qs(SEL.tasaInput).addEventListener('keydown', e => {
@@ -3458,7 +3797,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   // Currency toggle for cart totals column
-  const currencyToggle = qs('#cart-currency-toggle');
+  const currencyToggle =   qs(SEL.cartCurrencyToggle);
   if (currencyToggle) {
     currencyToggle.addEventListener('click', function() {
       cartShowBs = !cartShowBs;
@@ -3727,6 +4066,37 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
   }
 
+  /* Restore backup */
+  qs(SEL.restoreBackupBtn).addEventListener('click', async function() {
+    try {
+      var result = await invoke('plugin:dialog|open', {
+        filters: [{ name: 'Backup cifrado', extensions: ['enc'] }],
+        multiple: false,
+      });
+      if (!result) return;
+      this.disabled = true;
+      this.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Restaurando...';
+      const msg = await invoke('restore_backup', { backupPath: result });
+      showToast(msg, 'warning');
+    } catch (e) {
+      showToast('Error: ' + e, 'error');
+    } finally {
+      this.disabled = false;
+      this.innerHTML = '<i class="nf nf-fa-upload"></i> Restaurar';
+    }
+  });
+
+  /* Show backup key */
+  qs(SEL.showBackupKeyBtn).addEventListener('click', async function() {
+    try {
+      const key = await invoke('get_backup_key');
+      await navigator.clipboard.writeText(key);
+      showToast('Clave de cifrado copiada al portapapeles', 'info');
+    } catch (e) {
+      showToast('Error: ' + e, 'error');
+    }
+  });
+
   /* ========== SUPABASE SYNC ========== */
   /* Guardar URL y Key al cambiar */
   document.addEventListener('change', function(e) {
@@ -3782,7 +4152,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.viewConflictsBtn)?.addEventListener('click', openConflictModal);
 
   /* Refrescar dispositivos vinculados */
-  qs('#refresh-devices-btn')?.addEventListener('click', loadLinkedDevices);
+  qs(SEL.refreshDevicesBtn)?.addEventListener('click', loadLinkedDevices);
 
   /* Sync all progress UI */
   const syncProgressModal = qs(SEL.syncProgressModal);
@@ -4046,7 +4416,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Confirmar venta toggle
-  const confirmarToggle = qs('#confirmar-venta-toggle');
+  const confirmarToggle =   qs(SEL.confirmarVentaToggle);
   if (confirmarToggle) {
     confirmarToggle.addEventListener('change', function() {
       setUserConfig(CFG_CONFIRMAR_VENTA, this.checked ? '1' : '0').catch(e => showToast('Error al guardar configuración', 'error'));
@@ -4069,13 +4439,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   const fontDecBtn = qs(SEL.fontDecBtn);
   if (fontIncBtn) {
     fontIncBtn.addEventListener('click', function() {
-      applyFontSize(currentFontPct + FONT_SIZE_STEP);
+      applyFontSize(currentFontPct + FONT.SIZE_STEP);
       saveFontSize(currentFontPct);
     });
   }
   if (fontDecBtn) {
     fontDecBtn.addEventListener('click', function() {
-      applyFontSize(currentFontPct - FONT_SIZE_STEP);
+      applyFontSize(currentFontPct - FONT.SIZE_STEP);
       saveFontSize(currentFontPct);
     });
   }
@@ -4161,7 +4531,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   } catch (e) {}
 
   // Animations toggle
-  const animToggle = qs('#animations-toggle');
+  const animToggle = qs(SEL.animationsToggle);
   function setAnimations(enabled) {
     document.body.classList.toggle('no-animations', !enabled);
   }
@@ -4183,8 +4553,30 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Load confirmar venta config
   try {
     const val = await getUserConfig(CFG_CONFIRMAR_VENTA);
-    const toggle = qs('#confirmar-venta-toggle');
+    const toggle =   qs(SEL.confirmarVentaToggle);
     if (toggle) toggle.checked = val === '1';
+  } catch (e) {}
+
+  // Load IA config
+  const iaToggle =   qs(SEL.iaToggle);
+  function setIaEnabled(enabled) {
+    qs(SEL.chatFab).style.display = enabled ? '' : 'none';
+    if (!enabled) {
+      const panel = qs(SEL.chatPanel);
+      if (panel && !panel.classList.contains('hidden')) panel.classList.add('hidden');
+    }
+  }
+  if (iaToggle) {
+    iaToggle.addEventListener('change', function() {
+      setIaEnabled(this.checked);
+      setUserConfig(CFG_IA_HABILITADO, this.checked ? '1' : '0').catch(() => {});
+    });
+  }
+  try {
+    const val = await getUserConfig(CFG_IA_HABILITADO);
+    const enabled = val !== '0';
+    if (iaToggle) iaToggle.checked = enabled;
+    setIaEnabled(enabled);
   } catch (e) {}
 
   // Load history cleanup config
@@ -4213,7 +4605,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Manual clear history buttons
-  for (const btn of [qs('#audit-clear-btn'), qs('#audit-clear-config-btn')]) {
+  for (const btn of [qs(SEL.auditClearBtn), qs(SEL.auditClearConfigBtn)]) {
     if (btn) {
       btn.addEventListener('click', async () => {
         const ok = await confirmModal('\u00bfEliminar todo el historial de auditor\u00eda? Esta acci\u00f3n no se puede deshacer.', 'Limpiar Historial', 'Eliminar todo');
@@ -4231,7 +4623,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Ensure sales panels are visible on desktop
   window.addEventListener('resize', function() {
-    if (window.innerWidth > BREAKPOINT_DESKTOP) {
+    if (window.innerWidth > BREAKPOINT.DESKTOP) {
       document.querySelectorAll('.sales-left, .sales-center').forEach(el => el.style.display = '');
     }
   });
@@ -4244,7 +4636,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Check if device is already registered
   try {
-    const devId = await invoke('get_config_value', { key: 'dispositivo_id' });
+    const devId = await invoke('get_config_value', { key: CFG_DISPOSITIVO_ID });
     if (devId) {
       qs(SEL.deviceRegScreen).style.display = 'none';
       qs(SEL.loginScreen).style.display = 'flex';
@@ -4276,7 +4668,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       var diff = _prevVpHeight - window.visualViewport.height;
       var main = qs(SEL.mainApp);
       if (!main) return;
-      if (diff > KEYBOARD_THRESHOLD) {
+      if (diff > KEYBOARD.THRESHOLD) {
         // Keyboard opened
         document.body.classList.add('keyboard-open');
         var view = document.querySelector('.view.active');
@@ -4285,10 +4677,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (el) {
           setTimeout(function() {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, KEYBOARD_SCROLL_DELAY_MS);
+          }, KEYBOARD.SCROLL_DELAY_MS);
         }
-        main.style.paddingBottom = (diff - KEYBOARD_PAD_OFFSET) + 'px';
-      } else if (diff < -KEYBOARD_THRESHOLD) {
+        main.style.paddingBottom = (diff - KEYBOARD.PAD_OFFSET) + 'px';
+      } else if (diff < -KEYBOARD.THRESHOLD) {
         // Keyboard closed
         document.body.classList.remove('keyboard-open');
         var view2 = document.querySelector('.view.active');
@@ -4302,8 +4694,23 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   /* ========== OPENROUTER / SUGERENCIAS ========== */
   qs(SEL.openrouterSaveKeyBtn).addEventListener('click', saveOpenRouterKey);
-  qs(SEL.openrouterModel).addEventListener('change', async function() {
-    try { await invoke('set_config_value', { key: 'openrouter_model', value: this.value }); } catch (_) {}
+  // Custom select for model
+  qs(SEL.openrouterModelBtn).addEventListener('click', function(e) {
+    e.stopPropagation();
+    var wrap = qs(SEL.openrouterModelWrap);
+    wrap.classList.toggle('open');
+  });
+  qs(SEL.openrouterModelMenu).addEventListener('click', function(e) {
+    var opt = e.target.closest('button');
+    if (!opt || !opt.dataset.value) return;
+    var wrap = qs(SEL.openrouterModelWrap);
+    setCustomSelectValue(wrap, opt.dataset.value);
+    wrap.classList.remove('open');
+    try { invoke('set_config_value', { key: CFG_OPENROUTER_MODEL, value: opt.dataset.value }); } catch (_) {}
+  });
+  document.addEventListener('click', function(e) {
+    var wrap = qs(SEL.openrouterModelWrap);
+    if (wrap && !wrap.contains(e.target)) wrap.classList.remove('open');
   });
   qs(SEL.generateOrderBtn).addEventListener('click', generateOrder);
   qs(SEL.suggestionCopyBtn).addEventListener('click', copySuggestion);
@@ -4312,7 +4719,88 @@ document.addEventListener('DOMContentLoaded', async function() {
   loadOpenRouterKey();
 
   /* ========== CHAT IA ========== */
-  qs(SEL.chatFab).addEventListener('click', toggleChat);
+  /* FAB — click to open, drag to move (long-press or move >4px) */
+  (function initFabPos() {
+    var fab = qs(SEL.chatFab);
+    var saved = localStorage.getItem('chat_fab_pos');
+    if (saved) {
+      try {
+        var pos = JSON.parse(saved);
+        fab.style.left = pos.left + 'px';
+        fab.style.top = pos.top + 'px';
+        return;
+      } catch (_) {}
+    }
+    fab.style.left = (window.innerWidth - 72) + 'px';
+    fab.style.top = (window.innerHeight - 152) + 'px';
+  })();
+
+  var fabDragActive = false, fabTouchDrag = false;
+  var fabStartX, fabStartY, fabOrigLeft, fabOrigTop, fabDragTimer;
+
+  function fabStart(e, isTouch) {
+    var t = isTouch ? e.touches[0] : e;
+    fabDragActive = false;
+    fabTouchDrag = false;
+    fabStartX = t.clientX;
+    fabStartY = t.clientY;
+    fabOrigLeft = parseInt(qs(SEL.chatFab).style.left) || 0;
+    fabOrigTop = parseInt(qs(SEL.chatFab).style.top) || 0;
+    clearTimeout(fabDragTimer);
+    fabDragTimer = setTimeout(function() {
+      fabDragActive = true;
+      qs(SEL.chatFab).classList.add('dragging');
+    }, 250);
+  }
+
+  function fabMove(e, isTouch) {
+    if (fabStartX === undefined) return;
+    var t = isTouch ? e.touches[0] : e;
+    var dx = t.clientX - fabStartX;
+    var dy = t.clientY - fabStartY;
+    if (!fabDragActive && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    if (!fabDragActive) {
+      fabDragActive = true;
+      qs(SEL.chatFab).classList.add('dragging');
+      clearTimeout(fabDragTimer);
+    }
+    e.preventDefault();
+    qs(SEL.chatFab).style.left = Math.max(0, Math.min(window.innerWidth - 52, fabOrigLeft + dx)) + 'px';
+    qs(SEL.chatFab).style.top = Math.max(0, Math.min(window.innerHeight - 52, fabOrigTop + dy)) + 'px';
+  }
+
+  function fabEnd(isTouch) {
+    clearTimeout(fabDragTimer);
+    fabDragTimer = null;
+    if (fabDragActive) {
+      qs(SEL.chatFab).classList.remove('dragging');
+      localStorage.setItem('chat_fab_pos', JSON.stringify({
+        left: parseInt(qs(SEL.chatFab).style.left) || 0,
+        top: parseInt(qs(SEL.chatFab).style.top) || 0,
+      }));
+      if (isTouch) {
+        fabTouchDrag = true;
+        setTimeout(function() { fabTouchDrag = false; }, 100);
+      }
+    }
+    fabStartX = fabStartY = undefined;
+  }
+
+  qs(SEL.chatFab).addEventListener('mousedown', function(e) {
+    if (fabTouchDrag) return; // ignore synthetic mousedown after touch drag
+    fabStart(e, false);
+  });
+  document.addEventListener('mousemove', function(e) { fabMove(e, false); });
+  document.addEventListener('mouseup', function() { fabEnd(false); });
+  qs(SEL.chatFab).addEventListener('touchstart', function(e) { fabStart(e, true); }, { passive: true });
+  document.addEventListener('touchmove', function(e) { fabMove(e, true); }, { passive: false });
+  document.addEventListener('touchend', function() { fabEnd(true); });
+
+  qs(SEL.chatFab).addEventListener('click', function() {
+    if (fabDragActive || fabTouchDrag) { fabDragActive = false; fabTouchDrag = false; return; }
+    toggleChat();
+  });
+
   qs(SEL.chatCloseBtn).addEventListener('click', toggleChat);
   qs(SEL.chatSendBtn).addEventListener('click', handleChatSend);
   qs(SEL.chatInput).addEventListener('keydown', function(e) {
@@ -4324,5 +4812,18 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.chatInput).addEventListener('input', function() {
     this.style.height = 'auto';
     this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+  });
+
+  /* Expand chat */
+  qs(SEL.chatExpandBtn).addEventListener('click', function() {
+    qs(SEL.chatPanel).classList.toggle('expanded');
+    this.querySelector('i').className = qs(SEL.chatPanel).classList.contains('expanded') ? 'nf nf-fa-compress' : 'nf nf-fa-expand';
+  });
+
+  /* Quick prompts */
+  qsa('.chat-prompt-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      handleChatSend(this.dataset.prompt);
+    });
   });
 });

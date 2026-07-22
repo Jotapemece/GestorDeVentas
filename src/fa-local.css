@@ -82,6 +82,9 @@
 }
 .nf-fa-mobile::before { content: "\f10b"; }
 .nf-fa-paper_plane::before { content: "\f1d8"; }
+.nf-fa-robot::before { content: "\f544"; }
+.nf-fa-film::before { content: "\f008"; }
+.nf-fa-ellipsis_h::before { content: "\f141"; }
 .nf-fa-pulse {
   animation: nf-spin 1s steps(8) infinite;
 }

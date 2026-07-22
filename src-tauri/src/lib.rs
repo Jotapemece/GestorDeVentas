@@ -87,6 +87,7 @@ pub fn run() {
             cashier::get_caja_abierta,
             cashier::get_dashboard_summary,
             cashier::get_dashboard_payment_methods,
+            cashier::get_profit_series,
             // Audit
             audit::get_audit_logs,
             audit::get_cierres,
@@ -102,6 +103,8 @@ pub fn run() {
             tasa_bcv::check_tasa_update,
             // DB
             db::backup_database,
+            db::restore_backup,
+            db::get_backup_key,
             // Auth
             auth::admin_change_password,
             // Products

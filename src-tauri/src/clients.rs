@@ -179,6 +179,7 @@ pub fn get_cliente_history(
                     cantidad,
                     precio_usd_unitario: precio,
                     subtotal_usd: cantidad as f64 * precio,
+                    costo: 0.0,
                 });
             }
         }

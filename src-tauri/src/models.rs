@@ -5,6 +5,7 @@ pub struct Producto {
     pub codigo: String,
     pub nombre: String,
     pub precio_usd: f64,
+    pub costo: f64,
     pub stock: i64,
     pub stock_minimo: i64,
     pub created_at: String,
@@ -72,6 +73,8 @@ pub struct DetalleVenta {
     pub cantidad: i64,
     pub precio_usd_unitario: f64,
     pub subtotal_usd: f64,
+    #[serde(default)]
+    pub costo: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -238,6 +241,8 @@ pub struct SalesReportResult {
     pub total_ventas: i64,
     pub total_usd: f64,
     pub total_bs: f64,
+    pub total_costo_usd: f64,
+    pub total_ganancia_usd: f64,
     pub ventas: Vec<SalesReportItem>,
     pub page: i64,
     pub page_size: i64,
@@ -265,6 +270,8 @@ pub struct DashboardPeriod {
     pub total_ventas: i64,
     pub total_usd: f64,
     pub total_bs: f64,
+    pub total_costo_usd: f64,
+    pub total_ganancia_usd: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -305,5 +312,19 @@ pub struct ExportReportFilter {
     pub end_date: String,
     pub producto_codigo: Option<String>,
     pub username: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProfitDataPoint {
+    pub date: String,
+    pub revenue_usd: f64,
+    pub cost_usd: f64,
+    pub profit_usd: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProfitSeriesFilter {
+    pub start_date: String,
+    pub end_date: String,
 }
 
