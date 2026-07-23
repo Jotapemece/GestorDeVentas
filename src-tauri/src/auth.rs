@@ -8,9 +8,9 @@ use sha2::{Digest, Sha256};
 use std::time::Instant;
 use tauri::State;
 
-const SQL_USER_BY_USERNAME: &str = "SELECT id, username, password, rol FROM usuarios WHERE username = ?1";
+const SQL_USER_BY_USERNAME: &str = "SELECT id, username, password, rol, COALESCE(password_change_required, 0) FROM usuarios WHERE username = ?1";
 const SQL_INSERT_USUARIO: &str = "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)";
-const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol FROM usuarios ORDER BY username";
+const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol, COALESCE(password_change_required, 0) FROM usuarios ORDER BY username";
 const SQL_DELETE_USUARIO: &str = "DELETE FROM usuarios WHERE id = ?1 AND username != 'admin'";
 
 
@@ -70,6 +70,7 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                     success: false,
                     message: "Error interno".to_string(),
                     usuario: None,
+                    password_change_required: false,
                 }
             }
         };
@@ -82,6 +83,7 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                         until.duration_since(Instant::now()).as_secs()
                     ),
                     usuario: None,
+                    password_change_required: false,
                 };
             }
             if Instant::now() >= until {
@@ -97,12 +99,13 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                 success: false,
                 message: "Error interno del servidor".to_string(),
                 usuario: None,
+                password_change_required: false,
             }
         }
     };
 
     let username_clone = username.clone();
-    let (stored_hash, usuario) = match db.query_row(
+    let (stored_hash, usuario, pwd_change_required) = match db.query_row(
         SQL_USER_BY_USERNAME,
         rusqlite::params![username],
         |row| {
@@ -112,7 +115,9 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                     id: row.get(0)?,
                     username: row.get(1)?,
                     rol: row.get(3)?,
+                    password_change_required: row.get::<_, i64>(4)? != 0,
                 },
+                row.get::<_, i64>(4)? != 0,
             ))
         },
     ) {
@@ -129,6 +134,7 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                 success: false,
                 message: "Credenciales inválidas".to_string(),
                 usuario: None,
+                password_change_required: false,
             };
         }
     };
@@ -145,6 +151,7 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
             success: false,
             message: "Credenciales inválidas".to_string(),
             usuario: None,
+            password_change_required: false,
         };
     }
 
@@ -170,6 +177,7 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                 success: false,
                 message: "Error interno".to_string(),
                 usuario: None,
+                password_change_required: false,
             }
         }
     };
@@ -178,6 +186,7 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
         success: true,
         message: "Inicio de sesión exitoso".to_string(),
         usuario: Some(user_clone),
+        password_change_required: pwd_change_required,
     }
 }
 
@@ -270,6 +279,7 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
                 id: row.get(0)?,
                 username: row.get(1)?,
                 rol: row.get(2)?,
+                password_change_required: row.get::<_, i64>(3)? != 0,
             })
         })
         .map_err(|e| e.to_string())?
@@ -282,8 +292,7 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
 #[tauri::command]
 pub fn delete_usuario(state: State<AppState>, usuario_id: i64) -> Result<String, String> {
     let db = state.lock_db()?;
-    let admin_user = crate::auth::require_admin(&state, &db, &format!("Eliminó usuario id={}", usuario_id))?;
-    if admin_user.is_empty() { return Err("No autenticado".to_string()); }
+    let _admin_user = crate::auth::require_admin(&state, &db, &format!("Eliminó usuario id={}", usuario_id))?;
     let affected = db
         .execute(SQL_DELETE_USUARIO, params![usuario_id])
         .map_err(|e| format!("Error al eliminar usuario: {}", e))?;
@@ -353,7 +362,7 @@ pub fn change_password(
 
     let new_hashed = hash_password(&request.new_password);
     db.execute(
-        "UPDATE usuarios SET password = ?1 WHERE id = ?2",
+        "UPDATE usuarios SET password = ?1, password_change_required = 0 WHERE id = ?2",
         params![new_hashed, user.id],
     )
     .map_err(|e| format!("Error al cambiar contrasena: {}", e))?;
@@ -402,7 +411,7 @@ pub fn admin_change_password(
 
     let new_hashed = hash_password(&new_password);
     let affected = db
-        .execute("UPDATE usuarios SET password = ?1 WHERE id = ?2", params![new_hashed, usuario_id])
+        .execute("UPDATE usuarios SET password = ?1, password_change_required = 0 WHERE id = ?2", params![new_hashed, usuario_id])
         .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
 
     if affected == 0 {

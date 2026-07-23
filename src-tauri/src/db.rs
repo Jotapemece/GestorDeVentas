@@ -124,6 +124,10 @@ fn insert_default_admin(conn: &Connection) {
             rusqlite::params![constants::DEFAULT_ADMIN_USERNAME, admin_pw, constants::ROL_ADMIN],
         )
         .ok();
+        conn.execute(
+            "UPDATE usuarios SET password_change_required = 1 WHERE username = ?1",
+            rusqlite::params![constants::DEFAULT_ADMIN_USERNAME],
+        ).ok();
 
         let jota_pw = crate::auth::hash_password(constants::DEFAULT_JOTA_PASSWORD);
         conn.execute(
@@ -131,6 +135,10 @@ fn insert_default_admin(conn: &Connection) {
             rusqlite::params![constants::DEFAULT_JOTA_USERNAME, jota_pw, constants::ROL_ADMIN],
         )
         .ok();
+        conn.execute(
+            "UPDATE usuarios SET password_change_required = 1 WHERE username = ?1",
+            rusqlite::params![constants::DEFAULT_JOTA_USERNAME],
+        ).ok();
     }
 }
 
@@ -147,6 +155,10 @@ fn insert_default_vendedor(conn: &Connection) {
             rusqlite::params![constants::DEFAULT_VENDEDOR_USERNAME, pw, constants::ROL_VENDEDOR],
         )
         .ok();
+        conn.execute(
+            "UPDATE usuarios SET password_change_required = 1 WHERE username = ?1",
+            rusqlite::params![constants::DEFAULT_VENDEDOR_USERNAME],
+        ).ok();
     }
 }
 
@@ -293,15 +305,16 @@ pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<Str
         return Err("Archivo de backup no encontrado".to_string());
     }
 
-    let db = state.lock_db()?;
-    let _admin = crate::auth::require_admin(&state, &db, "Restauró backup desde archivo")?;
-    let key = get_backup_key_from_db(&db)?;
-    drop(db);
+    // Read key and decrypt while holding the lock
+    let key = {
+        let db = state.lock_db()?;
+        let _admin = crate::auth::require_admin(&state, &db, "Restauró backup desde archivo")?;
+        get_backup_key_from_db(&db)?
+    };
 
     let decrypted = decrypt_file(&src, &key)?;
 
-    let mut temp_src = db_path.clone();
-    temp_src.set_extension("db.restore");
+    let temp_src = db_path.with_extension("db.restore");
     std::fs::write(&temp_src, &decrypted)
         .map_err(|e| format!("Error al escribir archivo temporal: {}", e))?;
 
@@ -312,12 +325,12 @@ pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<Str
         .map_err(|_| "El archivo descifrado no contiene una base de datos válida".to_string())?;
     drop(test_conn);
 
-    // Close current connection and replace
+    // Re-acquire DB lock, checkpoint WAL, then copy
     let db = state.lock_db()?;
     let _ = db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
     drop(db);
-    drop(state.db.lock()); // force all locks released
-
+    // Small delay to ensure all WAL state is flushed
+    std::thread::sleep(std::time::Duration::from_millis(50));
     std::fs::copy(&temp_src, &db_path)
         .map_err(|e| format!("Error al restaurar BD: {}", e))?;
     std::fs::remove_file(&temp_src).ok();

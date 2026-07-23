@@ -13,7 +13,7 @@
   <script>
     try {
       (function(){var t={
-        oscuro:{'--bg':'#2A2533','--card':'#3D364A','--card-alt':'#4A4258','--danger':'#6B2E2A','--danger-dark':'#55201C','--primary':'#6C5C7A','--primary-dark':'#544666','--primary-rgb':'108, 92, 122','--accent':'#4A7C65','--accent-dark':'#3A6651','--accent-rgb':'74, 124, 101','--danger-rgb':'107, 46, 42','--overlay':'rgba(0,0,0,0.6)','--shadow':'0 2px 12px rgba(0,0,0,0.3)','--hover':'#352F44','--border':'#4A4460','--text':'#E0D8E8','--text-light':'#A098B8','--text-secondary':'#A098B8','--sidebar-bg':'#1F1A2E','--sidebar-text':'#C8C0D8','--sidebar-text-rgb':'200,192,216'},
+        oscuro:{'--bg':'#1A1825','--card':'#282636','--card-alt':'#333048','--danger':'#823F3A','--danger-dark':'#662E2A','--primary':'#8A7BB3','--primary-dark':'#6F5E9A','--primary-rgb':'138, 123, 179','--accent':'#4A9070','--accent-dark':'#3A765A','--accent-rgb':'74, 144, 112','--danger-rgb':'130, 63, 58','--overlay':'rgba(0,0,0,0.7)','--shadow':'0 2px 12px rgba(0,0,0,0.4)','--hover':'#3A3752','--border':'#4E4A68','--text':'#E8E0F2','--text-light':'#B0A8C4','--text-secondary':'#B0A8C4','--sidebar-bg':'#12101C','--sidebar-text':'#C8C0D8','--sidebar-text-rgb':'200,192,216'},
         claro:{'--bg':'#FAFAFA','--card':'#FFFFFF','--card-alt':'#F2F2F2','--danger':'#D97373','--danger-dark':'#C05555','--primary':'#6C8EBF','--primary-dark':'#5070A0','--primary-rgb':'108,142,191','--accent':'#6BAF8D','--accent-dark':'#4A8F6D','--accent-rgb':'107,175,141','--danger-rgb':'217,115,115','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#F5F5F5','--border':'#DDDDDD','--text':'#333333','--text-light':'#777777','--text-secondary':'#777777','--sidebar-bg':'#F0F0F0','--sidebar-text':'#333333','--sidebar-text-rgb':'51,51,51'},
         azul:{'--bg':'#EDF2F7','--card':'#FFFFFF','--card-alt':'#F2F6FA','--danger':'#E8A0A0','--danger-dark':'#D48888','--primary':'#7B9EBF','--primary-dark':'#5A7D9E','--primary-rgb':'123,158,191','--accent':'#8FC1B5','--accent-dark':'#6DA89A','--accent-rgb':'143,193,181','--danger-rgb':'232,160,160','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#E2E8F0','--border':'#CBD5E0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#2C5282','--sidebar-text':'#EBF4FF','--sidebar-text-rgb':'235,244,255'},
         verde:{'--bg':'#F0F7F0','--card':'#FFFFFF','--card-alt':'#EAF3EA','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#A8C9A8','--primary-dark':'#8BB08B','--primary-rgb':'168,201,168','--accent':'#B8DCC8','--accent-dark':'#9CC8AC','--accent-rgb':'184,220,200','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#E6F0E6','--border':'#D0E0D0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#3A6A3A','--sidebar-text':'#F0FFF0','--sidebar-text-rgb':'240,255,240'},
@@ -27,7 +27,7 @@
 </head>
 <body class="compact">
   <div id="app">
-    <div id="device-reg-screen" class="hidden">
+    <div id="device-reg-screen" style="display:none">
       <div class="login-card">
         <div class="login-brand">
           <div class="login-icon">
@@ -103,7 +103,7 @@
       </div>
     </div>
 
-    <div id="main-app" class="hidden">
+    <div id="main-app" style="display:none">
       <aside id="sidebar">
           <div class="sidebar-header">
             <div class="sidebar-logo">
@@ -159,39 +159,6 @@
           <button id="logout-btn"><i class="nf nf-fa-sign_out"></i> Salir</button>
         </div>
       </aside>
-
-      <nav id="bottom-tabs" class="bottom-tabs">
-        <button class="nav-btn active" data-view="sales">
-          <span class="nav-icon"><i class="nf nf-fa-shopping_cart"></i></span>
-          <span class="nav-text">Ventas</span>
-        </button>
-        <button class="nav-btn" data-view="inventory">
-          <span class="nav-icon"><i class="nf nf-fa-archive"></i></span>
-          <span class="nav-text">Inventario</span>
-        </button>
-        <button class="nav-btn" data-view="creditos">
-          <span class="nav-icon"><i class="nf nf-fa-credit_card"></i></span>
-          <span class="nav-text">Crédito</span>
-        </button>
-        <button class="nav-btn" data-view="cashier">
-          <span class="nav-icon"><i class="nf nf-fa-money"></i></span>
-          <span class="nav-text">Caja</span>
-        </button>
-        <div id="more-wrap" class="more-wrap">
-          <button id="more-btn" class="nav-btn">
-            <span class="nav-icon"><i class="nf nf-fa-ellipsis_h"></i></span>
-            <span class="nav-text">Más</span>
-          </button>
-          <div id="more-menu" class="more-menu hidden">
-            <button class="more-menu-item" data-view="reports"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
-            <button class="more-menu-item" data-view="audit"><i class="nf nf-fa-history"></i> Historial</button>
-            <button class="more-menu-item" data-view="config"><i class="nf nf-fa-cog"></i> Config.</button>
-            <button class="more-menu-item admin-only" data-view="sync"><i class="nf nf-fa-cloud_upload"></i> Sync</button>
-            <div class="more-menu-divider"></div>
-            <button id="mobile-logout-btn" class="more-menu-item danger-text"><i class="nf nf-fa-sign_out"></i> Salir</button>
-          </div>
-        </div>
-      </nav>
       <main id="main-content">
         <section id="view-sales" class="view active">
           <div class="sales-header">
@@ -200,7 +167,8 @@
             </div>
             <div class="tasa-input-group">
               <span class="tasa-label">Bs.</span>
-              <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal">
+              <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal" aria-label="Tasa de cambio Bs. por USD">
+              <span id="tasa-connection-badge" class="tasa-connection-badge online" title="Conectado - tasa autom\u00e1tica"><i class="nf nf-fa-wifi"></i></span>
               <span id="tasa-warning" class="tasa-warning hidden" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
               <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV">Tasa</button>
               <button id="calc-btn" class="btn tasa-fetch-btn" title="Calculadora" style="display:none"><i class="nf nf-fa-calculator"></i></button>
@@ -258,6 +226,7 @@
           <div class="view-header">
             <h2><i class="nf nf-fa-archive"></i> Inventario de Productos</h2>
             <div class="inventory-actions">
+              <button id="inventory-tasa-btn" class="btn btn-outline" title="Tasa hist&oacute;rica"><i class="nf nf-fa-calendar"></i> <span id="tasa-actual-label">Hoy</span></button>
               <button id="inventory-import-btn" class="btn btn-outline admin-only"><i class="nf nf-fa-upload"></i> Importar TSV</button>
               <button id="inventory-export-btn" class="btn btn-accent"><i class="nf nf-fa-download"></i> Exportar</button>
               <button id="inventory-add-btn" class="btn btn-accent admin-only"><i class="nf nf-fa-plus"></i> Agregar Producto</button>
@@ -291,14 +260,16 @@
             <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
           </div>
           <div style="margin-bottom:12px">
-            <input type="text" id="creditos-search" class="form-input" placeholder="Buscar por nombre..." style="max-width:280px">
+            <input type="text" id="creditos-search" class="form-input" placeholder="Buscar por nombre..." style="max-width:280px" aria-label="Buscar clientes por nombre">
           </div>
           <div class="table-container">
             <table class="table" id="creditos-table">
               <thead>
                 <tr>
                   <th>Nombre</th>
+                  <th>Cr&eacute;dito</th>
                   <th>Deuda ($)</th>
+                  <th>&Uacute;ltima compra</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -396,27 +367,27 @@
             <div class="reports-filter-row">
               <div class="form-group">
                 <label>Desde</label>
-                <input type="date" id="report-start-date">
+                <input type="date" id="report-start-date" aria-label="Fecha de inicio del reporte">
               </div>
               <div class="form-group">
                 <label>Hasta</label>
-                <input type="date" id="report-end-date">
+                <input type="date" id="report-end-date" aria-label="Fecha de fin del reporte">
               </div>
               <div class="form-group">
                 <label>Producto</label>
-                <input type="text" id="report-product-filter" placeholder="C&oacute;digo del producto">
+                <input type="text" id="report-product-filter" placeholder="C&oacute;digo del producto" aria-label="Filtrar por código de producto">
               </div>
               <div class="form-group">
                 <label>Vendedor</label>
-                <input type="text" id="report-vendor-filter" placeholder="Nombre de usuario">
+                <input type="text" id="report-vendor-filter" placeholder="Nombre de usuario" aria-label="Filtrar por nombre de vendedor">
               </div>
               <div class="form-group">
-                <label>&nbsp;</label>
-                <button id="report-search-btn" class="btn btn-primary" style="width:auto"><i class="nf nf-fa-search"></i> Buscar</button>
+                <label style="visibility:hidden">Buscar</label>
+                <button id="report-search-btn" class="btn btn-primary" style="width:auto" aria-label="Buscar reportes"><i class="nf nf-fa-search"></i> Buscar</button>
               </div>
               <div class="form-group">
-                <label>&nbsp;</label>
-                <button id="report-export-btn" class="btn btn-accent" style="width:auto"><i class="nf nf-fa-download"></i> Exportar XLSX</button>
+                <label style="visibility:hidden">Exportar</label>
+                <button id="report-export-btn" class="btn btn-accent" style="width:auto" aria-label="Exportar reporte a XLSX"><i class="nf nf-fa-download"></i> Exportar XLSX</button>
               </div>
             </div>
           </div>
@@ -544,7 +515,7 @@
               </div>
               <div class="config-row">
                 <span class="config-label">Volumen</span>
-                <input type="range" id="sound-volume" min="0" max="100" value="50">
+                <input type="range" id="sound-volume" min="0" max="100" value="50" aria-label="Volumen de sonidos">
               </div>
             </div>
           </div>
@@ -610,7 +581,7 @@
               <div class="config-info">
                 <p class="text-sm">Limpieza autom&aacute;tica: eliminar registros despu&eacute;s de:</p>
                 <div class="historial-limpieza-row">
-                  <input type="number" id="historial-limpieza-dias" min="0" max="365" value="0">
+                  <input type="number" id="historial-limpieza-dias" min="0" max="365" value="0" aria-label="Días para limpieza automática">
                   <span class="text-sm">d&iacute;as</span>
                   <button id="historial-limpieza-save" class="btn btn-primary btn-sm">Guardar</button>
                 </div>
@@ -653,8 +624,8 @@
                 <span class="config-label">Nuevo usuario</span>
               </div>
               <div class="user-form-row">
-                <input type="text" id="new-user-name" placeholder="Nombre" class="form-input">
-                <input type="password" id="new-user-password" placeholder="Contrase&ntilde;a" class="form-input">
+                <input type="text" id="new-user-name" placeholder="Nombre" class="form-input" aria-label="Nombre del nuevo usuario">
+                <input type="password" id="new-user-password" placeholder="Contrase&ntilde;a" class="form-input" aria-label="Contraseña del nuevo usuario">
                 <select id="new-user-rol" class="form-input">
                   <option value="vendedor">Vendedor</option>
                   <option value="admin">Admin</option>
@@ -677,9 +648,9 @@
             </div>
             <div class="config-card-body">
               <div class="user-form-row">
-                <input type="password" id="change-pwd-old" placeholder="Actual" class="form-input">
-                <input type="password" id="change-pwd-new" placeholder="Nueva" class="form-input">
-                <input type="password" id="change-pwd-confirm" placeholder="Confirmar" class="form-input">
+                <input type="password" id="change-pwd-old" placeholder="Actual" class="form-input" aria-label="Contraseña actual">
+                <input type="password" id="change-pwd-new" placeholder="Nueva" class="form-input" aria-label="Nueva contraseña">
+                <input type="password" id="change-pwd-confirm" placeholder="Confirmar" class="form-input" aria-label="Confirmar nueva contraseña">
                 <button id="change-pwd-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Cambiar</button>
               </div>
             </div>
@@ -694,7 +665,7 @@
               <div class="config-field">
                 <label>API Key de OpenRouter</label>
                 <div style="display:flex;gap:8px">
-                  <input type="password" id="openrouter-api-key" class="form-input" placeholder="sk-or-v1-..." style="flex:1">
+                  <input type="password" id="openrouter-api-key" class="form-input" placeholder="sk-or-v1-..." style="flex:1" aria-label="API Key de OpenRouter">
                   <button id="openrouter-save-key-btn" class="btn btn-primary">Guardar</button>
                 </div>
               </div>
@@ -739,28 +710,28 @@
           <div class="view-header">
             <h2><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</h2>
           </div>
-          <div style="max-width:960px;margin:0 auto;padding:0 16px">
-            <div id="sync-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
-              <div style="background:var(--card);border-radius:10px;padding:14px;box-shadow:var(--shadow);text-align:center">
-                <div style="font-size:24px;font-weight:700;color:var(--text)" id="stat-products">-</div>
-                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Productos activos</div>
+          <div class="sync-wrap">
+            <div class="sync-stats" id="sync-stats">
+              <div class="sync-stat">
+                <div class="sync-stat-num" id="stat-products">-</div>
+                <div class="sync-stat-label">Productos activos</div>
               </div>
-              <div style="background:var(--card);border-radius:10px;padding:14px;box-shadow:var(--shadow);text-align:center">
-                <div style="font-size:24px;font-weight:700;color:var(--text)" id="stat-clients">-</div>
-                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Clientes registrados</div>
+              <div class="sync-stat">
+                <div class="sync-stat-num" id="stat-clients">-</div>
+                <div class="sync-stat-label">Clientes registrados</div>
               </div>
-              <div style="background:var(--card);border-radius:10px;padding:14px;box-shadow:var(--shadow);text-align:center">
-                <div style="font-size:24px;font-weight:700;color:var(--text)" id="stat-sales">-</div>
-                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Ventas totales</div>
+              <div class="sync-stat">
+                <div class="sync-stat-num" id="stat-sales">-</div>
+                <div class="sync-stat-label">Ventas totales</div>
               </div>
             </div>
-            <div style="display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start">
-              <div style="display:flex;flex-direction:column;gap:16px">
-                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
-                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-link"></i> Conexi&oacute;n</h3>
+            <div class="sync-grid">
+              <div class="sync-col">
+                <div class="sync-card">
+                  <h3><i class="nf nf-fa-link"></i> Conexi&oacute;n</h3>
                   <div style="display:flex;flex-direction:column;gap:10px">
-                    <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co" readonly>
-                    <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_..." readonly>
+                    <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co" readonly aria-label="URL de Supabase">
+                    <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_..." readonly aria-label="Clave anónima de Supabase">
                     <button id="view-device-id-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-tag"></i> Ver ID</button>
                     <div id="device-id-display" style="font-size:12px;color:var(--text-light);word-break:break-all;display:none"></div>
                     <div style="display:flex;gap:8px;align-items:center">
@@ -769,8 +740,8 @@
                     </div>
                   </div>
                 </div>
-                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
-                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-history"></i> &Uacute;ltima sincronizaci&oacute;n</h3>
+                <div class="sync-card">
+                  <h3><i class="nf nf-fa-history"></i> &Uacute;ltima sincronizaci&oacute;n</h3>
                   <div id="sync-detail-status" style="font-size:12px;color:var(--text-secondary);display:flex;flex-direction:column;gap:6px">
                     <span>Subir productos: <span id="sync-upload-time">-</span></span>
                     <span>Descargar productos: <span id="sync-download-time">-</span></span>
@@ -780,8 +751,8 @@
                     <span>Descargar clientes: <span id="sync-download-clientes-time">-</span></span>
                   </div>
                 </div>
-                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
-                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-warning"></i> Conflictos</h3>
+                <div class="sync-card">
+                  <h3><i class="nf nf-fa-warning"></i> Conflictos</h3>
                   <div style="display:flex;flex-direction:column;gap:10px">
                     <div style="display:flex;align-items:center;justify-content:space-between">
                       <span style="font-size:14px;color:var(--text)">Pendientes</span>
@@ -791,24 +762,24 @@
                   </div>
                 </div>
               </div>
-              <div style="display:flex;flex-direction:column;gap:16px">
-                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
-                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)"><i class="nf nf-fa-cog"></i> Acciones</h3>
+              <div class="sync-col">
+                <div class="sync-card">
+                  <h3><i class="nf nf-fa-cog"></i> Acciones</h3>
                   <div style="display:flex;flex-direction:column;gap:10px">
-                    <button id="sync-all-btn" class="btn btn-primary" style="width:100%;padding:14px 16px;font-size:15px;border:none;border-radius:10px;cursor:pointer;font-weight:600"><i class="nf nf-fa-sync" style="font-size:20px;display:block;margin-bottom:4px"></i> Sincronizar todo</button>
+                    <button id="sync-all-btn" class="btn btn-primary sync-btn-full"><i class="nf nf-fa-sync" style="font-size:20px;display:block;margin-bottom:4px"></i> Sincronizar todo</button>
                     <details style="font-size:13px">
                       <summary style="cursor:pointer;color:var(--text-light);padding:6px 0;user-select:none"><i class="nf nf-fa-chevron_right" style="font-size:11px"></i> Avanzado</summary>
                       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-                        <button id="upload-all-btn" class="btn" style="width:100%;padding:10px 16px;background:var(--primary);color:#fff;font-size:13px;border:none;border-radius:8px;cursor:pointer"><i class="nf nf-fa-cloud_upload" style="font-size:16px;display:block;margin-bottom:2px"></i> Subir todo</button>
-                        <button id="download-all-btn" class="btn" style="width:100%;padding:10px 16px;background:var(--accent);color:#fff;font-size:13px;border:none;border-radius:8px;cursor:pointer"><i class="nf nf-fa-cloud_download" style="font-size:16px;display:block;margin-bottom:2px"></i> Descargar todo</button>
+                        <button id="upload-all-btn" class="sync-btn-adv" style="background:var(--primary);color:#fff"><i class="nf nf-fa-cloud_upload" style="font-size:16px;display:block;margin-bottom:2px"></i> Subir todo</button>
+                        <button id="download-all-btn" class="sync-btn-adv" style="background:var(--accent);color:#fff"><i class="nf nf-fa-cloud_download" style="font-size:16px;display:block;margin-bottom:2px"></i> Descargar todo</button>
                       </div>
                     </details>
                   </div>
                 </div>
-                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
-                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text);display:flex;align-items:center;gap:8px">
+                <div class="sync-card">
+                  <h3>
                     <i class="nf nf-fa-clock" style="color:var(--primary)"></i> Sincronizaci&oacute;n autom&aacute;tica
-                    <span style="margin-left:auto;font-size:11px;background:var(--primary);color:#fff;padding:2px 8px;border-radius:10px;font-weight:500">Activo</span>
+                    <span class="sync-auto-badge">Activo</span>
                   </h3>
                   <div style="display:flex;flex-direction:column;gap:12px">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -817,18 +788,18 @@
                         <span style="font-size:13px;color:var(--text)">Intervalo de descarga</span>
                       </div>
                       <div style="display:flex;align-items:center;gap:6px">
-                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" style="width:56px;padding:4px 8px;border:2px solid var(--primary);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:center;font-weight:600">
+                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" style="width:56px;padding:4px 8px;border:2px solid var(--primary);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:center;font-weight:600" aria-label="Intervalo de sincronización automática en minutos">
                         <span style="font-size:12px;color:var(--text-light);min-width:28px">min</span>
                       </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:color-mix(in srgb,var(--primary) 8%,var(--card));border-radius:8px">
+                    <div class="sync-auto-info">
                       <i class="nf nf-fa-info_circle" style="font-size:12px;color:var(--primary);flex-shrink:0"></i>
-                      <span style="font-size:11px;color:var(--text-light);line-height:1.4">Despu&eacute;s de cada venta se sube autom&aacute;ticamente. Este timer descarga datos de otros dispositivos en segundo plano.</span>
+                      <span>Despu&eacute;s de cada venta se sube autom&aacute;ticamente. Este timer descarga datos de otros dispositivos en segundo plano.</span>
                     </div>
                   </div>
                 </div>
-                <div style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
-                  <h3 style="margin:0 0 12px;font-size:15px;color:var(--text);display:flex;align-items:center;gap:8px">
+                <div class="sync-card">
+                  <h3>
                     <i class="nf nf-fa-display" style="color:var(--primary)"></i> Dispositivos vinculados
                     <button id="refresh-devices-btn" class="btn btn-outline btn-sm" style="margin-left:auto;padding:2px 10px;font-size:12px" title="Actualizar lista">
                       <i class="nf nf-fa-refresh"></i>
@@ -844,13 +815,46 @@
         </section>
       </main>
     </div>
+
+    <nav id="bottom-tabs" class="bottom-tabs" style="display:none">
+      <button class="nav-btn active" data-view="sales">
+        <span class="nav-icon"><i class="nf nf-fa-shopping_cart"></i></span>
+        <span class="nav-text">Ventas</span>
+      </button>
+      <button class="nav-btn" data-view="inventory">
+        <span class="nav-icon"><i class="nf nf-fa-archive"></i></span>
+        <span class="nav-text">Inventario</span>
+      </button>
+      <button class="nav-btn" data-view="creditos">
+        <span class="nav-icon"><i class="nf nf-fa-credit_card"></i></span>
+        <span class="nav-text">Cr&eacute;dito</span>
+      </button>
+      <button class="nav-btn" data-view="cashier">
+        <span class="nav-icon"><i class="nf nf-fa-money"></i></span>
+        <span class="nav-text">Caja</span>
+      </button>
+      <div id="more-wrap" class="more-wrap">
+        <button id="more-btn" class="nav-btn">
+          <span class="nav-icon"><i class="nf nf-fa-ellipsis_h"></i></span>
+          <span class="nav-text">M&aacute;s</span>
+        </button>
+        <div id="more-menu" class="more-menu hidden">
+          <button class="more-menu-item" data-view="reports"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
+          <button class="more-menu-item" data-view="audit"><i class="nf nf-fa-history"></i> Historial</button>
+          <button class="more-menu-item" data-view="config"><i class="nf nf-fa-cog"></i> Config.</button>
+          <button class="more-menu-item admin-only" data-view="sync"><i class="nf nf-fa-cloud_upload"></i> Sync</button>
+          <div class="more-menu-divider"></div>
+          <button id="mobile-logout-btn" class="more-menu-item danger-text"><i class="nf nf-fa-sign_out"></i> Salir</button>
+        </div>
+      </div>
+    </nav>
   </div>
 
-  <div id="payment-modal" class="modal hidden">
+  <div id="payment-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Procesar Pago">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Procesar Pago</h3>
-        <span class="modal-close" id="payment-modal-close">&times;</span>
+        <span class="modal-close" id="payment-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <div class="payment-totals">
@@ -881,7 +885,10 @@
         </div>
         <div class="form-group hidden" id="cliente-group">
           <label>Seleccionar Cliente</label>
-          <select id="cliente-select"></select>
+          <div class="custom-select" id="client-select-dropdown">
+            <button class="custom-select-btn" id="client-select-btn">Seleccione un cliente...</button>
+            <div class="custom-select-menu" id="client-select-menu"></div>
+          </div>
         </div>
         <div class="form-group hidden" id="mixto-group">
           <label>Desglose de pago</label>
@@ -906,11 +913,11 @@
     </div>
   </div>
 
-  <div id="product-modal" class="modal hidden">
+  <div id="product-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Registrar Nuevo Producto">
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="product-modal-title">Registrar Nuevo Producto</h3>
-        <span class="modal-close" id="product-modal-close">&times;</span>
+        <span class="modal-close" id="product-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -942,11 +949,11 @@
     </div>
   </div>
 
-  <div id="product-detail-modal" class="modal hidden">
+  <div id="product-detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Detalle del Producto">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Detalle del Producto</h3>
-        <span class="modal-close" id="product-detail-close">&times;</span>
+        <span class="modal-close" id="product-detail-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <div class="detail-grid">
@@ -965,11 +972,11 @@
     </div>
   </div>
 
-  <div id="sale-detail-modal" class="modal hidden">
+  <div id="sale-detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Detalle de Venta">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3>Detalle de Venta #<span id="sale-detail-id"></span></h3>
-        <span class="modal-close" id="sale-detail-close">&times;</span>
+        <span class="modal-close" id="sale-detail-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <div class="client-info-bar" id="sale-detail-bar">
@@ -981,16 +988,17 @@
         <div id="sale-detail-list"></div>
       </div>
       <div class="modal-footer">
+        <button id="sale-detail-share-btn" class="btn btn-primary btn-sm" style="display:none"><i class="nf nf-fa-share"></i> Compartir recibo</button>
         <button id="sale-detail-ok-btn" class="btn btn-outline">Cerrar</button>
       </div>
     </div>
   </div>
 
-  <div id="client-modal" class="modal hidden">
+  <div id="client-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Nuevo Cliente">
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="client-modal-title">Nuevo Cliente</h3>
-        <span class="modal-close" id="client-modal-close">&times;</span>
+        <span class="modal-close" id="client-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -1005,11 +1013,11 @@
     </div>
   </div>
 
-  <div id="debt-detail-modal" class="modal hidden">
+  <div id="debt-detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Detalle de Deuda">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3 id="debt-detail-title">Detalle de Deuda</h3>
-        <span class="modal-close" id="debt-detail-close">&times;</span>
+        <span class="modal-close" id="debt-detail-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <div class="client-info-bar" id="debt-detail-bar">
@@ -1023,11 +1031,11 @@
     </div>
   </div>
 
-  <div id="abono-modal" class="modal hidden">
+  <div id="abono-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Registrar Abono">
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="abono-title">Registrar Abono</h3>
-        <span class="modal-close" id="abono-close">&times;</span>
+        <span class="modal-close" id="abono-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <div class="abono-cliente-info" id="abono-cliente-info">
@@ -1071,11 +1079,51 @@
     </div>
   </div>
 
-  <div id="close-cashier-modal" class="modal hidden">
+  <div id="tasa-historial-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Tasa Histórica">
+    <div class="modal-content" style="max-width:420px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-calendar"></i> Tasa Hist&oacute;rica</h3>
+        <span class="modal-close" id="tasa-historial-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div id="tasa-calendar-wrap" style="margin-bottom:12px"></div>
+        <button id="tasa-historial-apply" class="btn btn-primary" style="width:100%;margin-bottom:8px">Aplicar tasa de esta fecha</button>
+        <button id="tasa-historial-clear" class="btn btn-outline" style="width:100%;margin-bottom:12px">Usar tasa actual del d&iacute;a</button>
+        <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
+        <label style="font-size:13px;font-weight:600;margin-bottom:8px;display:block">Tasas recientes (&uacute;ltimos 60 d&iacute;as)</label>
+        <div id="tasa-historial-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="tasa-historial-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="quick-debt-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Deuda Rápida">
+    <div class="modal-content" style="max-width:380px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-bolt"></i> Deuda R&aacute;pida</h3>
+        <span class="modal-close" id="quick-debt-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p id="quick-debt-cliente-nombre" style="font-weight:600;margin-bottom:12px"></p>
+        <div class="form-group">
+          <label>Monto en USD</label>
+          <input type="number" id="quick-debt-monto" class="form-input" step="0.01" min="0.01" placeholder="0.00" style="width:100%">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="quick-debt-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="quick-debt-confirm" class="btn btn-primary"><i class="nf nf-fa-check"></i> Registrar Deuda</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="close-cashier-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Confirmar Cierre de Jornada">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Confirmar Cierre de Jornada</h3>
-        <span class="modal-close" id="close-cashier-close">&times;</span>
+        <span class="modal-close" id="close-cashier-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <p>Se generar&aacute; un reporte de cierre con los siguientes datos:</p>
@@ -1089,11 +1137,11 @@
     </div>
   </div>
 
-  <div id="close-report-modal" class="modal hidden">
+  <div id="close-report-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Reporte de Cierre">
     <div class="modal-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-file_text"></i> Reporte de Cierre</h3>
-        <span class="modal-close" id="close-report-close">&times;</span>
+        <span class="modal-close" id="close-report-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body" id="close-report-body"></div>
       <div class="modal-footer">
@@ -1102,11 +1150,11 @@
     </div>
   </div>
 
-  <div id="historial-cierres-modal" class="modal hidden">
+  <div id="historial-cierres-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Historial de Cierres">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-history"></i> Historial de Cierres</h3>
-        <span class="modal-close" id="historial-cierres-close">&times;</span>
+        <span class="modal-close" id="historial-cierres-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body" id="historial-cierres-body">
         <div id="historial-cierres-list"></div>
@@ -1118,11 +1166,11 @@
   </div>
 
   <!-- Modal para detalle de cierre histórico -->
-  <div id="historial-cierre-detalle-modal" class="modal hidden">
+  <div id="historial-cierre-detalle-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Detalle del Cierre">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3 id="historial-cierre-detalle-title"><i class="nf nf-fa-file_text"></i> Detalle del Cierre</h3>
-        <span class="modal-close" id="historial-cierre-detalle-close">&times;</span>
+        <span class="modal-close" id="historial-cierre-detalle-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body" id="historial-cierre-detalle-body"></div>
       <div class="modal-footer">
@@ -1131,11 +1179,11 @@
     </div>
   </div>
 
-  <div id="product-history-modal" class="modal hidden">
+  <div id="product-history-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Historial de Ventas">
     <div class="modal-content modal-lg" style="max-width:800px">
       <div class="modal-header">
         <h3><i class="nf nf-fa-history"></i> Historial de Ventas</h3>
-        <span class="modal-close" id="product-history-modal-close">&times;</span>
+        <span class="modal-close" id="product-history-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body" style="overflow-x:auto">
         <p id="product-history-title" style="font-weight:600;margin-bottom:12px"></p>
@@ -1151,15 +1199,15 @@
       </div>
     </div>
   </div>
-  <div id="admin-pwd-modal" class="modal hidden">
+  <div id="admin-pwd-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Cambiar Contraseña de Usuario">
     <div class="modal-content" style="max-width:400px">
       <div class="modal-header">
         <h3><i class="nf nf-fa-lock"></i> Cambiar Contrase&ntilde;a de Usuario</h3>
-        <span class="modal-close" id="admin-pwd-modal-close">&times;</span>
+        <span class="modal-close" id="admin-pwd-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <p id="admin-pwd-user-info" style="margin-bottom:12px;font-size:14px"></p>
-        <input type="password" id="admin-pwd-input" class="form-input" placeholder="Nueva contrase&ntilde;a" style="width:100%;box-sizing:border-box">
+                    <input type="password" id="admin-pwd-input" class="form-input" placeholder="Nueva contrase&ntilde;a" style="width:100%;box-sizing:border-box" aria-label="Nueva contraseña">
       </div>
       <div class="modal-footer">
         <button id="admin-pwd-cancel-btn" class="btn btn-outline">Cancelar</button>
@@ -1167,11 +1215,11 @@
       </div>
     </div>
   </div>
-  <div id="confirm-modal" class="modal hidden">
+  <div id="confirm-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Confirmar">
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="confirm-title">Confirmar</h3>
-        <span class="modal-close" id="confirm-close">&times;</span>
+        <span class="modal-close" id="confirm-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <p id="confirm-message"></p>
@@ -1183,11 +1231,11 @@
     </div>
   </div>
 
-  <div id="conflict-modal" class="modal hidden">
+  <div id="conflict-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Conflictos de Sincronización">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-warning"></i> Conflictos de Sincronizaci&oacute;n</h3>
-        <span class="modal-close" id="conflict-modal-close">&times;</span>
+        <span class="modal-close" id="conflict-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
         <p style="margin-bottom:12px;font-size:14px;color:var(--text-secondary)">
@@ -1202,7 +1250,7 @@
     </div>
   </div>
 
-  <div id="sync-progress-modal" class="loading-overlay hidden">
+  <div id="sync-progress-modal" class="loading-overlay hidden" role="dialog" aria-modal="true" aria-label="Sincronizando">
     <div class="loading-modal" style="max-width:420px">
       <h3 style="margin:0 0 12px;font-size:16px">Sincronizando...</h3>
       <p id="sync-progress-text" style="margin:0 0 12px;font-size:14px;color:var(--text-secondary)">Preparando...</p>
@@ -1212,18 +1260,18 @@
     </div>
   </div>
 
-  <div id="loading-modal" class="loading-overlay hidden">
+  <div id="loading-modal" class="loading-overlay hidden" role="dialog" aria-modal="true" aria-label="Cargando">
     <div class="loading-modal">
       <div class="spinner"></div>
       <p id="loading-text">Cargando...</p>
     </div>
   </div>
 
-  <div id="suggestion-modal" class="modal hidden">
+  <div id="suggestion-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Orden de Compra Sugerida">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-shopping_cart"></i> Orden de Compra Sugerida</h3>
-        <span class="modal-close" id="suggestion-modal-close">&times;</span>
+        <span class="modal-close" id="suggestion-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body" style="max-height:60vh;overflow-y:auto">
         <div id="suggestion-content" style="font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap"></div>
@@ -1235,11 +1283,11 @@
     </div>
   </div>
 
-  <div id="guide-modal" class="modal hidden">
+  <div id="guide-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Guía rápida">
     <div class="modal-content modal-lg guide-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-file_text"></i> Gu&iacute;a r&aacute;pida</h3>
-        <span class="modal-close" id="guide-close">&times;</span>
+        <span class="modal-close" id="guide-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body guide-body">
         <aside class="guide-sidebar">
@@ -1257,31 +1305,34 @@
           <div class="guide-page active" id="guide-ventas">
             <h4><i class="nf nf-fa-shopping_cart"></i> Ventas (POS)</h4>
             <div class="guide-section">
-              <p>El panel de ventas es la pantalla principal. Est&aacute; dividido en tres zonas:</p>
+              <p>Panel principal dividido en b&uacute;squeda, carrito y totales:</p>
               <ul>
-                <li><strong>Buscar producto:</strong> escribe el nombre o c&oacute;digo. Los resultados aparecen abajo en tiempo real.</li>
-                <li><strong>Carrito:</strong> a la derecha, con los productos agregados, cantidades y totales.</li>
-                <li><strong>Tasa:</strong> ingresa la tasa del d&iacute;a manualmente o presiona el bot&oacute;n de actualizaci&oacute;n autom&aacute;tica.</li>
+                <li><strong>Buscar producto:</strong> escribe nombre o c&oacute;digo. Filtra por categor&iacute;a con el selector junto a la b&uacute;squeda.</li>
+                <li><strong>Carrito:</strong> productos agregados con cantidades editables (clic en el n&uacute;mero). Totales en USD y Bs.</li>
+                <li><strong>Tasa:</strong> al lado de la b&uacute;squeda. Si hay internet, se bloquea y solo usa la tasa oficial. Sin internet, puedes editarla manualmente.</li>
+                <li><strong>M&eacute;todos de pago:</strong> Efectivo (Bs. o $), Pago M&oacute;vil (con referencia de 4 d&iacute;gitos), Biopago, Punto, Cr&eacute;dito (elige cliente), Mixto (combina varios m&eacute;todos).</li>
+                <li><strong>Recibo:</strong> al cobrar se genera un recibo imprimible. En tel&eacute;fono puedes compartirlo por WhatsApp desde el detalle de la venta.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-keyboard"></i>
-              <span><strong>Tip:</strong> Presiona <kbd>F5</kbd> para enfocar la b&uacute;squeda, <kbd>Enter</kbd> para agregar el producto seleccionado al carrito y <kbd>F8</kbd> para abrir el modal de pago.</span>
+              <span><strong>Tip:</strong> <kbd>F1</kbd> Ventas, <kbd>F2</kbd> Inventario, <kbd>F3</kbd> Cr&eacute;dito, <kbd>F4</kbd> Caja. <kbd>F5</kbd> enfoca la b&uacute;squeda, <kbd>F8</kbd> cobrar. En m&oacute;vil, desliza entre secciones principales.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-caja">
             <h4><i class="nf nf-fa-database"></i> Caja</h4>
             <div class="guide-section">
-              <p>Gestiona el estado de la caja y los cierres diarios:</p>
+              <p>Gestiona la jornada laboral y consulta el resumen del d&iacute;a:</p>
               <ul>
-                <li><strong>Abrir caja:</strong> al iniciar el d&iacute;a, abre la caja para registrar las operaciones.</li>
-                <li><strong>Cerrar caja:</strong> al finalizar, cierra la caja para obtener un resumen de ventas, totales por m&eacute;todo de pago y un consolidado del d&iacute;a.</li>
-                <li><strong>Historial de cierres:</strong> consulta los cierres anteriores con sus detalles y totales.</li>
+                <li><strong>Abrir caja:</strong> al iniciar el d&iacute;a, abre la caja para habilitar las ventas.</li>
+                <li><strong>Cerrar caja:</strong> al finalizar, genera un reporte con totales por m&eacute;todo de pago, productos vendidos y clientes a cr&eacute;dito.</li>
+                <li><strong>Resumen diario:</strong> tarjetas con ventas totales, total en USD, tasa actual y cantidad de ventas del d&iacute;a.</li>
+                <li><strong>Historial de cierres:</strong> consulta cierres anteriores con detalles.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-info_circle"></i>
-              <span><strong>Info:</strong> No se puede realizar una venta si la caja no est&aacute; abierta. El cierre de caja es obligatorio al final de la jornada.</span>
+              <span><strong>Info:</strong> No se puede vender si la caja no est&aacute; abierta. El cierre es obligatorio al final de la jornada.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-credito">
@@ -1289,15 +1340,17 @@
             <div class="guide-section">
               <p>Administra clientes y ventas a cr&eacute;dito:</p>
               <ul>
-                <li><strong>Clientes:</strong> registra nuevos clientes con sus datos de contacto.</li>
-                <li><strong>Ventas a cr&eacute;dito:</strong> al cobrar, selecciona "Cr&eacute;dito" como m&eacute;todo de pago y elige el cliente.</li>
-                <li><strong>Abonos:</strong> registra pagos parciales de los clientes para reducir su deuda.</li>
-                <li><strong>Historial de cr&eacute;dito:</strong> consulta las deudas pendientes y los abonos realizados.</li>
+                <li><strong>Clientes:</strong> tabla con Nombre, estado del cr&eacute;dito, Deuda en USD, &Uacute;ltima compra y Acciones (&ctdot;).</li>
+                <li><strong>Cr&eacute;dito activo:</strong> los clientes sin cr&eacute;dito activo no pueden seleccionarse al cobrar. Desde el men&uacute; (&ctdot;) un admin puede activarlo.</li>
+                <li><strong>Deuda r&aacute;pida:</strong> los administradores pueden a&ntilde;adir un monto directo a la deuda sin crear una venta.</li>
+                <li><strong>Ventas a cr&eacute;dito:</strong> al cobrar, selecciona "Cr&eacute;dito" como m&eacute;todo y elige el cliente.</li>
+                <li><strong>Abonos:</strong> registra pagos parciales con m&eacute;todo de pago y referencia.</li>
+                <li><strong>Historial:</strong> desde "Detalles" consulta las ventas y abonos del cliente.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-search"></i>
-              <span><strong>Tip:</strong> Usa el campo de b&uacute;squeda en la vista de Cr&eacute;dito para filtrar clientes por nombre o n&uacute;mero de tel&eacute;fono.</span>
+              <span><strong>Tip:</strong> Usa el campo de b&uacute;squeda para filtrar clientes por nombre. Al pagar una deuda completa, el cr&eacute;dito se reactiva autom&aacute;ticamente.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-inventario">
@@ -1305,15 +1358,18 @@
             <div class="guide-section">
               <p>Gestiona los productos del negocio:</p>
               <ul>
-                <li><strong>Agregar:</strong> completa c&oacute;digo, nombre, precio en USD y stock.</li>
-                <li><strong>Editar:</strong> haz clic en el &iacute;cono de acciones (&ctdot;) junto a cada producto.</li>
+                <li><strong>Agregar:</strong> completa nombre, precio en USD y stock. El c&oacute;digo se genera autom&aacute;ticamente.</li>
+                <li><strong>Editar:</strong> bot&oacute;n (&ctdot;) en cada fila &rarr; Detalles, Historial (movimientos del producto), Editar.</li>
+                <li><strong>Tasa hist&oacute;rica:</strong> bot&oacute;n calendario junto al campo de tasa &mdash; selecciona una fecha para ver los precios en Bs. con la tasa de ese d&iacute;a.</li>
+                <li><strong>Filtrar:</strong> selector de categor&iacute;a para ver solo productos de una categor&iacute;a espec&iacute;fica.</li>
                 <li><strong>Importar:</strong> desde Config puedes importar productos desde un archivo TSV.</li>
-                <li><strong>Paginaci&oacute;n:</strong> la tabla se pagina autom&aacute;ticamente (50 productos por p&aacute;gina).</li>
+                <li><strong>Exportar:</strong> exporta el inventario a Excel (.xlsx) con el bot&oacute;n de exportaci&oacute;n.</li>
+                <li><strong>Paginaci&oacute;n:</strong> 50 productos por p&aacute;gina con controles Anterior/Siguiente.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-archive"></i>
-              <span><strong>Tip:</strong> Define un stock m&iacute;nimo para recibir alertas visuales cuando un producto est&eacute; por debajo de ese l&iacute;mite.</span>
+              <span><strong>Tip:</strong> Define un stock m&iacute;nimo para recibir alertas visuales (fondo rojo) cuando un producto est&eacute; por debajo de ese l&iacute;mite.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-tasa">
@@ -1321,14 +1377,15 @@
             <div class="guide-section">
               <p>La tasa de cambio se usa para convertir precios entre USD y Bs. en toda la aplicaci&oacute;n.</p>
               <ul>
-                <li><strong>Manual:</strong> escribe el valor directamente en el campo de tasa y presiona <kbd>Enter</kbd>.</li>
-                <li><strong>Autom&aacute;tico:</strong> presiona el bot&oacute;n de refresco para obtener la tasa oficial del BCV.</li>
-                <li>Un icono de advertencia aparece cuando la tasa difiere de la oficial.</li>
+                <li><strong>Autom&aacute;tica:</strong> al iniciar sesi&oacute;n se obtiene la tasa oficial del BCV. Tambi&eacute;n puedes presionar el bot&oacute;n de refresco.</li>
+                <li><strong>Manual solo sin internet:</strong> si hay conexi&oacute;n, el campo de tasa se bloquea y muestra un indicador verde. Sin internet, se desbloquea para ingreso manual con indicador rojo.</li>
+                <li><strong>Historial de tasas:</strong> en el inventario hay un bot&oacute;n calendario que abre el hist&oacute;rico de los &uacute;ltimos 60 d&iacute;as. Puedes seleccionar una fecha para que los precios en Bs. del inventario usen esa tasa hist&oacute;rica.</li>
+                <li>Un icono de advertencia aparece cuando la tasa local difiere de la oficial.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-sync"></i>
-              <span><strong>Tip:</strong> La tasa se actualiza autom&aacute;ticamente al iniciar sesi&oacute;n. Tambi&eacute;n puedes actualizarla manualmente cuando quieras.</span>
+              <span><strong>Tip:</strong> La tasa se actualiza autom&aacute;ticamente al iniciar sesi&oacute;n. El indicador de conexi&oacute;n (wifi verde/rojo) te muestra si puedes editarla o no.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-reportes">
@@ -1336,14 +1393,14 @@
             <div class="guide-section">
               <p>Tres herramientas para analizar las ventas:</p>
               <ul>
-                <li><strong>Dashboard:</strong> resumen visual con gr&aacute;ficos de barras y pastel. Ventas totales, m&eacute;todos de pago y comparativas por per&iacute;odo.</li>
-                <li><strong>Historial:</strong> listado completo de ventas con filtros por fecha, usuario y m&eacute;todo de pago.</li>
-                <li><strong>Cierres:</strong> registros de cierre de caja diarios con totales consolidados.</li>
+                <li><strong>Dashboard:</strong> resumen visual con dos tipos de gr&aacute;fico. <strong>Barras:</strong> ventas y USD agrupados por per&iacute;odo (Hoy, 7 d&iacute;as, Mes). <strong>Pastel:</strong> distribuci&oacute;n por m&eacute;todo de pago (d&iacute;a/semana/mes). Tooltips al pasar el mouse.</li>
+                <li><strong>Historial:</strong> listado completo de ventas con filtros por fecha, usuario, producto y m&eacute;todo de pago. Exportable a Excel.</li>
+                <li><strong>Cierres:</strong> registros de cierre de caja diarios con totales consolidados, desglose por m&eacute;todo y clientes a cr&eacute;dito.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-download"></i>
-              <span><strong>Tip:</strong> Puedes exportar el historial de ventas a Excel (.xlsx) con el bot&oacute;n de exportaci&oacute;n.</span>
+              <span><strong>Tip:</strong> Puedes exportar el historial de ventas a Excel (.xlsx). Los gr&aacute;ficos del dashboard se actualizan autom&aacute;ticamente al cambiar de per&iacute;odo.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-sync">
@@ -1365,52 +1422,59 @@
           <div class="guide-page" id="guide-config">
             <h4><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</h4>
             <div class="guide-section">
-              <p>Ajusta la aplicaci&oacute;n a tu gusto:</p>
+              <p>Ajusta la aplicaci&oacute;n a tu gusto (solo administradores):</p>
               <ul>
-                <li><strong>Tema:</strong> elige entre 8 combinaciones de colores.</li>
-                <li><strong>Entrada de datos:</strong> coma autom&aacute;tica, c&aacute;lculo de vuelto, redondeo.</li>
+                <li><strong>Tema:</strong> elige entre 8 combinaciones de colores (oscuro, claro, azul, verde, morado, turquesa, naranja, menta).</li>
+                <li><strong>Sonido:</strong> activa/desactiva sonidos y ajusta el volumen. &Uacute;til para confirmar acciones al vender.</li>
+                <li><strong>Fuente:</strong> ajusta el tama&ntilde;o de letra general de la interfaz.</li>
+                <li><strong>Pantalla completa:</strong> alterna entre modo ventana y pantalla completa.</li>
+                <li><strong>Entrada de datos:</strong> coma autom&aacute;tica en montos, c&aacute;lculo de vuelto, redondeo.</li>
                 <li><strong>Interfaz:</strong> barra lateral auto-plegable, confirmaci&oacute;n de venta, animaciones.</li>
-                <li><strong>Limpieza:</strong> retenci&oacute;n autom&aacute;tica del historial de acciones.</li>
-                <li><strong>Respaldos:</strong> crea copias de seguridad de la base de datos.</li>
+                <li><strong>Categor&iacute;as:</strong> crea, renombra y elimina categor&iacute;as con color personalizado (admin).</li>
+                <li><strong>Usuarios:</strong> crea y elimina usuarios, cambia contrase&ntilde;as (admin).</li>
+                <li><strong>IA:</strong> configura tu API key de OpenRouter y el modelo de IA.</li>
+                <li><strong>Sincronizaci&oacute;n:</strong> sube y descarga datos con Supabase. Activa el sync autom&aacute;tico con intervalo configurable.</li>
+                <li><strong>Respaldos:</strong> crea copias de seguridad de la base de datos manualmente.</li>
+                <li><strong>Limpieza:</strong> retenci&oacute;n autom&aacute;tica del historial de acciones (1-365 d&iacute;as).</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-lock"></i>
-              <span><strong>Tip:</strong> Solo los usuarios administradores pueden acceder a Configuraci&oacute;n y Sincronizaci&oacute;n.</span>
+              <span><strong>Tip:</strong> Solo los administradores pueden acceder a Configuraci&oacute;n y Sincronizaci&oacute;n. Los vendedores ven opciones limitadas.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-ia">
             <h4><i class="nf nf-fa-robot"></i> Asistente IA (Enar)</h4>
             <div class="guide-section">
-              <p>El sistema cuenta con un asistente de inteligencia artificial llamado <strong>Enar</strong> (el zorro), integrado para ayudarte con el uso del POS. Est&aacute; potenciado por <strong>OpenRouter</strong> y puedes configurar tu propia API key en Configuraci&oacute;n &rarr; IA.</p>
+              <p>El sistema cuenta con un asistente de inteligencia artificial llamado <strong>Enar</strong>, integrado para ayudarte con el uso del POS. Est&aacute; potenciado por <strong>OpenRouter</strong> y puedes configurar tu propia API key en Configuraci&oacute;n.</p>
               <h5>C&oacute;mo funciona</h5>
               <ul>
-                <li>Haz clic en el bot&oacute;n flotante del zorro <i class="nf nf-fa-robot"></i> para abrir el chat.</li>
+                <li>Haz clic en el bot&oacute;n flotante del zorro para abrir el chat.</li>
                 <li>Escribe tu pregunta sobre productos, ventas, clientes o configuraci&oacute;n.</li>
-                <li>Enar consulta los datos en vivo del sistema (productos activos, tasa, ventas del d&iacute;a, stock bajo, clientes con deuda) para darte respuestas precisas.</li>
+                <li>Enar consulta los datos en vivo del sistema (productos activos, tasa, ventas del d&iacute;a, stock bajo, clientes con deuda).</li>
                 <li>Usa los <strong>prompts r&aacute;pidos</strong> (Stock bajo, Ventas hoy, Deudas) para consultas frecuentes.</li>
-                <li>El FAB del chat se puede arrastrar a cualquier posici&oacute;n de la pantalla.</li>
+                <li>El bot&oacute;n flotante se puede arrastrar a cualquier posici&oacute;n de la pantalla.</li>
               </ul>
-              <h5>Qu&eacute; est&aacute; permitido preguntar</h5>
+              <h5>Modelos disponibles</h5>
               <ul>
-                <li>Productos: precios, stock, stock m&iacute;nimo, historial.</li>
-                <li>Ventas: resumen del d&iacute;a, ventas por per&iacute;odo, productos m&aacute;s vendidos.</li>
-                <li>Clientes: saldos, deudas, historial de cr&eacute;dito.</li>
-                <li>Configuraci&oacute;n: tasa del d&iacute;a, par&aacute;metros del sistema.</li>
-                <li>Generar &oacute;rdenes de compra sugeridas basadas en stock bajo.</li>
+                <li><strong>Router autom&aacute;tico</strong> (openrouter/free) &mdash; recomendado, elige el mejor modelo gratis disponible.</li>
+                <li><strong>Gemma 4 31B</strong> &mdash; modelo grande de Google, bueno para an&aacute;lisis.</li>
+                <li><strong>Nemotron 3 Super 120B</strong> &mdash; NVIDIA, muy capaz.</li>
+                <li><strong>Qwen3 Next 80B</strong> &mdash; Alibaba, fuerte en razonamiento.</li>
+                <li><strong>GPT-OSS 20B</strong> &mdash; ligero y r&aacute;pido.</li>
+                <li><strong>Gemma 4 26B</strong> &mdash; versi&oacute;n m&aacute;s peque&ntilde;a de Gemma.</li>
               </ul>
               <h5>Tips de uso</h5>
               <ul>
-                <li><strong>API Key:</strong> obt&eacute;n una key gratuita en <a href="https://openrouter.ai" target="_blank">openrouter.ai</a> (sin tarjeta de cr&eacute;dito).</li>
-                <li><strong>Modelo:</strong> usa el router autom&aacute;tico <kbd>openrouter/free</kbd> para mejor disponibilidad, o selecciona un modelo espec&iacute;fico.</li>
-                <li><strong>Contexto en vivo:</strong> Enar siempre ve los datos actuales del sistema, no necesitas escribir contexto t&uacute; mismo.</li>
-                <li><strong>Chat persistente:</strong> el historial de la sesi&oacute;n se mantiene mientras no recargues la p&aacute;gina.</li>
-                <li><strong>Desactivar:</strong> puedes desactivar el asistente desde Configuraci&oacute;n &rarr; Calidad de vida.</li>
+                <li><strong>API Key:</strong> obt&eacute;n una key gratuita en <a href="https://openrouter.ai" target="_blank">openrouter.ai</a>.</li>
+                <li><strong>Modelo:</strong> usa el router autom&aacute;tico para mejor disponibilidad.</li>
+                <li><strong>Contexto en vivo:</strong> Enar siempre ve los datos actuales del sistema.</li>
+                <li><strong>Desactivar:</strong> puedes ocultar el asistente desde Configuraci&oacute;n.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-keyboard"></i>
-              <span><strong>Tip:</strong> Si el asistente no responde, verifica que la API key sea correcta en Configuraci&oacute;n &rarr; IA. Los modelos gratuitos tienen l&iacute;mites de 20-60 requests por minuto.</span>
+              <span><strong>Tip:</strong> Si el asistente no responde, verifica que la API key sea correcta en Configuraci&oacute;n. Los modelos gratuitos tienen l&iacute;mites de 20-60 requests/minuto.</span>
             </div>
           </div>
         </div>
@@ -1418,11 +1482,11 @@
     </div>
   </div>
 
-  <div id="calculator-modal" class="modal hidden">
+  <div id="calculator-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Calculadora">
     <div class="modal-content calculator-content">
       <div class="modal-header">
         <h3>Calculadora</h3>
-        <span class="modal-close" id="calculator-close">&times;</span>
+        <span class="modal-close" id="calculator-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body calculator-body">
         <div class="calc-display">

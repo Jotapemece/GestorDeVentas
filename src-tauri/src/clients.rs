@@ -20,9 +20,13 @@ type VentaRow = (
 );
 
 const SQL_LIST_CLIENTES: &str =
-    "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at FROM clientes ORDER BY nombre ASC";
+    "SELECT c.id, c.nombre, c.credito_activo, c.saldo_deuda_usd, c.sync_id, c.updated_at, \
+     (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id) as ultima_compra \
+     FROM clientes c ORDER BY c.nombre ASC";
 const SQL_CLIENTE_BY_ID: &str =
-    "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at FROM clientes WHERE id = ?1";
+    "SELECT c.id, c.nombre, c.credito_activo, c.saldo_deuda_usd, c.sync_id, c.updated_at, \
+     (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id) as ultima_compra \
+     FROM clientes c WHERE c.id = ?1";
 const SQL_INSERT_CLIENTE: &str =
     "INSERT INTO clientes (nombre, sync_id, updated_at) VALUES (?1, ?2, ?3)";
 const SQL_TOGGLE_CREDITO: &str = "UPDATE clientes SET credito_activo = ?1 WHERE id = ?2";
@@ -50,6 +54,7 @@ fn row_to_cliente(row: &rusqlite::Row) -> rusqlite::Result<Cliente> {
         saldo_deuda_usd: row.get(3)?,
         sync_id: row.get(4)?,
         updated_at: row.get(5)?,
+        ultima_compra: row.get(6)?,
     })
 }
 
@@ -284,6 +289,34 @@ pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String) -
     db.execute(SQL_UPDATE_CLIENTE, params![nombre.trim(), now, cliente_id])
         .map_err(|e| e.to_string())?;
     Ok("Cliente actualizado exitosamente".to_string())
+}
+
+#[tauri::command]
+pub fn add_quick_debt(
+    state: State<AppState>,
+    cliente_id: i64,
+    monto_usd: f64,
+) -> Result<String, String> {
+    if monto_usd <= 0.0 {
+        return Err("El monto debe ser mayor a cero".to_string());
+    }
+    let username = state.get_username()?;
+    let db = state.lock_db()?;
+    let affected = db
+        .execute(
+            "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2",
+            params![monto_usd, cliente_id],
+        )
+        .map_err(|e| e.to_string())?;
+    if affected == 0 {
+        return Err("Cliente no encontrado".to_string());
+    }
+    let accion = format!(
+        "Deuda rápida - Cliente #{} - Monto: ${:.2}",
+        cliente_id, monto_usd
+    );
+    crate::audit::log_action(&db, &username, &accion).ok();
+    Ok(format!("Deuda de ${:.2} registrada correctamente", monto_usd))
 }
 
 #[tauri::command]

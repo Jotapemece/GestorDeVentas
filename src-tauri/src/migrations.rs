@@ -106,6 +106,8 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("015_add_client_sync_fields", add_client_sync_fields),
     ("016_add_product_updated_at_conflictos", add_product_updated_at_conflictos),
     ("017_add_costo_productos", add_costo_productos),
+    ("018_add_historial_tasas", add_historial_tasas),
+    ("019_add_password_change_required", add_password_change_required),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -325,6 +327,16 @@ fn add_costo_productos(conn: &Connection) {
     }
 }
 
+fn add_historial_tasas(conn: &Connection) {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS historial_tasas (
+            fecha TEXT PRIMARY KEY,
+            tasa REAL NOT NULL,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );"
+    ).ok();
+}
+
 fn add_product_updated_at_conflictos(conn: &Connection) {
     if !column_exists(conn, "productos", "updated_at") {
         if let Err(e) = conn.execute(
@@ -350,4 +362,17 @@ fn add_product_updated_at_conflictos(conn: &Connection) {
         )",
         [],
     ).ok();
+}
+
+fn add_password_change_required(conn: &Connection) {
+    if !column_exists(conn, "usuarios", "password_change_required") {
+        conn.execute_batch(
+            "ALTER TABLE usuarios ADD COLUMN password_change_required INTEGER NOT NULL DEFAULT 0;"
+        ).ok();
+        // Mark existing default users as requiring password change
+        conn.execute(
+            "UPDATE usuarios SET password_change_required = 1 WHERE username IN ('admin', 'jota', 'vendedor')",
+            [],
+        ).ok();
+    }
 }

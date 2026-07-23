@@ -222,16 +222,13 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 Features POS: roles de vendedor, cifrado backups, mejoras mobile, tema oscuro, fix modelo OpenRouter.
 
 ### Completed (this session)
-- **Path en Android**: quitado `#[cfg(not(target_os = "android"))]` de `use std::path::Path` en `db.rs`
-- **Reportes para vendedor**: `loadUserList()` eliminado del loader de reports
-- **Sync auto para todos**: `loadSyncAutoConfig()` movido a `handleLogin()`
-- **Config para vendedor**: nav buttons config + IA card sin `admin-only`
-- **Tema oscuro**: `--border #5A5270`, `--primary #7E6B90`, even-row `0.08`, +10 shadow overrides
-- **Mobile**: bottom tabs 4+More, pull-to-refresh, swipe-to-delete, share receipt, cart 44px, FAB 44px
-- **Icono ellipsis**: `.nf-fa-ellipsis_h` en `fa-local.css`
-- **Bug fixes**: `getUserConfig`/`setUserConfig` restauradas, constantes duplicadas eliminadas, `fabEnd` corregido
-- **Modelos OpenRouter**: actualizados con 6 modelos gratuitos actuales (Gemma 4, Nemotron 3, GPT-OSS, Qwen3 Next)
-- **Rust compila**: `cargo check` ✅
+- **Historial de tasas BCV**: Migration 018 crea `historial_tasas(fecha TEXT PK, tasa REAL)`; `check_tasa_update` guarda cada consulta; comandos `get_historial_tasas(dias)` y `get_tasa_historica(fecha)`
+- **Tasa histórica en inventario**: botón calendario `#inventory-tasa-btn` en cabecera de inventario, modal con selector de fecha + lista de últimos 60 días con tasas; `tasaInventario` variable separada de `tasaActual`; BS prices en inventario usan `tasaInventario || tasaActual`
+- **Custom dropdown clientes**: reemplazado `<select>` por dropdown personalizado con clase `custom-select`, items deshabilitados (`disabled muted`) para clientes sin crédito
+- **Toggle crédito activo**: botón toggle en fila de cliente (admin-only, con confirmación), clientes sin crédito aparecen grisados en el dropdown de pago
+- **Deuda rápida**: comando `add_quick_debt` suma monto a `saldo_deuda_usd`; botón `<i class="nf nf-fa-bolt"></i>` en fila de cliente; modal para ingresar monto
+- **Iconos nuevos**: `nf-fa-bolt`, `nf-fa-toggle-on`, `nf-fa-toggle-off`, `nf-fa-calendar` en `fa-local.css`
+- **Tests**: 80 passed, `cargo check` ✅, JS sin errores de sintaxis
 
 ### Active
 - (ninguno)

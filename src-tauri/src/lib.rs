@@ -77,6 +77,7 @@ pub fn run() {
             clients::pay_debt,
             clients::update_cliente,
             clients::delete_cliente,
+            clients::add_quick_debt,
             // Cashier
             cashier::get_daily_summary,
             cashier::close_cashier,
@@ -101,6 +102,8 @@ pub fn run() {
             // Tasa BCV
             tasa_bcv::fetch_tasa_bcv,
             tasa_bcv::check_tasa_update,
+            tasa_bcv::get_historial_tasas,
+            tasa_bcv::get_tasa_historica,
             // DB
             db::backup_database,
             db::restore_backup,

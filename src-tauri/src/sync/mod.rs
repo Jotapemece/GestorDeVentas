@@ -94,25 +94,11 @@ pub(crate) fn upsert_config(db: &rusqlite::Connection, key: &str, value: &str) {
 }
 
 pub(crate) fn urlencoding(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            ' ' => out.push_str("%20"),
-            '%' => out.push_str("%25"),
-            '<' => out.push_str("%3C"),
-            '>' => out.push_str("%3E"),
-            '#' => out.push_str("%23"),
-            '"' => out.push_str("%22"),
-            '(' => out.push_str("%28"),
-            ')' => out.push_str("%29"),
-            '{' | '}' => out.push_str(if c == '{' { "%7B" } else { "%7D" }),
-            '|' => out.push_str("%7C"),
-            '\\' => out.push_str("%5C"),
-            '^' => out.push_str("%5E"),
-            '~' => out.push_str("%7E"),
-            '[' | ']' => out.push_str(if c == '[' { "%5B" } else { "%5D" }),
-            '`' => out.push_str("%60"),
-            c => out.push(c),
+    let mut out = String::with_capacity(s.len() * 3);
+    for byte in s.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
+            _ => out.push_str(&format!("%{:02X}", byte)),
         }
     }
     out
@@ -147,7 +133,7 @@ mod tests {
     }
     #[test]
     fn test_urlencoding_passes_safe_chars() {
-        assert_eq!(urlencoding("2026-07-17T18:13:20.659Z"), "2026-07-17T18:13:20.659Z");
+        assert_eq!(urlencoding("2026-07-17T18:13:20.659Z"), "2026-07-17T18%3A13%3A20.659Z");
     }
     #[test]
     fn test_urlencoding_encodes_space() {

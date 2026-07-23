@@ -129,28 +129,11 @@ function cssVar(name, fallback = '') {
 async function tryCatch(fn, errorMsg = 'Error') {
   try { return await fn(); } catch (e) { showToast(errorMsg + ': ' + e, 'error'); }
 }
-function renderTableRows(tbody, data, rowFn) {
-  const frag = document.createDocumentFragment();
-  data.forEach(item => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = rowFn(item);
-    frag.appendChild(tr);
-  });
-  tbody.appendChild(frag);
-}
-
 async function getUserConfig(key) {
   return invoke('get_user_config_value', { key });
 }
 async function setUserConfig(key, value) {
   return invoke('set_user_config_value', { key, value });
-}
-
-async function loadToggleConfig(key, defaultValue = false) {
-  try {
-    const val = await getUserConfig(key);
-    return val === '1';
-  } catch (e) { return defaultValue; }
 }
 
 function setCustomSelectValue(wrap, value) {
@@ -196,6 +179,7 @@ const SEL = {
   regError: '#reg-error',
 
   mainApp: '#main-app',
+  bottomTabs: '#bottom-tabs',
   sidebarUser: '#sidebar-user',
   logoutBtn: '#logout-btn',
 
@@ -217,7 +201,9 @@ const SEL = {
   paymentTotalBs: '#payment-total-bs',
   paymentConfirmBtn: '#payment-confirm-btn',
   referenciaInput: '#referencia-input',
-  clienteSelect: '#cliente-select',
+  clienteSelect: '#client-select-dropdown',
+  clienteSelectBtn: '#client-select-btn',
+  clienteSelectMenu: '#client-select-menu',
   mixtoItems: '#mixto-items',
   mixtoError: '#mixto-error',
   mixtoWarning: '#mixto-warning',
@@ -234,6 +220,14 @@ const SEL = {
   inventoryAddBtn: '#inventory-add-btn',
   inventoryExportBtn: '#inventory-export-btn',
   inventoryImportBtn: '#inventory-import-btn',
+  inventoryTasaBtn: '#inventory-tasa-btn',
+  tasaHistorialModal: '#tasa-historial-modal',
+  tasaHistorialList: '#tasa-historial-list',
+  tasaHistorialApply: '#tasa-historial-apply',
+  tasaHistorialClear: '#tasa-historial-clear',
+  tasaHistorialClose: '#tasa-historial-close',
+  tasaHistorialOkBtn: '#tasa-historial-ok-btn',
+  tasaActualLabel: '#tasa-actual-label',
   productModal: '#product-modal',
   productModalTitle: '#product-modal-title',
   productSaveText: '#product-save-text',
@@ -255,6 +249,12 @@ const SEL = {
   // --- Creditos / Clientes ---
   creditosBody: '#creditos-body',
   creditoAddBtn: '#credito-add-btn',
+  quickDebtModal: '#quick-debt-modal',
+  quickDebtClienteNombre: '#quick-debt-cliente-nombre',
+  quickDebtMonto: '#quick-debt-monto',
+  quickDebtConfirm: '#quick-debt-confirm',
+  quickDebtCancel: '#quick-debt-cancel-btn',
+  quickDebtClose: '#quick-debt-close',
   clientModal: '#client-modal',
   clientModalTitle: '#client-modal-title',
   clientNombre: '#client-nombre',
@@ -330,6 +330,7 @@ const SEL = {
 
   // --- Tasa ---
   tasaFetchBtn: '#tasa-fetch-btn',
+  tasaConnectionBadge: '#tasa-connection-badge',
 
   // --- Cambio (vuelto) ---
   cambioGroup: '#cambio-group',
@@ -365,6 +366,7 @@ const SEL = {
   saleDetailList: '#sale-detail-list',
   saleDetailClose: '#sale-detail-close',
   saleDetailOkBtn: '#sale-detail-ok-btn',
+  saleDetailShareBtn: '#sale-detail-share-btn',
   viewReports: '#view-reports',
   gotoReportsBtn: '#goto-reports-btn',
 
@@ -524,6 +526,19 @@ const SEL = {
   clockHour: '#clock-hour',
   clockMinute: '#clock-minute',
   clockSecond: '#clock-second',
+
+  // --- Hardcoded selectors centralized ---
+  salesBody: '.sales-body',
+  paymentMethodActive: '.payment-method-btn.active',
+  invPage: '[data-inv-page]',
+  dashboardChartToggle: '.dashboard-chart-toggle button',
+  dashboardChartContainer: '.dashboard-chart-container',
+  dataPiePeriod: '[data-pie-period]',
+  configCardHeader: '.config-card-header',
+  creditosBodyTr: '#creditos-body tr',
+  customSelectOpen: '.custom-select.open',
+  salesLeftCenter: '.sales-left, .sales-center',
+  viewActive: '.view.active',
 };
 
 /* ========== CALCULATOR ========== */
@@ -572,7 +587,9 @@ function calcInput(val) {
   if (['add', 'subtract', 'multiply', 'divide'].includes(val)) {
     const opMap = { add: '+', subtract: '-', multiply: '*', divide: '/' };
     if (calcState.expr && calcState.memory !== null && calcState.op) {
-      calcState.expr = String(eval(`${calcState.memory} ${calcState.op} ${parseFloat(calcState.expr) || 0}`));
+      const a = calcState.memory;
+      const b = parseFloat(calcState.expr) || 0;
+      calcState.expr = String(calcState.op === '+' ? a + b : calcState.op === '-' ? a - b : calcState.op === '*' ? a * b : calcState.op === '/' ? (b !== 0 ? a / b : 0) : 0);
     }
     calcState.memory = parseFloat(calcState.expr) || 0;
     calcState.op = opMap[val];
@@ -772,15 +789,34 @@ function createInventoryRow(p, editBtn) {
   var stockBadge = (p.stock < p.stock_minimo) ? '<span class="badge badge-danger" title="Debajo del stock mínimo">!</span>' : '';
   var costo = p.costo || 0;
   var margen = (costo > 0 && p.precio_usd > 0) ? ((p.precio_usd - costo) / p.precio_usd * 100).toFixed(1) + '%' : '—';
-  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
+  var tasa = tasaInventario > 0 ? tasaInventario : tasaActual;
+  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
-  const adminBtns = isAdmin
-    ? '<button class="btn btn-sm btn-outline" data-action="edit-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-pencil"></i></button> '
-    + (c.saldo_deuda_usd === 0 ? '<button class="btn btn-sm btn-danger" data-action="delete-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-trash"></i></button>' : '')
-    : '';
-  return '<td>' + escapeHtml(c.nombre) + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td><button class="btn btn-sm btn-outline" data-action="open-debt-detail" data-id="' + c.id + '">Ver Detalles</button> <button class="btn btn-sm btn-primary" data-action="open-abono" data-id="' + c.id + '">Abonar / Pagar</button> ' + adminBtns + '</td>';
+  var activoBadge = c.credito_activo
+    ? '<span class="badge badge-success" style="font-size:10px">Activo</span>'
+    : '<span class="badge badge-danger" style="font-size:10px">Inactivo</span>';
+  var ultimaCompra = c.ultima_compra
+    ? escapeHtml(c.ultima_compra.split(' ')[0])
+    : '<span class="text-muted">—</span>';
+  var dropdownItems = '';
+  dropdownItems += '<button data-action="open-debt-detail" data-id="' + c.id + '"><i class="nf nf-fa-info_circle"></i> Detalles</button>';
+  dropdownItems += '<button data-action="open-abono" data-id="' + c.id + '"><i class="nf nf-fa-money"></i> Abonar / Pagar</button>';
+  if (isAdmin) {
+    var toggleIcon = c.credito_activo ? 'nf-fa-toggle-on' : 'nf-fa-toggle-off';
+    var toggleLabel = c.credito_activo ? 'Desactivar cr&eacute;dito' : 'Activar cr&eacute;dito';
+    var deleteBtn = c.saldo_deuda_usd === 0
+      ? '<button data-action="delete-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-trash"></i> Eliminar</button>'
+      : '';
+    dropdownItems += '<div class="dropdown-divider"></div>' +
+      '<button data-action="toggle-cliente-credito" data-id="' + c.id + '" data-activo="' + c.credito_activo + '"><i class="nf ' + toggleIcon + '"></i> ' + toggleLabel + '</button>' +
+      '<button data-action="edit-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-pencil"></i> Editar</button>' +
+      '<button data-action="open-quick-debt" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-bolt"></i> Deuda r&aacute;pida</button>' +
+      deleteBtn;
+  }
+  var dropdown = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu">' + dropdownItems + '</div></div>';
+  return '<td>' + escapeHtml(c.nombre) + '</td><td>' + activoBadge + '</td><td>' + formatUSD(c.saldo_deuda_usd) + '</td><td>' + ultimaCompra + '</td><td>' + dropdown + '</td>';
 }
 function createAuditRow(log) {
   return '<td>' + log.id + '</td><td>' + escapeHtml(log.fecha_hora) + '</td><td>' + escapeHtml(log.usuario) + '</td><td>' + escapeHtml(log.accion) + '</td>';
@@ -818,11 +854,15 @@ const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;paddin
 let currentUser = null;
 let cart = [];
 let tasaActual = 0;
+let tasaInventario = 0;
+let tasaInventarioFecha = '';
 let cartShowBs = false;
 let editingProduct = null;
 let editingClienteId = null;
 let abonoClienteId = null;
+let selectedClienteId = null;
 let productCache = [];
+let creditoRows = [];
 
 let lastCloseReportData = null;
 let lastViewName = 'sales';
@@ -939,6 +979,7 @@ document.addEventListener('keydown', (e) => {
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
 function parsePrecio(s) { return parseFloat(String(s).replace(',', '.')) || 0; }
+function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
 function totalBsRedondeado(totalUsd) {
   const bs = totalUsd * tasaActual;
   return redondeoBs ? Math.round(bs) : bs;
@@ -1259,8 +1300,32 @@ async function handleLogin() {
         localStorage.removeItem('recordar_usuario');
       }
       currentUser = res.usuario;
+      // password_change_required desactivado temporalmente
+      /* if (res.password_change_required) {
+        const ok = await confirmModal(
+          'Por seguridad, debe cambiar su contraseña antes de continuar.',
+          'Cambio de contraseña requerido',
+          'Cambiar ahora'
+        );
+        if (!ok) { handleLogout(); return; }
+        qs(SEL.loginScreen).style.display = 'none';
+        qs(SEL.mainApp).style.display = 'flex';
+        qs(SEL.bottomTabs).style.display = '';
+        showView('config');
+        await new Promise(r => setTimeout(r, 200));
+        const pwdSection = qs(SEL.changePwdOld)?.closest('.config-card');
+        if (pwdSection) {
+          const header = pwdSection.querySelector('.config-card-header');
+          if (header) header.classList.remove('collapsed');
+          pwdSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => qs(SEL.changePwdOld)?.focus(), 300);
+        }
+        showToast('Cambie su contraseña para continuar usando la aplicación', 'warning');
+        return;
+      } */
       qs(SEL.loginScreen).style.display = 'none';
       qs(SEL.mainApp).style.display = 'flex';
+      qs(SEL.bottomTabs).style.display = '';
       qs(SEL.sidebarUser).textContent = currentUser.username + ' (' + currentUser.rol + ')';
       startClock();
       initSidebarAutoHide();
@@ -1270,6 +1335,7 @@ async function handleLogin() {
       applyRoleUI();
       loadSyncAutoConfig();
       await loadTasa();
+      updateConnectionState();
       await loadProductCache();
       try { lastViewName = localStorage.getItem('last_view') || 'sales'; } catch (e) {}
       showView(lastViewName);
@@ -1281,6 +1347,7 @@ async function handleLogin() {
       errEl.textContent = res.message;
     }
   } catch (e) {
+    console.log('login invoke error:', e);
     errEl.textContent = 'Error: ' + e;
   }
 }
@@ -1294,6 +1361,8 @@ async function handleLogout() {
   currentUser = null; cart = []; lastCloseReportData = null;
   qs(SEL.loginPassword).value = '';
   qs(SEL.loginError).textContent = '';
+  qs(SEL.mainApp).style.display = 'none';
+  qs(SEL.bottomTabs).style.display = 'none';
   qs(SEL.loginScreen).style.display = 'flex';
 }
 
@@ -1310,7 +1379,7 @@ async function loadTasa() {
 }
 
 async function handleTasaChange() {
-  const val = parseFloat(qs(SEL.tasaInput).value);
+  const val = parseInput(qs(SEL.tasaInput).value);
   if (isNaN(val) || val <= 0) {
     qs(SEL.tasaInput).value = tasaActual.toFixed(2);
     showToast('La tasa debe ser mayor a cero', 'error');
@@ -1353,11 +1422,34 @@ async function fetchTasaBcv() {
   }
 }
 
+function updateConnectionState() {
+  var online = navigator.onLine;
+  var input = qs(SEL.tasaInput);
+  var badge = qs(SEL.tasaConnectionBadge);
+  if (!input || !badge) return;
+  if (online) {
+    input.disabled = true;
+    input.title = 'Con conexi\u00f3n - usa el bot\u00f3n Tasa BCV';
+    badge.className = 'tasa-connection-badge online';
+    badge.innerHTML = '<i class="nf nf-fa-wifi"></i>';
+    badge.title = 'Conectado';
+  } else {
+    input.disabled = false;
+    input.title = 'Sin conexi\u00f3n - puede ingresar la tasa manualmente';
+    badge.className = 'tasa-connection-badge offline';
+    badge.innerHTML = '<i class="nf nf-fa-wifi"></i>';
+    badge.title = 'Sin conexi\u00f3n';
+  }
+}
+
+window.addEventListener('online', updateConnectionState);
+window.addEventListener('offline', updateConnectionState);
 
 function refreshAllBsPrices() {
+  var tasa = tasaInventario > 0 ? tasaInventario : tasaActual;
   document.querySelectorAll('.bs-price-cell').forEach(el => {
     const usd = parseFloat(el.dataset.usdPrice);
-    if (!isNaN(usd)) el.textContent = formatBS(usd * tasaActual);
+    if (!isNaN(usd)) el.textContent = formatBS(usd * tasa);
   });
 }
 
@@ -1490,11 +1582,11 @@ function renderCart() {
   if (cart.length === 0) {
     empty.innerHTML = emptyState('<i class="nf nf-fa-shopping_cart"></i>', 'El carrito est\u00e1 vac\u00edo', 'Agregue productos desde la lista');
     empty.style.display = 'block';
-    document.querySelector('.sales-body').classList.add('cart-hidden');
+    qs(SEL.salesBody).classList.add('cart-hidden');
   } else {
     empty.innerHTML = '';
     empty.style.display = 'none';
-    document.querySelector('.sales-body').classList.remove('cart-hidden');
+    qs(SEL.salesBody).classList.remove('cart-hidden');
     const fragment = document.createDocumentFragment();
     cart.forEach(item => {
       const tr = document.createElement('tr');
@@ -1526,7 +1618,8 @@ function openPaymentModal() {
   qs(SEL.paymentTotalBs).textContent = formatBS(totalBsRedondeado(total));
   showModal(qs(SEL.paymentModal));
   qs(SEL.referenciaInput).value = '';
-  qs(SEL.clienteSelect).innerHTML = '<option value="">Seleccione...</option>';
+  selectedClienteId = null;
+  qs(SEL.clienteSelectBtn).textContent = 'Seleccione un cliente...';
   qs(SEL.mixtoItems).innerHTML = '';
   qs(SEL.mixtoError).style.display = 'none';
   selectPaymentMethod(METODO_EFECTIVO_BS);
@@ -1588,7 +1681,7 @@ function addMixtoRow(containerId, autoDistribute) {
   const curLabel = row.querySelector('.mixto-currency-label');
 
   function updateConversion() {
-    const val = parseFloat(montoInput.value) || 0;
+    const val = parseInput(montoInput.value);
     if (sel.value === METODO_EFECTIVO_USD) {
       convSpan.textContent = '= Bs. ' + formatBS(val * tasaActual);
       convSpan.style.display = 'inline';
@@ -1642,7 +1735,7 @@ function distributeMixto(containerId) {
   if (!rows.length) return;
   const total = containerId === 'mixto-items'
     ? cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0)
-    : parseFloat(qs(SEL.abonoMonto).value) || 0;
+    : parseInput(qs(SEL.abonoMonto).value);
   if (total <= 0) return;
   const share = total / rows.length;
   for (const row of rows) {
@@ -1680,10 +1773,10 @@ function getMixtoData(containerId) {
     const input = row.querySelector('.mixto-monto');
     let monto_usd;
     if (isBsMethod(metodo)) {
-      const bs = parseFloat(input.value) || 0;
+      const bs = parseInput(input.value);
       monto_usd = tasaActual > 0 ? bs / tasaActual : 0;
     } else {
-      monto_usd = parseFloat(input.value) || 0;
+      monto_usd = parseInput(input.value);
     }
     if (monto_usd > 0) {
       items.push({ metodo, monto_usd: monto_usd, referencia: metodo === METODO_PAGO_MOVIL ? ref : null });
@@ -1699,7 +1792,7 @@ function updateMixtoWarning(containerId) {
   const items = getMixtoData(containerId);
   const total = containerId === 'mixto-items'
     ? cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0)
-    : parseFloat(qs(SEL.abonoMonto).value) || 0;
+    : parseInput(qs(SEL.abonoMonto).value);
   if (items.length === 0 || total <= 0) { warningEl.style.display = 'none'; return; }
   let suma = 0;
   for (const item of items) suma += item.monto_usd;
@@ -1745,19 +1838,44 @@ function validarMixto(items, totalEsperado, errorId) {
   return true;
 }
 
+function toggleClientDropdown(show) {
+  const dd = qs(SEL.clienteSelect);
+  if (show === undefined) show = !dd.classList.contains('open');
+  dd.classList.toggle('open', !!show);
+}
+
+function selectCliente(id, nombre) {
+  selectedClienteId = id;
+  qs(SEL.clienteSelectBtn).textContent = nombre;
+  toggleClientDropdown(false);
+}
+
 async function loadClientesForSelect() {
   try {
     const clientes = await invoke('list_clientes');
-    const sel = qs(SEL.clienteSelect);
-    sel.innerHTML = '<option value="">Seleccione un cliente...</option>';
-    clientes.filter(c => c.credito_activo).forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = c.id;
-      opt.textContent = c.nombre + ' (Deuda: ' + formatUSD(c.saldo_deuda_usd) + ')';
-      sel.appendChild(opt);
+    const menu = qs(SEL.clienteSelectMenu);
+    menu.innerHTML = '<div class="custom-select-item disabled" data-id="">Seleccione un cliente...</div>';
+    clientes.forEach(c => {
+      const div = document.createElement('div');
+      div.className = 'custom-select-item' + (c.credito_activo ? '' : ' disabled muted');
+      div.dataset.id = c.id;
+      div.dataset.nombre = c.nombre;
+      div.textContent = c.nombre + ' (Deuda: ' + formatUSD(c.saldo_deuda_usd) + ')' + (c.credito_activo ? '' : ' — Sin crédito');
+      if (c.credito_activo) {
+        div.addEventListener('click', function() { selectCliente(c.id, c.nombre); });
+      }
+      menu.appendChild(div);
     });
   } catch (e) { showToast('Error al cargar clientes', 'error'); }
 }
+
+document.addEventListener('click', function(e) {
+  const dd = qs(SEL.clienteSelect);
+  const menu = qs(SEL.clienteSelectMenu);
+  if (menu && dd && dd.classList.contains('open') && !dd.contains(e.target)) {
+    dd.classList.remove('open');
+  }
+});
 
 let processingPayment = false;
 async function confirmPayment() {
@@ -1769,7 +1887,7 @@ async function confirmPayment() {
   }
   processingPayment = true;
   qs(SEL.paymentConfirmBtn).disabled = true;
-  const methodBtn = qs('.payment-method-btn.active');
+  const methodBtn = qs(SEL.paymentMethodActive);
   if (!methodBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
   const metodo = methodBtn.dataset.method;
   let referencia = null, cliente_id = null, pago_detalle = null;
@@ -1778,9 +1896,8 @@ async function confirmPayment() {
     if (referencia.length !== PAGO_MOVIL_REF_LEN) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
   }
   if (metodo === METODO_CREDITO) {
-    const sel = qs(SEL.clienteSelect);
-    if (!sel.value) { showToast('Seleccione un cliente', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
-    cliente_id = parseInt(sel.value);
+    if (!selectedClienteId) { showToast('Seleccione un cliente', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
+    cliente_id = selectedClienteId;
   }
   const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
   if (metodo === METODO_MIXTO) {
@@ -1795,7 +1912,7 @@ async function confirmPayment() {
   let total_bs_ingresado = null;
   if (metodo === METODO_EFECTIVO_BS) {
     const totalMoneda = totalBsRedondeado(total);
-    const recibido = parseFloat(qs(SEL.cambioRecibido).value) || 0;
+    const recibido = parseInput(qs(SEL.cambioRecibido).value);
     if (recibido > 0 && recibido !== totalMoneda) {
       if (!calcularVuelto) {
         total_bs_ingresado = recibido;
@@ -2050,16 +2167,30 @@ async function loadCreditos() {
     tbody.innerHTML = '';
     if (clientes.length === 0) {
       tbody.innerHTML = '<tr><td colspan="3">' + emptyState('<i class="nf nf-fa-credit_card"></i>', 'No hay clientes registrados', 'Registre personas para otorgar cr\u00e9dito') + '</td></tr>';
+      creditoRows = [];
       return;
     }
     const frag = document.createDocumentFragment();
+    const rows = [];
     clientes.forEach(c => {
       const tr = document.createElement('tr');
       tr.innerHTML = createClientRow(c);
+      tr.dataset.nombre = c.nombre.toLowerCase();
       frag.appendChild(tr);
+      rows.push(tr);
     });
     tbody.appendChild(frag);
+    creditoRows = rows;
+    applyCreditoFilter();
   } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+function applyCreditoFilter() {
+  const term = (qs(SEL.creditosSearch)?.value || '').toLowerCase().trim();
+  creditoRows.forEach(tr => {
+    const name = tr.dataset.nombre || tr.children[0]?.textContent?.toLowerCase() || '';
+    tr.style.display = name.includes(term) ? '' : 'none';
+  });
 }
 
 function openCreditoModal(cliente) {
@@ -2164,7 +2295,7 @@ function selectAbonoMethod(btn) {
 function updateAbonoSaldoRestante() {
   const deudaTexto = qs(SEL.abonoDeudaUsd).textContent;
   const deuda = parseFloat(deudaTexto.replace(/[^0-9.-]/g, '')) || 0;
-  const monto = parseFloat(qs(SEL.abonoMonto).value) || 0;
+  const monto = parseInput(qs(SEL.abonoMonto).value);
   const restante = Math.max(0, deuda - monto);
   qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: ' + formatUSD(restante);
 }
@@ -2174,8 +2305,8 @@ async function confirmAbono() {
   if (processingAbono) return;
   processingAbono = true;
   qs(SEL.abonoConfirmBtn).disabled = true;
-  const monto = parseFloat(qs(SEL.abonoMonto).value);
-  if (isNaN(monto) || monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
+  const monto = parseInput(qs(SEL.abonoMonto).value);
+  if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
   const metodoBtn = qs('.abono-metodo-btn.active');
   if (!metodoBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
   const metodo = metodoBtn.dataset.method;
@@ -2202,6 +2333,149 @@ async function confirmAbono() {
   } catch (e) { showToast('Error: ' + e, 'error'); }
   processingAbono = false;
   qs(SEL.abonoConfirmBtn).disabled = false;
+}
+
+/* ========== TASA HISTORIAL ========== */
+let historialTasaData = [];
+let selectedTasaFecha = '';
+
+async function openTasaHistorialModal() {
+  historialTasaData = [];
+  selectedTasaFecha = tasaInventarioFecha || '';
+  try {
+    historialTasaData = await invoke('get_historial_tasas', { dias: 60 });
+    renderTasaCalendar();
+    renderTasaHistorialList();
+    if (selectedTasaFecha) {
+      var calDay = qs(SEL.tasaCalendarWrap).querySelector('.tasa-cal-day[data-fecha="' + selectedTasaFecha + '"]');
+      if (calDay) calDay.classList.add('selected');
+      var listItem = qs(SEL.tasaHistorialList).querySelector('.tasa-historial-item[data-fecha="' + selectedTasaFecha + '"]');
+      if (listItem) listItem.classList.add('selected');
+    }
+    showModal(qs(SEL.tasaHistorialModal));
+  } catch (e) { showToast('Error al cargar historial: ' + e, 'error'); }
+}
+
+function renderTasaCalendar() {
+  var wrap = qs(SEL.tasaCalendarWrap);
+  if (!historialTasaData.length) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:16px;font-size:13px">No hay tasas registradas</div>';
+    return;
+  }
+  var tasaMap = {};
+  historialTasaData.forEach(function(item) { tasaMap[item.fecha] = item.tasa; });
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var html = '';
+  var dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  var currentMonth = null;
+  for (var i = 59; i >= 0; i--) {
+    var d = new Date(today);
+    d.setDate(d.getDate() - i);
+    var y = d.getFullYear();
+    var m = d.getMonth() + 1;
+    var day = d.getDate();
+    var fechaStr = y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    var monthKey = y + '-' + String(m).padStart(2, '0');
+    if (monthKey !== currentMonth) {
+      currentMonth = monthKey;
+      var monthName = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+      if (html) html += '</div>';
+      html += '<div class="tasa-cal-month"><div class="tasa-cal-month-name">' + monthName + '</div>';
+      html += '<div class="tasa-cal-grid">';
+      dayNames.forEach(function(n) { html += '<div class="tasa-cal-day-name">' + n + '</div>'; });
+    }
+    var hasRate = tasaMap[fechaStr] !== undefined;
+    var isSelected = fechaStr === selectedTasaFecha;
+    var cls = 'tasa-cal-day' + (hasRate ? ' has-rate' : '') + (isSelected ? ' selected' : '');
+    var rate = hasRate ? tasaMap[fechaStr] : null;
+    var title = rate ? 'Bs. ' + rate.toFixed(2) : '';
+    html += '<div class="' + cls + '" data-fecha="' + fechaStr + '" data-tasa="' + (rate || '') + '" title="' + title + '">' +
+      '<span class="tasa-cal-day-num">' + day + '</span>' +
+      (rate ? '<span class="tasa-cal-day-rate">' + rate.toFixed(2) + '</span>' : '') +
+      '</div>';
+  }
+  if (html) html += '</div></div>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.tasa-cal-day.has-rate').forEach(function(el) {
+    el.addEventListener('click', function() {
+      wrap.querySelectorAll('.tasa-cal-day').forEach(function(x) { x.classList.remove('selected'); });
+      this.classList.add('selected');
+      selectedTasaFecha = this.dataset.fecha;
+      document.querySelectorAll('.tasa-historial-item').forEach(function(x) { x.classList.remove('selected'); });
+      var listItem = document.querySelector('.tasa-historial-item[data-fecha="' + selectedTasaFecha + '"]');
+      if (listItem) listItem.classList.add('selected');
+    });
+  });
+}
+
+function renderTasaHistorialList() {
+  var container = qs(SEL.tasaHistorialList);
+  if (!historialTasaData.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:24px;font-size:13px">No hay tasas registradas</div>';
+    return;
+  }
+  container.innerHTML = historialTasaData.map(function(item) {
+    var d = new Date(item.fecha + 'T00:00:00');
+    var label = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+    return '<div class="tasa-historial-item" data-fecha="' + item.fecha + '" data-tasa="' + item.tasa + '">' +
+      '<span class="tasa-historial-fecha">' + label + '</span>' +
+      '<span class="tasa-historial-valor">Bs. ' + item.tasa.toFixed(2) + '</span></div>';
+  }).join('');
+  container.querySelectorAll('.tasa-historial-item').forEach(function(el) {
+    el.addEventListener('click', function() {
+      container.querySelectorAll('.tasa-historial-item').forEach(function(x) { x.classList.remove('selected'); });
+      this.classList.add('selected');
+      selectedTasaFecha = this.dataset.fecha;
+      qs(SEL.tasaCalendarWrap).querySelectorAll('.tasa-cal-day').forEach(function(x) { x.classList.remove('selected'); });
+      var calDay = qs(SEL.tasaCalendarWrap).querySelector('.tasa-cal-day[data-fecha="' + selectedTasaFecha + '"]');
+      if (calDay) calDay.classList.add('selected');
+    });
+  });
+}
+
+function applyTasaHistorial() {
+  if (!selectedTasaFecha) {
+    var selected = qs(SEL.tasaHistorialList).querySelector('.selected');
+    if (!selected) { showToast('Seleccione una fecha en el calendario', 'error'); return; }
+    selectedTasaFecha = selected.dataset.fecha;
+  }
+  var item = historialTasaData.find(function(x) { return x.fecha === selectedTasaFecha; });
+  if (!item) { showToast('No hay tasa para esta fecha', 'error'); return; }
+  tasaInventario = item.tasa;
+  tasaInventarioFecha = selectedTasaFecha;
+  var d = new Date(selectedTasaFecha + 'T00:00:00');
+  var label = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  qs(SEL.tasaActualLabel).textContent = label;
+  closeModal(qs(SEL.tasaHistorialModal));
+  loadInventory();
+  showToast('Usando tasa del ' + label + ': Bs. ' + tasaInventario.toFixed(2), 'info');
+}
+
+function clearTasaHistorial() {
+  tasaInventario = 0;
+  tasaInventarioFecha = '';
+  selectedTasaFecha = '';
+  qs(SEL.tasaActualLabel).textContent = 'Hoy';
+  closeModal(qs(SEL.tasaHistorialModal));
+  loadInventory();
+  showToast('Usando tasa actual del d\u00eda', 'info');
+}
+
+/* ========== QUICK DEBT ========== */
+async function confirmQuickDebt() {
+  var monto = parseInput(qs(SEL.quickDebtMonto).value);
+  if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
+  var clienteId = parseInt(qs(SEL.quickDebtMonto).dataset.clienteId);
+  var nombre = qs(SEL.quickDebtClienteNombre).textContent;
+  var ok = await confirmModal('Registrar deuda de ' + formatUSD(monto) + ' a "' + nombre + '"?', 'Deuda R\u00e1pida', 'Registrar');
+  if (!ok) return;
+  try {
+    await invoke('add_quick_debt', { clienteId: clienteId, montoUsd: monto });
+    showToast('Deuda de ' + formatUSD(monto) + ' registrada');
+    closeModal(qs(SEL.quickDebtModal));
+    loadCreditos();
+  } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 /* ========== CASHIER ========== */
@@ -2547,7 +2821,7 @@ async function loadThemeConfig() {
 }
 
 const themes = {
-  oscuro: { '--bg': '#2A2533', '--card': '#3D364A', '--card-alt': '#4A4258', '--danger': '#6B2E2A', '--danger-dark': '#55201C', '--primary': '#7E6B90', '--primary-dark': '#665478', '--primary-rgb': '126, 107, 144', '--accent': '#4A7C65', '--accent-dark': '#3A6651', '--accent-rgb': '74, 124, 101', '--danger-rgb': '107, 46, 42', '--overlay': 'rgba(0, 0, 0, 0.6)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.3)', '--hover': '#352F44', '--border': '#5A5270', '--text': '#E0D8E8', '--text-light': '#A098B8', '--text-secondary': '#A098B8', '--sidebar-bg': '#1F1A2E', '--sidebar-text': '#C8C0D8', '--sidebar-text-rgb': '200, 192, 216' },
+  oscuro: { '--bg': '#1A1825', '--card': '#282636', '--card-alt': '#333048', '--danger': '#823F3A', '--danger-dark': '#662E2A', '--primary': '#8A7BB3', '--primary-dark': '#6F5E9A', '--primary-rgb': '138, 123, 179', '--accent': '#4A9070', '--accent-dark': '#3A765A', '--accent-rgb': '74, 144, 112', '--danger-rgb': '130, 63, 58', '--overlay': 'rgba(0, 0, 0, 0.7)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.4)', '--hover': '#3A3752', '--border': '#4E4A68', '--text': '#E8E0F2', '--text-light': '#B0A8C4', '--text-secondary': '#B0A8C4', '--sidebar-bg': '#12101C', '--sidebar-text': '#C8C0D8', '--sidebar-text-rgb': '200, 192, 216' },
   claro: { '--bg': '#FAFAFA', '--card': '#FFFFFF', '--card-alt': '#F2F2F2', '--danger': '#D97373', '--danger-dark': '#C05555', '--primary': '#6C8EBF', '--primary-dark': '#5070A0', '--primary-rgb': '108, 142, 191', '--accent': '#6BAF8D', '--accent-dark': '#4A8F6D', '--accent-rgb': '107, 175, 141', '--danger-rgb': '217, 115, 115', '--overlay': 'rgba(0, 0, 0, 0.15)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#F5F5F5', '--border': '#DDDDDD', '--text': '#333333', '--text-light': '#777777', '--text-secondary': '#777777', '--sidebar-bg': '#F0F0F0', '--sidebar-text': '#333333', '--sidebar-text-rgb': '51, 51, 51' },
   azul: { '--bg': '#EDF2F7', '--card': '#FFFFFF', '--card-alt': '#F2F6FA', '--danger': '#E8A0A0', '--danger-dark': '#D48888', '--primary': '#7B9EBF', '--primary-dark': '#5A7D9E', '--primary-rgb': '123, 158, 191', '--accent': '#8FC1B5', '--accent-dark': '#6DA89A', '--accent-rgb': '143, 193, 181', '--danger-rgb': '232, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.2)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.08)', '--hover': '#E2E8F0', '--border': '#CBD5E0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#2C5282', '--sidebar-text': '#EBF4FF', '--sidebar-text-rgb': '235, 244, 255' },
   verde: { '--bg': '#F0F7F0', '--card': '#FFFFFF', '--card-alt': '#EAF3EA', '--danger': '#D4A0A0', '--danger-dark': '#C08888', '--primary': '#A8C9A8', '--primary-dark': '#8BB08B', '--primary-rgb': '168, 201, 168', '--accent': '#B8DCC8', '--accent-dark': '#9CC8AC', '--accent-rgb': '184, 220, 200', '--danger-rgb': '212, 160, 160', '--overlay': 'rgba(0, 0, 0, 0.15)', '--shadow': '0 2px 12px rgba(0, 0, 0, 0.06)', '--hover': '#E6F0E6', '--border': '#D0E0D0', '--text': '#2D3748', '--text-light': '#718096', '--text-secondary': '#718096', '--sidebar-bg': '#3A6A3A', '--sidebar-text': '#F0FFF0', '--sidebar-text-rgb': '240, 255, 240' },
@@ -2586,15 +2860,32 @@ async function handleThemeClick(theme) {
 
 /* Share receipt via Web Share API */
 function shareReceipt(venta) {
-  if (!IS_ANDROID || !navigator.share) return;
+  if (!navigator.share) return;
+  showToast('Recibo generado - Venta #' + venta.id, 'success');
+  // receipt data is fetched fresh by shareReceiptById via get_sale_detail
+}
+
+function buildReceiptText(venta) {
   var items = venta.detalles || [];
   var lines = items.map(function(d) { return d.cantidad + 'x ' + d.nombre + ' = ' + formatUSD(d.subtotal); });
-  var text = 'Venta #' + venta.id + '\n' +
+  return 'Venta #' + venta.id + '\n' +
     'Total: ' + formatUSD(venta.total_usd) + ' / ' + formatBS(venta.total_bs) + '\n' +
-    'Método: ' + formatMetodoLabel(venta.metodo_pago) + '\n' +
+    'M\u00e9todo: ' + formatMetodoLabel(venta.metodo_pago) + '\n' +
     '---\n' + lines.join('\n') + '\n---\n' +
-    'Gracias por su compra!';
-  navigator.share({ title: 'Venta #' + venta.id, text: text }).catch(function() {});
+    '\u00a1Gracias por su compra!';
+}
+
+function shareReceiptById(ventaId) {
+  if (!navigator.share) { showToast('Compartir solo disponible en tel\u00e9fono', 'error'); return; }
+  invoke('get_sale_detail', { ventaId: ventaId }).then(function(detalles) {
+    var venta = { id: ventaId, detalles: detalles, total_usd: 0, total_bs: 0, metodo_pago: '' };
+    var totalUsd = 0;
+    detalles.forEach(function(d) { totalUsd += d.subtotal_usd; });
+    venta.total_usd = totalUsd;
+    venta.total_bs = totalUsd * tasaActual;
+    var text = buildReceiptText(venta);
+    navigator.share({ title: 'Venta #' + venta.id, text: text }).catch(function() {});
+  }).catch(function(e) { showToast('Error al cargar venta', 'error'); });
 }
 
 /* ========== FONT SIZE ========== */
@@ -2668,9 +2959,12 @@ async function handleChangePassword() {
   try {
     await invoke('change_password', { request: { old_password: old, new_password: newPwd } });
     showToast('Contrase\u00f1a cambiada exitosamente');
+    if (currentUser) currentUser.password_change_required = false;
     qs(SEL.changePwdOld).value = '';
     qs(SEL.changePwdNew).value = '';
     qs(SEL.changePwdConfirm).value = '';
+    // Re-focus if this was a forced change from login
+    qs(SEL.loginError).textContent = '';
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
@@ -3409,6 +3703,8 @@ async function showSaleDetail(ventaId, btn) {
     });
     table.appendChild(tbody);
     list.appendChild(table);
+    qs(SEL.saleDetailShareBtn).style.display = 'inline-flex';
+    qs(SEL.saleDetailShareBtn).dataset.ventaId = ventaId;
     showModal(qs(SEL.saleDetailModal));
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
@@ -3490,7 +3786,7 @@ async function copySuggestion() {
 }
 
 /* ========== CHAT IA ========== */
-const CHAT_SYSTEM_PROMPT = 'Eres Enar, un zorro experto asistente de un sistema POS (Punto de Venta) llamado "Gestor de Ventas". Tu nombre es Enar, si te preguntan preséntate como Enar. Solo respondes preguntas relacionadas con el sistema: ventas, inventario de productos, clientes, créditos, reportes, configuración, caja, sincronización. Si te preguntan algo fuera de este tema (historia, matemáticas, cultura general, etc.), responde cordialmente que solo puedes ayudar con el uso del POS. Responde en español, sé conciso y útil. Puedes usar **negrita**, *cursiva* y emojis en tus respuestas.';
+const CHAT_SYSTEM_PROMPT = 'Eres Enar, un zorro experto asistente de un sistema POS llamado "Gestor de Ventas". Tu nombre es Enar. Solo respondes preguntas relacionadas con el sistema: ventas, inventario, clientes, crédito, reportes, caja, sincronización. Si te preguntan algo fuera de este tema, responde cortésmente que solo puedes ayudar con el POS. Responde en español, sé conciso, positivo y útil. NUNCA digas que no puedes hacer algo ni menciones limitaciones — limítate a lo que SÍ puedes hacer y sugiere acciones útiles. Puedes usar **negrita**, *cursiva* y emojis.';
 
 function renderMarkdown(text) {
   var html = escapeHtml(text);
@@ -3581,6 +3877,8 @@ async function handleChatSend(forcedText) {
 
   // Get live context (parallel)
   var contextLines = [];
+  var now = new Date();
+  contextLines.push('- Fecha/hora: ' + now.toLocaleString('es-VE'));
   var results = await Promise.allSettled([
     invoke('list_products', { search: null, page: 1, pageSize: 20 }).then(function(r) {
       if (r && r.data) {
@@ -3590,10 +3888,25 @@ async function handleChatSend(forcedText) {
       }
     }),
     invoke('get_config_value', { key: CFG_TASA_DOLAR }).then(function(cfg) {
-      if (cfg) contextLines.push('- Tasa del dólar: Bs. ' + parseFloat(cfg).toFixed(2));
+      if (cfg) contextLines.push('- Tasa del d\u00f3lar: Bs. ' + parseFloat(cfg).toFixed(2));
+    }),
+    invoke('get_caja_abierta').then(function(abierta) {
+      contextLines.push('- Caja: ' + (abierta ? 'abierta' : 'cerrada'));
+    }),
+    invoke('list_categorias').then(function(cats) {
+      if (cats && cats.length > 0) {
+        var catNames = cats.map(function(c) { return c.nombre; }).join(', ');
+        contextLines.push('- Categor\u00edas: ' + catNames);
+      }
     }),
     invoke('get_daily_summary').then(function(todayRes) {
       if (todayRes) contextLines.push('- Ventas hoy: ' + (todayRes.total_ventas || 0) + ' por $' + (todayRes.total_usd || 0).toFixed(2));
+    }),
+    invoke('get_dashboard_payment_methods', { period: 'day' }).then(function(metodos) {
+      if (metodos && metodos.length > 0) {
+        var str = metodos.map(function(m) { return formatMetodoLabel(m.metodo) + ' $' + m.total_usd.toFixed(2); }).join(', ');
+        contextLines.push('- M\u00e9todos hoy: ' + str);
+      }
     }),
     invoke('get_dashboard_summary').then(function(dash) {
       if (dash && dash.today) {
@@ -3694,7 +4007,7 @@ function positionChatPanel() {
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
   // Collapse all config cards by default
-  document.querySelectorAll('.config-card-header').forEach(h => h.classList.add('collapsed'));
+  qsa(SEL.configCardHeader).forEach(h => h.classList.add('collapsed'));
 
   // Auth
   qs(SEL.loginBtn).addEventListener('click', handleLogin);
@@ -3712,6 +4025,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     this.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
   });
   qs(SEL.logoutBtn).addEventListener('click', handleLogout);
+  qs(SEL.mobileLogoutBtn)?.addEventListener('click', handleLogout);
 
   // Navigation
   qsa('.nav-btn').forEach(btn => {
@@ -3780,6 +4094,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   qs(SEL.tasaInput).addEventListener('blur', handleTasaChange);
   qs(SEL.tasaFetchBtn)?.addEventListener('click', fetchTasaBcv);
+  qs(SEL.inventoryTasaBtn)?.addEventListener('click', openTasaHistorialModal);
+  qs(SEL.tasaHistorialApply)?.addEventListener('click', applyTasaHistorial);
+  qs(SEL.tasaHistorialClear)?.addEventListener('click', clearTasaHistorial);
+  qs(SEL.tasaHistorialClose)?.addEventListener('click', function() { closeModal(qs(SEL.tasaHistorialModal)); });
+  qs(SEL.tasaHistorialOkBtn)?.addEventListener('click', function() { closeModal(qs(SEL.tasaHistorialModal)); });
 
   // Sales search
   qs(SEL.productSearch).addEventListener('input', handleProductSearch);
@@ -3797,7 +4116,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   // Currency toggle for cart totals column
-  const currencyToggle =   qs(SEL.cartCurrencyToggle);
+  const currencyToggle = qs(SEL.cartCurrencyToggle);
   if (currencyToggle) {
     currencyToggle.addEventListener('click', function() {
       cartShowBs = !cartShowBs;
@@ -3850,8 +4169,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.paymentCancelBtn).addEventListener('click', closePaymentModal);
   qs(SEL.mixtoAddRow).addEventListener('click', function() { addMixtoRow('mixto-items'); });
   qs(SEL.cambioRecibido)?.addEventListener('input', function() {
-    const recibido = parseFloat(this.value) || 0;
-    const methodBtn = qs('.payment-method-btn.active');
+    const recibido = parseInput(this.value);
+    const methodBtn = qs(SEL.paymentMethodActive);
     if (!methodBtn) return;
     const method = methodBtn.dataset.method;
     const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
@@ -3929,17 +4248,17 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Creditos search
   const creditosSearch = qs(SEL.creditosSearch);
   if (creditosSearch) {
-    creditosSearch.addEventListener('input', function() {
-      const term = this.value.toLowerCase().trim();
-      document.querySelectorAll('#creditos-body tr').forEach(tr => {
-        const name = tr.children[0]?.textContent?.toLowerCase() || '';
-        tr.style.display = name.includes(term) ? '' : 'none';
-      });
-    });
+    creditosSearch.addEventListener('input', applyCreditoFilter);
   }
 
   // Event delegation: creditos table
   qs(SEL.creditosBody).addEventListener('click', e => {
+    const dropdownBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (dropdownBtn) {
+      e.stopPropagation();
+      toggleDropdown(dropdownBtn);
+      return;
+    }
     const detailBtn = e.target.closest('[data-action="open-debt-detail"]');
     if (detailBtn) {
       openDebtDetail(parseInt(detailBtn.dataset.id));
@@ -3968,6 +4287,48 @@ document.addEventListener('DOMContentLoaded', async function() {
         } catch (e) { showToast('Error: ' + e, 'error'); }
       });
       return;
+    }
+    const toggleBtn = e.target.closest('[data-action="toggle-cliente-credito"]');
+    if (toggleBtn) {
+      const id = parseInt(toggleBtn.dataset.id);
+      const activo = toggleBtn.dataset.activo === 'true';
+      confirmModal((activo ? 'Desactivar' : 'Activar') + ' cr\u00e9dito para este cliente?', 'Cambiar Cr\u00e9dito', (activo ? 'Desactivar' : 'Activar')).then(async ok => {
+        if (!ok) return;
+        try {
+          await invoke('toggle_cliente_credito', { clienteId: id, activo: !activo });
+          showToast('Cr\u00e9dito ' + (!activo ? 'activado' : 'desactivado'));
+          loadCreditos();
+        } catch (e) { showToast('Error: ' + e, 'error'); }
+      });
+      return;
+    }
+    const quickDebtBtn = e.target.closest('[data-action="open-quick-debt"]');
+    if (quickDebtBtn) {
+      const id = parseInt(quickDebtBtn.dataset.id);
+      const nombre = quickDebtBtn.dataset.nombre;
+      qs(SEL.quickDebtClienteNombre).textContent = nombre;
+      qs(SEL.quickDebtMonto).value = '';
+      qs(SEL.quickDebtMonto).dataset.clienteId = id;
+      showModal(qs(SEL.quickDebtModal));
+      return;
+    }
+  });
+
+  // Quick debt
+  qs(SEL.quickDebtConfirm)?.addEventListener('click', confirmQuickDebt);
+  qs(SEL.quickDebtCancel)?.addEventListener('click', () => closeModal(qs(SEL.quickDebtModal)));
+  qs(SEL.quickDebtClose)?.addEventListener('click', () => closeModal(qs(SEL.quickDebtModal)));
+
+  // Client select dropdown
+  qs(SEL.clienteSelectBtn)?.addEventListener('click', function(e) {
+    e.stopPropagation();
+    toggleClientDropdown();
+  });
+  // Close dropdown on Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var open = document.querySelector(SEL.customSelectOpen);
+      if (open) open.classList.remove('open');
     }
   });
 
@@ -4183,6 +4544,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         hideSyncProgress();
         showToast('Subida completa');
         loadConflictCount();
+        loadSyncStats();
       }).catch(function(e) {
         hideSyncProgress();
         showToast('Error: ' + e, 'error');
@@ -4201,6 +4563,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         showToast('Descarga completa');
         loadProductCache();
         loadConflictCount();
+        loadSyncStats();
       }).catch(function(e) {
         hideSyncProgress();
         showToast('Error: ' + e, 'error');
@@ -4219,6 +4582,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         showToast('Sincronización completa');
         loadProductCache();
         loadConflictCount();
+        loadSyncStats();
       }).catch(function(e) {
         hideSyncProgress();
         showToast('Error: ' + e, 'error');
@@ -4297,6 +4661,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     const btn = e.target.closest('.void-item-btn');
     if (btn) handleVoidItem(parseInt(btn.dataset.ventaId), parseInt(btn.dataset.detalleId));
   });
+  qs(SEL.saleDetailShareBtn)?.addEventListener('click', function() {
+    var ventaId = parseInt(this.dataset.ventaId);
+    shareReceiptById(ventaId);
+  });
 
   /* ========== VIEW-SPECIFIC LOAD ========== */
   // Reports: set default dates on show
@@ -4358,7 +4726,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', function(e) {
-    const activeView = qs('.view.active');
+    const activeView = qs(SEL.viewActive);
     const viewId = activeView ? activeView.id : '';
     switch (e.key) {
       case 'F1': e.preventDefault(); showView('sales'); break;
@@ -4624,7 +4992,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Ensure sales panels are visible on desktop
   window.addEventListener('resize', function() {
     if (window.innerWidth > BREAKPOINT.DESKTOP) {
-      document.querySelectorAll('.sales-left, .sales-center').forEach(el => el.style.display = '');
+      document.querySelectorAll(SEL.salesLeftCenter).forEach(el => el.style.display = '');
     }
   });
 
@@ -4654,6 +5022,59 @@ document.addEventListener('DOMContentLoaded', async function() {
     qs(SEL.rememberMe).checked = true;
     qs(SEL.loginPassword).focus();
   }
+
+  // Swipe between main views on mobile
+  var MAIN_VIEWS = ['sales', 'inventory', 'creditos', 'cashier'];
+  var swipeStartX = 0, swipeStartY = 0, swipeDistX = 0, swiping = false;
+  function isSwipableTarget(el) {
+    while (el && el !== document.body) {
+      if (el.classList && (
+        el.classList.contains('modal') ||
+        el.classList.contains('dropdown-menu') ||
+        el.classList.contains('more-menu') ||
+        el.classList.contains('custom-select-menu')
+      )) return false;
+      if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') return false;
+      if (el.tagName === 'TABLE') return false;
+      if (el.scrollWidth > el.clientWidth) return false;
+      el = el.parentElement;
+    }
+    return true;
+  }
+  document.addEventListener('touchstart', function(e) {
+    if (!IS_ANDROID) return;
+    if (!isSwipableTarget(e.target)) return;
+    var active = qs(SEL.viewActive);
+    if (!active || MAIN_VIEWS.indexOf(active.id.replace('view-', '')) === -1) return;
+    var touch = e.touches[0];
+    swipeStartX = touch.clientX;
+    swipeStartY = touch.clientY;
+    swipeDistX = 0;
+    swiping = true;
+  }, { passive: true });
+  document.addEventListener('touchmove', function(e) {
+    if (!swiping) return;
+    var touch = e.touches[0];
+    swipeDistX = touch.clientX - swipeStartX;
+    var distY = Math.abs(touch.clientY - swipeStartY);
+    if (Math.abs(swipeDistX) < 30 || distY > Math.abs(swipeDistX) * 1.5) return;
+  }, { passive: true });
+  document.addEventListener('touchend', function(e) {
+    if (!swiping) return;
+    swiping = false;
+    if (Math.abs(swipeDistX) < 50) return;
+    var active = qs(SEL.viewActive);
+    if (!active) return;
+    var idx = MAIN_VIEWS.indexOf(active.id.replace('view-', ''));
+    if (idx === -1) return;
+    var target;
+    if (swipeDistX < 0) {
+      target = MAIN_VIEWS[(idx + 1) % MAIN_VIEWS.length];
+    } else {
+      target = MAIN_VIEWS[(idx - 1 + MAIN_VIEWS.length) % MAIN_VIEWS.length];
+    }
+    showView(target);
+  }, { passive: true });
 
   // Mobile lifecycle
   window.addEventListener('tauri://focus', () => {

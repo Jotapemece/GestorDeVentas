@@ -29,6 +29,8 @@ pub struct Usuario {
     pub id: i64,
     pub username: String,
     pub rol: String,
+    #[serde(default)]
+    pub password_change_required: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -41,6 +43,8 @@ pub struct Cliente {
     pub sync_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ultima_compra: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -75,6 +79,12 @@ pub struct DetalleVenta {
     pub subtotal_usd: f64,
     #[serde(default)]
     pub costo: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HistorialTasa {
+    pub fecha: String,
+    pub tasa: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -146,6 +156,8 @@ pub struct LoginResponse {
     pub success: bool,
     pub message: String,
     pub usuario: Option<Usuario>,
+    #[serde(default)]
+    pub password_change_required: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

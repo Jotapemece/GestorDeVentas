@@ -1,4 +1,5 @@
 use crate::db::AppState;
+use crate::models::HistorialTasa;
 use rusqlite::params;
 use serde::Deserialize;
 use tauri::State;
@@ -67,6 +68,12 @@ pub fn check_tasa_update(state: State<AppState>) -> Result<Option<f64>, String> 
             )
             .ok();
 
+            db.execute(
+                "INSERT OR REPLACE INTO historial_tasas (fecha, tasa) VALUES (?1, ?2)",
+                params![today, new_rate],
+            )
+            .ok();
+
             if (new_rate - current_tasa).abs() > 0.001 {
                 Ok(Some(new_rate))
             } else {
@@ -75,4 +82,39 @@ pub fn check_tasa_update(state: State<AppState>) -> Result<Option<f64>, String> 
         }
         Err(_) => Ok(None),
     }
+}
+
+#[tauri::command]
+pub fn get_historial_tasas(state: State<AppState>, dias: i64) -> Result<Vec<HistorialTasa>, String> {
+    let db = state.lock_db()?;
+    let dias = dias.clamp(1, 365);
+    let mut stmt = db
+        .prepare(
+            "SELECT fecha, tasa FROM historial_tasas \
+             ORDER BY fecha DESC LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![dias], |row| {
+            Ok(HistorialTasa {
+                fecha: row.get(0)?,
+                tasa: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let result: Vec<HistorialTasa> = rows.filter_map(|r| r.ok()).collect();
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn get_tasa_historica(state: State<AppState>, fecha: String) -> Result<Option<f64>, String> {
+    let db = state.lock_db()?;
+    let tasa: Option<f64> = db
+        .query_row(
+            "SELECT tasa FROM historial_tasas WHERE fecha = ?1",
+            params![fecha],
+            |row| row.get(0),
+        )
+        .ok();
+    Ok(tasa)
 }

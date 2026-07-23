@@ -460,13 +460,14 @@ pub fn import_products_from_file(
     state: State<AppState>,
     content: String,
 ) -> Result<String, String> {
-    let db = state.lock_db()?;
-    crate::auth::require_admin(
+    let mut db = state.lock_db()?;
+    let _admin = crate::auth::require_admin(
         &state,
         &db,
         "Importó productos vía upload",
     )?;
 
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
     let mut count = 0;
     let mut errors: Vec<String> = Vec::new();
     let ts = crate::helpers::now_iso();
@@ -477,7 +478,7 @@ pub fn import_products_from_file(
 
         match parse_product_tsv_line(line, line_no, count) {
             Ok((codigo, nombre, stock, precio_usd)) => {
-                if let Err(e) = db.execute(
+                if let Err(e) = tx.execute(
                     SQL_IMPORT_PRODUCTO,
                     params![codigo, nombre, precio_usd, 0.0, stock, 0, ts],
                 ) {
@@ -488,6 +489,12 @@ pub fn import_products_from_file(
             }
             Err(e) => errors.push(e),
         }
+    }
+
+    if errors.is_empty() {
+        tx.commit().map_err(|e| format!("Error al confirmar importación: {}", e))?;
+    } else {
+        drop(tx);
     }
 
     Ok(format_import_result(count, &errors))

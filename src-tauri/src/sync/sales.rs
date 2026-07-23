@@ -197,8 +197,13 @@ pub(crate) fn download_sales_inner(
         return Ok("No hay ventas nuevas para descargar".to_string());
     }
 
+    // First pass: insert ventas and collect sync_ids of newly inserted ones
     let mut inserted_ventas = 0;
-    let mut adjusted_stock_items = 0i64;
+    let mut inserted_sync_ids: Vec<String> = Vec::new();
+    // Track venta_id local for each inserted sync_id
+    let mut sync_to_local_id: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    // Track anulada status
+    let mut anulada_map: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
 
     for venta_json in &cloud_ventas {
         let sync_id = venta_json["sync_id"].as_str().unwrap_or("");
@@ -206,71 +211,104 @@ pub(crate) fn download_sales_inner(
             continue;
         }
 
-        let venta_id = {
-            let result = db.execute(
-                "INSERT OR IGNORE INTO ventas \
-                 (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
-                  cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-                params![
-                    &normalize_fecha(venta_json["fecha_hora"].as_str().unwrap_or("")),
-                    venta_json["usuario_id"].as_i64().unwrap_or(0),
-                    venta_json["metodo_pago"].as_str().unwrap_or(""),
-                    venta_json["referencia_pago_movil"].as_str(),
-                    venta_json["pago_detalle"].as_str().unwrap_or(""),
-                    venta_json["cliente_id"].as_i64(),
-                    venta_json["total_usd"].as_f64().unwrap_or(0.0),
-                    venta_json["tasa_aplicada"].as_f64().unwrap_or(0.0),
-                    venta_json["total_bs"].as_f64().unwrap_or(0.0),
-                    sync_id,
-                    venta_json["dispositivo_origen"].as_str().unwrap_or(""),
-                    venta_json["updated_at"].as_str().unwrap_or(""),
-                ],
-            ).map_err(|e| format!("Error insertando venta remota: {}", e))?;
+        let result = db.execute(
+            "INSERT OR IGNORE INTO ventas \
+             (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
+              cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                &normalize_fecha(venta_json["fecha_hora"].as_str().unwrap_or("")),
+                venta_json["usuario_id"].as_i64().unwrap_or(0),
+                venta_json["metodo_pago"].as_str().unwrap_or(""),
+                venta_json["referencia_pago_movil"].as_str(),
+                venta_json["pago_detalle"].as_str().unwrap_or(""),
+                venta_json["cliente_id"].as_i64(),
+                venta_json["total_usd"].as_f64().unwrap_or(0.0),
+                venta_json["tasa_aplicada"].as_f64().unwrap_or(0.0),
+                venta_json["total_bs"].as_f64().unwrap_or(0.0),
+                sync_id,
+                venta_json["dispositivo_origen"].as_str().unwrap_or(""),
+                venta_json["updated_at"].as_str().unwrap_or(""),
+            ],
+        ).map_err(|e| format!("Error insertando venta remota: {}", e))?;
 
-            if result == 0 {
-                continue;
-            }
-            inserted_ventas += 1;
-            db.last_insert_rowid()
-        };
+        if result == 0 {
+            continue;
+        }
 
-        let det_url = api_url(
-            supabase_url,
-            &format!("/detalles_ventas?venta_id=eq.{}&select=*", urlencoding(sync_id)),
-        );
+        let local_id = db.last_insert_rowid();
+        inserted_ventas += 1;
+        inserted_sync_ids.push(sync_id.to_string());
+        sync_to_local_id.insert(sync_id.to_string(), local_id);
+        let anulada = venta_json["anulada"].as_i64().unwrap_or(0) != 0;
+        if anulada {
+            anulada_map.insert(sync_id.to_string(), true);
+        }
+    }
 
-        let cloud_detalles: Vec<serde_json::Value> =
-            supabase_get(&det_url, supabase_key)
-                .map_err(|e| format!("Error al descargar detalles de venta {}: {}", sync_id, e))?;
+    if inserted_sync_ids.is_empty() {
+        upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+        return Ok("No hay ventas nuevas para descargar".to_string());
+    }
 
-        for det in &cloud_detalles {
-            let det_sync_id = det["sync_id"].as_str().unwrap_or("");
-            if det_sync_id.is_empty() {
-                continue;
-            }
+    // Batch fetch all detalles for inserted ventas in one request
+    let sync_ids_param: Vec<String> = inserted_sync_ids.iter().map(|id| urlencoding(id)).collect();
+    let in_clause = sync_ids_param.join(",");
+    let det_url = api_url(
+        supabase_url,
+        &format!("/detalles_ventas?venta_id=in.({})&select=*", in_clause),
+    );
 
-            let prod_codigo = det["producto_codigo"].as_str().unwrap_or("").to_string();
-            let cantidad = det["cantidad"].as_i64().unwrap_or(0);
-            let precio = det["precio_usd_unitario"].as_f64().unwrap_or(0.0);
+    let cloud_detalles: Vec<serde_json::Value> =
+        supabase_get(&det_url, supabase_key)
+            .map_err(|e| format!("Error al descargar detalles: {}", e))?;
 
-            let det_result = db.execute(
-                "INSERT OR IGNORE INTO detalles_ventas \
-                 (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![venta_id, prod_codigo, cantidad, precio, det_sync_id],
-            ).map_err(|e| format!("Error insertando detalle remoto: {}", e))?;
+    // Group detalles by venta sync_id
+    let mut detalles_by_venta: std::collections::HashMap<String, Vec<&serde_json::Value>> =
+        std::collections::HashMap::new();
+    for det in &cloud_detalles {
+        let v_id = det["venta_id"].as_str().unwrap_or("").to_string();
+        if !v_id.is_empty() {
+            detalles_by_venta.entry(v_id).or_default().push(det);
+        }
+    }
 
-            if det_result > 0 && venta_json["anulada"].as_i64().unwrap_or(0) == 0 {
+    let mut adjusted_stock_items = 0i64;
+
+    // Second pass: process detalles and handle anuladas
+    for sync_id in &inserted_sync_ids {
+        let venta_id = sync_to_local_id[sync_id];
+        let is_anulada = anulada_map.contains_key(sync_id);
+
+        if let Some(dets) = detalles_by_venta.get(sync_id) {
+            for det in dets {
+                let det_sync_id = det["sync_id"].as_str().unwrap_or("");
+                if det_sync_id.is_empty() {
+                    continue;
+                }
+
+                let prod_codigo = det["producto_codigo"].as_str().unwrap_or("").to_string();
+                let cantidad = det["cantidad"].as_i64().unwrap_or(0);
+                let precio = det["precio_usd_unitario"].as_f64().unwrap_or(0.0);
+
                 db.execute(
-                    "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1",
-                    params![cantidad, prod_codigo],
-                ).map_err(|e| format!("Error ajustando stock: {}", e))?;
-                adjusted_stock_items += cantidad;
+                    "INSERT OR IGNORE INTO detalles_ventas \
+                     (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![venta_id, prod_codigo, cantidad, precio, det_sync_id],
+                ).map_err(|e| format!("Error insertando detalle remoto: {}", e))?;
+
+                if !is_anulada {
+                    db.execute(
+                        "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1",
+                        params![cantidad, prod_codigo],
+                    ).map_err(|e| format!("Error ajustando stock: {}", e))?;
+                    adjusted_stock_items += cantidad;
+                }
             }
         }
 
-        if venta_json["anulada"].as_i64().unwrap_or(0) != 0 {
+        if is_anulada {
             db.execute("UPDATE ventas SET anulada = 1 WHERE id = ?1", params![venta_id])
                 .map_err(|e| format!("Error marcando venta como anulada: {}", e))?;
         }

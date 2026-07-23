@@ -85,6 +85,10 @@
 .nf-fa-robot::before { content: "\f544"; }
 .nf-fa-film::before { content: "\f008"; }
 .nf-fa-ellipsis_h::before { content: "\f141"; }
+.nf-fa-bolt::before { content: "\f0e7"; }
+.nf-fa-toggle-on::before { content: "\f205"; }
+.nf-fa-toggle-off::before { content: "\f204"; }
+.nf-fa-calendar::before { content: "\f073"; }
 .nf-fa-pulse {
   animation: nf-spin 1s steps(8) infinite;
 }
