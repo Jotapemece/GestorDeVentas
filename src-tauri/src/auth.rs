@@ -308,6 +308,7 @@ pub fn change_password(
     state: State<AppState>,
     request: ChangePasswordRequest,
 ) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     if request.new_password.len() < constants::PASSWORD_MIN_LENGTH {
         return Err(format!(
             "La contrasena debe tener al menos {} caracteres",
@@ -429,6 +430,27 @@ pub fn admin_change_password(
         }
         Ok("Contraseña cambiada exitosamente".to_string())
     }
+}
+
+#[tauri::command]
+pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
+    let db = state.lock_db()?;
+    let _admin_user = crate::auth::require_admin(&state, &db, "Reset usuarios a solo superadmin")?;
+
+    db.execute("DELETE FROM usuarios", [])
+        .map_err(|e| format!("Error al eliminar usuarios: {}", e))?;
+
+    let hashed = hash_password(constants::DEFAULT_ADMIN_PASSWORD);
+    db.execute(
+        "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
+        params![constants::DEFAULT_ADMIN_USERNAME, hashed, constants::ROL_ADMIN],
+    )
+    .map_err(|e| format!("Error al crear superadmin: {}", e))?;
+
+    Ok(format!(
+        "Usuarios reseteados. Solo queda '{}' (admin). Debe cerrar sesión y volver a iniciar.",
+        constants::DEFAULT_ADMIN_USERNAME
+    ))
 }
 
 #[cfg(test)]

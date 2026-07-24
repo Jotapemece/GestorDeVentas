@@ -83,7 +83,6 @@ pub fn init_db(app_handle: &AppHandle) -> Result<(Connection, PathBuf), String> 
     crate::migrations::run_migrations(&conn);
 
     insert_default_admin(&conn);
-    insert_default_vendedor(&conn);
     insert_default_config(&conn);
 
     auto_import_products(&conn, app_handle);
@@ -124,41 +123,6 @@ fn insert_default_admin(conn: &Connection) {
             rusqlite::params![constants::DEFAULT_ADMIN_USERNAME, admin_pw, constants::ROL_ADMIN],
         )
         .ok();
-        conn.execute(
-            "UPDATE usuarios SET password_change_required = 1 WHERE username = ?1",
-            rusqlite::params![constants::DEFAULT_ADMIN_USERNAME],
-        ).ok();
-
-        let jota_pw = crate::auth::hash_password(constants::DEFAULT_JOTA_PASSWORD);
-        conn.execute(
-            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
-            rusqlite::params![constants::DEFAULT_JOTA_USERNAME, jota_pw, constants::ROL_ADMIN],
-        )
-        .ok();
-        conn.execute(
-            "UPDATE usuarios SET password_change_required = 1 WHERE username = ?1",
-            rusqlite::params![constants::DEFAULT_JOTA_USERNAME],
-        ).ok();
-    }
-}
-
-fn insert_default_vendedor(conn: &Connection) {
-    let exists: bool = conn
-        .query_row(
-            &format!("SELECT COUNT(*) > 0 FROM usuarios WHERE username = '{}'", constants::DEFAULT_VENDEDOR_USERNAME),
-            [], |row| row.get(0))
-        .unwrap_or_else(|e| { eprintln!("Error verificando vendedor por defecto: {}", e); false });
-    if !exists {
-        let pw = crate::auth::hash_password(constants::DEFAULT_VENDEDOR_PASSWORD);
-        conn.execute(
-            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
-            rusqlite::params![constants::DEFAULT_VENDEDOR_USERNAME, pw, constants::ROL_VENDEDOR],
-        )
-        .ok();
-        conn.execute(
-            "UPDATE usuarios SET password_change_required = 1 WHERE username = ?1",
-            rusqlite::params![constants::DEFAULT_VENDEDOR_USERNAME],
-        ).ok();
     }
 }
 

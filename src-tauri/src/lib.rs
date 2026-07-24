@@ -110,6 +110,7 @@ pub fn run() {
             db::get_backup_key,
             // Auth
             auth::admin_change_password,
+            auth::reset_usuarios,
             // Products
             products::get_top_products,
             products::update_stock_minimo,

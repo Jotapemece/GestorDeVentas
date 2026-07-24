@@ -291,6 +291,10 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
         &format!("INSERT INTO configuracion (clave, valor) VALUES ('{}', ?1) ON CONFLICT(clave) DO UPDATE SET valor = ?1", constants::CFG_TASA_UPDATED_AT),
         params![now],
     ).map_err(|e| format!("Error al guardar fecha de tasa: {}", e))?;
+    tx.execute(
+        "INSERT OR REPLACE INTO historial_tasas (fecha, tasa) VALUES (?1, ?2)",
+        params![now, tasa],
+    ).ok();
     tx.commit().map_err(|e| format!("Error al confirmar tasa: {}", e))?;
     Ok(())
 }

@@ -88,10 +88,18 @@
 .nf-fa-bolt::before { content: "\f0e7"; }
 .nf-fa-toggle-on::before { content: "\f205"; }
 .nf-fa-toggle-off::before { content: "\f204"; }
-.nf-fa-calendar::before { content: "\f073"; }
 .nf-fa-pulse {
   animation: nf-spin 1s steps(8) infinite;
 }
+.nf-fa-sign_in::before { content: "\f090"; }
+.nf-fa-clock::before { content: "\f017"; }
+.nf-fa-compress::before { content: "\f066"; }
+.nf-fa-expand::before { content: "\f065"; }
+.nf-fa-copy::before { content: "\f0c5"; }
+.nf-fa-share::before { content: "\f064"; }
+.nf-fa-wifi::before { content: "\f1eb"; }
+.nf-fa-chevron_right::before { content: "\f054"; }
+.nf-fa-line_chart::before { content: "\f201"; }
 @keyframes nf-spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }

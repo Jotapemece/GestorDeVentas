@@ -45,6 +45,7 @@ pub const CFG_BACKUP_KEY: &str = "backup_encryption_key";
 
 // Roles
 pub const ROL_ADMIN: &str = "admin";
+#[allow(dead_code)]
 pub const ROL_VENDEDOR: &str = "vendedor";
 
 // Default values
@@ -52,12 +53,8 @@ pub const DB_FILENAME: &str = "gestor_ventas.db";
 pub const BACKUP_FILENAME_PREFIX: &str = "gestor_ventas_backup_";
 #[cfg(not(target_os = "android"))]
 pub const AUTO_IMPORT_FILENAME: &str = "productos";
-pub const DEFAULT_ADMIN_USERNAME: &str = "admin";
-pub const DEFAULT_ADMIN_PASSWORD: &str = "admin";
-pub const DEFAULT_JOTA_USERNAME: &str = "jota";
-pub const DEFAULT_JOTA_PASSWORD: &str = "1234";
-pub const DEFAULT_VENDEDOR_USERNAME: &str = "vendedor";
-pub const DEFAULT_VENDEDOR_PASSWORD: &str = "1234";
+pub const DEFAULT_ADMIN_USERNAME: &str = "Jota_admin";
+pub const DEFAULT_ADMIN_PASSWORD: &str = "233323*";
 
 // Supabase
 pub const SUPABASE_URL: &str = "https://xryvxaslbtouihbulonw.supabase.co";

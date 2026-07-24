@@ -36,6 +36,7 @@ const CFG_HISTORIAL_LIMPIEZA_DIAS = 'historial_limpieza_dias';
 const CFG_COMA_AUTOMATICA = 'coma_automatica';
 const CFG_CALCULAR_VUELTO = 'calcular_vuelto';
 const CFG_REDONDEO_BS = 'redondeo_bs';
+const CFG_REDONDEO_TOTAL = 'redondeo_total';
 const CFG_SIDEBAR_AUTO_HIDE = 'sidebar_auto_hide';
 const CFG_CONFIRMAR_VENTA = 'confirmar_venta';
 const CFG_ANIMACIONES = 'animaciones_habilitadas';
@@ -227,6 +228,7 @@ const SEL = {
   tasaHistorialClear: '#tasa-historial-clear',
   tasaHistorialClose: '#tasa-historial-close',
   tasaHistorialOkBtn: '#tasa-historial-ok-btn',
+  tasaCalendarWrap: '#tasa-calendar-wrap',
   tasaActualLabel: '#tasa-actual-label',
   productModal: '#product-modal',
   productModalTitle: '#product-modal-title',
@@ -458,6 +460,7 @@ const SEL = {
   comaAutomaticaToggle: '#coma-automatica-toggle',
   calcularVueltoToggle: '#calcular-vuelto-toggle',
   redondeoBsToggle: '#redondeo-bs-toggle',
+  redondeoTotalToggle: '#redondeo-total-toggle',
   sidebarAutoHideToggle: '#sidebar-auto-hide-toggle',
 
   // --- Calculator ---
@@ -869,6 +872,7 @@ let lastViewName = 'sales';
 let comaAutomaticaEnabled = false;
 let calcularVuelto = true;
 let redondeoBs = false;
+let redondeoTotal = false;
 let soundEnabled = true;
 let soundVolume = 0.5;
 let auditOffset = 0;
@@ -982,6 +986,7 @@ function parsePrecio(s) { return parseFloat(String(s).replace(',', '.')) || 0; }
 function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
 function totalBsRedondeado(totalUsd) {
   const bs = totalUsd * tasaActual;
+  if (redondeoTotal) return Math.round(bs);
   return redondeoBs ? Math.round(bs) : bs;
 }
 
@@ -1427,15 +1432,13 @@ function updateConnectionState() {
   var input = qs(SEL.tasaInput);
   var badge = qs(SEL.tasaConnectionBadge);
   if (!input || !badge) return;
+  input.disabled = false;
+  input.title = 'Ingrese la tasa manualmente o use el bot\u00f3n Tasa BCV';
   if (online) {
-    input.disabled = true;
-    input.title = 'Con conexi\u00f3n - usa el bot\u00f3n Tasa BCV';
     badge.className = 'tasa-connection-badge online';
     badge.innerHTML = '<i class="nf nf-fa-wifi"></i>';
     badge.title = 'Conectado';
   } else {
-    input.disabled = false;
-    input.title = 'Sin conexi\u00f3n - puede ingresar la tasa manualmente';
     badge.className = 'tasa-connection-badge offline';
     badge.innerHTML = '<i class="nf nf-fa-wifi"></i>';
     badge.title = 'Sin conexi\u00f3n';
@@ -1913,16 +1916,35 @@ async function confirmPayment() {
   if (metodo === METODO_EFECTIVO_BS) {
     const totalMoneda = totalBsRedondeado(total);
     const recibido = parseInput(qs(SEL.cambioRecibido).value);
-    if (recibido > 0 && recibido !== totalMoneda) {
-      if (!calcularVuelto) {
-        total_bs_ingresado = recibido;
-      } else if (recibido <= totalMoneda) {
-        total_bs_ingresado = totalMoneda;
+    if (recibido > 0) {
+      if (recibido < totalMoneda) {
+        showToast('El monto recibido (Bs. ' + recibido.toFixed(2).replace('.', ',') + ') es menor al total (Bs. ' + totalMoneda.toFixed(2).replace('.', ',') + ')', 'error');
+        processingPayment = false;
+        qs(SEL.paymentConfirmBtn).disabled = false;
+        qs(SEL.paymentConfirmBtn).classList.remove('loading');
+        qs(SEL.paymentConfirmBtn).textContent = 'Confirmar Pago';
+        return;
       }
-    } else if (redondeoBs) {
+      total_bs_ingresado = recibido;
+    } else if (redondeoBs || redondeoTotal) {
       total_bs_ingresado = totalMoneda;
     }
-  } else if (redondeoBs) {
+  } else if (metodo === METODO_EFECTIVO_USD) {
+    const recibidoUsd = parseInput(qs(SEL.cambioRecibido).value);
+    if (recibidoUsd > 0) {
+      if (recibidoUsd < total) {
+        showToast('El monto recibido ($' + recibidoUsd.toFixed(2) + ') es menor al total ($' + total.toFixed(2) + ')', 'error');
+        processingPayment = false;
+        qs(SEL.paymentConfirmBtn).disabled = false;
+        qs(SEL.paymentConfirmBtn).classList.remove('loading');
+        qs(SEL.paymentConfirmBtn).textContent = 'Confirmar Pago';
+        return;
+      }
+      total_bs_ingresado = totalBsRedondeado(recibidoUsd);
+    } else if (redondeoBs || redondeoTotal) {
+      total_bs_ingresado = totalBsRedondeado(total);
+    }
+  } else if (redondeoBs || redondeoTotal) {
     total_bs_ingresado = totalBsRedondeado(total);
   }
   const confirmBtn = qs(SEL.paymentConfirmBtn);
@@ -2860,9 +2882,20 @@ async function handleThemeClick(theme) {
 
 /* Share receipt via Web Share API */
 function shareReceipt(venta) {
-  if (!navigator.share) return;
-  showToast('Recibo generado - Venta #' + venta.id, 'success');
-  // receipt data is fetched fresh by shareReceiptById via get_sale_detail
+  if (navigator.share) {
+    showToast('Recibo generado - Venta #' + venta.id, 'success');
+    return;
+  }
+  copyReceiptToClipboard(venta);
+}
+
+function copyReceiptToClipboard(venta) {
+  var text = buildReceiptText(venta);
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Recibo copiado al portapapeles', 'success');
+  }).catch(function() {
+    showToast('No se pudo copiar el recibo', 'error');
+  });
 }
 
 function buildReceiptText(venta) {
@@ -2876,7 +2909,6 @@ function buildReceiptText(venta) {
 }
 
 function shareReceiptById(ventaId) {
-  if (!navigator.share) { showToast('Compartir solo disponible en tel\u00e9fono', 'error'); return; }
   invoke('get_sale_detail', { ventaId: ventaId }).then(function(detalles) {
     var venta = { id: ventaId, detalles: detalles, total_usd: 0, total_bs: 0, metodo_pago: '' };
     var totalUsd = 0;
@@ -2884,7 +2916,15 @@ function shareReceiptById(ventaId) {
     venta.total_usd = totalUsd;
     venta.total_bs = totalUsd * tasaActual;
     var text = buildReceiptText(venta);
-    navigator.share({ title: 'Venta #' + venta.id, text: text }).catch(function() {});
+    if (navigator.share) {
+      navigator.share({ title: 'Venta #' + venta.id, text: text }).catch(function() {});
+    } else {
+      navigator.clipboard.writeText(text).then(function() {
+        showToast('Recibo copiado al portapapeles', 'success');
+      }).catch(function() {
+        showToast('No se pudo copiar el recibo', 'error');
+      });
+    }
   }).catch(function(e) { showToast('Error al cargar venta', 'error'); });
 }
 
@@ -4177,11 +4217,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     const totalMoneda = method === METODO_EFECTIVO_BS ? totalBsRedondeado(total) : total;
     const cambioEl = qs(SEL.cambioResultado);
     const montoEl = qs(SEL.cambioMonto);
-    if (recibido > 0 && recibido > totalMoneda && calcularVuelto) {
-      const cambio = recibido - totalMoneda;
-      const cambioTexto = method === METODO_EFECTIVO_BS ? 'Bs. ' + cambio.toFixed(2).replace('.', ',') : formatUSD(cambio);
-      montoEl.textContent = cambioTexto;
-      cambioEl.classList.remove('hidden');
+    if (recibido > 0) {
+      if (recibido < totalMoneda) {
+        montoEl.textContent = method === METODO_EFECTIVO_BS ? 'Faltan Bs. ' + (totalMoneda - recibido).toFixed(2).replace('.', ',') : 'Faltan ' + formatUSD(totalMoneda - recibido);
+        cambioEl.classList.remove('hidden');
+        cambioEl.style.color = 'var(--danger)';
+      } else if (recibido > totalMoneda && calcularVuelto) {
+        const cambio = recibido - totalMoneda;
+        const cambioTexto = method === METODO_EFECTIVO_BS ? 'Bs. ' + cambio.toFixed(2).replace('.', ',') : formatUSD(cambio);
+        montoEl.textContent = cambioTexto;
+        cambioEl.classList.remove('hidden');
+        cambioEl.style.color = '';
+      } else {
+        cambioEl.classList.add('hidden');
+      }
     } else {
       cambioEl.classList.add('hidden');
     }
@@ -4350,6 +4399,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   /* ========== USER MANAGEMENT ========== */
   const createUserBtn = qs(SEL.createUserBtn);
   if (createUserBtn) createUserBtn.addEventListener('click', handleCreateUser);
+  const resetUsersBtn = qs('#reset-users-btn');
+  if (resetUsersBtn) resetUsersBtn.addEventListener('click', function() {
+    confirmModal('\u00bfEliminar TODOS los usuarios y dejar solo superadmin? Esta acci\u00f3n no se puede deshacer.', 'Reset Usuarios', 'Resetear').then(ok => {
+      if (!ok) return;
+      invoke('reset_usuarios').then(msg => { showToast(msg); loadUserList(); }).catch(e => showToast('Error: ' + e, 'error'));
+    });
+  });
   document.addEventListener('click', function(e) {
     const delBtn = e.target.closest('.delete-user-btn');
     if (delBtn) {
@@ -4852,6 +4908,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       try { await setUserConfig(CFG_REDONDEO_BS, this.checked ? '1' : '0'); } catch (e) {}
     });
   }
+  const redondeoTotalToggle = qs(SEL.redondeoTotalToggle);
+  if (redondeoTotalToggle) {
+    redondeoTotalToggle.addEventListener('change', async function() {
+      redondeoTotal = this.checked;
+      try { await setUserConfig(CFG_REDONDEO_TOTAL, this.checked ? '1' : '0'); } catch (e) {}
+    });
+  }
 
   // Load saved sound config
   try {
@@ -4887,6 +4950,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     const savedRedondeo = await getUserConfig(CFG_REDONDEO_BS);
     redondeoBs = savedRedondeo === '1' || savedRedondeo === true;
     if (redondeoToggle) redondeoToggle.checked = redondeoBs;
+  } catch (e) {}
+
+  // Load redondeo total config
+  try {
+    const savedTotal = await getUserConfig(CFG_REDONDEO_TOTAL);
+    redondeoTotal = savedTotal === '1' || savedTotal === true;
+    if (redondeoTotalToggle) redondeoTotalToggle.checked = redondeoTotal;
   } catch (e) {}
 
   // Load saved theme on startup

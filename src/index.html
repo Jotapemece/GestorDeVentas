@@ -4,10 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Gestor de Ventas</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23D47A4A'/%3E%3Cstop offset='100%25' stop-color='%23C06030'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='96' fill='url(%23bg)'/%3E%3Cpolygon points='128,256 80,80 200,192' fill='%232D1B0E'/%3E%3Cpolygon points='384,256 432,80 312,192' fill='%232D1B0E'/%3E%3Cpolygon points='140,240 100,100 195,195' fill='%23D47A4A'/%3E%3Cpolygon points='372,240 412,100 317,195' fill='%23D47A4A'/%3E%3Cellipse cx='256' cy='280' rx='140' ry='120' fill='%23F5D6B8'/%3E%3Cellipse cx='200' cy='260' rx='22' ry='26' fill='%232D1B0E'/%3E%3Cellipse cx='312' cy='260' rx='22' ry='26' fill='%232D1B0E'/%3E%3Cellipse cx='204' cy='252' rx='10' ry='14' fill='white'/%3E%3Cellipse cx='316' cy='252' rx='10' ry='14' fill='white'/%3E%3Cellipse cx='256' cy='310' rx='10' ry='8' fill='%232D1B0E'/%3E%3Cpath d='M240 325 Q256 340 272 325' stroke='%232D1B0E' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='48' fill='%234A90A0'/%3E%3Ctext x='256' y='340' font-size='320' text-anchor='middle' fill='white' font-family='sans-serif'%3E%24%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="fa-local.css">
   <script>
@@ -98,7 +95,7 @@
             <span>Recordar usuario</span>
           </label>
         </div>
-        <button id="login-btn" class="btn btn-primary btn-full">Iniciar Sesi&oacute;n</button>
+        <button id="login-btn" class="btn btn-primary btn-full"><i class="nf nf-fa-sign_in"></i> Iniciar Sesi&oacute;n</button>
         <p id="login-error" class="login-error"></p>
       </div>
     </div>
@@ -496,6 +493,13 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-circle"></i> Redondear total al entero m&aacute;s cercano</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="redondeo-total-toggle">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -583,7 +587,7 @@
                 <div class="historial-limpieza-row">
                   <input type="number" id="historial-limpieza-dias" min="0" max="365" value="0" aria-label="Días para limpieza automática">
                   <span class="text-sm">d&iacute;as</span>
-                  <button id="historial-limpieza-save" class="btn btn-primary btn-sm">Guardar</button>
+                  <button id="historial-limpieza-save" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Guardar</button>
                 </div>
                 <div class="historial-limpieza-info">
                   <span class="text-muted text-sm" id="historial-limpieza-status"></span>
@@ -638,9 +642,12 @@
                   <tbody id="user-list-body"></tbody>
                 </table>
               </div>
+              <div class="config-row" style="margin-top:12px">
+                <button id="reset-users-btn" class="btn btn-danger btn-sm"><i class="nf nf-fa-exclamation_triangle"></i> Reset usuarios (solo superadmin)</button>
+              </div>
             </div>
           </div>
-          <div class="config-card">
+          <div class="config-card admin-only">
             <div class="config-card-header">
               <i class="nf nf-fa-lock"></i> Contrase&ntilde;a
               <span class="config-card-desc">Cambia tu contrase&ntilde;a de acceso al sistema</span>
