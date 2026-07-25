@@ -350,6 +350,10 @@ const SEL = {
   syncDownloadSalesTime: '#sync-download-sales-time',
   syncUploadClientesTime: '#sync-upload-clientes-time',
   syncDownloadClientesTime: '#sync-download-clientes-time',
+  syncUploadUsuariosTime: '#sync-upload-usuarios-time',
+  syncDownloadUsuariosTime: '#sync-download-usuarios-time',
+  uploadUsuariosBtn: '#upload-usuarios-btn',
+  downloadUsuariosBtn: '#download-usuarios-btn',
 
   // --- Tasa ---
   tasaFetchBtn: '#tasa-fetch-btn',
@@ -678,6 +682,92 @@ function switchGuideTab(section) {
   qsa(SEL.guidePages).forEach(p => p.classList.remove('active'));
   qs(`.guide-tab[data-section="${section}"]`).classList.add('active');
   qs(`#guide-${section}`).classList.add('active');
+}
+
+/* ========== COLUMN TOGGLE ========== */
+function initColumnToggle() {
+  qsa('table[data-col-toggle]').forEach(function(table) {
+    var storageKey = table.dataset.colToggle;
+    var theadRow = table.querySelector('thead tr');
+    if (!theadRow) return;
+    var ths = theadRow.querySelectorAll('th');
+    if (ths.length === 0) return;
+
+    var savedKey = 'col-vis-' + storageKey;
+    var hiddenCols = new Set();
+    try {
+      var saved = JSON.parse(localStorage.getItem(savedKey));
+      if (Array.isArray(saved)) hiddenCols = new Set(saved);
+    } catch(e) {}
+
+    var protectedCols = new Set();
+    ths.forEach(function(th, idx) {
+      var text = th.textContent.trim();
+      if (text === 'Nombre' || text.indexOf('$') !== -1 || text === 'Acción' || text === 'Acciones') protectedCols.add(idx);
+    });
+
+    var styleId = 'col-style-' + storageKey;
+    var styleEl = document.getElementById(styleId);
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      document.head.appendChild(styleEl);
+    }
+
+    function applyVisibility() {
+      var tableId = table.id;
+      if (!tableId) return;
+      var rules = [];
+      for (var i = 0; i < ths.length; i++) {
+        if (hiddenCols.has(i)) {
+          rules.push('#' + tableId + ' th:nth-child(' + (i + 1) + '), #' + tableId + ' td:nth-child(' + (i + 1) + ') { display: none !important; }');
+        }
+      }
+      styleEl.textContent = rules.join('\n');
+    }
+
+    ths.forEach(function(th, idx) {
+      if (protectedCols.has(idx)) {
+        if (idx === 0) {
+          var resetBtn = document.createElement('button');
+          resetBtn.className = 'col-toggle-btn col-restore-btn';
+          resetBtn.type = 'button';
+          resetBtn.title = 'Restaurar todas las columnas';
+          resetBtn.innerHTML = '<i class="nf nf-fa-refresh"></i>';
+          resetBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            hiddenCols.clear();
+            localStorage.setItem(savedKey, JSON.stringify([]));
+            applyVisibility();
+          });
+          th.appendChild(resetBtn);
+        }
+        return;
+      }
+      var btn = document.createElement('button');
+      btn.className = 'col-toggle-btn';
+      btn.type = 'button';
+      btn.title = 'Ocultar columna';
+      btn.innerHTML = '<i class="nf nf-fa-eye"></i>';
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (hiddenCols.has(idx)) {
+          hiddenCols.delete(idx);
+          btn.title = 'Ocultar columna';
+          btn.innerHTML = '<i class="nf nf-fa-eye"></i>';
+        } else {
+          hiddenCols.add(idx);
+          btn.title = 'Mostrar columna';
+          btn.innerHTML = '<i class="nf nf-fa-eye_slash"></i>';
+        }
+        localStorage.setItem(savedKey, JSON.stringify(Array.from(hiddenCols)));
+        applyVisibility();
+      });
+      th.appendChild(btn);
+    });
+
+    applyVisibility();
+  });
 }
 
 /* ========== CLOCK ========== */
@@ -1185,6 +1275,8 @@ async function loadSyncStats() {
     qs(SEL.syncDownloadSalesTime).textContent = fmt(stats.ultimo_download_ventas);
     qs(SEL.syncUploadClientesTime).textContent = fmt(stats.ultimo_upload_clientes);
     qs(SEL.syncDownloadClientesTime).textContent = fmt(stats.ultimo_download_clientes);
+    qs(SEL.syncUploadUsuariosTime).textContent = fmt(stats.ultimo_upload_usuarios);
+    qs(SEL.syncDownloadUsuariosTime).textContent = fmt(stats.ultimo_download_usuarios);
   } catch (_) {}
 }
 
@@ -1353,6 +1445,7 @@ async function handleLogin() {
       initSidebarAutoHide();
       initCalculator();
       initGuide();
+      initColumnToggle();
       loadSidebarAutoHideConfig();
       applyRoleUI();
       loadSyncAutoConfig();
@@ -4808,6 +4901,28 @@ document.addEventListener('DOMContentLoaded', async function() {
         showToast('Error: ' + e, 'error');
       });
     });
+  });
+
+  /* Subir usuarios */
+  qs(SEL.uploadUsuariosBtn)?.addEventListener('click', async function() {
+    var ok = await confirmModal('¿Subir usuarios a Supabase?', 'Subir usuarios', 'Subir');
+    if (!ok) return;
+    try {
+      var r = await invoke('upload_usuarios');
+      showToast(r);
+      loadSyncStats();
+    } catch (e) { showToast('Error: ' + e, 'error'); }
+  });
+
+  /* Descargar usuarios */
+  qs(SEL.downloadUsuariosBtn)?.addEventListener('click', async function() {
+    var ok = await confirmModal('¿Descargar usuarios de otros dispositivos desde Supabase?', 'Descargar usuarios', 'Descargar');
+    if (!ok) return;
+    try {
+      var r = await invoke('download_usuarios');
+      showToast(r);
+      loadSyncStats();
+    } catch (e) { showToast('Error: ' + e, 'error'); }
   });
 
   /* Sincronizar todo */

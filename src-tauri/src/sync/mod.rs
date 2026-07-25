@@ -1,12 +1,14 @@
 pub(crate) mod products;
 pub(crate) mod sales;
 pub(crate) mod clients;
+pub(crate) mod users;
 pub(crate) mod conflicts;
 pub(crate) mod orchestrator;
 
 pub use products::*;
 pub use sales::*;
 pub use clients::*;
+pub use users::*;
 pub use conflicts::*;
 pub use orchestrator::*;
 

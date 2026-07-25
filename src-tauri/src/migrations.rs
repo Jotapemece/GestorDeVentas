@@ -111,6 +111,8 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("020_add_es_inari", add_es_inari),
     ("021_add_subcategoria_combos", add_subcategoria_combos),
     ("022_add_inari_products", add_inari_products),
+    ("023_add_inari_bebidas", add_inari_bebidas),
+    ("024_add_usuarios_sync_fields", add_usuarios_sync_fields),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -426,6 +428,45 @@ fn add_inari_products(conn: &Connection) {
             rusqlite::params![codigo, nombre, precio_usd, subcategoria],
         ).ok();
     }
+}
+
+fn add_inari_bebidas(conn: &Connection) {
+    let productos = [
+        ("I018", "Refresco Hit 1L", 1.50),
+        ("I019", "Coca-Cola 2L", 2.30),
+        ("I020", "Coca-Cola 1.5L", 1.90),
+        ("I021", "Refresco Glup Cola 1L", 1.25),
+        ("I022", "Refresco Glup 400ml", 0.80),
+        ("I023", "Refresco Glup Cola 2L", 1.75),
+        ("I024", "Refresco Cool 400ml", 0.80),
+        ("I025", "Refresco Cool 1L", 0.95),
+        ("I026", "Refresco Cool 2L", 1.55),
+        ("I027", "Malta (Retornable)", 1.20),
+        ("I028", "Malta (Desechable)", 1.35),
+        ("I029", "Cerveza", 1.20),
+        ("I030", "Jugo Del Valle 1.5L", 1.90),
+        ("I031", "Jugo Del Valle 500ml", 1.40),
+    ];
+    for (codigo, nombre, precio_usd) in &productos {
+        conn.execute(
+            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, es_inari, subcategoria, created_at)
+             VALUES (?1, ?2, ?3, 0, 1, 'bebidas', datetime('now','localtime'))",
+            rusqlite::params![codigo, nombre, precio_usd],
+        ).ok();
+    }
+}
+
+fn add_usuarios_sync_fields(conn: &Connection) {
+    if !column_exists(conn, "usuarios", "sync_id") {
+        conn.execute_batch("ALTER TABLE usuarios ADD COLUMN sync_id TEXT UNIQUE;").ok();
+    }
+    if !column_exists(conn, "usuarios", "updated_at") {
+        conn.execute_batch("ALTER TABLE usuarios ADD COLUMN updated_at TEXT DEFAULT (datetime('now','localtime'));").ok();
+    }
+    if !column_exists(conn, "usuarios", "dispositivo_origen") {
+        conn.execute_batch("ALTER TABLE usuarios ADD COLUMN dispositivo_origen TEXT DEFAULT '';").ok();
+    }
+    conn.execute("UPDATE usuarios SET updated_at = datetime('now','localtime'), sync_id = 'admin-' || id WHERE sync_id IS NULL", []).ok();
 }
 
 fn add_password_change_required(conn: &Connection) {

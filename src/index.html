@@ -178,7 +178,7 @@
             <div class="sales-panel sales-left">
               <div class="panel-header">Productos</div>
               <div class="product-list-container">
-                <table class="table" id="product-search-table">
+                <table class="table" id="product-search-table" data-col-toggle="product-search">
                   <thead>
                     <tr>
                       <th>Nombre</th>
@@ -250,7 +250,7 @@
             <button id="inari-create-combo-btn" class="btn btn-sm btn-primary admin-only" style="margin-left:auto"><i class="nf nf-fa-plus"></i> Crear Combo</button>
           </div>
           <div class="table-container">
-              <table class="table" id="inventory-table">
+              <table class="table" id="inventory-table" data-col-toggle="inventory">
                 <thead>
                     <tr>
                       <th>Nombre</th>
@@ -280,7 +280,7 @@
             </div>
           </div>
           <div class="table-container">
-            <table class="table" id="creditos-table">
+            <table class="table" id="creditos-table" data-col-toggle="creditos">
               <thead>
                 <tr>
                   <th>Nombre</th>
@@ -328,7 +328,7 @@
           </div>
           <h3>Ventas del D&iacute;a</h3>
           <div class="table-container">
-            <table class="table" id="daily-sales-table">
+            <table class="table" id="daily-sales-table" data-col-toggle="daily-sales">
               <thead>
                 <tr>
                   <th>#</th>
@@ -353,7 +353,7 @@
             </div>
           </div>
           <div class="table-container">
-            <table class="table" id="audit-table">
+            <table class="table" id="audit-table" data-col-toggle="audit">
               <thead>
                 <tr>
                   <th>ID</th>
@@ -442,7 +442,7 @@
             <div class="top-products-grid" id="top-products-grid"></div>
           </div>
           <div class="table-container">
-            <table class="table" id="report-sales-table">
+            <table class="table" id="report-sales-table" data-col-toggle="report-sales">
               <thead>
                 <tr>
                   <th>#</th>
@@ -783,6 +783,8 @@
                     <span>Descargar ventas: <span id="sync-download-sales-time">-</span></span>
                     <span>Subir clientes: <span id="sync-upload-clientes-time">-</span></span>
                     <span>Descargar clientes: <span id="sync-download-clientes-time">-</span></span>
+                    <span>Subir usuarios: <span id="sync-upload-usuarios-time">-</span></span>
+                    <span>Descargar usuarios: <span id="sync-download-usuarios-time">-</span></span>
                   </div>
                 </div>
                 <div class="sync-card">
@@ -806,6 +808,9 @@
                       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
                         <button id="upload-all-btn" class="sync-btn-adv" style="background:var(--primary);color:#fff"><i class="nf nf-fa-cloud_upload" style="font-size:16px;display:block;margin-bottom:2px"></i> Subir todo</button>
                         <button id="download-all-btn" class="sync-btn-adv" style="background:var(--accent);color:#fff"><i class="nf nf-fa-cloud_download" style="font-size:16px;display:block;margin-bottom:2px"></i> Descargar todo</button>
+                        <div class="dropdown-divider" style="margin:4px 0"></div>
+                        <button id="upload-usuarios-btn" class="sync-btn-adv" style="background:var(--card);color:var(--text);border:1px solid var(--border)"><i class="nf nf-fa-cloud_upload" style="font-size:14px;display:block;margin-bottom:2px"></i> Subir usuarios</button>
+                        <button id="download-usuarios-btn" class="sync-btn-adv" style="background:var(--card);color:var(--text);border:1px solid var(--border)"><i class="nf nf-fa-cloud_download" style="font-size:14px;display:block;margin-bottom:2px"></i> Descargar usuarios</button>
                       </div>
                     </details>
                   </div>

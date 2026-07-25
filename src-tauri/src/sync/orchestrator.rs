@@ -1,6 +1,7 @@
 use super::clients::{download_clientes_inner, upload_clientes_inner};
 use super::products::{download_products_inner, upload_products_inner};
 use super::sales::{download_sales_inner, upload_sales_inner};
+use super::users::{download_usuarios_inner, upload_usuarios_inner};
 use super::{api_url, emit_progress, get_config, supabase_config, supabase_get, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
@@ -187,15 +188,17 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
     let (supabase_url, supabase_key) = supabase_config(&db)?;
     let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
 
-    let total = 3u32;
+    let total = 4u32;
     emit_progress(&app_handle, "Subiendo productos...", 1, total);
     let r1 = upload_products_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo clientes...", 2, total);
     let r2 = upload_clientes_inner(&db, &supabase_url, &supabase_key)?;
     emit_progress(&app_handle, "Subiendo ventas...", 3, total);
     let r3 = upload_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Subiendo usuarios...", 4, total);
+    let r4 = upload_usuarios_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
 
-    Ok(format!("{}\n{}\n{}", r1, r2, r3))
+    Ok(format!("{}\n{}\n{}\n{}", r1, r2, r3, r4))
 }
 
 #[tauri::command]
@@ -206,16 +209,18 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
     let (supabase_url, supabase_key) = supabase_config(&tx)?;
     let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID).unwrap_or_default();
 
-    let total = 3u32;
+    let total = 4u32;
     emit_progress(&app_handle, "Descargando productos...", 1, total);
     let r1 = download_products_inner(&tx, &supabase_url, &supabase_key)?;
     emit_progress(&app_handle, "Descargando clientes...", 2, total);
     let r2 = download_clientes_inner(&tx, &supabase_url, &supabase_key)?;
     emit_progress(&app_handle, "Descargando ventas...", 3, total);
     let r3 = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Descargando usuarios...", 4, total);
+    let r4 = download_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
 
     tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
-    Ok(format!("{}\n{}\n{}", r1, r2, r3))
+    Ok(format!("{}\n{}\n{}\n{}", r1, r2, r3, r4))
 }
 
 #[tauri::command]
@@ -226,22 +231,26 @@ pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<
     let (supabase_url, supabase_key) = supabase_config(&tx)?;
     let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
 
-    let total = 6u32;
+    let total = 8u32;
     emit_progress(&app_handle, "Subiendo productos...", 1, total);
     let r1 = upload_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo clientes...", 2, total);
     let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key)?;
     emit_progress(&app_handle, "Subiendo ventas...", 3, total);
     let r3 = upload_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Descargando productos...", 4, total);
-    let r4 = download_products_inner(&tx, &supabase_url, &supabase_key)?;
-    emit_progress(&app_handle, "Descargando clientes...", 5, total);
-    let r5 = download_clientes_inner(&tx, &supabase_url, &supabase_key)?;
-    emit_progress(&app_handle, "Descargando ventas...", 6, total);
-    let r6 = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Subiendo usuarios...", 4, total);
+    let r4 = upload_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Descargando productos...", 5, total);
+    let r5 = download_products_inner(&tx, &supabase_url, &supabase_key)?;
+    emit_progress(&app_handle, "Descargando clientes...", 6, total);
+    let r6 = download_clientes_inner(&tx, &supabase_url, &supabase_key)?;
+    emit_progress(&app_handle, "Descargando ventas...", 7, total);
+    let r7 = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Descargando usuarios...", 8, total);
+    let r8 = download_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
 
     tx.commit().map_err(|e| format!("Error al confirmar sincronización: {}", e))?;
-    Ok(format!("{}\n{}\n{}\n{}\n{}\n{}", r1, r2, r3, r4, r5, r6))
+    Ok(format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", r1, r2, r3, r4, r5, r6, r7, r8))
 }
 
 #[derive(Serialize)]
@@ -255,6 +264,8 @@ pub struct SyncStats {
     ultimo_download_ventas: String,
     ultimo_upload_clientes: String,
     ultimo_download_clientes: String,
+    ultimo_upload_usuarios: String,
+    ultimo_download_usuarios: String,
     dispositivo_id: String,
 }
 
@@ -291,6 +302,8 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
         ultimo_download_ventas: gc(constants::CFG_ULTIMO_DOWNLOAD_VENTAS),
         ultimo_upload_clientes: gc(constants::CFG_ULTIMO_UPLOAD_CLIENTES),
         ultimo_download_clientes: gc(constants::CFG_ULTIMO_DOWNLOAD_CLIENTES),
+        ultimo_upload_usuarios: gc(constants::CFG_ULTIMO_UPLOAD_USUARIOS),
+        ultimo_download_usuarios: gc(constants::CFG_ULTIMO_DOWNLOAD_USUARIOS),
         dispositivo_id: gc(constants::CFG_DISPOSITIVO_ID),
     })
 }

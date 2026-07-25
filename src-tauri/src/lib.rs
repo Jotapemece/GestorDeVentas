@@ -123,6 +123,8 @@ pub fn run() {
             sync::download_sales,
             sync::upload_clientes,
             sync::download_clientes,
+            sync::upload_usuarios,
+            sync::download_usuarios,
             sync::register_device,
             sync::list_dispositivos,
             sync::get_ultimo_upload,
