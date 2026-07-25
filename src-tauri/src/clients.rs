@@ -43,7 +43,7 @@ const SQL_PAGO_DEUDA_ATOMICO: &str =
 const SQL_REACTIVAR_CREDITO: &str =
     "UPDATE clientes SET credito_activo = 1 WHERE id = ?1 AND credito_activo = 0";
 const SQL_UPDATE_CLIENTE: &str = "UPDATE clientes SET nombre = ?1, updated_at = ?2 WHERE id = ?3";
-const SQL_DELETE_CLIENTE: &str = "DELETE FROM clientes WHERE id = ?1 AND saldo_deuda_usd = 0";
+const SQL_DELETE_CLIENTE: &str = "DELETE FROM clientes WHERE id = ?1";
 
 fn row_to_cliente(row: &rusqlite::Row) -> rusqlite::Result<Cliente> {
     let activo: i64 = row.get(2)?;
@@ -321,17 +321,21 @@ pub fn add_quick_debt(
 
 #[tauri::command]
 pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String, String> {
-    let db = state.lock_db()?;
+    let mut db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
         &format!("Eliminó cliente #{}", cliente_id),
     )?;
-    let affected = db.execute(SQL_DELETE_CLIENTE, params![cliente_id])
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    tx.execute("UPDATE ventas SET cliente_id = NULL WHERE cliente_id = ?1", params![cliente_id])
+        .map_err(|e| format!("Error al desvincular ventas: {}", e))?;
+    let affected = tx.execute(SQL_DELETE_CLIENTE, params![cliente_id])
         .map_err(|e| e.to_string())?;
     if affected == 0 {
-        return Err("No se puede eliminar: el cliente tiene deuda pendiente".to_string());
+        return Err("Cliente no encontrado".to_string());
     }
+    tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
     Ok("Cliente eliminado exitosamente".to_string())
 }
 

@@ -24,7 +24,7 @@
 </head>
 <body class="compact">
   <div id="app">
-    <div id="device-reg-screen" style="display:none">
+    <div id="device-reg-screen">
       <div class="login-card">
         <div class="login-brand">
           <div class="login-icon">
@@ -56,7 +56,7 @@
       </div>
     </div>
 
-    <div id="login-screen" style="display:none">
+    <div id="login-screen">
       <div class="login-card">
         <div class="login-brand">
           <div class="login-icon">
@@ -160,7 +160,10 @@
         <section id="view-sales" class="view active">
           <div class="sales-header">
             <div class="sales-header-left">
-              <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo..." aria-label="Buscar producto">
+              <div class="search-clear-wrap">
+                <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo..." aria-label="Buscar producto">
+                <button class="search-clear-btn" data-clear="product-search" aria-label="Limpiar b&uacute;squeda" tabindex="-1">&times;</button>
+              </div>
             </div>
             <div class="tasa-input-group">
               <span class="tasa-label">Bs.</span>
@@ -224,13 +227,27 @@
             <h2><i class="nf nf-fa-archive"></i> Inventario de Productos</h2>
             <div class="inventory-actions">
               <button id="inventory-tasa-btn" class="btn btn-outline" title="Tasa hist&oacute;rica"><i class="nf nf-fa-calendar"></i> <span id="tasa-actual-label">Hoy</span></button>
+              <button id="inventory-inari-btn" class="btn btn-outline" title="Inari Bocados"><i class="nf nf-fa-fire"></i> Inari</button>
               <button id="inventory-import-btn" class="btn btn-outline admin-only"><i class="nf nf-fa-upload"></i> Importar TSV</button>
               <button id="inventory-export-btn" class="btn btn-accent"><i class="nf nf-fa-download"></i> Exportar</button>
               <button id="inventory-add-btn" class="btn btn-accent admin-only"><i class="nf nf-fa-plus"></i> Agregar Producto</button>
             </div>
           </div>
           <div class="search-box flex-row">
-            <input type="text" id="inventory-search" placeholder="Buscar en inventario..." class="inventory-search-input" aria-label="Buscar en inventario">
+            <div class="search-clear-wrap">
+              <input type="text" id="inventory-search" placeholder="Buscar en inventario..." class="inventory-search-input" aria-label="Buscar en inventario">
+              <button class="search-clear-btn" data-clear="inventory-search" aria-label="Limpiar b&uacute;squeda" tabindex="-1">&times;</button>
+            </div>
+          </div>
+          <div id="inari-subcat-bar" class="inari-subcat-bar" style="display:none">
+            <button class="inari-subcat-btn active" data-subcat="">Todas</button>
+            <button class="inari-subcat-btn" data-subcat="hamburguesas">Hamburguesas</button>
+            <button class="inari-subcat-btn" data-subcat="perros_calientes">Perros Calientes</button>
+            <button class="inari-subcat-btn" data-subcat="pizzas">Pizzas</button>
+            <button class="inari-subcat-btn" data-subcat="entradas">Entradas</button>
+            <button class="inari-subcat-btn" data-subcat="bebidas">Bebidas</button>
+            <button class="inari-subcat-btn" data-subcat="combos">Combos</button>
+            <button id="inari-create-combo-btn" class="btn btn-sm btn-primary admin-only" style="margin-left:auto"><i class="nf nf-fa-plus"></i> Crear Combo</button>
           </div>
           <div class="table-container">
               <table class="table" id="inventory-table">
@@ -257,7 +274,10 @@
             <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
           </div>
           <div style="margin-bottom:12px">
-            <input type="text" id="creditos-search" class="form-input" placeholder="Buscar por nombre..." style="max-width:280px" aria-label="Buscar clientes por nombre">
+            <div class="search-clear-wrap" style="max-width:280px">
+              <input type="text" id="creditos-search" class="form-input" placeholder="Buscar por nombre..." aria-label="Buscar clientes por nombre">
+              <button class="search-clear-btn" data-clear="creditos-search" aria-label="Limpiar b&uacute;squeda" tabindex="-1">&times;</button>
+            </div>
           </div>
           <div class="table-container">
             <table class="table" id="creditos-table">
@@ -573,6 +593,13 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-fire"></i> Inari Bocados</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="inari-config-toggle">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
           <div class="config-card">
@@ -877,7 +904,7 @@
           <div class="form-group">
           <label>M&eacute;todo de Pago</label>
           <div class="payment-methods">
-            <button class="payment-method-btn active" data-method="efectivo_bs">Efectivo Bs.</button>
+            <button class="payment-method-btn" data-method="efectivo_bs">Efectivo Bs.</button>
             <button class="payment-method-btn" data-method="efectivo_usd">Efectivo USD</button>
             <button class="payment-method-btn" data-method="biopago">Biopago</button>
             <button class="payment-method-btn" data-method="punto">Punto</button>
@@ -1058,7 +1085,7 @@
           <div class="abono-metodo">
             <label>M&eacute;todo de Pago</label>
             <div class="abono-metodo-btns">
-              <button class="btn btn-sm abono-metodo-btn active" data-method="efectivo_bs">Efectivo Bs.</button>
+              <button class="btn btn-sm abono-metodo-btn" data-method="efectivo_bs">Efectivo Bs.</button>
               <button class="btn btn-sm abono-metodo-btn" data-method="efectivo_usd">Efectivo USD</button>
               <button class="btn btn-sm abono-metodo-btn" data-method="pago_movil">Pago M&oacute;vil</button>
               <button class="btn btn-sm abono-metodo-btn" data-method="punto">Punto</button>
@@ -1102,6 +1129,37 @@
       </div>
       <div class="modal-footer">
         <button id="tasa-historial-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="combo-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Crear Combo">
+    <div class="modal-content" style="max-width:600px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-fire"></i> Crear Combo Inari</h3>
+        <span class="modal-close" id="combo-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;gap:12px;margin-bottom:12px">
+          <div style="flex:1">
+            <label style="font-size:13px;font-weight:600">Nombre del combo</label>
+            <input type="text" id="combo-nombre" class="form-input" placeholder="Ej: Combo Hamburguesa" style="width:100%">
+          </div>
+          <div style="width:120px">
+            <label style="font-size:13px;font-weight:600">Precio USD</label>
+            <input type="number" id="combo-precio" class="form-input" placeholder="0.00" step="0.01" min="0" style="width:100%">
+          </div>
+        </div>
+        <label style="font-size:13px;font-weight:600;margin-bottom:4px;display:block">Buscar y agregar productos</label>
+        <input type="text" id="combo-search" class="form-input" placeholder="Buscar producto Inari..." style="width:100%;margin-bottom:6px">
+        <div id="combo-available-list" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:12px"></div>
+        <label style="font-size:13px;font-weight:600;margin-bottom:4px;display:block">Productos en el combo <span id="combo-count-badge" style="font-weight:400;color:var(--text-muted)">(0)</span></label>
+        <div id="combo-selected-list" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;margin-bottom:8px"></div>
+        <div id="combo-error" class="form-error" style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="combo-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="combo-save-btn" class="btn btn-primary"><i class="nf nf-fa-check"></i> Guardar Combo</button>
       </div>
     </div>
   </div>
@@ -1500,8 +1558,6 @@
           <div class="calc-expression" id="calc-expression"></div>
           <div class="calc-result" id="calc-result">0</div>
           <div class="calc-display-actions">
-            <button id="calc-history-prev" class="calc-nav-btn" title="Resultado anterior">&triangle;</button>
-            <button id="calc-history-next" class="calc-nav-btn" title="Siguiente resultado">&triangledown;</button>
             <button id="calc-tasa-btn" class="calc-tasa-btn" title="Insertar tasa del d\u00eda">$</button>
           </div>
         </div>
@@ -1527,7 +1583,6 @@
           <button class="calc-btn calc-op" data-calc="negate">&plusmn;</button>
           <button id="calc-equals" class="calc-btn calc-equals">=</button>
         </div>
-        <div class="calc-last-result" id="calc-last-result"></div>
       </div>
     </div>
   </div>

@@ -11,12 +11,14 @@ fn row_to_producto(row: &rusqlite::Row) -> rusqlite::Result<Producto> {
         codigo: row.get(0)?, nombre: row.get(1)?, precio_usd: row.get(2)?,
         costo: row.get(3)?, stock: row.get(4)?, stock_minimo: row.get(5)?,
         created_at: row.get(6)?, updated_at: row.get(7)?,
+        es_inari: row.get::<_, i64>(8)? != 0,
+        subcategoria: row.get(9)?,
     })
 }
 
 const SQL_BASE_PRODUCTOS: &str =
     "SELECT p.codigo, p.nombre, p.precio_usd, COALESCE(p.costo,0), p.stock, COALESCE(p.stock_minimo,0), \
-     COALESCE(p.created_at,''), p.updated_at \
+     COALESCE(p.created_at,''), p.updated_at, COALESCE(p.es_inari,0), p.subcategoria \
      FROM productos p WHERE p.activo = 1";
 
 const SQL_NEXT_CODIGO: &str =
@@ -28,11 +30,14 @@ const SQL_UPDATE_REACTIVATE: &str =
      WHERE codigo = ?6";
 
 const SQL_INSERT_PRODUCTO: &str =
-    "INSERT INTO productos (codigo, nombre, precio_usd, costo, stock, created_at, updated_at) \
-     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6) ON CONFLICT(codigo) DO NOTHING";
+    "INSERT INTO productos (codigo, nombre, precio_usd, costo, stock, created_at, updated_at, es_inari) \
+     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6, ?7) ON CONFLICT(codigo) DO NOTHING";
 
 const SQL_UPDATE_PRODUCTO: &str =
     "UPDATE productos SET nombre = ?1, precio_usd = ?2, costo = ?3, stock = ?4, updated_at = ?5 WHERE codigo = ?6";
+
+const SQL_SET_INARI: &str =
+    "UPDATE productos SET es_inari = ?1 WHERE codigo = ?2";
 
 const SQL_HAS_SALES: &str = "SELECT COUNT(*) > 0 FROM detalles_ventas WHERE producto_codigo = ?1";
 
@@ -50,45 +55,58 @@ pub fn list_products(
     search: Option<String>,
     page: Option<i64>,
     page_size: Option<i64>,
+    inari: Option<bool>,
+    subcategoria: Option<String>,
 ) -> Result<PaginatedResult<Producto>, String> {
     let db = state.lock_db()?;
 
     let has_query = search.as_ref().is_some_and(|s| !s.is_empty());
+    let has_inari_filter = inari.is_some();
+    let has_subcat = subcategoria.as_ref().is_some_and(|s| !s.is_empty());
+    let inari_val = inari.unwrap_or(false);
     let q = search.unwrap_or_default();
     let pattern = format!("%{}%", q);
     let p = page.unwrap_or(1).max(1);
     let ps = page_size.unwrap_or(constants::PAGE_SIZE_DEFAULT).clamp(1, constants::PAGE_SIZE_MAX);
     let offset = (p - 1) * ps;
 
-    // Count
-    let count_sql = if has_query {
-        "SELECT COUNT(*) FROM productos p WHERE p.activo = 1 AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1)".to_string()
-    } else {
-        "SELECT COUNT(*) FROM productos p WHERE p.activo = 1".to_string()
-    };
-    let total: i64 = if has_query {
-        db.query_row(&count_sql, params![pattern], |row| row.get(0)).unwrap_or(0)
-    } else {
-        db.query_row(&count_sql, [], |row| row.get(0)).unwrap_or(0)
-    };
-
-    // Data
-    let sql = if has_query {
-        format!("{} AND (p.codigo LIKE ?1 OR p.nombre LIKE ?1) ORDER BY p.nombre ASC LIMIT ?2 OFFSET ?3", SQL_BASE_PRODUCTOS)
-    } else {
-        format!("{} ORDER BY p.nombre ASC LIMIT ?1 OFFSET ?2", SQL_BASE_PRODUCTOS)
-    };
-
-    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
-
-    let products: Vec<Producto> = if has_query {
-        stmt.query_map(rusqlite::params![pattern, ps, offset], row_to_producto)
-    } else {
-        stmt.query_map(rusqlite::params![ps, offset], row_to_producto)
+    let mut where_clauses: Vec<String> = vec!["p.activo = 1".to_string()];
+    let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = vec![];
+    if has_inari_filter {
+        where_clauses.push(if inari_val { "p.es_inari = 1" } else { "p.es_inari = 0" }.to_string());
     }
-    .map_err(|e| e.to_string())?
-    .filter_map(|r| r.ok())
-    .collect();
+    if has_subcat {
+        where_clauses.push("p.subcategoria = ?1".to_string());
+        params_vec.push(Box::new(subcategoria.unwrap()));
+    }
+    if has_query {
+        let param_idx = if has_subcat { 2 } else { 1 };
+        where_clauses.push(format!("(p.codigo LIKE ?{} OR p.nombre LIKE ?{})", param_idx, param_idx));
+        params_vec.push(Box::new(pattern.clone()));
+    }
+
+    let where_sql: String = where_clauses.join(" AND ");
+    let count_sql = format!("SELECT COUNT(*) FROM productos p WHERE {}", where_sql);
+    let total: i64 = {
+        let mut stmt = db.prepare(&count_sql).map_err(|e| e.to_string())?;
+        let refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        stmt.query_row(refs.as_slice(), |row| row.get(0)).unwrap_or(0)
+    };
+
+    let num_param = params_vec.len();
+    let data_sql = format!("{} AND {} ORDER BY p.nombre ASC LIMIT ?{} OFFSET ?{}",
+        SQL_BASE_PRODUCTOS, where_sql, num_param + 1, num_param + 2);
+
+    let mut stmt = db.prepare(&data_sql).map_err(|e| e.to_string())?;
+    params_vec.push(Box::new(ps));
+    params_vec.push(Box::new(offset));
+    let refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+    let products: Vec<Producto> = stmt
+        .query_map(refs.as_slice(), row_to_producto)
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
 
     Ok(PaginatedResult { total, page: p, page_size: ps, data: products })
 }
@@ -101,6 +119,7 @@ pub fn create_product(
     precio_usd: f64,
     costo: f64,
     stock: i64,
+    es_inari: Option<bool>,
 ) -> Result<String, String> {
     if precio_usd <= 0.0 {
         return Err("El precio debe ser mayor a cero".to_string());
@@ -108,6 +127,7 @@ pub fn create_product(
     if stock < 0 {
         return Err("El stock no puede ser negativo".to_string());
     }
+    let es_inari = es_inari.unwrap_or(false);
     let mut db = state.lock_db()?;
     let codigo = if codigo.is_empty() {
         let next_id: i64 = db
@@ -133,7 +153,7 @@ pub fn create_product(
 
     match tx.execute(
         SQL_INSERT_PRODUCTO,
-        params![codigo, nombre, precio_usd, costo_real, stock, ts],
+        params![codigo, nombre, precio_usd, costo_real, stock, ts, es_inari],
     ) {
         Ok(_) => {
             tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
@@ -173,6 +193,23 @@ pub fn update_product(
         Ok(_) => Ok("Producto actualizado exitosamente".to_string()),
         Err(e) => Err(format!("Error al actualizar producto: {}", e)),
     }
+}
+
+#[tauri::command]
+pub fn set_product_inari(
+    state: State<AppState>,
+    codigo: String,
+    es_inari: bool,
+) -> Result<String, String> {
+    let db = state.lock_db()?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("{} producto '{}' como Inari", if es_inari { "Marcó" } else { "Desmarcó" }, codigo),
+    )?;
+    db.execute(SQL_SET_INARI, params![es_inari, codigo])
+        .map_err(|e| format!("Error al actualizar: {}", e))?;
+    Ok(if es_inari { "Producto marcado como Inari Bocados" } else { "Producto quitado de Inari Bocados" }.to_string())
 }
 
 #[tauri::command]

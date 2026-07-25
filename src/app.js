@@ -1,4 +1,9 @@
-const invoke = window.__TAURI__.core.invoke;
+// Lazy access to Tauri IPC bridge to avoid crash when __TAURI__ isn't ready yet
+const invoke = ((...args) => {
+  const fn = window.__TAURI__?.core?.invoke;
+  if (!fn) throw new Error('Backend no disponible');
+  return fn(...args);
+});
 
 const IS_ANDROID = navigator.userAgent.includes('Android');
 
@@ -230,6 +235,22 @@ const SEL = {
   tasaHistorialOkBtn: '#tasa-historial-ok-btn',
   tasaCalendarWrap: '#tasa-calendar-wrap',
   tasaActualLabel: '#tasa-actual-label',
+  inventoryInariBtn: '#inventory-inari-btn',
+  inariConfigToggle: '#inari-config-toggle',
+  inariSubcatBar: '#inari-subcat-bar',
+  inariSubcatBtn: '.inari-subcat-btn',
+  inariCreateComboBtn: '#inari-create-combo-btn',
+  comboModal: '#combo-modal',
+  comboNombre: '#combo-nombre',
+  comboPrecio: '#combo-precio',
+  comboSearch: '#combo-search',
+  comboAvailableList: '#combo-available-list',
+  comboSelectedList: '#combo-selected-list',
+  comboCountBadge: '#combo-count-badge',
+  comboError: '#combo-error',
+  comboSaveBtn: '#combo-save-btn',
+  comboCancelBtn: '#combo-cancel-btn',
+  comboModalClose: '#combo-modal-close',
   productModal: '#product-modal',
   productModalTitle: '#product-modal-title',
   productSaveText: '#product-save-text',
@@ -467,9 +488,6 @@ const SEL = {
   calcModal: '#calculator-modal',
   calcExpression: '#calc-expression',
   calcResult: '#calc-result',
-  calcLastResult: '#calc-last-result',
-  calcHistoryPrev: '#calc-history-prev',
-  calcHistoryNext: '#calc-history-next',
   calcTasaBtn: '#calc-tasa-btn',
   calcBtn: '#calc-btn',
   calcClose: '#calculator-close',
@@ -545,8 +563,7 @@ const SEL = {
 };
 
 /* ========== CALCULATOR ========== */
-const MAX_CALC_HISTORY = 25;
-const calcState = { expr: '', result: '0', memory: null, op: null, reset: false, history: [], historyIdx: -1, historyDate: '' };
+const calcState = { expr: '', result: '0', memory: null, op: null, reset: false };
 
 function initCalculator() {
   if (IS_ANDROID) return;
@@ -555,18 +572,13 @@ function initCalculator() {
   qs(SEL.calcClose).addEventListener('click', closeCalculator);
   document.querySelectorAll('[data-calc]').forEach(btn => btn.addEventListener('click', () => calcInput(btn.dataset.calc)));
   qs(SEL.calcEquals).addEventListener('click', calcEquals);
-  qs(SEL.calcHistoryPrev).addEventListener('click', calcHistoryGo.bind(null, -1));
-  qs(SEL.calcHistoryNext).addEventListener('click', calcHistoryGo.bind(null, 1));
   qs(SEL.calcTasaBtn).addEventListener('click', calcInsertTasa);
   document.addEventListener('keydown', calcKeydown);
 }
 
 function openCalculator() {
   showModal(qs(SEL.calcModal));
-  const today = new Date().toDateString();
-  if (calcState.historyDate !== today) { calcState.history = []; calcState.historyIdx = -1; calcState.historyDate = today; }
   calcRender();
-  calcRenderLastResult();
   setTimeout(() => qs(SEL.calcModal).querySelector('.calc-buttons').focus(), 100);
 }
 
@@ -613,22 +625,13 @@ function calcEquals() {
   const right = parseFloat(calcState.expr.split(' ').pop()) || 0;
   if (calcState.op === '/' && right === 0) { calcState.result = 'Error'; calcRender(); return; }
   const result = ops[calcState.op](calcState.memory, right);
-  const prevExpr = calcState.expr;
   calcState.result = String(Math.round(result * 1e10) / 1e10);
   calcState.expr = calcState.result;
   calcState.memory = null;
   calcState.op = null;
   calcState.reset = true;
-  const today = new Date().toDateString();
-  if (calcState.historyDate !== today) { calcState.history = []; calcState.historyIdx = -1; calcState.historyDate = today; }
-  calcState.history.push({ expr: prevExpr, result: calcState.result });
-  if (calcState.history.length > MAX_CALC_HISTORY) calcState.history.shift();
-  calcState.historyIdx = calcState.history.length;
-  calcRenderLastResult();
   calcRender();
 }
-
-function calcHistoryGo(dir) { if (calcState.history.length === 0) return; calcState.historyIdx = Math.max(0, Math.min(calcState.history.length - 1, (calcState.historyIdx === -1 ? (dir > 0 ? 0 : calcState.history.length - 1) : calcState.historyIdx + dir))); const h = calcState.history[calcState.historyIdx]; if (h) { calcState.expr = h.expr; calcState.result = h.result; calcRender(); } }
 
 function calcInsertTasa() {
   if (tasaActual && tasaActual > 0) {
@@ -639,13 +642,6 @@ function calcInsertTasa() {
 }
 
 function calcRender() { qs(SEL.calcExpression).textContent = calcState.expr || ''; qs(SEL.calcResult).textContent = calcState.result; }
-
-function calcRenderLastResult() {
-  const el = qs(SEL.calcLastResult);
-  if (calcState.history.length === 0) { el.textContent = ''; return; }
-  const last = calcState.history[calcState.history.length - 1];
-  el.textContent = last.expr + ' = ' + last.result;
-}
 
 function calcKeydown(e) {
   const modal = qs(SEL.calcModal);
@@ -774,7 +770,8 @@ function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '
 
 function createProductRow(p) {
   const name = escapeHtml(p.nombre);
-  return '<td title="' + name + '">' + name + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + escapeHtml(p.codigo) + '">+</button></td>';
+  const inariBadge = p.es_inari ? ' <span class="badge badge-inari">Inari</span>' : '';
+  return '<td title="' + name + '">' + name + inariBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + escapeHtml(p.codigo) + '">+</button></td>';
 }
 function createCartRow(item) {
   const displayName = item.nombre || item.codigo;
@@ -793,7 +790,8 @@ function createInventoryRow(p, editBtn) {
   var costo = p.costo || 0;
   var margen = (costo > 0 && p.precio_usd > 0) ? ((p.precio_usd - costo) / p.precio_usd * 100).toFixed(1) + '%' : '—';
   var tasa = tasaInventario > 0 ? tasaInventario : tasaActual;
-  return '<td>' + escapeHtml(p.nombre) + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
+  var inariBadge = p.es_inari ? ' <span class="badge badge-inari">Inari</span>' : '';
+  return '<td>' + escapeHtml(p.nombre) + inariBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones">&ctdot;</button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + '</div></div></td>';
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
@@ -809,9 +807,7 @@ function createClientRow(c) {
   if (isAdmin) {
     var toggleIcon = c.credito_activo ? 'nf-fa-toggle-on' : 'nf-fa-toggle-off';
     var toggleLabel = c.credito_activo ? 'Desactivar cr&eacute;dito' : 'Activar cr&eacute;dito';
-    var deleteBtn = c.saldo_deuda_usd === 0
-      ? '<button data-action="delete-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-trash"></i> Eliminar</button>'
-      : '';
+    var deleteBtn = '<button data-action="delete-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '" data-deuda="' + c.saldo_deuda_usd + '"><i class="nf nf-fa-trash"></i> Eliminar</button>';
     dropdownItems += '<div class="dropdown-divider"></div>' +
       '<button data-action="toggle-cliente-credito" data-id="' + c.id + '" data-activo="' + c.credito_activo + '"><i class="nf ' + toggleIcon + '"></i> ' + toggleLabel + '</button>' +
       '<button data-action="edit-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-pencil"></i> Editar</button>' +
@@ -860,6 +856,7 @@ let tasaActual = 0;
 let tasaInventario = 0;
 let tasaInventarioFecha = '';
 let cartShowBs = false;
+let comboCache = [];
 let editingProduct = null;
 let editingClienteId = null;
 let abonoClienteId = null;
@@ -1243,6 +1240,26 @@ function showView(name) {
   qsa('.nav-btn').forEach(b => b.classList.remove('active'));
   getViewEl(name).classList.add('active');
   qs(`.nav-btn[data-view="${name}"]`).classList.add('active');
+  // Inari activation: config toggle is master switch
+  if (name === 'inventory') {
+    const cfgToggle = qs(SEL.inariConfigToggle);
+    const configActive = cfgToggle && cfgToggle.checked;
+    if (!configActive) {
+      if (showInari) {
+        showInari = false;
+        qs(SEL.inventoryInariBtn).classList.remove('active');
+      }
+    } else {
+      const hoy = new Date().getDay();
+      if (INARI_DIAS.includes(hoy) && !showInari) {
+        showInari = true;
+        qs(SEL.inventoryInariBtn).classList.add('active');
+      }
+    }
+    qs(SEL.inariSubcatBar).style.display = showInari ? 'flex' : 'none';
+    if (!showInari) { inariSubcat = ''; }
+  }
+
   const loaders = {
     inventory: loadInventory,
     creditos: loadCreditos,
@@ -1461,6 +1478,9 @@ async function loadProductCache() {
     const result = await invoke('list_products', { search: null, page: 1, pageSize: PRODUCT_CACHE_PAGE_SIZE });
     productCache = result.data || result;
   } catch (e) { showToast('Error al cargar productos', 'error'); }
+  try {
+    comboCache = await invoke('list_combos_simple');
+  } catch (e) { comboCache = []; }
 }
 
 /* ========== SALES ========== */
@@ -1473,7 +1493,14 @@ function handleProductSearch() {
 
 function filterProducts(query) {
   if (!query) return [];
-  return productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
+  let results = productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
+  // Include combos in search results
+  comboCache.forEach(c => {
+    if (c.nombre.toLowerCase().includes(query)) {
+      results.push({ codigo: 'COMBO-' + c.id, nombre: c.nombre + ' (Combo)', precio_usd: c.precio_usd, costo: 0, stock: 999, es_inari: true, subcategoria: 'combos' });
+    }
+  });
+  return results;
 }
 
 function renderProductSearch() {
@@ -1502,13 +1529,15 @@ function renderProductSearch() {
 
 function addToCart(codigo) {
   playSound('add');
+  const p = productCache.find(x => x.codigo === codigo);
+  const esInari = p && p.es_inari;
   const existing = cart.find(item => item.codigo === codigo);
   if (existing) {
-    if (existing.stock === 0) {
+    if (!esInari && existing.stock === 0) {
       showToast('El producto no tiene stock disponible', 'error');
       return;
     }
-    if (existing.cantidad >= existing.stock) {
+    if (!esInari && existing.cantidad >= existing.stock) {
       showToast('Stock m\u00e1ximo alcanzado (' + existing.stock + ')', 'error');
       return;
     }
@@ -1516,7 +1545,7 @@ function addToCart(codigo) {
     renderCart();
     updateCheckoutBtn();
   } else {
-    cart.push({ codigo, cantidad: 1, nombre: '', precio_usd: 0, stock: 0 });
+    cart.push({ codigo, cantidad: 1, nombre: '', precio_usd: 0, stock: 0, es_inari: esInari });
     loadProductName(codigo);
   }
   const cartBody = qs(SEL.cartBody);
@@ -1530,8 +1559,8 @@ async function loadProductName(codigo) {
   if (p) {
     const item = cart.find(x => x.codigo === codigo);
     if (item) {
-      item.nombre = p.nombre; item.precio_usd = p.precio_usd; item.stock = p.stock;
-      if (p.stock === 0) {
+      item.nombre = p.nombre; item.precio_usd = p.precio_usd; item.stock = p.stock; item.es_inari = p.es_inari;
+      if (!p.es_inari && p.stock === 0) {
         cart = cart.filter(x => x.codigo !== codigo);
         showToast('El producto no tiene stock disponible', 'error');
       }
@@ -1625,7 +1654,12 @@ function openPaymentModal() {
   qs(SEL.clienteSelectBtn).textContent = 'Seleccione un cliente...';
   qs(SEL.mixtoItems).innerHTML = '';
   qs(SEL.mixtoError).style.display = 'none';
-  selectPaymentMethod(METODO_EFECTIVO_BS);
+  qsa('.payment-method-btn').forEach(b => b.classList.remove('active'));
+  qs(SEL.referenciaGroup).style.display = 'none';
+  qs(SEL.clienteGroup).style.display = 'none';
+  qs(SEL.mixtoGroup).style.display = 'none';
+  const cambioGroup = qs(SEL.cambioGroup);
+  if (cambioGroup) { cambioGroup.style.display = 'none'; qs(SEL.cambioRecibido).value = ''; qs(SEL.cambioResultado).classList.add('hidden'); }
   loadClientesForSelect();
 }
 
@@ -1911,7 +1945,7 @@ async function confirmPayment() {
       return;
     }
   }
-  const productos = cart.map(i => ({ codigo: i.codigo, cantidad: i.cantidad }));
+  const productos = cart.map(i => ({ codigo: i.codigo, cantidad: i.cantidad, es_inari: !!i.es_inari }));
   let total_bs_ingresado = null;
   if (metodo === METODO_EFECTIVO_BS) {
     const totalMoneda = totalBsRedondeado(total);
@@ -1973,13 +2007,16 @@ async function confirmPayment() {
 
 /* ========== INVENTORY ========== */
 let inventoryPage = 1;
+let showInari = false;
+let inariSubcat = '';
+const INARI_DIAS = [4, 5, 6, 0]; // jueves, viernes, sábado, domingo
 
 async function loadInventory() {
   const query = qs(SEL.inventorySearch).value.trim();
   const tbody = qs(SEL.inventoryBody);
   showLoading(tbody);
   try {
-    const result = await invoke('list_products', { search: query || null, page: inventoryPage, pageSize: INVENTORY_PAGE_SIZE });
+    const result = await invoke('list_products', { search: query || null, page: inventoryPage, pageSize: INVENTORY_PAGE_SIZE, inari: showInari || null, subcategoria: inariSubcat || null });
     const products = result.data || result;
     tbody.innerHTML = '';
     if (products.length === 0) {
@@ -2101,6 +2138,105 @@ function editProduct(codigo) {
 
 function closeProductModal() {
   closeModal(qs(SEL.productModal));
+}
+
+/* ========== COMBOS ========== */
+let comboProductosSeleccionados = [];
+let combosearchTimer = null;
+
+function openComboModal() {
+  comboProductosSeleccionados = [];
+  qs(SEL.comboNombre).value = '';
+  qs(SEL.comboPrecio).value = '';
+  qs(SEL.comboError).style.display = 'none';
+  qs(SEL.comboSearch).value = '';
+  renderComboDisponibles();
+  renderComboSeleccionados();
+  showModal(qs(SEL.comboModal));
+}
+
+function closeComboModal() {
+  closeModal(qs(SEL.comboModal));
+}
+
+function renderComboDisponibles() {
+  const query = qs(SEL.comboSearch).value.trim().toLowerCase();
+  let disponibles = productCache.filter(p => p.es_inari && p.subcategoria !== 'combos' && !comboProductosSeleccionados.some(s => s.codigo === p.codigo));
+  if (query) disponibles = disponibles.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
+  const container = qs(SEL.comboAvailableList);
+  if (disponibles.length === 0) {
+    const allAdded = !productCache.some(p => p.es_inari && p.subcategoria !== 'combos' && !comboProductosSeleccionados.some(s => s.codigo === p.codigo));
+    container.innerHTML = '<div class="text-muted" style="padding:14px;text-align:center;font-size:13px">' + (allAdded ? 'Todos los productos ya est\u00e1n agregados' : 'Sin resultados') + '</div>';
+    return;
+  }
+  container.innerHTML = disponibles.map(p =>
+    '<div class="combo-prod-item" data-codigo="' + escapeHtml(p.codigo) + '">' +
+      '<span class="prod-name">' + escapeHtml(p.nombre) + '</span>' +
+      '<span class="prod-price">' + formatUSD(p.precio_usd) + '</span>' +
+    '</div>'
+  ).join('');
+  container.querySelectorAll('.combo-prod-item').forEach(el => {
+    el.addEventListener('click', function() {
+      comboProductosSeleccionados.push({ codigo: this.dataset.codigo, cantidad: 1 });
+      qs(SEL.comboSearch).value = '';
+      renderComboDisponibles();
+      renderComboSeleccionados();
+    });
+  });
+}
+
+function renderComboSeleccionados() {
+  const container = qs(SEL.comboSelectedList);
+  const badge = qs(SEL.comboCountBadge);
+  badge.textContent = '(' + comboProductosSeleccionados.length + ')';
+  if (comboProductosSeleccionados.length === 0) {
+    container.innerHTML = '<div class="text-muted" style="padding:14px;text-align:center;font-size:12px">Agregue productos Inari desde la lista de arriba</div>';
+    return;
+  }
+  container.innerHTML = comboProductosSeleccionados.map((item, idx) => {
+    const p = productCache.find(x => x.codigo === item.codigo);
+    const name = p ? p.nombre : item.codigo;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border)">' +
+      '<span style="flex:1;font-size:13px">' + escapeHtml(name) + '</span>' +
+      '<button class="btn btn-sm btn-outline combo-qty-btn" data-idx="' + idx + '" data-dir="dec" style="padding:2px 8px;font-size:16px;line-height:1">&minus;</button>' +
+      '<span class="combo-qty-display" data-idx="' + idx + '" style="min-width:24px;text-align:center;font-weight:600;font-size:14px">' + item.cantidad + '</span>' +
+      '<button class="btn btn-sm btn-outline combo-qty-btn" data-idx="' + idx + '" data-dir="inc" style="padding:2px 8px;font-size:16px;line-height:1">+</button>' +
+      '<button class="btn btn-sm btn-outline" data-action="remove-combo-sel" data-idx="' + idx + '" style="color:var(--danger);padding:2px 8px"><i class="nf nf-fa-trash"></i></button></div>';
+  }).join('');
+  container.querySelectorAll('.combo-qty-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const idx = parseInt(this.dataset.idx);
+      const dir = this.dataset.dir;
+      if (!comboProductosSeleccionados[idx]) return;
+      if (dir === 'inc') comboProductosSeleccionados[idx].cantidad++;
+      else if (comboProductosSeleccionados[idx].cantidad > 1) comboProductosSeleccionados[idx].cantidad--;
+      renderComboSeleccionados();
+    });
+  });
+  container.querySelectorAll('[data-action="remove-combo-sel"]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const idx = parseInt(this.dataset.idx);
+      comboProductosSeleccionados.splice(idx, 1);
+      renderComboDisponibles();
+      renderComboSeleccionados();
+    });
+  });
+}
+
+async function saveCombo() {
+  const nombre = qs(SEL.comboNombre).value.trim();
+  const precio = parseFloat(qs(SEL.comboPrecio).value);
+  const errorEl = qs(SEL.comboError);
+  errorEl.style.display = 'none';
+  if (!nombre) { errorEl.textContent = 'El nombre del combo es obligatorio'; errorEl.style.display = 'block'; return; }
+  if (!precio || precio <= 0) { errorEl.textContent = 'El precio debe ser mayor a cero'; errorEl.style.display = 'block'; return; }
+  if (comboProductosSeleccionados.length === 0) { errorEl.textContent = 'Agregue al menos un producto al combo'; errorEl.style.display = 'block'; return; }
+  try {
+    await invoke('create_combo', { nombre, precioUsd: precio, productos: comboProductosSeleccionados });
+    showToast('Combo creado exitosamente');
+    closeComboModal();
+    if (inariSubcat === 'combos') loadInventory();
+  } catch (e) { errorEl.textContent = e; errorEl.style.display = 'block'; }
 }
 
 async function saveProduct() {
@@ -2281,7 +2417,9 @@ function openAbonoModal(id) {
   qs(SEL.abonoMixtoItems).innerHTML = '';
   qs(SEL.abonoMixtoError).style.display = 'none';
   qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: $0.00';
-  qsa('.abono-metodo-btn').forEach(b => b.classList.toggle('active', b.dataset.method === METODO_EFECTIVO_BS));
+  qsa('.abono-metodo-btn').forEach(b => b.classList.remove('active'));
+  qs(SEL.abonoReferenciaGroup).style.display = 'none';
+  qs(SEL.abonoMixtoGroup).style.display = 'none';
   loadAbonoClienteInfo(id);
   showModal(qs(SEL.abonoModal));
 }
@@ -4140,6 +4278,17 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.tasaHistorialClose)?.addEventListener('click', function() { closeModal(qs(SEL.tasaHistorialModal)); });
   qs(SEL.tasaHistorialOkBtn)?.addEventListener('click', function() { closeModal(qs(SEL.tasaHistorialModal)); });
 
+  // Search clear buttons
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.search-clear-btn');
+    if (!btn) return;
+    const input = document.getElementById(btn.dataset.clear);
+    if (!input) return;
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  });
+
   // Sales search
   qs(SEL.productSearch).addEventListener('input', handleProductSearch);
   qs(SEL.checkoutBtn).addEventListener('click', openPaymentModal);
@@ -4251,6 +4400,28 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.inventoryAddBtn).addEventListener('click', openNewProductModal);
   qs(SEL.inventoryExportBtn).addEventListener('click', exportProducts);
   qs(SEL.inventoryImportBtn).addEventListener('click', openImportModal);
+  qs(SEL.inventoryInariBtn).addEventListener('click', () => {
+    showInari = !showInari;
+    inventoryPage = 1;
+    qs(SEL.inventoryInariBtn).classList.toggle('active', showInari);
+    qs(SEL.inariSubcatBar).style.display = showInari ? 'flex' : 'none';
+    if (!showInari) { inariSubcat = ''; }
+    loadInventory();
+  });
+
+  // Inari subcategory click
+  qs(SEL.inariSubcatBar).addEventListener('click', e => {
+    const btn = e.target.closest('.inari-subcat-btn');
+    if (!btn) return;
+    qsa('.inari-subcat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    inariSubcat = btn.dataset.subcat || '';
+    inventoryPage = 1;
+    loadInventory();
+  });
+
+  // Create combo button
+  qs(SEL.inariCreateComboBtn).addEventListener('click', openComboModal);
 
   // Event delegation: inventory dropdown and actions
   qs(SEL.inventoryBody).addEventListener('click', e => {
@@ -4283,6 +4454,15 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.productSaveBtn).addEventListener('click', saveProduct);
   qs(SEL.productDeleteBtn).addEventListener('click', deleteProduct);
   qs(SEL.productPrecio).addEventListener('input', function() { applyComaAutomatica(this); });
+
+  // Combo modal
+  qs(SEL.comboSaveBtn).addEventListener('click', saveCombo);
+  qs(SEL.comboCancelBtn).addEventListener('click', closeComboModal);
+  qs(SEL.comboModalClose).addEventListener('click', closeComboModal);
+  qs(SEL.comboSearch).addEventListener('input', function() {
+    clearTimeout(combosearchTimer);
+    combosearchTimer = setTimeout(renderComboDisponibles, 150);
+  });
 
   // Product detail modal
   qs(SEL.productDetailClose).addEventListener('click', closeProductDetail);
@@ -4327,7 +4507,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (delBtn) {
       const id = parseInt(delBtn.dataset.id);
       const nombre = delBtn.dataset.nombre;
-      confirmModal('\u00bfEliminar a "' + nombre + '"? Esta acci\u00f3n no se puede deshacer.', 'Eliminar Cliente', 'Eliminar').then(async ok => {
+      const deuda = parseFloat(delBtn.dataset.deuda);
+      let msg = '\u00bfEliminar a "' + nombre + '"? Esta acci\u00f3n no se puede deshacer.';
+      if (deuda > 0) msg += ' Tiene una deuda de ' + formatUSD(deuda) + ' pendiente.';
+      confirmModal(msg, 'Eliminar Cliente', 'Eliminar').then(async ok => {
         if (!ok) return;
         try {
           await invoke('delete_cliente', { clienteId: id });
@@ -5017,6 +5200,31 @@ document.addEventListener('DOMContentLoaded', async function() {
     setIaEnabled(enabled);
   } catch (e) {}
 
+  // Inari config toggle
+  const inariToggle = qs(SEL.inariConfigToggle);
+  function applyInariConfig(active) {
+    if (active) {
+      showInari = true;
+      qs(SEL.inventoryInariBtn).classList.add('active');
+    } else {
+      showInari = false;
+      qs(SEL.inventoryInariBtn).classList.remove('active');
+    }
+  }
+  if (inariToggle) {
+    inariToggle.addEventListener('change', function() {
+      const active = this.checked;
+      invoke('set_config_value', { key: 'inari_activo', value: active ? '1' : '0' }).catch(() => {});
+      applyInariConfig(active);
+    });
+  }
+  try {
+    const val = await invoke('get_config_value', { key: 'inari_activo' });
+    const enabled = val === '1';
+    if (inariToggle) inariToggle.checked = enabled;
+    applyInariConfig(enabled);
+  } catch (e) {}
+
   // Load history cleanup config
   try {
     const days = await invoke('get_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS });
@@ -5072,14 +5280,22 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Device registration
   qs(SEL.regDeviceBtn).addEventListener('click', handleDeviceRegister);
 
-  // Check if device is already registered
+  // Check if device is already registered, or auto-register via fingerprint
   try {
     const devId = await invoke('get_config_value', { key: CFG_DISPOSITIVO_ID });
     if (devId) {
       qs(SEL.deviceRegScreen).style.display = 'none';
       qs(SEL.loginScreen).style.display = 'flex';
     } else {
-      qs(SEL.deviceRegScreen).style.display = 'flex';
+      // Auto-register: si el dispositivo ya existe en Supabase por huella, lo recupera
+      try {
+        const nombre = IS_ANDROID ? 'Tel\u00e9fono' : 'PC';
+        await invoke('register_device', { nombre });
+        qs(SEL.deviceRegScreen).style.display = 'none';
+        qs(SEL.loginScreen).style.display = 'flex';
+      } catch (_) {
+        qs(SEL.deviceRegScreen).style.display = 'flex';
+      }
     }
   } catch (e) {
     qs(SEL.deviceRegScreen).style.display = 'flex';

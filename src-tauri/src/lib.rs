@@ -2,6 +2,7 @@ mod auth;
 mod audit;
 mod cashier;
 mod clients;
+mod combos;
 mod config;
 mod constants;
 mod db;
@@ -114,6 +115,7 @@ pub fn run() {
             // Products
             products::get_top_products,
             products::update_stock_minimo,
+            products::set_product_inari,
             // Sync
             sync::upload_products,
             sync::download_products,
@@ -132,6 +134,12 @@ pub fn run() {
             sync::sync_all,
             sync::get_sync_stats,
             sync::test_supabase_connection,
+            // Combos
+            combos::create_combo,
+            combos::list_combos,
+            combos::get_combo_detail,
+            combos::delete_combo,
+            combos::list_combos_simple,
             // OpenRouter
             openrouter::generate_purchase_suggestion,
             openrouter::chat_with_ai,

@@ -64,5 +64,11 @@ pub const SUPABASE_KEY: &str = "sb_publishable_3XXhx5ktfhrUvngJDYAQAA_xPCRMFzh";
 pub const PAGE_SIZE_DEFAULT: i64 = 200;
 pub const PAGE_SIZE_MAX: i64 = 5000;
 
+// Inari Bocados
+#[allow(dead_code)]
+pub const CFG_INARI_ACTIVO: &str = "inari_activo";
+#[allow(dead_code)]
+pub const INARI_DIAS: [u32; 4] = [4, 5, 6, 0]; // jueves, viernes, sábado, domingo
+
 // Rounding
 pub const ROUNDING_FACTOR: f64 = 100.0;

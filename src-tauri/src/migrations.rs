@@ -108,6 +108,9 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("017_add_costo_productos", add_costo_productos),
     ("018_add_historial_tasas", add_historial_tasas),
     ("019_add_password_change_required", add_password_change_required),
+    ("020_add_es_inari", add_es_inari),
+    ("021_add_subcategoria_combos", add_subcategoria_combos),
+    ("022_add_inari_products", add_inari_products),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -362,6 +365,67 @@ fn add_product_updated_at_conflictos(conn: &Connection) {
         )",
         [],
     ).ok();
+}
+
+fn add_es_inari(conn: &Connection) {
+    if !column_exists(conn, "productos", "es_inari") {
+        conn.execute_batch(
+            "ALTER TABLE productos ADD COLUMN es_inari INTEGER NOT NULL DEFAULT 0;"
+        ).ok();
+    }
+}
+
+fn add_subcategoria_combos(conn: &Connection) {
+    if !column_exists(conn, "productos", "subcategoria") {
+        conn.execute_batch("ALTER TABLE productos ADD COLUMN subcategoria TEXT;").ok();
+    }
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS combos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            precio_usd REAL NOT NULL,
+            subcategoria TEXT NOT NULL DEFAULT 'combos',
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        );"
+    ).ok();
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS combo_productos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            combo_id INTEGER NOT NULL REFERENCES combos(id) ON DELETE CASCADE,
+            producto_codigo TEXT NOT NULL REFERENCES productos(codigo),
+            cantidad INTEGER NOT NULL DEFAULT 1
+        );"
+    ).ok();
+}
+
+fn add_inari_products(conn: &Connection) {
+    let productos = [
+        ("I001", "Hamburguesa de Carne", 5.8, "hamburguesas"),
+        ("I002", "Hamburguesa de Pollo Crispy", 6.7, "hamburguesas"),
+        ("I003", "Hamburguesa Doble Carne", 7.8, "hamburguesas"),
+        ("I004", "Hamburguesa Mediana de Carne", 4.5, "hamburguesas"),
+        ("I005", "Hamburguesa Mediana de Pollo", 4.8, "hamburguesas"),
+        ("I006", "Perro Sencillo", 1.3, "perros_calientes"),
+        ("I007", "Perro con Queso Blanco", 1.4, "perros_calientes"),
+        ("I008", "Perro con Queso Amarillo", 1.5, "perros_calientes"),
+        ("I009", "Perro Especial (Tocineta/Queso Amarillo)", 2.7, "perros_calientes"),
+        ("I010", "Pizza Margarita", 7.3, "pizzas"),
+        ("I011", "Pizza Jamón/Queso", 7.9, "pizzas"),
+        ("I012", "Pizza Pepperonie", 8.7, "pizzas"),
+        ("I013", "Pizza Tocineta", 9.5, "pizzas"),
+        ("I014", "Pizza Tocineta/Pepperonie", 9.8, "pizzas"),
+        ("I015", "Papas Fritas", 3.9, "entradas"),
+        ("I016", "Tequeños (5 Unidades)", 4.0, "entradas"),
+        ("I017", "Salchipapas", 6.5, "entradas"),
+    ];
+    for (codigo, nombre, precio_usd, subcategoria) in &productos {
+        conn.execute(
+            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, es_inari, subcategoria, created_at)
+             VALUES (?1, ?2, ?3, 0, 1, ?4, datetime('now','localtime'))",
+            rusqlite::params![codigo, nombre, precio_usd, subcategoria],
+        ).ok();
+    }
 }
 
 fn add_password_change_required(conn: &Connection) {

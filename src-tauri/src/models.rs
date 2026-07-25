@@ -11,6 +11,10 @@ pub struct Producto {
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    #[serde(default)]
+    pub es_inari: bool,
+    #[serde(default)]
+    pub subcategoria: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -130,6 +134,8 @@ pub struct CloseReport {
 pub struct ProductoVenta {
     pub codigo: String,
     pub cantidad: i64,
+    #[serde(default)]
+    pub es_inari: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

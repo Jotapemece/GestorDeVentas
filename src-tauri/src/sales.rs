@@ -102,7 +102,7 @@ fn execute_sale_transaction(
                 Ok((row.get(0)?, row.get(1)?))
             })
             .map_err(|_| format!("Producto '{}' no encontrado", pv.codigo))?;
-        if stock < pv.cantidad {
+        if !pv.es_inari && stock < pv.cantidad {
             return Err(format!(
                 "Stock insuficiente para '{}'. Disponible: {}, solicitado: {}",
                 pv.codigo, stock, pv.cantidad
@@ -149,11 +149,13 @@ fn execute_sale_transaction(
         let detalle_sync_id = Uuid::new_v4().to_string();
         tx.execute(SQL_INSERT_DETALLE, params![venta_id, pv.codigo, pv.cantidad, precio, detalle_sync_id])
             .map_err(|e| format!("Error al insertar detalle: {}", e))?;
-        let affected = tx
-            .execute(SQL_UPDATE_STOCK, params![pv.cantidad, pv.codigo])
-            .map_err(|e| format!("Error al actualizar stock: {}", e))?;
-        if affected == 0 {
-            return Err(format!("Stock insuficiente para '{}'", pv.codigo));
+        if !pv.es_inari {
+            let affected = tx
+                .execute(SQL_UPDATE_STOCK, params![pv.cantidad, pv.codigo])
+                .map_err(|e| format!("Error al actualizar stock: {}", e))?;
+            if affected == 0 {
+                return Err(format!("Stock insuficiente para '{}'", pv.codigo));
+            }
         }
     }
 
@@ -858,7 +860,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
             tasa: 0.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -875,7 +877,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
             tasa: -1.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -892,7 +894,7 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -908,7 +910,7 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: Some("AB".into()),
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -924,7 +926,7 @@ mod tests {
             metodo_pago: "credito".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -941,7 +943,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2 }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -957,7 +959,7 @@ mod tests {
             metodo_pago: "credito".into(),
             referencia_pago_movil: None,
             cliente_id: Some(5),
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -973,7 +975,7 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: Some("ABCD".into()),
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1 }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,

@@ -7,7 +7,7 @@ edition = "2021"
 
 [lib]
 name = "gestor_ventas_lib"
-crate-type = ["lib", "staticlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [profile.release]
 opt-level = "z"

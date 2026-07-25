@@ -100,6 +100,8 @@
 .nf-fa-wifi::before { content: "\f1eb"; }
 .nf-fa-chevron_right::before { content: "\f054"; }
 .nf-fa-line_chart::before { content: "\f201"; }
+.nf-fa-utensils::before { content: "\f2e7"; }
+.nf-fa-fire::before { content: "\f06d"; }
 @keyframes nf-spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
