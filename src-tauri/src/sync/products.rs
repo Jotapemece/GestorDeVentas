@@ -44,8 +44,8 @@ pub(crate) fn upload_products_inner(
 
     let mut stmt = db
         .prepare(
-            "SELECT codigo, nombre, precio_usd, COALESCE(costo,0), stock, COALESCE(stock_minimo,0), \
-             COALESCE(categoria_id,0) FROM productos WHERE activo = 1",
+             "SELECT codigo, nombre, precio_usd, COALESCE(costo,0), stock, COALESCE(stock_minimo,0), \
+             COALESCE(categoria_id,0), COALESCE(es_inari,0), COALESCE(subcategoria,'') FROM productos WHERE activo = 1",
         )
         .map_err(|e| e.to_string())?;
     let products: Vec<serde_json::Value> = stmt
@@ -60,6 +60,8 @@ pub(crate) fn upload_products_inner(
                 "stock_minimo": row.get::<_, i64>(5)?,
                 "activo": 1i64,
                 "categoria_id": if cat_id == 0 { serde_json::Value::Null } else { json!(cat_id) },
+                "es_inari": row.get::<_, i64>(7)?,
+                "subcategoria": row.get::<_, String>(8)?,
                 "dispositivo_id": dispositivo_id,
                 "updated_at": &*ts,
             }))
@@ -111,7 +113,7 @@ pub(crate) fn download_products_inner(
     let get_url = api_url(
         supabase_url,
         &format!(
-            "/productos?updated_at=gt.{}&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,updated_at",
+            "/productos?updated_at=gt.{}&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,es_inari,subcategoria,updated_at",
             since,
         ),
     );
@@ -127,24 +129,24 @@ pub(crate) fn download_products_inner(
     let mut upd = db
         .prepare(
             "UPDATE productos SET nombre = ?1, precio_usd = ?2, \
-             costo = ?3, stock_minimo = ?4, activo = ?5, categoria_id = ?6, updated_at = ?7 \
-             WHERE codigo = ?8",
+             costo = ?3, stock_minimo = ?4, activo = ?5, categoria_id = ?6, es_inari = ?7, subcategoria = ?8, updated_at = ?9 \
+             WHERE codigo = ?10",
         )
         .map_err(|e| e.to_string())?;
 
     let mut ins = db
         .prepare(
             &format!("INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, costo, stock, stock_minimo, \
-             activo, categoria_id, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, {}, ?9)", constants::SQL_DATETIME_NOW),
+             activo, categoria_id, es_inari, subcategoria, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, {}, ?11)", constants::SQL_DATETIME_NOW),
         )
         .map_err(|e| e.to_string())?;
 
-    let local_map: HashMap<String, (String, String, f64, f64, i64, i64, Option<i64>)> = {
+    let local_map: HashMap<String, (String, String, f64, f64, i64, i64, Option<i64>, i64, String)> = {
         let mut stmt = db
             .prepare(
-                "SELECT codigo, updated_at, nombre, precio_usd, COALESCE(costo,0), stock_minimo, activo, categoria_id \
-                 FROM productos",
+                "SELECT codigo, updated_at, nombre, precio_usd, COALESCE(costo,0), stock_minimo, activo, categoria_id, \
+                 COALESCE(es_inari,0), COALESCE(subcategoria,'') FROM productos",
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt
@@ -158,13 +160,15 @@ pub(crate) fn download_products_inner(
                     row.get::<_, i64>(5)?,
                     row.get::<_, i64>(6)?,
                     row.get::<_, Option<i64>>(7)?,
+                    row.get::<_, i64>(8)?,
+                    row.get::<_, String>(9)?,
                 ))
             })
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok());
         let mut map = HashMap::new();
-        for (codigo, updated_at, nombre, precio, costo, stock_min, activo, cat_id) in rows {
-            map.insert(codigo, (updated_at.unwrap_or_default(), nombre, precio, costo, stock_min, activo, cat_id));
+        for (codigo, updated_at, nombre, precio, costo, stock_min, activo, cat_id, es_inari, subcategoria) in rows {
+            map.insert(codigo, (updated_at.unwrap_or_default(), nombre, precio, costo, stock_min, activo, cat_id, es_inari, subcategoria));
         }
         map
     };
@@ -182,6 +186,8 @@ pub(crate) fn download_products_inner(
         let stock_minimo = prod["stock_minimo"].as_i64().unwrap_or(0);
         let activo = prod["activo"].as_i64().unwrap_or(1);
         let cat_id = prod["categoria_id"].as_i64();
+        let es_inari = prod["es_inari"].as_i64().unwrap_or(0);
+        let subcategoria = prod["subcategoria"].as_str().unwrap_or("").to_string();
         let remote_ts = prod["updated_at"].as_str();
 
         let remote_json = json!({
@@ -192,9 +198,11 @@ pub(crate) fn download_products_inner(
             "stock_minimo": stock_minimo,
             "activo": activo,
             "categoria_id": cat_id,
+            "es_inari": es_inari,
+            "subcategoria": &subcategoria,
         });
 
-        if let Some((local_ts, local_nombre, local_precio, local_costo, local_stock_min, local_activo, local_cat_id)) = local_map.get(&codigo) {
+        if let Some((local_ts, local_nombre, local_precio, local_costo, local_stock_min, local_activo, local_cat_id, local_es_inari, local_subcategoria)) = local_map.get(&codigo) {
             let local_ts = if local_ts.is_empty() { None } else { Some(local_ts.as_str()) };
             if is_conflict(local_ts, remote_ts, &last_sync) {
                 let local_json = json!({
@@ -205,6 +213,8 @@ pub(crate) fn download_products_inner(
                     "stock_minimo": local_stock_min,
                     "activo": local_activo,
                     "categoria_id": local_cat_id,
+                    "es_inari": local_es_inari,
+                    "subcategoria": local_subcategoria,
                 });
                 check_and_record_conflict(
                     db, "productos", &codigo,
@@ -215,13 +225,13 @@ pub(crate) fn download_products_inner(
                 continue;
             }
             upd.execute(params![
-                nombre, precio_usd, costo, stock_minimo, activo, cat_id,
+                nombre, precio_usd, costo, stock_minimo, activo, cat_id, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts), codigo,
             ]).unwrap_or(0);
             updated += 1;
         } else {
             ins.execute(params![
-                codigo, nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id,
+                codigo, nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts),
             ]).ok();
             inserted += 1;
