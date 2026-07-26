@@ -9,3 +9,6 @@ linker = "/home/jotapemece/Android/Sdk/ndk/27.0.12077973/toolchains/llvm/prebuil
 
 [target.x86_64-linux-android]
 linker = "/home/jotapemece/Android/Sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang"
+
+[target.i686-pc-windows-gnu]
+rustflags = ["-C", "link-args=-Wl,--exclude-libs,ALL"]
