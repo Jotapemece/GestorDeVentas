@@ -313,6 +313,8 @@ async function handleDeviceRegister() {
     const res = await invoke('register_device', { nombre });
     qs(SEL.regPending).classList.add('hidden');
     qs(SEL.regSuccess).classList.remove('hidden');
+    // Descargar usuarios de Supabase para que estén disponibles al login
+    invoke('download_usuarios').catch(() => {});
     setTimeout(() => {
       qs(SEL.deviceRegScreen).style.display = 'none';
       qs(SEL.loginScreen).style.display = 'flex';
