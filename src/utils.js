@@ -122,6 +122,8 @@ function hideToast(el) {
   el._closing = true;
   if (el._frame) cancelAnimationFrame(el._frame);
   if (el._timer) clearTimeout(el._timer);
+  if (el._resumeTimer) clearTimeout(el._resumeTimer);
+  el._pausedAt = null;
   el.classList.add('exit');
   setTimeout(() => {
     el.remove();
@@ -131,6 +133,48 @@ function hideToast(el) {
       showToast(next.msg, next.type, next.action);
     }
   }, TOAST.FADE_MS);
+}
+
+function toastTick(el, cfg) {
+  if (el._pausedAt !== null) return;
+  const now = performance.now();
+  const dt = now - el._lastTick;
+  el._lastTick = now;
+  el._remaining -= dt;
+
+  const p = 1 - Math.max(0, el._remaining) / cfg.duration;
+  const deg = 360 * (1 - p);
+  const m = `conic-gradient(#fff 0deg, #fff ${deg}deg, transparent ${deg}deg)`;
+  el._border.style.mask = m;
+  el._border.style.webkitMask = m;
+
+  if (el._remaining <= 0) {
+    hideToast(el);
+    return;
+  }
+  el._frame = requestAnimationFrame(() => toastTick(el, cfg));
+}
+
+function toastPause(el) {
+  if (el._pausedAt !== null) return;
+  el._pausedAt = performance.now();
+  if (el._frame) { cancelAnimationFrame(el._frame); el._frame = null; }
+  if (el._timer) { clearTimeout(el._timer); el._timer = null; }
+  if (el._resumeTimer) { clearTimeout(el._resumeTimer); el._resumeTimer = null; }
+}
+
+function toastStartResume(el, cfg) {
+  if (el._resumeTimer) clearTimeout(el._resumeTimer);
+  el._resumeTimer = setTimeout(() => {
+    if (el._pausedAt !== null) {
+      el._pausedAt = null;
+      el._lastTick = performance.now();
+      el._remaining = Math.max(0, el._remaining);
+      if (el._remaining <= 0) { hideToast(el); return; }
+      el._timer = setTimeout(() => hideToast(el), el._remaining);
+      el._frame = requestAnimationFrame(() => toastTick(el, cfg));
+    }
+  }, 1000);
 }
 
 function showToast(msg, type = 'success', action) {
@@ -146,26 +190,11 @@ function showToast(msg, type = 'success', action) {
   const el = document.createElement('div');
   el.className = 'toast';
 
-  // Border ring that shrinks clockwise via conic-gradient mask
   const border = document.createElement('div');
   border.className = 'toast-border';
   border.style.borderColor = cfg.color;
   el.appendChild(border);
-
-  // Animate border mask: full circle → empty (clockwise shrink)
-  const start = performance.now();
-  function animateBorder(now) {
-    const p = Math.min((now - start) / cfg.duration, 1);
-    const deg = 360 * (1 - p);
-    const m = `conic-gradient(#fff 0deg, #fff ${deg}deg, transparent ${deg}deg)`;
-    border.style.mask = m;
-    border.style.webkitMask = m;
-    if (p < 1) el._frame = requestAnimationFrame(animateBorder);
-  }
-  el._frame = requestAnimationFrame(animateBorder);
-
-  // Auto-dismiss
-  el._timer = setTimeout(() => hideToast(el), cfg.duration);
+  el._border = border;
 
   const icon = document.createElement('i');
   icon.className = 'nf ' + cfg.icon + ' toast-icon';
@@ -198,6 +227,40 @@ function showToast(msg, type = 'success', action) {
     hideToast(el);
   });
   el.appendChild(closeBtn);
+
+  // Timer state
+  el._remaining = cfg.duration;
+  el._lastTick = performance.now();
+  el._pausedAt = null;
+  el._frame = null;
+  el._timer = null;
+  el._resumeTimer = null;
+
+  // Start border animation + auto-dismiss
+  el._timer = setTimeout(() => hideToast(el), cfg.duration);
+  el._frame = requestAnimationFrame(() => toastTick(el, cfg));
+
+  // Pause on hover / touch
+  el.addEventListener('mouseenter', () => toastPause(el));
+  el.addEventListener('mouseleave', () => toastStartResume(el, cfg));
+  el.addEventListener('touchstart', () => toastPause(el), { passive: true });
+  el.addEventListener('touchend', function(e) {
+    // Only pause on actual touch, not on swipe-dismiss
+    const touch = e.changedTouches[0];
+    const rect = el.getBoundingClientRect();
+    if (touch.clientX - rect.left < rect.width * 0.7) {
+      toastStartResume(el, cfg);
+    }
+  }, { passive: true });
+
+  // Resume on click outside (mobile)
+  function outsideClick(e) {
+    if (el._pausedAt !== null && !el.contains(e.target)) {
+      toastStartResume(el, cfg);
+    }
+  }
+  document.addEventListener('touchstart', outsideClick, { passive: true });
+  document.addEventListener('mousedown', outsideClick);
 
   el.addEventListener('click', function(e) {
     if (e.target === el || e.target === msgSpan) hideToast(el);
