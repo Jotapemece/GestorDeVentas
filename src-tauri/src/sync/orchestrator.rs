@@ -184,20 +184,23 @@ pub fn get_ultimo_download(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
-    let db = state.secondary_conn()?;
-    let (supabase_url, supabase_key) = supabase_config(&db)?;
-    let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
+    let mut db = state.secondary_conn()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+
+    let (supabase_url, supabase_key) = supabase_config(&tx)?;
+    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
 
     let total = 4u32;
     emit_progress(&app_handle, "Subiendo productos...", 1, total);
-    let r1 = upload_products_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
+    let r1 = upload_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo clientes...", 2, total);
-    let r2 = upload_clientes_inner(&db, &supabase_url, &supabase_key)?;
+    let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key)?;
     emit_progress(&app_handle, "Subiendo usuarios...", 3, total);
-    let r3 = upload_usuarios_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
+    let r3 = upload_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo ventas...", 4, total);
-    let r4 = upload_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
+    let r4 = upload_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
 
+    tx.commit().map_err(|e| format!("Error al confirmar subida: {}", e))?;
     Ok(format!("{}\n{}\n{}\n{}", r1, r2, r3, r4))
 }
 
@@ -207,7 +210,7 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
     let (supabase_url, supabase_key) = supabase_config(&tx)?;
-    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID).unwrap_or_default();
+    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
 
     let total = 4u32;
     emit_progress(&app_handle, "Descargando productos...", 1, total);

@@ -17,7 +17,8 @@
         morado:{'--bg':'#F5F0FA','--card':'#FFFFFF','--card-alt':'#F0EAF5','--danger':'#E0A8C0','--danger-dark':'#CC90A8','--primary':'#C4B0E0','--primary-dark':'#B098D4','--primary-rgb':'196,176,224','--accent':'#D4A8DC','--accent-dark':'#C090CA','--accent-rgb':'212,168,220','--danger-rgb':'224,168,192','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#F0EAF6','--border':'#D8CCE8','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#6A4C93','--sidebar-text':'#F3E5F5','--sidebar-text-rgb':'243,229,245'},
         turquesa:{'--bg':'#E6F7F5','--card':'#F5FFFE','--card-alt':'#EAF8F5','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#4DB8AC','--primary-dark':'#3A9A8E','--primary-rgb':'77,184,172','--accent':'#80D0C4','--accent-dark':'#60B8AA','--accent-rgb':'128,208,196','--danger-rgb':'212,176,160','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(26,74,68,0.08)','--hover':'#E8F5F2','--border':'#C0E0DA','--text':'#1A4A44','--text-light':'#5A7A74','--text-secondary':'#5A7A74','--sidebar-bg':'#B0E0D6','--sidebar-text':'#1A4A44','--sidebar-text-rgb':'26,74,68'},
         naranja:{'--bg':'#FDF0E8','--card':'#FFF8F0','--card-alt':'#F5EDE0','--danger':'#D97050','--danger-dark':'#C06040','--primary':'#D47A4A','--primary-dark':'#C06030','--primary-rgb':'212,122,74','--accent':'#E8A060','--accent-dark':'#D48540','--accent-rgb':'232,160,96','--danger-rgb':'217,112,80','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(74,42,16,0.08)','--hover':'#F8EDE0','--border':'#E8D0B8','--text':'#4A2A10','--text-light':'#8A6A4A','--text-secondary':'#8A6A4A','--sidebar-bg':'#F0C8A8','--sidebar-text':'#5C2A0A','--sidebar-text-rgb':'92,42,10'},
-        menta:{'--bg':'#EEF7EE','--card':'#FFFFFF','--card-alt':'#E8F5E8','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#6BAF8D','--primary-dark':'#4A8F6D','--primary-rgb':'107,175,141','--accent':'#8FC1A8','--accent-dark':'#6DA88A','--accent-rgb':'143,193,168','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(58,106,74,0.08)','--hover':'#E6F5E6','--border':'#D0E0D0','--text':'#2A3A2A','--text-light':'#5A7A6A','--text-secondary':'#5A7A6A','--sidebar-bg':'#B0D0B8','--sidebar-text':'#2A4A3A','--sidebar-text-rgb':'42,74,58'}
+        menta:{'--bg':'#EEF7EE','--card':'#FFFFFF','--card-alt':'#E8F5E8','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#6BAF8D','--primary-dark':'#4A8F6D','--primary-rgb':'107,175,141','--accent':'#8FC1A8','--accent-dark':'#6DA88A','--accent-rgb':'143,193,168','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(58,106,74,0.08)','--hover':'#E6F5E6','--border':'#D0E0D0','--text':'#2A3A2A','--text-light':'#5A7A6A','--text-secondary':'#5A7A6A','--sidebar-bg':'#B0D0B8','--sidebar-text':'#2A4A3A','--sidebar-text-rgb':'42,74,58'},
+        rubi:{'--bg':'#FDF2F2','--card':'#FFFFFF','--card-alt':'#FDE8E8','--danger':'#D45050','--danger-dark':'#C03838','--primary':'#C45050','--primary-dark':'#A83838','--primary-rgb':'196,80,80','--accent':'#D47070','--accent-dark':'#C05858','--accent-rgb':'212,112,112','--danger-rgb':'212,80,80','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(80,16,16,0.08)','--hover':'#F8E0E0','--border':'#E8C8C8','--text':'#3D1A1A','--text-light':'#8A5A5A','--text-secondary':'#8A5A5A','--sidebar-bg':'#B42A2A','--sidebar-text':'#FDE8E8','--sidebar-text-rgb':'253,232,232'}
       },saved=localStorage.getItem('tema'),theme=t[saved]||t.claro;Object.keys(theme).forEach(function(k){document.documentElement.style.setProperty(k,theme[k])});}());
     } catch (e) {}
   </script>
@@ -58,6 +59,7 @@
 
     <div id="login-screen">
       <div class="login-card">
+        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.01</button>
         <div class="login-brand">
           <div class="login-icon">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -154,6 +156,7 @@
         </nav>
         <div class="sidebar-footer">
           <div class="sidebar-version">InariMarket v1.0</div>
+          <div id="offline-indicator"><i class="nf nf-fa-wifi"></i> Sin conexión</div>
           <div id="sync-indicator" class="sync-indicator" title="Estado de sincronización"><i class="nf nf-fa-cloud"></i> <span id="sync-indicator-text">-</span></div>
           <button id="logout-btn"><i class="nf nf-fa-sign_out"></i> Salir</button>
         </div>
@@ -180,13 +183,14 @@
             <div class="sales-panel sales-left">
               <div class="panel-header">Productos</div>
               <div class="product-list-container">
+                <div id="recent-products" class="recent-products" style="display:none"></div>
                 <table class="table" id="product-search-table" data-col-toggle="product-search">
                   <thead>
                     <tr>
-                      <th>Nombre</th>
-                      <th>Precio ($)</th>
-                      <th>Precio (Bs.)</th>
-                      <th>Stock</th>
+                      <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
+                      <th data-sortable="precio_usd">Precio ($)<span class="sort-arrow"></span></th>
+                      <th data-sortable="precio_bs">Precio (Bs.)<span class="sort-arrow"></span></th>
+                      <th data-sortable="stock">Stock<span class="sort-arrow"></span></th>
                       <th>Acci&oacute;n</th>
                     </tr>
                   </thead>
@@ -216,10 +220,12 @@
                   <div class="cart-total"><span>Total Bs.:</span><span id="cart-total-bs">Bs. 0,00</span></div>
                 </div>
                 <div class="cart-actions">
+                  <button id="hold-cart-btn" class="btn btn-outline" title="Plegar carrito y abrir otro"><i class="nf nf-fa-chevron_down"></i> Hold</button>
                   <button id="checkout-btn" class="btn btn-primary" disabled>Cobrar</button>
                   <button id="cancel-sale-btn" class="btn btn-cancel" title="Cancelar venta">&times;</button>
                 </div>
               </div>
+              <div id="cart-tabs" class="cart-tabs hidden"></div>
             </div>
           </div>
         </section>
@@ -255,13 +261,13 @@
               <table class="table" id="inventory-table" data-col-toggle="inventory">
                 <thead>
                     <tr>
-                      <th>Nombre</th>
-                      <th>Precio ($)</th>
-                      <th>Costo ($)</th>
-                      <th>Margen</th>
-                      <th>Precio (Bs.)</th>
-                      <th>Stock</th>
-                      <th>Stock Mín</th>
+                      <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
+                      <th data-sortable="precio_usd">Precio ($)<span class="sort-arrow"></span></th>
+                      <th data-sortable="costo_usd">Costo ($)<span class="sort-arrow"></span></th>
+                      <th data-sortable="margen">Margen<span class="sort-arrow"></span></th>
+                      <th data-sortable="precio_bs">Precio (Bs.)<span class="sort-arrow"></span></th>
+                      <th data-sortable="stock">Stock<span class="sort-arrow"></span></th>
+                      <th data-sortable="stock_minimo">Stock Mín<span class="sort-arrow"></span></th>
                       <th>Acciones</th>
                     </tr>
                 </thead>
@@ -285,10 +291,10 @@
             <table class="table" id="creditos-table" data-col-toggle="creditos">
               <thead>
                 <tr>
-                  <th>Nombre</th>
-                  <th>Cr&eacute;dito</th>
-                  <th>Deuda ($)</th>
-                  <th>&Uacute;ltima compra</th>
+                  <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
+                  <th data-sortable="tiene_credito">Cr&eacute;dito<span class="sort-arrow"></span></th>
+                  <th data-sortable="saldo_deuda_usd">Deuda ($)<span class="sort-arrow"></span></th>
+                  <th data-sortable="ultima_compra">&Uacute;ltima compra<span class="sort-arrow"></span></th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -333,12 +339,12 @@
             <table class="table" id="daily-sales-table" data-col-toggle="daily-sales">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Hora</th>
-                  <th>Usuario</th>
-                  <th>M&eacute;todo Pago</th>
-                  <th>Total ($)</th>
-                  <th>Total (Bs.)</th>
+                  <th data-sortable="id">#<span class="sort-arrow"></span></th>
+                  <th data-sortable="hora">Hora<span class="sort-arrow"></span></th>
+                  <th data-sortable="usuario">Usuario<span class="sort-arrow"></span></th>
+                  <th data-sortable="metodo_pago">M&eacute;todo Pago<span class="sort-arrow"></span></th>
+                  <th data-sortable="total_usd">Total ($)<span class="sort-arrow"></span></th>
+                  <th data-sortable="total_bs">Total (Bs.)<span class="sort-arrow"></span></th>
                   <th>Acci&oacute;n</th>
                 </tr>
               </thead>
@@ -358,15 +364,16 @@
             <table class="table" id="audit-table" data-col-toggle="audit">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Fecha / Hora</th>
-                  <th>Usuario</th>
-                  <th>Acci&oacute;n</th>
+                  <th data-sortable="id">ID<span class="sort-arrow"></span></th>
+                  <th data-sortable="fecha">Fecha / Hora<span class="sort-arrow"></span></th>
+                  <th data-sortable="usuario">Usuario<span class="sort-arrow"></span></th>
+                  <th data-sortable="accion">Acci&oacute;n<span class="sort-arrow"></span></th>
                 </tr>
               </thead>
               <tbody id="audit-body"></tbody>
             </table>
             <div class="audit-load-more"><button id="audit-load-more" class="btn btn-outline hidden">Cargar m&aacute;s</button></div>
+            <div id="audit-sentinel" class="scroll-sentinel"></div>
           </div>
         </section>
 
@@ -447,15 +454,15 @@
             <table class="table" id="report-sales-table" data-col-toggle="report-sales">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Fecha</th>
-                  <th>Usuario</th>
-                  <th>M&eacute;todo</th>
-                  <th>Productos</th>
-                  <th>Total ($)</th>
-                  <th>Costo ($)</th>
-                  <th>Ganancia ($)</th>
-                  <th>Total (Bs.)</th>
+                  <th data-sortable="id">#<span class="sort-arrow"></span></th>
+                  <th data-sortable="fecha">Fecha<span class="sort-arrow"></span></th>
+                  <th data-sortable="usuario">Usuario<span class="sort-arrow"></span></th>
+                  <th data-sortable="metodo">M&eacute;todo<span class="sort-arrow"></span></th>
+                  <th data-sortable="productos">Productos<span class="sort-arrow"></span></th>
+                  <th data-sortable="total_usd">Total ($)<span class="sort-arrow"></span></th>
+                  <th data-sortable="costo_usd">Costo ($)<span class="sort-arrow"></span></th>
+                  <th data-sortable="ganancia_usd">Ganancia ($)<span class="sort-arrow"></span></th>
+                  <th data-sortable="total_bs">Total (Bs.)<span class="sort-arrow"></span></th>
                 </tr>
               </thead>
               <tbody id="report-sales-body"></tbody>
@@ -489,6 +496,7 @@
                 <button class="theme-btn" data-theme="turquesa"><i class="nf nf-fa-palette"></i><span>Turquesa</span></button>
                 <button class="theme-btn" data-theme="naranja"><i class="nf nf-fa-palette"></i><span>Naranja</span></button>
                 <button class="theme-btn" data-theme="menta"><i class="nf nf-fa-palette"></i><span>Menta</span></button>
+                <button class="theme-btn" data-theme="rubi"><i class="nf nf-fa-gem"></i><span>Rub&iacute;</span></button>
               </div>
             </div>
           </div>
@@ -675,7 +683,7 @@
                   <button id="user-list-refresh-btn" class="btn btn-sm btn-outline" title="Actualizar lista"><i class="nf nf-fa-refresh"></i></button>
                 </div>
                 <table class="table compact-table">
-                  <thead><tr><th>Usuario</th><th>Rol</th><th>Acci&oacute;n</th></tr></thead>
+                  <thead><tr><th data-sortable="usuario">Usuario<span class="sort-arrow"></span></th><th data-sortable="rol">Rol<span class="sort-arrow"></span></th><th>Acci&oacute;n</th></tr></thead>
                   <tbody id="user-list-body"></tbody>
                 </table>
               </div>
@@ -972,22 +980,27 @@
         <div class="form-group">
           <label>Nombre</label>
           <input type="text" id="product-nombre" placeholder="Nombre del producto">
+          <div class="field-error" id="product-nombre-error"></div>
         </div>
         <div class="form-group">
           <label>Precio en USD ($)</label>
           <input type="number" id="product-precio" step="any" min="0" placeholder="0.00">
+          <div class="field-error" id="product-precio-error"></div>
         </div>
         <div class="form-group">
           <label>Costo en USD ($)</label>
           <input type="number" id="product-costo" step="any" min="0" placeholder="0.00">
+          <div class="field-error" id="product-costo-error"></div>
         </div>
         <div class="form-group">
           <label>Stock</label>
           <input type="number" id="product-stock" step="1" min="0" placeholder="0">
+          <div class="field-error" id="product-stock-error"></div>
         </div>
         <div class="form-group">
           <label>Stock Mínimo</label>
           <input type="number" id="product-stock-minimo" step="1" min="0" placeholder="0">
+          <div class="field-error" id="product-stock-minimo-error"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -1053,6 +1066,7 @@
         <div class="form-group">
           <label>Nombre del Cliente</label>
           <input type="text" id="client-nombre" placeholder="Nombre completo">
+          <div class="field-error" id="client-nombre-error"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -1597,6 +1611,45 @@
           <button class="calc-btn calc-num" data-calc="dot">.</button>
           <button class="calc-btn calc-op" data-calc="negate">&plusmn;</button>
           <button id="calc-equals" class="calc-btn calc-equals">=</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
+    <div class="modal-content changelog-content">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-clipboard_list"></i> Notas de la versi&oacute;n v1.01</h3>
+        <span class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body changelog-body">
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-plus_circle" style="color:var(--success)"></i> Nuevas funcionalidades</h4>
+          <ul>
+            <li><strong>Carrito m&uacute;ltiple (Hold):</strong> Ahora puedes plegar el carrito actual y abrir hasta 3 carritos simult&aacute;neamente. Los carritos en espera aparecen como pesta&ntilde;as con vista previa de productos.</li>
+            <li><strong>Notas de versi&oacute;n:</strong> Bot&oacute;n "v1.01" en la pantalla de inicio para consultar los cambios de cada versi&oacute;n.</li>
+            <li><strong>Productos recientes:</strong> Al agregar un producto desde la caja, aparece en "&Uacute;ltimos:" para acceso r&aacute;pido.</li>
+            <li><strong>Editar precio unitario:</strong> Doble clic o bot&oacute;n l&aacute;piz en el carrito para editar el precio (solo admins).</li>
+            <li><strong>Snapshot del carrito:</strong> El carrito se guarda autom&aacute;ticamente al cerrar la aplicaci&oacute;n y se restaura al abrir.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-wrench" style="color:var(--accent)"></i> Mejoras y optimizaciones</h4>
+          <ul>
+            <li><strong>Transacci&oacute;n en upload_all:</strong> Las subidas a la nube ahora usan una transacci&oacute;n, evitando estados inconsistentes si falla una sub-operaci&oacute;n.</li>
+            <li><strong>Registro autom&aacute;tico de dispositivo:</strong> Al crear una venta sin dispositivo registrado, se genera y guarda un UUID autom&aacute;ticamente.</li>
+            <li><strong>Auditor&iacute;a m&aacute;s robusta:</strong> Los errores al registrar acciones de auditor&iacute;a ya no se ignoran silenciosamente, se muestran en consola.</li>
+            <li><strong>Swipe-to-delete universal:</strong> El gesto de deslizar para eliminar en el carrito ahora funciona en iOS y cualquier dispositivo t&aacute;ctil.</li>
+            <li><strong>Navegaci&oacute;n t&aacute;ctil mejorada:</strong> Botones de navegaci&oacute;n m&aacute;s grandes y legibles en pantallas peque&ntilde;as (&le;480px).</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-bug" style="color:var(--danger)"></i> Correcciones</h4>
+          <ul>
+            <li>El editor de precio por doble clic ahora funciona correctamente.</li>
+            <li>Estructura del callback DOMContentLoaded corregida para evitar errores de sintaxis.</li>
+            <li>Los errores de creaci&oacute;n del usuario admin por defecto ahora se registran en consola.</li>
+          </ul>
         </div>
       </div>
     </div>

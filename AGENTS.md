@@ -222,13 +222,14 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 Features POS: roles de vendedor, cifrado backups, mejoras mobile, tema oscuro, fix modelo OpenRouter.
 
 ### Completed (this session)
-- **Historial de tasas BCV**: Migration 018 crea `historial_tasas(fecha TEXT PK, tasa REAL)`; `check_tasa_update` guarda cada consulta; comandos `get_historial_tasas(dias)` y `get_tasa_historica(fecha)`
-- **Tasa histórica en inventario**: botón calendario `#inventory-tasa-btn` en cabecera de inventario, modal con selector de fecha + lista de últimos 60 días con tasas; `tasaInventario` variable separada de `tasaActual`; BS prices en inventario usan `tasaInventario || tasaActual`
-- **Custom dropdown clientes**: reemplazado `<select>` por dropdown personalizado con clase `custom-select`, items deshabilitados (`disabled muted`) para clientes sin crédito
-- **Toggle crédito activo**: botón toggle en fila de cliente (admin-only, con confirmación), clientes sin crédito aparecen grisados en el dropdown de pago
-- **Deuda rápida**: comando `add_quick_debt` suma monto a `saldo_deuda_usd`; botón `<i class="nf nf-fa-bolt"></i>` en fila de cliente; modal para ingresar monto
-- **Iconos nuevos**: `nf-fa-bolt`, `nf-fa-toggle-on`, `nf-fa-toggle-off`, `nf-fa-calendar` en `fa-local.css`
-- **Tests**: 80 passed, `cargo check` ✅, JS sin errores de sintaxis
+- **View transitions**: exit animation (`.view-exit` 100ms fade-out) before swapping views in `showView` (sync-view.js:98)
+- **Focus management**: `showModal` saves `document.activeElement`, `closeModal` restores it (utils.js:335-343)
+- **Offline indicator**: `#offline-indicator` in sidebar + `initConnectionMonitor()` monitors `navigator.onLine` (utils.js + app.js:2)
+- **Inline validation**: `field-error` divs in product/client modals, `clearProductErrors()`/`showProductError()` for inline errors instead of `showToast` (inventory-view.js, clients-view.js)
+- **Table sorting**: `initTableSorting(tableId)` generic, `data-sortable` + `sort-arrow` on all table headers, triggered by `viewChanged` event (utils.js + index.html + style.css)
+- **Loading states**: `showSyncProgress()` / `hideSyncProgress()` added to upload_usuarios and download_usuarios handlers (app.js:657-700)
+- **Sync progress**: all 4 individual sync operations (upload_usuarios, download_usuarios, upload_all, download_all) plus sync_all now show progress modal
+- **Tests**: 146 passed (80 Rust + 66 JS), `cargo check` ✅, `node --check` ✅
 
 ### Active
 - (ninguno)

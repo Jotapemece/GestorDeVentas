@@ -381,6 +381,7 @@ async function handleLogin() {
       await loadTasa();
       updateConnectionState();
       await loadProductCache();
+      restoreCartSnapshot();
       try { lastViewName = localStorage.getItem('last_view') || VIEW.SALES; } catch (e) {}
       showView(lastViewName);
       if (lastViewName === VIEW.SALES) {
@@ -402,7 +403,7 @@ async function handleLogout() {
   qs(SEL.confirmModal).classList.remove('transparent-bg');
   if (!ok) return;
   await tryCatch(() => invoke('logout'), 'Error al cerrar sesi\u00f3n');
-  currentUser = null; cart = []; lastCloseReportData = null;
+  currentUser = null; carts = [{ id: 1, items: [], folded: false }]; cart = carts[0].items; cartIdCounter = 1; recentProducts = []; lastCloseReportData = null;
   qs(SEL.loginPassword).value = '';
   qs(SEL.loginError).textContent = '';
   qs(SEL.mainApp).style.display = 'none';

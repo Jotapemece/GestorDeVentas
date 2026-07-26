@@ -378,7 +378,7 @@ pub fn download_sales(state: State<AppState>) -> Result<String, String> {
     let mut db = state.secondary_conn()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
     let (supabase_url, supabase_key) = supabase_config(&tx)?;
-    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID).unwrap_or_default();
+    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
     let result = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
     Ok(result)

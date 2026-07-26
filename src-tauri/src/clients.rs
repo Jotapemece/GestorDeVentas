@@ -260,7 +260,9 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
         "Pago de deuda - Cliente #{} - Monto: ${:.2} - Método: {} - Saldo restante: ${:.2}",
         request.cliente_id, request.monto_usd, request.metodo_pago, nuevo_saldo
     );
-    crate::audit::log_action(&tx, &username, &accion).ok();
+    if let Err(e) = crate::audit::log_action(&tx, &username, &accion) {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
 
     if (nuevo_saldo - 0.0).abs() < constants::MONTO_TOLERANCIA {
         let _ = tx.execute(SQL_REACTIVAR_CREDITO, params![request.cliente_id]);
@@ -315,7 +317,9 @@ pub fn add_quick_debt(
         "Deuda rápida - Cliente #{} - Monto: ${:.2}",
         cliente_id, monto_usd
     );
-    crate::audit::log_action(&db, &username, &accion).ok();
+    if let Err(e) = crate::audit::log_action(&db, &username, &accion) {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
     Ok(format!("Deuda de ${:.2} registrada correctamente", monto_usd))
 }
 

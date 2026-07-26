@@ -122,7 +122,7 @@ fn insert_default_admin(conn: &Connection) {
             "INSERT INTO usuarios (username, password, rol, sync_id) VALUES (?1, ?2, ?3, ?4)",
             rusqlite::params![constants::DEFAULT_ADMIN_USERNAME, admin_pw, constants::ROL_ADMIN, "admin-1"],
         )
-        .ok();
+        .unwrap_or_else(|e| { eprintln!("[db] Error al crear usuario admin por defecto: {}", e); 0 });
     }
 }
 

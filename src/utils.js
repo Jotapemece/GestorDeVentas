@@ -15,7 +15,8 @@ function createCartRow(item) {
   const showBs = cartShowBs;
   const totalText = showBs ? formatBS(totalBs) : formatUSD(totalUsd);
   const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
-  return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td><div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div></td><td class="' + cls + '">' + totalText + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
+  const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button class="cart-edit-price-btn" data-action="edit-price" data-codigo="' + code + '" title="Editar precio unitario"><i class="nf nf-fa-pencil"></i></button>' : '';
+  return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td><div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div></td><td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
 }
 function createInventoryRow(p, editBtn) {
   var stockClass = (p.stock < p.stock_minimo) ? ' class="low-stock"' : '';
@@ -89,7 +90,11 @@ function createReportRow(v) {
 const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
 
 let currentUser = null;
-let cart = [];
+let carts = [{ id: 1, items: [], folded: false }];
+let cart = carts[0].items;
+let cartIdCounter = 1;
+let recentProducts = [];
+const RECENT_MAX = 10;
 let tasaActual = 0;
 let tasaInventario = 0;
 let tasaInventarioFecha = '';
@@ -311,6 +316,17 @@ function forcePaint() {
 function showLoading(el) {
   el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
 }
+function showSkeleton(el, cols) {
+  var rows = '';
+  for (var r = 0; r < 5; r++) {
+    rows += '<tr class="skeleton-row">';
+    for (var c = 0; c < cols; c++) {
+      rows += '<td><div class="skeleton-cell"></div></td>';
+    }
+    rows += '</tr>';
+  }
+  el.innerHTML = rows;
+}
 async function withButtonLock(btn, fn) {
   if (!btn || btn.disabled) return;
   var orig = btn.innerHTML;
@@ -332,12 +348,18 @@ function emptyState(icon, text, sub) {
 }
 
 /* ========== MODAL HELPERS ========== */
+let lastFocused = null;
 function showModal(el) {
+  lastFocused = document.activeElement;
   qsa('.modal').forEach(m => { if (m !== el) m.classList.add('hidden'); });
   el.classList.remove('hidden');
 }
 function closeModal(el) {
   el.classList.add('hidden');
+  if (lastFocused && lastFocused.focus) {
+    try { lastFocused.focus(); } catch (_) {}
+    lastFocused = null;
+  }
 }
 
 function isBsMethod(m) { return m === METODO_EFECTIVO_BS || m === METODO_BIOPAGO || m === METODO_PUNTO || m === METODO_PAGO_MOVIL; }
@@ -472,7 +494,59 @@ function getViewEl(name) {
   return document.getElementById('view-' + name);
 }
 
-/* ========== CONFLICTOS ========== */
+/* ========== TABLE SORTING ========== */
+function initTableSorting(tableId) {
+  const table = document.getElementById(tableId);
+  if (!table || table.dataset.sortInit) return;
+  table.dataset.sortInit = '1';
+  const headers = table.querySelectorAll('th[data-sortable]');
+  let currentSort = { col: null, asc: true };
+  headers.forEach(th => {
+    th.addEventListener('click', function() {
+      const key = this.getAttribute('data-sortable');
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const isAsc = currentSort.col === key ? !currentSort.asc : true;
+      currentSort = { col: key, asc: isAsc };
+      headers.forEach(h => { h.classList.remove('sort-asc', 'sort-desc'); });
+      this.classList.add(isAsc ? 'sort-asc' : 'sort-desc');
+      rows.sort((a, b) => {
+        const aVal = a.getAttribute('data-sort-' + key) || a.children[Array.from(th.parentNode.children).indexOf(th)]?.textContent?.trim() || '';
+        const bVal = b.getAttribute('data-sort-' + key) || b.children[Array.from(th.parentNode.children).indexOf(th)]?.textContent?.trim() || '';
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
+        if (!isNaN(aNum) && !isNaN(bNum)) return isAsc ? aNum - bNum : bNum - aNum;
+        return isAsc ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+}
+
+/* ========== CONNECTION MONITOR ========== */
+function initConnectionMonitor() {
+  const indicator = document.getElementById('offline-indicator');
+  if (!indicator) return;
+  function update() {
+    indicator.classList.toggle('visible', !navigator.onLine);
+  }
+  window.addEventListener('online', update);
+  window.addEventListener('offline', update);
+  update();
+}
+
+/* ========== TABLE SORTING INIT ========== */
+document.addEventListener('viewChanged', function(e) {
+  const map = {
+    inventory: 'inventory-table',
+    cashier: 'daily-sales-table',
+    audit: 'audit-table',
+    reportes: 'report-sales-table',
+    creditos: 'creditos-table',
+  };
+  const id = map[e.detail];
+  if (id) initTableSorting(id);
+});
 async function loadLinkedDevices() {
   const container = qs(SEL.linkedDevicesContainer);
   if (!container) return;

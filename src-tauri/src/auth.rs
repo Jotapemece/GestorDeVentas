@@ -56,7 +56,9 @@ pub(crate) fn require_admin(
     action: &str,
 ) -> Result<String, String> {
     let username = check_admin_role(state)?;
-    crate::audit::log_action(db, &username, &crate::constants::sanitize_audit(action)).ok();
+    if let Err(e) = crate::audit::log_action(db, &username, &crate::constants::sanitize_audit(action)) {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
     Ok(username)
 }
 
@@ -438,7 +440,9 @@ pub fn admin_change_password(
     }
 
     let db = state.lock_db()?;
-    crate::audit::log_action(&db, &admin_username, &format!("Cambió password del usuario id={}", usuario_id)).ok();
+    if let Err(e) = crate::audit::log_action(&db, &admin_username, &format!("Cambió password del usuario id={}", usuario_id)) {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
 
     let new_hashed = hash_password(&new_password);
     let affected = db

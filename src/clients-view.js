@@ -1,7 +1,7 @@
 /* ========== CREDITOS ========== */
 async function loadCreditos() {
   const tbody = qs(SEL.creditosBody);
-  showLoading(tbody);
+  showSkeleton(tbody, 5);
   try {
     const clientes = await invoke('list_clientes');
     tbody.innerHTML = '';
@@ -25,12 +25,31 @@ async function loadCreditos() {
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
+let creditoFilterTimer = null;
 function applyCreditoFilter() {
-  const term = (qs(SEL.creditosSearch)?.value || '').toLowerCase().trim();
-  creditoRows.forEach(tr => {
-    const name = tr.dataset.nombre || tr.children[0]?.textContent?.toLowerCase() || '';
-    tr.style.display = name.includes(term) ? '' : 'none';
-  });
+  clearTimeout(creditoFilterTimer);
+  creditoFilterTimer = setTimeout(function() {
+    const term = (qs(SEL.creditosSearch)?.value || '').toLowerCase().trim();
+    var hasVisible = false;
+    creditoRows.forEach(tr => {
+      const name = tr.dataset.nombre || tr.children[0]?.textContent?.toLowerCase() || '';
+      var visible = name.includes(term);
+      tr.style.display = visible ? '' : 'none';
+      if (visible) hasVisible = true;
+    });
+    var tbody = qs(SEL.creditosBody);
+    var emptyRow = tbody.querySelector('.creditos-empty-row');
+    if (!hasVisible && creditoRows.length > 0) {
+      if (!emptyRow) {
+        emptyRow = document.createElement('tr');
+        emptyRow.className = 'creditos-empty-row';
+        emptyRow.innerHTML = '<td colspan="5">' + emptyState('<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda') + '</td>';
+        tbody.appendChild(emptyRow);
+      }
+    } else if (emptyRow) {
+      emptyRow.remove();
+    }
+  }, 150);
 }
 
 function openCreditoModal(cliente) {
@@ -38,15 +57,34 @@ function openCreditoModal(cliente) {
   qs(SEL.clientNombre).value = cliente ? cliente.nombre : '';
   qs(SEL.clientModalTitle).textContent = cliente ? 'Editar Cliente' : 'Registrar Persona para Cr\u00e9dito';
   qs(SEL.clientSaveBtn).textContent = cliente ? 'Guardar Cambios' : 'Guardar';
+  clearClientErrors();
   showModal(qs(SEL.clientModal));
 }
 
-function closeClientModal() { editingClienteId = null; closeModal(qs(SEL.clientModal)); }
+function closeClientModal() {
+  editingClienteId = null;
+  closeModal(qs(SEL.clientModal));
+  clearClientErrors();
+}
+
+function clearClientErrors() {
+  var err = document.getElementById('client-nombre-error');
+  var input = document.getElementById('client-nombre');
+  if (err) { err.textContent = ''; err.classList.remove('visible'); }
+  if (input) input.classList.remove('input-error');
+}
 
 async function saveClient() {
   const btn = qs(SEL.clientSaveBtn);
   const nombre = qs(SEL.clientNombre).value.trim();
-  if (!nombre) { showToast('Ingrese el nombre', 'error'); return; }
+  clearClientErrors();
+  if (!nombre) {
+    var err = document.getElementById('client-nombre-error');
+    var input = document.getElementById('client-nombre');
+    if (err) { err.textContent = 'El nombre del cliente es obligatorio'; err.classList.add('visible'); }
+    if (input) input.classList.add('input-error');
+    return;
+  }
   if (btn) btn.disabled = true;
   try {
     if (editingClienteId) {

@@ -1,5 +1,7 @@
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
+  initConnectionMonitor();
+  window.addEventListener('beforeunload', function() { saveCartSnapshot(); });
   // Collapse all config cards by default
   qsa(SEL.configCardHeader).forEach(h => h.classList.add('collapsed'));
 
@@ -20,6 +22,14 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   qs(SEL.logoutBtn).addEventListener('click', handleLogout);
   qs(SEL.mobileLogoutBtn)?.addEventListener('click', handleLogout);
+
+  // Changelog
+  document.getElementById('changelog-btn')?.addEventListener('click', function() {
+    showModal(document.getElementById('changelog-modal'));
+  });
+  document.getElementById('changelog-close')?.addEventListener('click', function() {
+    closeModal(document.getElementById('changelog-modal'));
+  });
 
   // Navigation
   qsa('.nav-btn').forEach(btn => {
@@ -43,7 +53,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   document.addEventListener('viewChanged', function() { qs(SEL.moreMenu).classList.add('hidden'); });
 
   /* Swipe-to-delete on cart items (mobile) */
-  if (IS_ANDROID) {
+  if ('ontouchstart' in window) {
     var cartSwipeState = { el: null, startX: 0 };
     qs(SEL.cartBody).addEventListener('touchstart', function(e) {
       var row = e.target.closest('tr');
@@ -113,6 +123,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     const ok = await confirmModal('\u00bfEst\u00e1 seguro de cancelar la venta? El carrito se perder\u00e1.', 'Cancelar Venta', 'S\u00ed, cancelar');
     if (ok) clearCart();
   });
+  document.getElementById('hold-cart-btn')?.addEventListener('click', holdCart);
+  document.getElementById('cart-tabs')?.addEventListener('click', function(e) {
+    var tab = e.target.closest('.cart-tab');
+    if (tab) unholdCart(parseInt(tab.dataset.cartId));
+  });
 
   // Event delegation: product search add-to-cart
   qs(SEL.productSearchBody).addEventListener('click', e => {
@@ -167,7 +182,43 @@ document.addEventListener('DOMContentLoaded', async function() {
       }
       return;
     }
+    const editBtn = e.target.closest('[data-action="edit-price"]');
+    if (editBtn) {
+      cartEditPrice(editBtn.dataset.codigo);
+      return;
+    }
   });
+
+  /* Cart inline price editor */
+  function cartEditPrice(codigo) {
+    var item = cart.find(function(i) { return i.codigo === codigo; });
+    if (!item) return;
+    var tr = qs(SEL.cartBody).querySelector('tr[data-codigo="' + codigo + '"]');
+    if (!tr) return;
+    var totalTd = tr.querySelector('.cart-item-total');
+    if (!totalTd) return;
+    var currentPrice = item.precio_usd;
+    totalTd.innerHTML = '<input type="number" class="cart-price-edit" step="0.01" min="0" value="' + currentPrice.toFixed(2) + '">';
+    var input = totalTd.querySelector('.cart-price-edit');
+    input.focus();
+    input.select();
+    function commitPrice() {
+      var val = parseFloat(input.value);
+      if (!isNaN(val) && val >= 0) {
+        item.precio_usd = val;
+        renderCart();
+        updateCheckoutBtn();
+        saveCartSnapshot();
+      } else {
+        renderCart();
+      }
+    }
+    input.addEventListener('blur', commitPrice);
+    input.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); renderCart(); }
+    });
+  }
 
   // Payment modal
   qs(SEL.paymentModalClose).addEventListener('click', closePaymentModal);
@@ -273,8 +324,25 @@ document.addEventListener('DOMContentLoaded', async function() {
           loadInventory();
         } catch (e) {
           showToast('Error: ' + e, 'error');
-        }
-      });
+    }
+  });
+
+  // Double-click cart row to edit unit price (admin only)
+  qs(SEL.cartBody).addEventListener('dblclick', function(e) {
+    if (!currentUser || currentUser.rol !== ROL_ADMIN) return;
+    if (e.target.closest('.cart-qty-input') || e.target.closest('.cart-qty-btn') || e.target.closest('.cart-remove-btn') || e.target.closest('[data-action="edit-price"]')) return;
+    var tr = e.target.closest('tr');
+    if (!tr) return;
+    var codigo = tr.dataset.codigo;
+    if (!codigo) return;
+    cartEditPrice(codigo);
+  });
+
+  // Recent products quick-add
+  document.getElementById('recent-products')?.addEventListener('click', function(e) {
+    var chip = e.target.closest('.recent-chip');
+    if (chip) addToCart(chip.dataset.codigo);
+  });
       return;
     }
   });
@@ -658,22 +726,38 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.uploadUsuariosBtn)?.addEventListener('click', async function() {
     var ok = await confirmModal('¿Subir usuarios a Supabase?', 'Subir usuarios', 'Subir');
     if (!ok) return;
+    showSyncProgress();
+    updateSyncIndicator('Subiendo usuarios...', true);
+    await forcePaint();
     try {
       var r = await invoke('upload_usuarios');
+      hideSyncProgress();
       showToast(r);
       loadSyncStats();
-    } catch (e) { showToast('Error: ' + e, 'error'); }
+    } catch (e) {
+      hideSyncProgress();
+      updateSyncIndicator('Error en sync', false);
+      showToast('Error: ' + e, 'error');
+    }
   });
 
   /* Descargar usuarios */
   qs(SEL.downloadUsuariosBtn)?.addEventListener('click', async function() {
     var ok = await confirmModal('¿Descargar usuarios de otros dispositivos desde Supabase?', 'Descargar usuarios', 'Descargar');
     if (!ok) return;
+    showSyncProgress();
+    updateSyncIndicator('Descargando usuarios...', true);
+    await forcePaint();
     try {
       var r = await invoke('download_usuarios');
+      hideSyncProgress();
       showToast(r);
       loadSyncStats();
-    } catch (e) { showToast('Error: ' + e, 'error'); }
+    } catch (e) {
+      hideSyncProgress();
+      updateSyncIndicator('Error en sync', false);
+      showToast('Error: ' + e, 'error');
+    }
   });
 
   /* Sincronizar todo */
@@ -1134,6 +1218,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           playSound('remove');
           qs(SEL.auditBody).innerHTML = emptyState('<i class="nf nf-fa-history"></i>', 'Historial vac\u00edo', 'No hay registros de auditor\u00eda');
           qs(SEL.auditLoadMore).classList.add('hidden');
+          disconnectAuditObserver();
         } catch (e) { showToast('Error: ' + e, 'error'); }
       });
     }
@@ -1192,7 +1277,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     return true;
   }
   document.addEventListener('touchstart', function(e) {
-    if (!IS_ANDROID) return;
+    if (!('ontouchstart' in window)) return;
     if (!isSwipableTarget(e.target)) return;
     var active = qs(SEL.viewActive);
     if (!active || MAIN_VIEWS.indexOf(active.id.replace('view-', '')) === -1) return;
@@ -1396,5 +1481,39 @@ document.addEventListener('DOMContentLoaded', async function() {
     btn.addEventListener('click', function() {
       handleChatSend(this.dataset.prompt);
     });
+  });
+
+  /* ========== KEYBOARD SHORTCUTS ========== */
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key === 'f') {
+      e.preventDefault();
+      var searchMap = {
+        sales: 'product-search',
+        inventory: 'inventory-search',
+        creditos: 'creditos-search',
+        sync: 'sync-search',
+      };
+      var inputId = searchMap[lastViewName];
+      if (inputId) {
+        var input = document.getElementById(inputId);
+        if (input) { input.focus(); input.select(); }
+      }
+    }
+    if (e.key === 'F5' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      var reloadMap = {
+        sales: function() { renderProductSearch(); renderCart(); },
+        inventory: loadInventory,
+        creditos: loadCreditos,
+        cashier: loadDailySummary,
+        audit: loadAudit,
+        reports: function() { loadReportsAndTopProducts(true); },
+        config: function() { loadThemeConfig(); },
+        sync: function() { loadSyncConfig(); loadConflictCount(); },
+      };
+      var fn = reloadMap[lastViewName];
+      if (fn) fn();
+      showToast('Vista recargada', 'info');
+    }
   });
 });

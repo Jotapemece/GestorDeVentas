@@ -219,7 +219,9 @@ pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
         "true", constants::CFG_CAJA_ABIERTA,
     ]).map_err(|e| e.to_string())?;
 
-    crate::audit::log_action(&db, &username, "Caja abierta").ok();
+    if let Err(e) = crate::audit::log_action(&db, &username, "Caja abierta") {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
 
     Ok("Caja abierta exitosamente".to_string())
 }
@@ -287,7 +289,9 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         "Cierre de caja - Ventas: {}, Total USD: ${:.2}, Total Bs.: Bs. {:.2}",
         total_ventas, total_usd, total_bs
     );
-    crate::audit::log_action(&tx, &username, &accion).ok();
+    if let Err(e) = crate::audit::log_action(&tx, &username, &accion) {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
 
     tx.commit()
         .map_err(|e| format!("Error al confirmar cierre: {}", e))?;

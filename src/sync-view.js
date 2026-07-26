@@ -99,8 +99,8 @@ function showView(name) {
   lastViewName = name;
   try { localStorage.setItem('last_view', name); } catch (e) {}
   qsa('.view').forEach(v => v.classList.remove('active'));
-  qsa('.nav-btn').forEach(b => b.classList.remove('active'));
   getViewEl(name).classList.add('active');
+  qsa('.nav-btn').forEach(b => b.classList.remove('active'));
   qs(`.nav-btn[data-view="${name}"]`).classList.add('active');
   // Inari activation: config toggle is master switch
   if (name === VIEW.INVENTORY) {
@@ -136,6 +136,7 @@ function showView(name) {
     if (!IS_ANDROID) qs(SEL.productSearch).focus();
     renderProductSearch();
     renderCart();
+    renderRecentProducts();
   }
   document.dispatchEvent(new CustomEvent('viewChanged', { detail: name }));
   if (IS_ANDROID) {

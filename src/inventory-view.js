@@ -7,7 +7,7 @@ const INARI_DIAS = [4, 5, 6, 0]; // jueves, viernes, sábado, domingo
 async function loadInventory() {
   const query = qs(SEL.inventorySearch).value.trim();
   const tbody = qs(SEL.inventoryBody);
-  showLoading(tbody);
+  showSkeleton(tbody, 8);
   try {
     const result = await invoke('list_products', { search: query || null, page: inventoryPage, pageSize: INVENTORY_PAGE_SIZE, inari: showInari || null, subcategoria: inariSubcat || null });
     const products = result.data || result;
@@ -111,6 +111,7 @@ function openNewProductModal() {
   qs(SEL.productSaveText).textContent = 'Registrar';
   [SEL.productNombre, SEL.productPrecio, SEL.productCosto, SEL.productStock, SEL.productStockMinimo].forEach(id => qs(id).value = '');
   qs(SEL.productDeleteBtn).style.display = 'none';
+  clearProductErrors();
   showModal(qs(SEL.productModal));
 }
 
@@ -120,6 +121,7 @@ function editProduct(codigo) {
   if (!p) { showToast('Producto no encontrado', 'error'); return; }
   qs(SEL.productModalTitle).textContent = 'Editar Producto';
   qs(SEL.productSaveText).textContent = 'Guardar';
+  clearProductErrors();
   qs(SEL.productNombre).value = p.nombre;
   qs(SEL.productPrecio).value = comaAutomaticaEnabled ? p.precio_usd.toFixed(2).replace('.', ',') : p.precio_usd;
   qs(SEL.productCosto).value = p.costo || 0;
@@ -131,6 +133,23 @@ function editProduct(codigo) {
 
 function closeProductModal() {
   closeModal(qs(SEL.productModal));
+  clearProductErrors();
+}
+
+/* Inline validation errors */
+function clearProductErrors() {
+  ['product-nombre', 'product-precio', 'product-costo', 'product-stock', 'product-stock-minimo'].forEach(function(id) {
+    var err = document.getElementById(id + '-error');
+    var input = document.getElementById(id);
+    if (err) { err.textContent = ''; err.classList.remove('visible'); }
+    if (input) input.classList.remove('input-error');
+  });
+}
+function showProductError(inputId, msg) {
+  var err = document.getElementById(inputId + '-error');
+  var input = document.getElementById(inputId);
+  if (err) { err.textContent = msg; err.classList.add('visible'); }
+  if (input) input.classList.add('input-error');
 }
 
 /* ========== COMBOS ========== */
@@ -240,7 +259,12 @@ async function saveProduct() {
   const costo = parsePrecio(qs(SEL.productCosto).value) || 0;
   const stock = parseInt(qs(SEL.productStock).value) || 0;
   const stockMinimo = parseInt(qs(SEL.productStockMinimo).value) || 0;
-  if (!nombre || isNaN(precio) || precio < 0) { showToast('Complete todos los campos', 'error'); return; }
+  clearProductErrors();
+  var hasError = false;
+  if (!nombre || nombre.length < 1) { showProductError('product-nombre', 'El nombre es obligatorio'); hasError = true; }
+  if (isNaN(precio) || precio < 0) { showProductError('product-precio', 'Ingrese un precio v\u00e1lido'); hasError = true; }
+  if (isNaN(stock) || stock < 0) { showProductError('product-stock', 'Ingrese un stock v\u00e1lido'); hasError = true; }
+  if (hasError) return;
   if (btn) btn.disabled = true;
   try {
     if (editingProduct) {

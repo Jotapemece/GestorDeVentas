@@ -163,7 +163,9 @@ fn execute_sale_transaction(
         "Venta #{} creada - Total: ${:.2} - Método: {} - Productos: {}",
         venta_id, total_usd, request.metodo_pago, request.productos.len()
     );
-    crate::audit::log_action(&tx, current_username, &accion).ok();
+    if let Err(e) = crate::audit::log_action(&tx, current_username, &accion) {
+    eprintln!("[audit] Error al registrar acción: {}", e);
+}
 
     if request.metodo_pago == constants::METODO_CREDITO {
         if let Some(cliente_id) = request.cliente_id {
@@ -185,10 +187,20 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
     let now = crate::helpers::fecha_hora_local();
     let current_username = state.get_username()?;
     let venta_sync_id = Uuid::new_v4().to_string();
-    let dispositivo_origen = db.query_row(
+    let dispositivo_origen: String = match db.query_row(
         "SELECT valor FROM configuracion WHERE clave = ?1",
-        params![constants::CFG_DISPOSITIVO_ID], |r| r.get::<_, String>(0),
-    ).unwrap_or_default();
+        params![constants::CFG_DISPOSITIVO_ID], |r| r.get(0),
+    ) {
+        Ok(id) => id,
+        Err(_) => {
+            let new_id = Uuid::new_v4().to_string();
+            db.execute(
+                "INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?1, ?2)",
+                params![constants::CFG_DISPOSITIVO_ID, new_id],
+            ).map_err(|e| format!("Error al registrar dispositivo: {}", e))?;
+            new_id
+        }
+    };
     let now_iso = crate::helpers::now_iso();
 
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
@@ -358,7 +370,9 @@ pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String
     )
     .map_err(|e| e.to_string())?;
 
-    crate::audit::log_action(&tx, &current_username, &format!("Anuló venta #{}", venta_id)).ok();
+    if let Err(e) = crate::audit::log_action(&tx, &current_username, &format!("Anuló venta #{}", venta_id)) {
+    eprintln!("[audit] Error al registrar acción: {}", e);
+}
 
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
@@ -646,8 +660,11 @@ pub fn void_sale_items(
 
     recalculate_sale_after_void(&tx, request.venta_id)?;
 
-    crate::audit::log_action(&tx, &current_username,
-        &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id)).ok();
+    if let Err(e) = crate::audit::log_action(&tx, &current_username,
+        &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id))
+    {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
 
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
