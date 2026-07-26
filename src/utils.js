@@ -120,6 +120,8 @@ let toastVisible = 0;
 function hideToast(el) {
   if (el._closing) return;
   el._closing = true;
+  if (el._frame) cancelAnimationFrame(el._frame);
+  if (el._timer) clearTimeout(el._timer);
   el.classList.add('exit');
   setTimeout(() => {
     el.remove();
@@ -144,11 +146,26 @@ function showToast(msg, type = 'success', action) {
   const el = document.createElement('div');
   el.className = 'toast';
 
+  // Border ring that shrinks clockwise via conic-gradient mask
   const border = document.createElement('div');
   border.className = 'toast-border';
-  border.style.border = '2px solid ' + cfg.color;
-  border.style.animationDuration = cfg.duration + 'ms';
+  border.style.borderColor = cfg.color;
   el.appendChild(border);
+
+  // Animate border mask: full circle → empty (clockwise shrink)
+  const start = performance.now();
+  function animateBorder(now) {
+    const p = Math.min((now - start) / cfg.duration, 1);
+    const deg = 360 * (1 - p);
+    const m = `conic-gradient(#fff 0deg, #fff ${deg}deg, transparent ${deg}deg)`;
+    border.style.mask = m;
+    border.style.webkitMask = m;
+    if (p < 1) el._frame = requestAnimationFrame(animateBorder);
+  }
+  el._frame = requestAnimationFrame(animateBorder);
+
+  // Auto-dismiss
+  el._timer = setTimeout(() => hideToast(el), cfg.duration);
 
   const icon = document.createElement('i');
   icon.className = 'nf ' + cfg.icon + ' toast-icon';
@@ -182,8 +199,8 @@ function showToast(msg, type = 'success', action) {
   });
   el.appendChild(closeBtn);
 
-  el.addEventListener('click', function() {
-    hideToast(el);
+  el.addEventListener('click', function(e) {
+    if (e.target === el || e.target === msgSpan) hideToast(el);
   });
 
   // Swipe to dismiss on mobile

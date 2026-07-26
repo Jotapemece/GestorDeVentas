@@ -1121,7 +1121,7 @@ th .col-toggle-btn { float: none; display: inline; }
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  animation: toastBorder linear forwards;
+  border: 2px solid;
 }
 .toast-close {
   flex-shrink: 0;
@@ -1141,10 +1141,6 @@ th .col-toggle-btn { float: none; display: inline; }
 @keyframes toastOut {
   from { transform: translateX(0); opacity: 1; }
   to { transform: translateX(40px); opacity: 0; }
-}
-@keyframes toastBorder {
-  from { opacity: 1; }
-  to { opacity: 0; }
 }
 @media (max-width: 768px) {
   #toast-container {
