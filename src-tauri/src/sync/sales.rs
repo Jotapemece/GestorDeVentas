@@ -9,7 +9,7 @@ pub(crate) fn upload_sales_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
-    dispositivo_id: &str,
+    _dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -60,24 +60,45 @@ pub(crate) fn upload_sales_inner(
     let mut all_detalles: Vec<serde_json::Value> = Vec::new();
     let sale_ids: Vec<i64> = rows.iter().map(|(id, ..)| *id).collect();
 
+    let user_map: std::collections::HashMap<i64, String> = {
+        let mut m = std::collections::HashMap::new();
+        if let Ok(mut s) = db.prepare("SELECT id, sync_id FROM usuarios WHERE sync_id IS NOT NULL AND sync_id != ''") {
+            if let Ok(rows) = s.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))) {
+                for r in rows.filter_map(|r| r.ok()) { m.insert(r.0, r.1); }
+            }
+        }
+        m
+    };
+
+    let client_map: std::collections::HashMap<i64, String> = {
+        let mut s = db.prepare("SELECT id, sync_id FROM clientes WHERE sync_id IS NOT NULL AND sync_id != ''")
+            .map_err(|e| e.to_string())?;
+        let rows = s.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok());
+        let mut m = std::collections::HashMap::new();
+        for (id, sid) in rows { m.insert(id, sid); }
+        m
+    };
+
     for (id, sync_id, fecha, uid, metodo, refe, pago_det, cliente_id, total_usd, tasa, total_bs, anulada, disp_origen) in &rows {
         let fecha_iso = fecha.replace(' ', "T");
+        let usr_sync_id = user_map.get(uid).cloned().unwrap_or_default();
+        let cli_sync_id = cliente_id.and_then(|cid| client_map.get(&cid).cloned());
         all_ventas.push(json!({
             "id": sync_id,
-            "sync_id": sync_id,
             "local_id": id,
-            "dispositivo_id": dispositivo_id,
+            "dispositivo_origen": disp_origen,
             "fecha_hora": fecha_iso,
-            "usuario_id": uid,
+            "usuario_sync_id": usr_sync_id,
             "metodo_pago": metodo,
             "referencia_pago_movil": refe,
             "pago_detalle": pago_det,
-            "cliente_id": cliente_id,
+            "cliente_sync_id": cli_sync_id,
             "total_usd": total_usd,
             "tasa_aplicada": tasa,
             "total_bs": total_bs,
             "anulada": if *anulada { 1i64 } else { 0i64 },
-            "dispositivo_origen": disp_origen,
             "updated_at": &ts,
         }));
     }
@@ -123,14 +144,15 @@ pub(crate) fn upload_sales_inner(
         .collect();
 
     for (venta_id, codigo, cantidad, precio, det_sync_id, local_det_id) in &dets {
-        if let Some(sync_id) = sale_sync_map.get(venta_id) {
+        if let Some(venta_sync_id) = sale_sync_map.get(venta_id) {
+            let det_id = det_sync_id.as_deref().unwrap_or("").to_string();
             all_detalles.push(json!({
-                "venta_id": sync_id,
+                "id": if det_id.is_empty() { serde_json::Value::Null } else { json!(det_id) },
+                "venta_id": venta_sync_id,
                 "local_id": local_det_id,
                 "producto_codigo": codigo,
                 "cantidad": cantidad,
                 "precio_usd_unitario": precio,
-                "sync_id": det_sync_id,
                 "anulado": 0,
                 "updated_at": &ts,
             }));
@@ -140,7 +162,7 @@ pub(crate) fn upload_sales_inner(
     let ventas_body = serde_json::to_string(&all_ventas)
         .map_err(|e| format!("Error serializando ventas JSON: {}", e))?;
     supabase_post(
-        &api_url(supabase_url, "/ventas?on_conflict=sync_id"),
+        &api_url(supabase_url, "/ventas?on_conflict=id"),
         supabase_key,
         &ventas_body,
     )?;
@@ -149,7 +171,7 @@ pub(crate) fn upload_sales_inner(
         let detalles_body = serde_json::to_string(&all_detalles)
             .map_err(|e| format!("Error serializando detalles JSON: {}", e))?;
         supabase_post(
-            &api_url(supabase_url, "/detalles_ventas?on_conflict=sync_id"),
+            &api_url(supabase_url, "/detalles_ventas?on_conflict=id"),
             supabase_key,
             &detalles_body,
         )?;
@@ -175,6 +197,27 @@ pub(crate) fn download_sales_inner(
     dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
+
+    let user_rev: std::collections::HashMap<String, i64> = {
+        let mut m = std::collections::HashMap::new();
+        if let Ok(mut s) = db.prepare("SELECT sync_id, id FROM usuarios WHERE sync_id IS NOT NULL AND sync_id != ''") {
+            if let Ok(rows) = s.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))) {
+                for r in rows.filter_map(|r| r.ok()) { m.insert(r.0, r.1); }
+            }
+        }
+        m
+    };
+
+    let client_rev: std::collections::HashMap<String, i64> = {
+        let mut s = db.prepare("SELECT sync_id, id FROM clientes WHERE sync_id IS NOT NULL AND sync_id != ''")
+            .map_err(|e| e.to_string())?;
+        let rows = s.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok());
+        let mut m = std::collections::HashMap::new();
+        for (sid, id) in rows { m.insert(sid, id); }
+        m
+    };
 
     let last_sync = super::get_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS)
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
@@ -206,29 +249,37 @@ pub(crate) fn download_sales_inner(
     let mut anulada_map: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
 
     for venta_json in &cloud_ventas {
-        let sync_id = venta_json["sync_id"].as_str().unwrap_or("");
-        if sync_id.is_empty() {
+        let sale_id = venta_json["id"].as_str().unwrap_or("");
+        if sale_id.is_empty() {
             continue;
         }
+
+        let usr_sync_id = venta_json["usuario_sync_id"].as_str().unwrap_or("");
+        let cli_sync_id = venta_json["cliente_sync_id"].as_str();
+        let local_uid = user_rev.get(usr_sync_id).copied().unwrap_or(0);
+        let local_cid = cli_sync_id.and_then(|sid| client_rev.get(sid).copied());
 
         let result = db.execute(
             "INSERT OR IGNORE INTO ventas \
              (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
-              cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+              cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at, \
+              usuario_sync_id, cliente_sync_id) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 &normalize_fecha(venta_json["fecha_hora"].as_str().unwrap_or("")),
-                venta_json["usuario_id"].as_i64().unwrap_or(0),
+                local_uid,
                 venta_json["metodo_pago"].as_str().unwrap_or(""),
                 venta_json["referencia_pago_movil"].as_str(),
                 venta_json["pago_detalle"].as_str().unwrap_or(""),
-                venta_json["cliente_id"].as_i64(),
+                local_cid,
                 venta_json["total_usd"].as_f64().unwrap_or(0.0),
                 venta_json["tasa_aplicada"].as_f64().unwrap_or(0.0),
                 venta_json["total_bs"].as_f64().unwrap_or(0.0),
-                sync_id,
+                sale_id,
                 venta_json["dispositivo_origen"].as_str().unwrap_or(""),
                 venta_json["updated_at"].as_str().unwrap_or(""),
+                usr_sync_id,
+                cli_sync_id.unwrap_or(""),
             ],
         ).map_err(|e| format!("Error insertando venta remota: {}", e))?;
 
@@ -238,11 +289,11 @@ pub(crate) fn download_sales_inner(
 
         let local_id = db.last_insert_rowid();
         inserted_ventas += 1;
-        inserted_sync_ids.push(sync_id.to_string());
-        sync_to_local_id.insert(sync_id.to_string(), local_id);
+        inserted_sync_ids.push(sale_id.to_string());
+        sync_to_local_id.insert(sale_id.to_string(), local_id);
         let anulada = venta_json["anulada"].as_i64().unwrap_or(0) != 0;
         if anulada {
-            anulada_map.insert(sync_id.to_string(), true);
+            anulada_map.insert(sale_id.to_string(), true);
         }
     }
 
@@ -282,8 +333,8 @@ pub(crate) fn download_sales_inner(
 
         if let Some(dets) = detalles_by_venta.get(sync_id) {
             for det in dets {
-                let det_sync_id = det["sync_id"].as_str().unwrap_or("");
-                if det_sync_id.is_empty() {
+                let det_id = det["id"].as_str().unwrap_or("");
+                if det_id.is_empty() {
                     continue;
                 }
 
@@ -295,7 +346,7 @@ pub(crate) fn download_sales_inner(
                     "INSERT OR IGNORE INTO detalles_ventas \
                      (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
                      VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![venta_id, prod_codigo, cantidad, precio, det_sync_id],
+                    params![venta_id, prod_codigo, cantidad, precio, det_id],
                 ).map_err(|e| format!("Error insertando detalle remoto: {}", e))?;
 
                 if !is_anulada {

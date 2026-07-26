@@ -10,9 +10,13 @@
     "build:portable": "tauri build --config '{\"bundle\":{\"active\":false}}' --target i686-pc-windows-gnu",
     "build:portable:64": "tauri build --config '{\"bundle\":{\"active\":false}}' --target x86_64-pc-windows-gnu",
     "build:portable:win": "tauri build --bundles none",
-    "build:android": "tauri android build"
+    "build:android": "tauri android build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.10"
   }
 }

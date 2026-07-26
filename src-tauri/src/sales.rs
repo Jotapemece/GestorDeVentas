@@ -186,8 +186,8 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
     let current_username = state.get_username()?;
     let venta_sync_id = Uuid::new_v4().to_string();
     let dispositivo_origen = db.query_row(
-        "SELECT valor FROM configuracion WHERE clave = 'dispositivo_id'",
-        [], |r| r.get::<_, String>(0),
+        "SELECT valor FROM configuracion WHERE clave = ?1",
+        params![constants::CFG_DISPOSITIVO_ID], |r| r.get::<_, String>(0),
     ).unwrap_or_default();
     let now_iso = crate::helpers::now_iso();
 
@@ -483,16 +483,7 @@ pub fn export_report_xlsx(
 }
 
 fn format_metodo_label(m: &str) -> String {
-    match m {
-        "efectivo_bs" => "Efectivo Bs.".to_string(),
-        "efectivo_usd" => "Efectivo USD".to_string(),
-        "pago_movil" => "Pago Móvil".to_string(),
-        "punto" => "Punto".to_string(),
-        "biopago" => "Biopago".to_string(),
-        "credito" => "Crédito".to_string(),
-        "mixto" => "Mixto".to_string(),
-        _ => m.to_string(),
-    }
+    constants::metodo_label(m).to_string()
 }
 
 fn get_sales_report_inner(

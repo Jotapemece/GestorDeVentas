@@ -27,8 +27,8 @@ const SQL_CLIENTES_CREDITO: &str = "
     GROUP BY c.id
     ORDER BY c.nombre";
 const SQL_CAJA_ABIERTA: &str =
-    "SELECT valor FROM configuracion WHERE clave = 'caja_abierta'";
-const SQL_SET_CAJA: &str = "UPDATE configuracion SET valor = ?1 WHERE clave = 'caja_abierta'";
+    "SELECT valor FROM configuracion WHERE clave = ?1";
+const SQL_SET_CAJA: &str = "UPDATE configuracion SET valor = ?1 WHERE clave = ?2";
 const SQL_INSERT_CIERRE: &str = "
     INSERT INTO cierres_caja (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
@@ -215,8 +215,9 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
 pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
     let username = state.get_username()?;
     let db = state.lock_db()?;
-    db.execute(SQL_SET_CAJA, params!["true"])
-        .map_err(|e| e.to_string())?;
+    db.execute(SQL_SET_CAJA, params![
+        "true", constants::CFG_CAJA_ABIERTA,
+    ]).map_err(|e| e.to_string())?;
 
     crate::audit::log_action(&db, &username, "Caja abierta").ok();
 
@@ -227,7 +228,7 @@ pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
 pub fn get_caja_abierta(state: State<AppState>) -> Result<bool, String> {
     let db = state.lock_db()?;
     let val: String = db
-        .query_row(SQL_CAJA_ABIERTA, [], |row| row.get(0))
+        .query_row(SQL_CAJA_ABIERTA, params![constants::CFG_CAJA_ABIERTA], |row| row.get(0))
         .unwrap_or_else(|_| "false".to_string());
     Ok(val == "true")
 }
@@ -256,7 +257,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         .map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
     let caja_abierta: String = tx
-        .query_row(SQL_CAJA_ABIERTA, [], |row| row.get(0))
+        .query_row(SQL_CAJA_ABIERTA, params![constants::CFG_CAJA_ABIERTA], |row| row.get(0))
         .unwrap_or_else(|_| "false".to_string());
     if caja_abierta != "true" {
         return Err("La caja no está abierta. Ábrela primero.".to_string());
@@ -278,8 +279,9 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
     tx.execute(SQL_INSERT_CIERRE_DETALLE, params![cierre_id, detalle_json])
         .map_err(|e| format!("Error al guardar detalle del cierre: {}", e))?;
 
-    tx.execute(SQL_SET_CAJA, params!["false"])
-        .map_err(|e| format!("Error al cerrar caja: {}", e))?;
+    tx.execute(SQL_SET_CAJA, params![
+        "false", constants::CFG_CAJA_ABIERTA,
+    ]).map_err(|e| format!("Error al cerrar caja: {}", e))?;
 
     let accion = format!(
         "Cierre de caja - Ventas: {}, Total USD: ${:.2}, Total Bs.: Bs. {:.2}",

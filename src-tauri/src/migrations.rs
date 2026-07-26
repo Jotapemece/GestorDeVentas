@@ -113,6 +113,7 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("022_add_inari_products", add_inari_products),
     ("023_add_inari_bebidas", add_inari_bebidas),
     ("024_add_usuarios_sync_fields", add_usuarios_sync_fields),
+    ("025_add_ventas_sync_refs", add_ventas_sync_refs),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -401,72 +402,40 @@ fn add_subcategoria_combos(conn: &Connection) {
     ).ok();
 }
 
-fn add_inari_products(conn: &Connection) {
-    let productos = [
-        ("I001", "Hamburguesa de Carne", 5.8, "hamburguesas"),
-        ("I002", "Hamburguesa de Pollo Crispy", 6.7, "hamburguesas"),
-        ("I003", "Hamburguesa Doble Carne", 7.8, "hamburguesas"),
-        ("I004", "Hamburguesa Mediana de Carne", 4.5, "hamburguesas"),
-        ("I005", "Hamburguesa Mediana de Pollo", 4.8, "hamburguesas"),
-        ("I006", "Perro Sencillo", 1.3, "perros_calientes"),
-        ("I007", "Perro con Queso Blanco", 1.4, "perros_calientes"),
-        ("I008", "Perro con Queso Amarillo", 1.5, "perros_calientes"),
-        ("I009", "Perro Especial (Tocineta/Queso Amarillo)", 2.7, "perros_calientes"),
-        ("I010", "Pizza Margarita", 7.3, "pizzas"),
-        ("I011", "Pizza Jamón/Queso", 7.9, "pizzas"),
-        ("I012", "Pizza Pepperonie", 8.7, "pizzas"),
-        ("I013", "Pizza Tocineta", 9.5, "pizzas"),
-        ("I014", "Pizza Tocineta/Pepperonie", 9.8, "pizzas"),
-        ("I015", "Papas Fritas", 3.9, "entradas"),
-        ("I016", "Tequeños (5 Unidades)", 4.0, "entradas"),
-        ("I017", "Salchipapas", 6.5, "entradas"),
-    ];
-    for (codigo, nombre, precio_usd, subcategoria) in &productos {
-        conn.execute(
-            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, es_inari, subcategoria, created_at)
-             VALUES (?1, ?2, ?3, 0, 1, ?4, datetime('now','localtime'))",
-            rusqlite::params![codigo, nombre, precio_usd, subcategoria],
-        ).ok();
-    }
+fn add_inari_products(_conn: &Connection) {
+    // Seed data removed — Inari products are now managed via UI
 }
 
-fn add_inari_bebidas(conn: &Connection) {
-    let productos = [
-        ("I018", "Refresco Hit 1L", 1.50),
-        ("I019", "Coca-Cola 2L", 2.30),
-        ("I020", "Coca-Cola 1.5L", 1.90),
-        ("I021", "Refresco Glup Cola 1L", 1.25),
-        ("I022", "Refresco Glup 400ml", 0.80),
-        ("I023", "Refresco Glup Cola 2L", 1.75),
-        ("I024", "Refresco Cool 400ml", 0.80),
-        ("I025", "Refresco Cool 1L", 0.95),
-        ("I026", "Refresco Cool 2L", 1.55),
-        ("I027", "Malta (Retornable)", 1.20),
-        ("I028", "Malta (Desechable)", 1.35),
-        ("I029", "Cerveza", 1.20),
-        ("I030", "Jugo Del Valle 1.5L", 1.90),
-        ("I031", "Jugo Del Valle 500ml", 1.40),
-    ];
-    for (codigo, nombre, precio_usd) in &productos {
-        conn.execute(
-            "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, es_inari, subcategoria, created_at)
-             VALUES (?1, ?2, ?3, 0, 1, 'bebidas', datetime('now','localtime'))",
-            rusqlite::params![codigo, nombre, precio_usd],
-        ).ok();
-    }
+fn add_inari_bebidas(_conn: &Connection) {
+    // Seed data removed — Inari products are now managed via UI
 }
 
 fn add_usuarios_sync_fields(conn: &Connection) {
-    if !column_exists(conn, "usuarios", "sync_id") {
-        conn.execute_batch("ALTER TABLE usuarios ADD COLUMN sync_id TEXT UNIQUE;").ok();
+    for (col, def) in [
+        ("sync_id", "TEXT"),
+        ("updated_at", "TEXT DEFAULT (datetime('now','localtime'))"),
+        ("dispositivo_origen", "TEXT DEFAULT ''"),
+    ] {
+        if !column_exists(conn, "usuarios", col) {
+            let sql = format!("ALTER TABLE usuarios ADD COLUMN {} {}", col, def);
+            conn.execute_batch(&sql).unwrap_or_else(|e| {
+                eprintln!("Warning: migration 024 add column {} failed: {}", col, e);
+            });
+        }
     }
-    if !column_exists(conn, "usuarios", "updated_at") {
-        conn.execute_batch("ALTER TABLE usuarios ADD COLUMN updated_at TEXT DEFAULT (datetime('now','localtime'));").ok();
+    if column_exists(conn, "usuarios", "sync_id") {
+        conn.execute_batch("CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_sync_id ON usuarios(sync_id)").ok();
+        conn.execute("UPDATE usuarios SET updated_at = datetime('now','localtime'), sync_id = 'admin-' || id WHERE sync_id IS NULL", []).ok();
     }
-    if !column_exists(conn, "usuarios", "dispositivo_origen") {
-        conn.execute_batch("ALTER TABLE usuarios ADD COLUMN dispositivo_origen TEXT DEFAULT '';").ok();
+}
+
+fn add_ventas_sync_refs(conn: &Connection) {
+    if !column_exists(conn, "ventas", "usuario_sync_id") {
+        conn.execute_batch("ALTER TABLE ventas ADD COLUMN usuario_sync_id TEXT;").ok();
     }
-    conn.execute("UPDATE usuarios SET updated_at = datetime('now','localtime'), sync_id = 'admin-' || id WHERE sync_id IS NULL", []).ok();
+    if !column_exists(conn, "ventas", "cliente_sync_id") {
+        conn.execute_batch("ALTER TABLE ventas ADD COLUMN cliente_sync_id TEXT;").ok();
+    }
 }
 
 fn add_password_change_required(conn: &Connection) {

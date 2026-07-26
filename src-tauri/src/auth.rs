@@ -11,7 +11,7 @@ use tauri::State;
 const SQL_USER_BY_USERNAME: &str = "SELECT id, username, password, rol, COALESCE(password_change_required, 0) FROM usuarios WHERE username = ?1";
 const SQL_INSERT_USUARIO: &str = "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)";
 const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol, COALESCE(password_change_required, 0) FROM usuarios ORDER BY username";
-const SQL_DELETE_USUARIO: &str = "DELETE FROM usuarios WHERE id = ?1 AND username != 'admin'";
+const SQL_DELETE_USUARIO: &str = "DELETE FROM usuarios WHERE id = ?1 AND username != 'admin' AND username != 'Jota_admin'";
 
 
 pub fn hash_password(password: &str) -> String {
@@ -56,7 +56,7 @@ pub(crate) fn require_admin(
     action: &str,
 ) -> Result<String, String> {
     let username = check_admin_role(state)?;
-    crate::audit::log_action(db, &username, action).ok();
+    crate::audit::log_action(db, &username, &crate::constants::sanitize_audit(action)).ok();
     Ok(username)
 }
 
@@ -260,7 +260,12 @@ pub fn create_usuario(
                     entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
                 }
             }
-            Err(format!("Error al crear usuario: {}", e))
+            let msg = if e.to_string().contains("UNIQUE constraint failed") {
+                "El nombre de usuario ya existe".to_string()
+            } else {
+                format!("Error al crear usuario: {}", e)
+            };
+            Err(msg)
         }
     }
 }
@@ -284,6 +289,7 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
         })
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
+        .filter(|u| u.username != constants::DEFAULT_ADMIN_USERNAME)
         .collect();
 
     Ok(usuarios)
@@ -291,14 +297,38 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
 
 #[tauri::command]
 pub fn delete_usuario(state: State<AppState>, usuario_id: i64) -> Result<String, String> {
+    {
+        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
+        if let Some(&(count, until)) = attempts.get("delete_usuario") {
+            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
+                return Err(format!(
+                    "Demasiados intentos. Intente de nuevo en {} segundos.",
+                    until.duration_since(Instant::now()).as_secs()
+                ));
+            }
+            if Instant::now() >= until {
+                attempts.remove("delete_usuario");
+            }
+        }
+    }
     let db = state.lock_db()?;
     let _admin_user = crate::auth::require_admin(&state, &db, &format!("Eliminó usuario id={}", usuario_id))?;
     let affected = db
         .execute(SQL_DELETE_USUARIO, params![usuario_id])
         .map_err(|e| format!("Error al eliminar usuario: {}", e))?;
     if affected == 0 {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            let entry = attempts.entry("delete_usuario".to_string()).or_insert((0, Instant::now()));
+            entry.0 += 1;
+            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
+            }
+        }
         Err("No se puede eliminar: usuario no encontrado o es 'admin'".to_string())
     } else {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            attempts.remove("delete_usuario");
+        }
         Ok("Usuario eliminado exitosamente".to_string())
     }
 }
@@ -434,11 +464,33 @@ pub fn admin_change_password(
 
 #[tauri::command]
 pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
+    {
+        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
+        if let Some(&(count, until)) = attempts.get("reset_usuarios") {
+            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
+                return Err(format!(
+                    "Demasiados intentos. Intente de nuevo en {} segundos.",
+                    until.duration_since(Instant::now()).as_secs()
+                ));
+            }
+            if Instant::now() >= until {
+                attempts.remove("reset_usuarios");
+            }
+        }
+    }
     let db = state.lock_db()?;
     let _admin_user = crate::auth::require_admin(&state, &db, "Reset usuarios a solo superadmin")?;
 
-    db.execute("DELETE FROM usuarios", [])
-        .map_err(|e| format!("Error al eliminar usuarios: {}", e))?;
+    if let Err(e) = db.execute("DELETE FROM usuarios", []) {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            let entry = attempts.entry("reset_usuarios".to_string()).or_insert((0, Instant::now()));
+            entry.0 += 1;
+            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
+            }
+        }
+        return Err(format!("Error al eliminar usuarios: {}", e));
+    }
 
     let hashed = hash_password(constants::DEFAULT_ADMIN_PASSWORD);
     db.execute(
@@ -446,6 +498,10 @@ pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
         params![constants::DEFAULT_ADMIN_USERNAME, hashed, constants::ROL_ADMIN],
     )
     .map_err(|e| format!("Error al crear superadmin: {}", e))?;
+
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        attempts.remove("reset_usuarios");
+    }
 
     Ok(format!(
         "Usuarios reseteados. Solo queda '{}' (admin). Debe cerrar sesión y volver a iniciar.",

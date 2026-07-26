@@ -75,11 +75,13 @@ pub fn list_products(
     if has_inari_filter {
         where_clauses.push(if inari_val { "p.es_inari = 1" } else { "p.es_inari = 0" }.to_string());
     }
+    let subcat_val = subcategoria.clone().unwrap_or_default();
     if has_subcat {
         where_clauses.push("p.subcategoria = ?1".to_string());
-        params_vec.push(Box::new(subcategoria.unwrap()));
+        params_vec.push(Box::new(subcat_val));
     }
     if has_query {
+        // param_idx is a safe integer (1 or 2), NOT user input — no injection risk
         let param_idx = if has_subcat { 2 } else { 1 };
         where_clauses.push(format!("(p.codigo LIKE ?{} OR p.nombre LIKE ?{})", param_idx, param_idx));
         params_vec.push(Box::new(pattern.clone()));

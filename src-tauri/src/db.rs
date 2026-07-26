@@ -119,8 +119,8 @@ fn insert_default_admin(conn: &Connection) {
     if count == 0 {
         let admin_pw = crate::auth::hash_password(constants::DEFAULT_ADMIN_PASSWORD);
         conn.execute(
-            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
-            rusqlite::params![constants::DEFAULT_ADMIN_USERNAME, admin_pw, constants::ROL_ADMIN],
+            "INSERT INTO usuarios (username, password, rol, sync_id) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![constants::DEFAULT_ADMIN_USERNAME, admin_pw, constants::ROL_ADMIN, "admin-1"],
         )
         .ok();
     }

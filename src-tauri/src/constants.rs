@@ -23,6 +23,10 @@ pub const SQL_USERNAME_BY_ID: &str = "SELECT username FROM usuarios WHERE id = ?
 pub const SQL_TASA: &str = "SELECT CAST(valor AS REAL) FROM configuracion WHERE clave = 'tasa_dolar'";
 pub const SQL_DATETIME_NOW: &str = "datetime('now','localtime')";
 
+pub fn sanitize_audit(s: &str) -> String {
+    s.chars().filter(|&c| c != '\n' && c != '\r' && c != '\t').take(500).collect()
+}
+
 // Config keys
 pub const CFG_TASA_DOLAR: &str = "tasa_dolar";
 pub const CFG_TASA_UPDATED_AT: &str = "tasa_updated_at";
@@ -74,3 +78,17 @@ pub const INARI_DIAS: [u32; 4] = [4, 5, 6, 0]; // jueves, viernes, sábado, domi
 
 // Rounding
 pub const ROUNDING_FACTOR: f64 = 100.0;
+
+// Payment method labels (must match METODO_LABELS in constants.js)
+pub fn metodo_label(key: &str) -> &str {
+    match key {
+        "efectivo_bs" => "Efectivo Bs.",
+        "efectivo_usd" => "Efectivo USD",
+        "pago_movil" => "Pago Móvil",
+        "punto" => "Punto",
+        "biopago" => "Biopago",
+        "credito" => "Crédito",
+        "mixto" => "Mixto",
+        _ => key,
+    }
+}

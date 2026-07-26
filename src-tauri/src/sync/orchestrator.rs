@@ -193,10 +193,10 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
     let r1 = upload_products_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo clientes...", 2, total);
     let r2 = upload_clientes_inner(&db, &supabase_url, &supabase_key)?;
-    emit_progress(&app_handle, "Subiendo ventas...", 3, total);
-    let r3 = upload_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Subiendo usuarios...", 4, total);
-    let r4 = upload_usuarios_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Subiendo usuarios...", 3, total);
+    let r3 = upload_usuarios_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Subiendo ventas...", 4, total);
+    let r4 = upload_sales_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)?;
 
     Ok(format!("{}\n{}\n{}\n{}", r1, r2, r3, r4))
 }
@@ -236,10 +236,10 @@ pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<
     let r1 = upload_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo clientes...", 2, total);
     let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key)?;
-    emit_progress(&app_handle, "Subiendo ventas...", 3, total);
-    let r3 = upload_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Subiendo usuarios...", 4, total);
-    let r4 = upload_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Subiendo usuarios...", 3, total);
+    let r3 = upload_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+    emit_progress(&app_handle, "Subiendo ventas...", 4, total);
+    let r4 = upload_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Descargando productos...", 5, total);
     let r5 = download_products_inner(&tx, &supabase_url, &supabase_key)?;
     emit_progress(&app_handle, "Descargando clientes...", 6, total);

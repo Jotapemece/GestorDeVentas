@@ -11,7 +11,7 @@ pub(crate) fn upload_products_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
-    dispositivo_id: &str,
+    _dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -62,7 +62,6 @@ pub(crate) fn upload_products_inner(
                 "categoria_id": if cat_id == 0 { serde_json::Value::Null } else { json!(cat_id) },
                 "es_inari": row.get::<_, i64>(7)?,
                 "subcategoria": row.get::<_, String>(8)?,
-                "dispositivo_id": dispositivo_id,
                 "updated_at": &*ts,
             }))
         })

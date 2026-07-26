@@ -149,10 +149,12 @@
           <button class="nav-btn admin-only" data-view="sync">
             <span class="nav-icon"><i class="nf nf-fa-cloud_upload"></i></span>
             <span class="nav-text">Sync</span>
+            <span id="sync-nav-conflicts" class="nav-badge hidden" title="Conflictos pendientes">0</span>
           </button>
         </nav>
         <div class="sidebar-footer">
           <div class="sidebar-version">InariMarket v1.0</div>
+          <div id="sync-indicator" class="sync-indicator" title="Estado de sincronización"><i class="nf nf-fa-cloud"></i> <span id="sync-indicator-text">-</span></div>
           <button id="logout-btn"><i class="nf nf-fa-sign_out"></i> Salir</button>
         </div>
       </aside>
@@ -458,6 +460,11 @@
               </thead>
               <tbody id="report-sales-body"></tbody>
             </table>
+            <div id="report-pagination" class="pagination-controls" style="display:none;margin-top:12px;justify-content:center;align-items:center;gap:8px">
+              <button id="report-prev-btn" class="btn btn-sm btn-outline" disabled><i class="nf nf-fa-chevron_left"></i> Anterior</button>
+              <span id="report-page-info"></span>
+              <button id="report-next-btn" class="btn btn-sm btn-outline">Siguiente <i class="nf nf-fa-chevron_right"></i></button>
+            </div>
           </div>
         </section>
 
@@ -664,6 +671,9 @@
                 <button id="create-user-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-plus"></i> Crear</button>
               </div>
               <div class="table-container" style="margin-top:12px">
+                <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
+                  <button id="user-list-refresh-btn" class="btn btn-sm btn-outline" title="Actualizar lista"><i class="nf nf-fa-refresh"></i></button>
+                </div>
                 <table class="table compact-table">
                   <thead><tr><th>Usuario</th><th>Rol</th><th>Acci&oacute;n</th></tr></thead>
                   <tbody id="user-list-body"></tbody>
@@ -763,20 +773,20 @@
               <div class="sync-col">
                 <div class="sync-card">
                   <h3><i class="nf nf-fa-link"></i> Conexi&oacute;n</h3>
-                  <div style="display:flex;flex-direction:column;gap:10px">
-                    <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co" readonly aria-label="URL de Supabase">
-                    <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_..." readonly aria-label="Clave anónima de Supabase">
-                    <button id="view-device-id-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-tag"></i> Ver ID</button>
-                    <div id="device-id-display" style="font-size:12px;color:var(--text-light);word-break:break-all;display:none"></div>
-                    <div style="display:flex;gap:8px;align-items:center">
-                      <button id="test-connection-btn" class="btn btn-outline btn-sm" style="flex:1;justify-content:center"><i class="nf nf-fa-plug"></i> Probar conexi&oacute;n</button>
-                      <span id="connection-status" style="font-size:20px" title="Sin probar">&bull;</span>
+                    <div class="sync-flex-col">
+                      <input type="text" id="sync-url" class="form-input" placeholder="https://xxxx.supabase.co" readonly aria-label="URL de Supabase">
+                      <input type="password" id="sync-key" class="form-input" placeholder="sb_publishable_..." readonly aria-label="Clave anónima de Supabase">
+                      <button id="view-device-id-btn" class="btn btn-outline btn-sm sync-btn-center"><i class="nf nf-fa-tag"></i> Ver ID</button>
+                      <div id="device-id-display" class="sync-device-id"></div>
+                      <div class="sync-flex-row">
+                        <button id="test-connection-btn" class="btn btn-outline btn-sm" style="flex:1;justify-content:center"><i class="nf nf-fa-plug"></i> Probar conexi&oacute;n</button>
+                        <span id="connection-status" class="sync-connection-status" title="Sin probar">&bull;</span>
+                      </div>
                     </div>
-                  </div>
                 </div>
                 <div class="sync-card">
                   <h3><i class="nf nf-fa-history"></i> &Uacute;ltima sincronizaci&oacute;n</h3>
-                  <div id="sync-detail-status" style="font-size:12px;color:var(--text-secondary);display:flex;flex-direction:column;gap:6px">
+                  <div id="sync-detail-status" class="sync-detail-status">
                     <span>Subir productos: <span id="sync-upload-time">-</span></span>
                     <span>Descargar productos: <span id="sync-download-time">-</span></span>
                     <span>Subir ventas: <span id="sync-upload-sales-time">-</span></span>
@@ -789,63 +799,63 @@
                 </div>
                 <div class="sync-card">
                   <h3><i class="nf nf-fa-warning"></i> Conflictos</h3>
-                  <div style="display:flex;flex-direction:column;gap:10px">
-                    <div style="display:flex;align-items:center;justify-content:space-between">
-                      <span style="font-size:14px;color:var(--text)">Pendientes</span>
+                  <div class="sync-flex-col">
+                    <div class="sync-space-between">
+                      <span class="sync-text">Pendientes</span>
                       <span id="conflict-count" class="text-muted">0</span>
                     </div>
-                    <button id="view-conflicts-btn" class="btn btn-outline btn-sm" style="justify-content:center"><i class="nf nf-fa-search"></i> Ver conflictos</button>
+                    <button id="view-conflicts-btn" class="btn btn-outline btn-sm sync-btn-center"><i class="nf nf-fa-search"></i> Ver conflictos</button>
                   </div>
                 </div>
               </div>
               <div class="sync-col">
                 <div class="sync-card">
                   <h3><i class="nf nf-fa-cog"></i> Acciones</h3>
-                  <div style="display:flex;flex-direction:column;gap:10px">
+                  <div class="sync-flex-col">
                     <button id="sync-all-btn" class="btn btn-primary sync-btn-full"><i class="nf nf-fa-sync" style="font-size:20px;display:block;margin-bottom:4px"></i> Sincronizar todo</button>
-                    <details style="font-size:13px">
-                      <summary style="cursor:pointer;color:var(--text-light);padding:6px 0;user-select:none"><i class="nf nf-fa-chevron_right" style="font-size:11px"></i> Avanzado</summary>
+                    <details class="details-sm">
+                      <summary class="sync-summary">Avanzado</summary>
                       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-                        <button id="upload-all-btn" class="sync-btn-adv" style="background:var(--primary);color:#fff"><i class="nf nf-fa-cloud_upload" style="font-size:16px;display:block;margin-bottom:2px"></i> Subir todo</button>
-                        <button id="download-all-btn" class="sync-btn-adv" style="background:var(--accent);color:#fff"><i class="nf nf-fa-cloud_download" style="font-size:16px;display:block;margin-bottom:2px"></i> Descargar todo</button>
+                        <button id="upload-all-btn" class="sync-btn-adv sync-btn-primary"><i class="nf nf-fa-cloud_upload sync-btn-icon-block"></i> Subir todo</button>
+                        <button id="download-all-btn" class="sync-btn-adv sync-btn-accent"><i class="nf nf-fa-cloud_download sync-btn-icon-block"></i> Descargar todo</button>
                         <div class="dropdown-divider" style="margin:4px 0"></div>
-                        <button id="upload-usuarios-btn" class="sync-btn-adv" style="background:var(--card);color:var(--text);border:1px solid var(--border)"><i class="nf nf-fa-cloud_upload" style="font-size:14px;display:block;margin-bottom:2px"></i> Subir usuarios</button>
-                        <button id="download-usuarios-btn" class="sync-btn-adv" style="background:var(--card);color:var(--text);border:1px solid var(--border)"><i class="nf nf-fa-cloud_download" style="font-size:14px;display:block;margin-bottom:2px"></i> Descargar usuarios</button>
+                        <button id="upload-usuarios-btn" class="sync-btn-adv sync-btn-outline"><i class="nf nf-fa-cloud_upload sync-btn-icon-block"></i> Subir usuarios</button>
+                        <button id="download-usuarios-btn" class="sync-btn-adv sync-btn-outline"><i class="nf nf-fa-cloud_download sync-btn-icon-block"></i> Descargar usuarios</button>
                       </div>
                     </details>
                   </div>
                 </div>
                 <div class="sync-card">
                   <h3>
-                    <i class="nf nf-fa-clock" style="color:var(--primary)"></i> Sincronizaci&oacute;n autom&aacute;tica
+                    <i class="nf nf-fa-clock sync-icon-primary"></i> Sincronizaci&oacute;n autom&aacute;tica
                     <span class="sync-auto-badge">Activo</span>
                   </h3>
-                  <div style="display:flex;flex-direction:column;gap:12px">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-                      <div style="display:flex;align-items:center;gap:6px">
-                        <i class="nf nf-fa-refresh" style="font-size:14px;color:var(--primary)"></i>
-                        <span style="font-size:13px;color:var(--text)">Intervalo de descarga</span>
+                  <div class="sync-flex-col sync-gap-12">
+                    <div class="sync-space-between" style="gap:12px">
+                      <div class="sync-flex-row" style="gap:6px">
+                        <i class="nf nf-fa-refresh sync-icon-primary" style="font-size:14px"></i>
+                        <span class="sync-text-sm">Intervalo de descarga</span>
                       </div>
-                      <div style="display:flex;align-items:center;gap:6px">
-                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" style="width:56px;padding:4px 8px;border:2px solid var(--primary);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:center;font-weight:600" aria-label="Intervalo de sincronización automática en minutos">
-                        <span style="font-size:12px;color:var(--text-light);min-width:28px">min</span>
+                      <div class="sync-flex-row" style="gap:6px">
+                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" class="sync-input-interval" aria-label="Intervalo de sincronización automática en minutos">
+                        <span class="sync-text-light" style="min-width:28px">min</span>
                       </div>
                     </div>
                     <div class="sync-auto-info">
-                      <i class="nf nf-fa-info_circle" style="font-size:12px;color:var(--primary);flex-shrink:0"></i>
+                      <i class="nf nf-fa-info_circle sync-icon-primary" style="font-size:12px;flex-shrink:0"></i>
                       <span>Despu&eacute;s de cada venta se sube autom&aacute;ticamente. Este timer descarga datos de otros dispositivos en segundo plano.</span>
                     </div>
                   </div>
                 </div>
                 <div class="sync-card">
                   <h3>
-                    <i class="nf nf-fa-display" style="color:var(--primary)"></i> Dispositivos vinculados
-                    <button id="refresh-devices-btn" class="btn btn-outline btn-sm" style="margin-left:auto;padding:2px 10px;font-size:12px" title="Actualizar lista">
+                    <i class="nf nf-fa-display sync-icon-primary"></i> Dispositivos vinculados
+                    <button id="refresh-devices-btn" class="btn btn-outline btn-sm sync-refresh-btn" title="Actualizar lista">
                       <i class="nf nf-fa-refresh"></i>
                     </button>
                   </h3>
                   <div id="linked-devices-container">
-                    <p class="text-muted text-sm" style="font-size:12px">Presiona <i class="nf nf-fa-refresh" style="font-size:11px"></i> para cargar.</p>
+                    <p class="text-muted text-sm sync-init-text">Presiona <i class="nf nf-fa-refresh sync-init-icon"></i> para cargar.</p>
                   </div>
                 </div>
               </div>
@@ -1651,6 +1661,15 @@
     </div>
   </div>
 
+  <script src="constants.js"></script>
+  <script src="utils.js"></script>
+  <script src="views.js"></script>
+  <script src="sync-view.js"></script>
+  <script src="inventory-view.js"></script>
+  <script src="clients-view.js"></script>
+  <script src="cashier-view.js"></script>
+  <script src="config-view.js"></script>
+  <script src="reports-view.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
