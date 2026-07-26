@@ -113,22 +113,93 @@ let soundVolume = 0.5;
 let auditOffset = 0;
 let auditLimit = AUDIT_LIMIT_DEFAULT;
 
+/* ========== TOAST QUEUE ========== */
+let toastQueue = [];
+let toastVisible = 0;
+
 function hideToast(el) {
   if (el._closing) return;
   el._closing = true;
-  el.classList.add('fade-out');
-  setTimeout(() => { el.classList.add('hidden'); el.classList.remove('fade-out'); el._closing = false; }, TOAST.FADE_MS);
+  el.classList.add('exit');
+  setTimeout(() => {
+    el.remove();
+    toastVisible--;
+    if (toastQueue.length > 0) {
+      const next = toastQueue.shift();
+      showToast(next.msg, next.type, next.action);
+    }
+  }, TOAST.FADE_MS);
 }
 
-function showToast(msg, type = 'success') {
-  const t = qs(SEL.toast);
-  t.textContent = msg;
-  t.className = 'toast ' + type;
-  t.classList.remove('hidden', 'fade-out');
-  t._closing = false;
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => hideToast(t), TOAST.DURATION);
-  t.onclick = () => { clearTimeout(t._timer); hideToast(t); };
+function showToast(msg, type = 'success', action) {
+  const cfg = TOAST.TYPES[type] || TOAST.TYPES.info;
+  const container = qs(SEL.toastContainer);
+  if (!container) return;
+
+  if (toastVisible >= TOAST.MAX_VISIBLE) {
+    toastQueue.push({ msg, type, action });
+    return;
+  }
+
+  const el = document.createElement('div');
+  el.className = 'toast';
+
+  const border = document.createElement('div');
+  border.className = 'toast-border';
+  border.style.border = '2px solid ' + cfg.color;
+  border.style.animationDuration = cfg.duration + 'ms';
+  el.appendChild(border);
+
+  const icon = document.createElement('i');
+  icon.className = 'nf ' + cfg.icon + ' toast-icon';
+  icon.style.color = cfg.color;
+  el.appendChild(icon);
+
+  const msgSpan = document.createElement('span');
+  msgSpan.className = 'toast-msg';
+  msgSpan.textContent = msg;
+  el.appendChild(msgSpan);
+
+  if (action && action.label && action.callback) {
+    const actBtn = document.createElement('button');
+    actBtn.className = 'toast-action';
+    actBtn.textContent = action.label;
+    actBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      action.callback();
+      hideToast(el);
+    });
+    el.appendChild(actBtn);
+  }
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'toast-close';
+  closeBtn.innerHTML = '&times;';
+  closeBtn.setAttribute('aria-label', 'Cerrar');
+  closeBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    hideToast(el);
+  });
+  el.appendChild(closeBtn);
+
+  el.addEventListener('click', function() {
+    hideToast(el);
+  });
+
+  // Swipe to dismiss on mobile
+  if (IS_ANDROID || window.innerWidth <= 768) {
+    let startX = 0;
+    el.addEventListener('touchstart', function(e) {
+      startX = e.touches[0].clientX;
+    }, { passive: true });
+    el.addEventListener('touchend', function(e) {
+      const dx = e.changedTouches[0].clientX - startX;
+      if (dx > 60) hideToast(el);
+    }, { passive: true });
+  }
+
+  container.appendChild(el);
+  toastVisible++;
 }
 
 function qs(sel) { return document.querySelector(sel); }

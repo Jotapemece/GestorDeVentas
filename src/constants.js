@@ -86,7 +86,16 @@ const CFG_SUPABASE_KEY = 'supabase_key';
 const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
 
 // UI Timing & Layout Constants
-const TOAST = { DURATION: 3000, FADE_MS: 300 };
+const TOAST = {
+  TYPES: {
+    success: { icon: 'nf-fa-check_circle', duration: 3000, color: 'var(--accent)' },
+    error: { icon: 'nf-fa-ban', duration: 5000, color: 'var(--danger)' },
+    warning: { icon: 'nf-fa-warning', duration: 4000, color: 'var(--danger)' },
+    info: { icon: 'nf-fa-info_circle', duration: 3000, color: 'var(--primary)' },
+  },
+  MAX_VISIBLE: 5,
+  FADE_MS: 300,
+};
 const KEYBOARD = { THRESHOLD: 100, PAD_OFFSET: 40, SCROLL_DELAY_MS: 300 };
 const SIDEBAR = { HIDE_DELAY: 250, HOVER_MARGIN: 14, HOVER_CHECK_MS: 350 };
 const DROPDOWN = { MIN_PADDING: 4 };
@@ -195,7 +204,7 @@ function setCustomSelectValue(wrap, value) {
 /* ========== SELECTORS ========== */
 const SEL = {
   // --- Toast & Print ---
-  toast: '#toast',
+  toastContainer: '#toast-container',
   printFrame: '#print-frame',
 
 
