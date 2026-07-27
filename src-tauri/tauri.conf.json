@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.gestor-ventas.app",
   "build": {
-    "frontendDist": "../src",
-    "beforeBuildCommand": ""
+    "frontendDist": "../dist",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "node scripts/minify.mjs"
   },
   "app": {
     "withGlobalTauri": true,

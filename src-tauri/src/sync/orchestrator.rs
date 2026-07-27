@@ -137,7 +137,8 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
     }
 
     let body = json!({"nombre": nombre, "huella": huella}).to_string();
-    let resp = ureq::post(&api_url(&supabase_url, "/dispositivos"))
+    let resp = super::supabase_agent()
+        .post(&api_url(&supabase_url, "/dispositivos"))
         .set("apikey", &supabase_key)
         .set("Authorization", &format!("Bearer {}", &supabase_key))
         .set("Content-Type", "application/json")
@@ -326,7 +327,8 @@ pub fn test_supabase_connection(state: State<AppState>) -> Result<bool, String> 
 
     let test_url = api_url(&supabase_url, "/productos?select=codigo&limit=1");
 
-    match ureq::get(&test_url)
+    match super::supabase_agent()
+        .get(&test_url)
         .set("apikey", &supabase_key)
         .set("Authorization", &format!("Bearer {}", &supabase_key))
         .call()

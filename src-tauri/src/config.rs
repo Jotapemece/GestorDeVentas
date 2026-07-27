@@ -1,5 +1,6 @@
 use crate::db::AppState;
 use rusqlite::params;
+use std::time::Instant;
 use tauri::State;
 
 const SQL_GET_CONFIG: &str = "SELECT valor FROM configuracion WHERE clave = ?1";
@@ -23,10 +24,45 @@ pub fn set_config_value(
     key: String,
     value: String,
 ) -> Result<(), String> {
+    {
+        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
+        if let Some(&(count, until)) = attempts.get("set_config_value") {
+            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
+                return Err(format!(
+                    "Demasiados intentos. Intente de nuevo en {} segundos.",
+                    until.duration_since(Instant::now()).as_secs()
+                ));
+            }
+            if Instant::now() >= until {
+                attempts.remove("set_config_value");
+            }
+        }
+    }
     let db = state.lock_db()?;
-    crate::auth::check_admin_role(&state)?;
+    if let Err(e) = crate::auth::check_admin_role(&state) {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            let entry = attempts.entry("set_config_value".to_string()).or_insert((0, Instant::now()));
+            entry.0 += 1;
+            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
+            }
+        }
+        return Err(e);
+    }
     db.execute(SQL_UPSERT_CONFIG, params![key, value])
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+                let entry = attempts.entry("set_config_value".to_string()).or_insert((0, Instant::now()));
+                entry.0 += 1;
+                if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
+                    entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
+                }
+            }
+            e.to_string()
+        })?;
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        attempts.remove("set_config_value");
+    }
     Ok(())
 }
 

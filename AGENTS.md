@@ -10,10 +10,23 @@
 
 ### Desarrollo
 ```sh
-npm run dev        # Inicia servidor Tauri (Rust + frontend)
-# F5 en frontend solo refresca HTML/JS/CSS (sin dev server)
+npm run dev        # Minifica frontend + inicia servidor Tauri (Rust + frontend)
+# F5 en frontend solo refresca HTML/JS/CSS (sin dev server, minificado)
 # Para cambios en Rust, reiniciar npm run dev
+# Para cambios en frontend JS/HTML/CSS, solo recargar F5 (dist/ se regenera)
 ```
+
+### Build (producción)
+```sh
+npm run build      # Minifica frontend + compila Rust + empaqueta
+```
+
+### Frontend minification
+- `scripts/minify.mjs` — usa esbuild para minificar JS/CSS + minificación simple de HTML
+- Se ejecuta automáticamente en `beforeDevCommand` y `beforeBuildCommand`
+- Salida en `dist/` (no versionado, generado automáticamente)
+- Fuente original en `src/` (editar aquí, se regenera al hacer build/dev)
+- `fa-local.css` se copia sin modificar (necesita el `@font-face` intacto)
 
 ### Android
 ```sh
@@ -29,8 +42,9 @@ npm run tauri build                     # Genera instalador NSIS en src-tauri/ta
 
 ### Testing
 ```sh
-cd src-tauri && cargo test --lib        # 29 tests (auth, config, sales, sync)
+cd src-tauri && cargo test --lib        # 80 tests (auth, config, sales, sync, clients, cashier)
 cd src-tauri && cargo check             # Verifica compilación Rust
+node --check src/*.js && node --check dist/*.js   # Verifica JS (src y minificado)
 ```
 
 ## Estructura del proyecto
@@ -54,15 +68,23 @@ cd src-tauri && cargo check             # Verifica compilación Rust
 - `src/constants.rs` — Constantes (métodos de pago, config keys)
 
 ### `src/` (frontend)
-- `app.js` — Toda la lógica frontend (~3047 líneas)
-- `style.css` — Estilos con temas (oscuro, claro, azul, verde, morado, turquesa, naranja)
+- `app.js` — Lógica principal frontend (~1520 líneas, eventos globales, init)
+- `views.js` — Login, logout, navegación, guía, calculadora (694 líneas)
+- `cashier-view.js` — Caja POS: carrito, tasa, productos recientes (1068 líneas)
+- `config-view.js` — Configuración, auditoría, temas (241 líneas)
+- `inventory-view.js` — Inventario, productos, combos Inari
+- `clients-view.js` — Clientes, créditos, abonos (363 líneas)
+- `constants.js` — Constantes, `SEL` (objeto de selectores DOM), config keys (615 líneas)
+- `utils.js` — Utilidades: `qs`, `showToast`, `invoke`, `confirmModal`, `initTableSorting`, `initConnectionMonitor` (635 líneas)
+- `style.css` — Estilos con temas (oscuro, claro, azul, verde, morado, turquesa, naranja, rubí)
 - `index.html` — HTML único con todas las vistas y modales
 - `fa-local.css` — Iconos Font Awesome 6 Free autogenerados
 
 ## Base de datos
 - Archivo: `gestor_ventas.db` (SQLite, se crea automáticamente)
 - Backup: botón en Config → `backup_database` copia a `gestor_ventas_backup_YYYYMMDD_HHMMSS.db`
-- Migraciones en `migrations.rs` (014 actual: `sync_id`, `dispositivo_origen`, `updated_at` en `ventas`; `sync_id` en `detalles_ventas`; tabla `ajustes_stock`)
+- Migraciones en `migrations.rs` (019 actual: `password_change_required` en `usuarios`, `sync_id`/`updated_at` en `clientes`, `updated_at` en `productos`, tabla `conflictos`, `ajustes_stock`)
+- Backups cifrados con AES-256-GCM, clave almacenada en config (`backup_key`)
 
 ## Supabase Sync
 - Proyecto: `https://xryvxaslbtouihbulonw.supabase.co`
@@ -105,13 +127,47 @@ cd src-tauri && cargo check             # Verifica compilación Rust
 ## Convenciones
 - Las vistas son `<section class="view" id="view-{name}">`
 - `showView('{name}')` activa/desactiva vistas
-- Los IDs de elementos se definen en `const SEL = { ... }` en app.js
+- Los IDs de elementos se definen en `const SEL = { ... }` en constants.js
+- Todos los selectores DOM estáticos deben estar en `SEL`; usar `qs(SEL.xxx)` no `document.getElementById(...)`
 - `escapeHtml()` para todo texto insertado como HTML (XSS)
 - `invoke('comando', { arg })` para llamadas Tauri
 - `productCache` se usa en Caja para búsqueda de productos; refrescar con `loadProductCache()` tras descargar productos/ventas
 - `showToast(msg, type)` para notificaciones
 - `confirmModal(text, title, confirmLabel)` para confirmaciones
 - `playSound('add'|'remove')` para sonidos
+
+## Enar — Asistente IA integrado (chat)
+
+Enar es un asistente tipo zorro integrado como FAB flotante. Se comunica con OpenRouter API.
+
+### Config
+- **API Key**: `openrouter_api_key` en `configuracion` (configurable en Config → IA).
+- **Model**: `openrouter_model` (default `openrouter/free`).
+- **Toggle**: `ia_habilitado` en config, oculta/muestra el FAB.
+
+### Cómo funciona
+1. Usuario abre el chat (FAB flotante, arrastrable con persistencia en localStorage).
+2. Al enviar mensaje, `handleChatSend()` (views.js) recolecta **10 llamadas paralelas** a Tauri para contexto: productos, tasa, caja, ventas hoy, métodos de pago, dashboard, top productos, stock bajo, clientes con deuda.
+3. Construye `CHAT_SYSTEM_PROMPT` con esos datos y lo envía a `openrouter::chat_with_ai` (openrouter.rs).
+4. Backend envía POST a `https://openrouter.ai/api/v1/chat/completions` con `frequency_penalty: 1.0`, `reasoning.max_tokens: 0`.
+5. La respuesta se renderiza con Markdown (bold, italic, code, line breaks) y botón "Copiar".
+6. Chat history `chatHistory[]` en memoria (se pierde al recargar).
+
+### Contexto que Enar recibe
+- Productos activos (20), tasa, caja abierta/cerrada, categorías, ventas de hoy, métodos de pago, dashboard (hoy/semana/mes), top 3 productos, stock bajo (top 5), clientes con deuda (top 5).
+
+### Capacidades
+- **Solo lectura**: no ejecuta comandos Tauri de escritura.
+- **Órdenes de compra**: botón "Generar orden de compra" → `generate_purchase_suggestion` (openrouter.rs) que consulta productos con `stock < stock_minimo` y pide una tabla al AI.
+- **Prompts rápidos**: "Stock bajo", "Ventas hoy", "Deudas".
+- **Modo expandido**: el panel puede agrandarse a 520×600px.
+- **Tema oscuro**: tiene overrides específicos para sombras del FAB.
+
+### Archivos clave
+- `src/views.js:476` — `CHAT_SYSTEM_PROMPT` (prompt del sistema)
+- `src-tauri/src/openrouter.rs` — `chat_with_ai`, `generate_purchase_suggestion`, `ChatMessage`
+- `src/constants.js` — `CFG_IA_HABILITADO`, `CFG_OPENROUTER_API_KEY`, `CFG_OPENROUTER_MODEL`
+- `src/index.html` — FAB, chat panel, suggestion modal, configuración IA
 
 ## Android build
 - SDK mínimo: 24 (Android 7.0)
@@ -219,46 +275,44 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 ## Work State
 
 ### Objective
-Features POS: roles de vendedor, cifrado backups, mejoras mobile, tema oscuro, fix modelo OpenRouter.
+Auditoría: race conditions, selectores SEL, paginación, rate limiting, contraseñas por defecto.
 
 ### Completed (this session)
-- **View transitions**: exit animation (`.view-exit` 100ms fade-out) before swapping views in `showView` (sync-view.js:98)
-- **Focus management**: `showModal` saves `document.activeElement`, `closeModal` restores it (utils.js:335-343)
-- **Offline indicator**: `#offline-indicator` in sidebar + `initConnectionMonitor()` monitors `navigator.onLine` (utils.js + app.js:2)
-- **Inline validation**: `field-error` divs in product/client modals, `clearProductErrors()`/`showProductError()` for inline errors instead of `showToast` (inventory-view.js, clients-view.js)
-- **Table sorting**: `initTableSorting(tableId)` generic, `data-sortable` + `sort-arrow` on all table headers, triggered by `viewChanged` event (utils.js + index.html + style.css)
-- **Loading states**: `showSyncProgress()` / `hideSyncProgress()` added to upload_usuarios and download_usuarios handlers (app.js:657-700)
-- **Sync progress**: all 4 individual sync operations (upload_usuarios, download_usuarios, upload_all, download_all) plus sync_all now show progress modal
-- **Tests**: 146 passed (80 Rust + 66 JS), `cargo check` ✅, `node --check` ✅
+- **Race conditions**: `delete_product`, `create_sale`, `void_sale`, `change_password` ahora envuelven read+write en transacciones (products.rs, sales.rs, auth.rs)
+- **SEL selectors**: agregados 9 IDs + 2 selectores a `SEL` en constants.js; migrados todos los `document.getElementById()` y `qs('...')` hardcodeados en app.js, utils.js, cashier-view.js, config-view.js, views.js, clients-view.js
+- **list_sales pagination**: ahora acepta `page`/`page_size`, retorna `PaginatedResult<Venta>` (sales.rs)
+- **Rate limiting**: `set_config_value` y `void_sale` protegidos con `admin_action_attempts` (config.rs, sales.rs)
+- **Default password**: `reset_usuarios` crea admin con `password_change_required=1`; frontend activó handler forzando cambio de contraseña (auth.rs, views.js)
+- **Tests**: 80 Rust passed, `cargo check` ✅, `node --check` ✅ en todos los JS
 
 ### Active
 - (ninguno)
 
 ### Next Move
+- Auditoría: DRY Rust (A2.5), SQL injection surface (A2.7), HTML templates inline (A2.9)
 - Probar build Android / Windows
-- Según feedback del usuario
 
 ---
 
 ## Auditoría Plan
 
 ### Fase 1 — Integridad de datos (bugs)
-1. Revisar cada `#[tauri::command]` con ≥2 writes — ¿en transacción?
+1. Revisar cada `#[tauri::command]` con ≥2 writes — ¿en transacción? ✅ (create_product, create_sale, void_sale, pay_debt, delete_cliente, set_tasa, import_products, replace_all_products todos en transacción)
 2. Stock inconsistencies: `void_sale` sync, doble descarga, stock negativo paths
-3. Race conditions: read-then-write sin lock atómico
+3. Race conditions: read-then-write sin lock atómico ✅ (delete_product, create_sale, void_sale, change_password fijados con transacciones)
 4. Error paths silenciosos: `unwrap()`, `.ok()`, `catch(_)` que traguen errores
 
 ### Fase 2 — Deuda técnica (normas)
 5. DRY Rust: lógica repetida sales/clients/sync
-6. Anti-hardcoding JS: strings remanentes
+6. Anti-hardcoding JS: strings remanentes ✅ (todos los `document.getElementById()` migrados a `qs(SEL.xxx)`)
 7. SQL injection surface: `format!()` con input de usuario
-8. Selectores DOM fuera de `SEL`
+8. Selectores DOM fuera de `SEL` ✅ (12 IDs + 2 selectores agregados a SEL, migradas todas las referencias)
 9. HTML templates inline vs `<template>`
 
 ### Fase 3 — Performance
-10. N+1 queries (reportes, historial)
-11. Paginación faltante (list_sales)
+10. N+1 queries (reportes, historial) ✅ (no se encontraron N+1 significativos; reportes usan batch fetching, void_sale_items loop es pequeño y está en transacción)
+11. Paginación faltante (list_sales) ✅ (list_sales ahora acepta page/page_size, retorna PaginatedResult<Venta>)
 
 ### Fase 4 — Seguridad
-12. Rate limiting faltante (create_usuario, change_password)
-13. Default passwords: forzar cambio
+12. Rate limiting faltante (create_usuario, change_password) ✅ (ya tenían rate limiting via admin_action_attempts; se agregó a set_config_value y void_sale)
+13. Default passwords: forzar cambio ✅ (reset_usuarios crea con password_change_required=1; frontend activó handler de cambio forzado)

@@ -105,7 +105,7 @@ function addRecentProduct(codigo) {
 }
 
 function renderRecentProducts() {
-  var container = document.getElementById('recent-products');
+  var container = qs(SEL.recentProducts);
   if (!container) return;
   if (recentProducts.length === 0) { container.style.display = 'none'; return; }
   container.style.display = '';
@@ -342,7 +342,7 @@ function unholdCart(cartId) {
 }
 
 function renderCartTabs() {
-  var container = document.getElementById('cart-tabs');
+  var container = qs(SEL.cartTabs);
   if (!container) return;
   var held = carts.filter(function(c) { return c.folded && c.items.length > 0; });
   if (held.length === 0) {

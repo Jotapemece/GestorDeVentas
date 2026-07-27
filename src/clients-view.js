@@ -190,7 +190,7 @@ async function confirmAbono() {
   qs(SEL.abonoConfirmBtn).disabled = true;
   const monto = parseInput(qs(SEL.abonoMonto).value);
   if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
-  const metodoBtn = qs('.abono-metodo-btn.active');
+  const metodoBtn = qs(SEL.abonoMetodoBtnActive);
   if (!metodoBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
   const metodo = metodoBtn.dataset.method;
   let referencia = null, pago_detalle = null;

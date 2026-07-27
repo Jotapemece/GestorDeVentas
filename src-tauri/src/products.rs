@@ -216,24 +216,30 @@ pub fn set_product_inari(
 
 #[tauri::command]
 pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, String> {
-    let db = state.lock_db()?;
+    let mut db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
         &format!("Eliminó producto código '{}'", codigo),
     )?;
 
-    let has_sales: bool = db
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+
+    let has_sales: bool = tx
         .query_row(SQL_HAS_SALES, params![codigo], |row| row.get(0))
         .map_err(|e| format!("Error al verificar ventas del producto: {}", e))?;
 
     if has_sales {
-        db.execute(SQL_SOFT_DELETE, params![codigo])
+        tx.execute(SQL_SOFT_DELETE, params![codigo])
             .map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())?;
         return Ok("Producto desactivado (tiene historial de ventas). Stock puesto a 0.".to_string());
     }
-    match db.execute(SQL_DELETE_PRODUCTO, params![codigo]) {
-        Ok(_) => Ok("Producto eliminado exitosamente".to_string()),
+    match tx.execute(SQL_DELETE_PRODUCTO, params![codigo]) {
+        Ok(_) => {
+            tx.commit().map_err(|e| e.to_string())?;
+            Ok("Producto eliminado exitosamente".to_string())
+        }
         Err(e) => Err(format!("Error al eliminar producto: {}", e)),
     }
 }

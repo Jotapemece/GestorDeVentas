@@ -583,6 +583,29 @@ const SEL = {
   moreMenu: '#more-menu',
   moreWrap: '#more-wrap',
 
+  // --- Changelog ---
+  changelogBtn: '#changelog-btn',
+  changelogModal: '#changelog-modal',
+  changelogClose: '#changelog-close',
+
+  // --- Cart hold / recent products ---
+  recentProducts: '#recent-products',
+  cartTabs: '#cart-tabs',
+  holdCartBtn: '#hold-cart-btn',
+
+  // --- Connection / Sync ---
+  offlineIndicator: '#offline-indicator',
+
+  // --- Audit ---
+  auditSentinel: '#audit-sentinel',
+
+  // --- Users ---
+  resetUsersBtn: '#reset-users-btn',
+
+  // --- Selectors ---
+  guideTabActive: '.guide-tab.active',
+  abonoMetodoBtnActive: '.abono-metodo-btn.active',
+
   // --- Misc missing ---
   sidebar: '#sidebar',
   syncAutoInterval: '#sync-auto-interval',

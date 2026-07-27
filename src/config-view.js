@@ -15,7 +15,7 @@ function disconnectAuditObserver() {
 
 function initAuditObserver() {
   disconnectAuditObserver();
-  var sentinel = document.getElementById('audit-sentinel');
+  var sentinel = qs(SEL.auditSentinel);
   if (!sentinel) return;
   auditObserver = new IntersectionObserver(function(entries) {
     if (entries[0].isIntersecting) {

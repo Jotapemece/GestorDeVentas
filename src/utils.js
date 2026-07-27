@@ -525,7 +525,7 @@ function initTableSorting(tableId) {
 
 /* ========== CONNECTION MONITOR ========== */
 function initConnectionMonitor() {
-  const indicator = document.getElementById('offline-indicator');
+  const indicator = qs(SEL.offlineIndicator);
   if (!indicator) return;
   function update() {
     indicator.classList.toggle('visible', !navigator.onLine);

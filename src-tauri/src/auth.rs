@@ -371,10 +371,10 @@ pub fn change_password(
         }
     }
 
-    let db = state.lock_db()?;
+    let mut db = state.lock_db()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
-    // Verify old password
-    let stored_hash: String = db
+    let stored_hash: String = tx
         .query_row(
             "SELECT password FROM usuarios WHERE id = ?1",
             params![user.id],
@@ -383,6 +383,7 @@ pub fn change_password(
         .map_err(|_| "Usuario no encontrado".to_string())?;
 
     if !verify_password(&request.old_password, &stored_hash) {
+        drop(tx);
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
             let entry = attempts.entry(rate_key.clone()).or_insert((0, Instant::now()));
             entry.0 += 1;
@@ -394,11 +395,13 @@ pub fn change_password(
     }
 
     let new_hashed = hash_password(&request.new_password);
-    db.execute(
+    tx.execute(
         "UPDATE usuarios SET password = ?1, password_change_required = 0 WHERE id = ?2",
         params![new_hashed, user.id],
     )
     .map_err(|e| format!("Error al cambiar contrasena: {}", e))?;
+
+    tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
     if let Ok(mut attempts) = state.admin_action_attempts.lock() {
         attempts.remove(&rate_key);
@@ -498,7 +501,7 @@ pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
 
     let hashed = hash_password(constants::DEFAULT_ADMIN_PASSWORD);
     db.execute(
-        "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
+        "INSERT INTO usuarios (username, password, rol, password_change_required) VALUES (?1, ?2, ?3, 1)",
         params![constants::DEFAULT_ADMIN_USERNAME, hashed, constants::ROL_ADMIN],
     )
     .map_err(|e| format!("Error al crear superadmin: {}", e))?;

@@ -24,11 +24,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.mobileLogoutBtn)?.addEventListener('click', handleLogout);
 
   // Changelog
-  document.getElementById('changelog-btn')?.addEventListener('click', function() {
-    showModal(document.getElementById('changelog-modal'));
+  qs(SEL.changelogBtn)?.addEventListener('click', function() {
+    showModal(qs(SEL.changelogModal));
   });
-  document.getElementById('changelog-close')?.addEventListener('click', function() {
-    closeModal(document.getElementById('changelog-modal'));
+  qs(SEL.changelogClose)?.addEventListener('click', function() {
+    closeModal(qs(SEL.changelogModal));
   });
 
   // Navigation
@@ -123,8 +123,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const ok = await confirmModal('\u00bfEst\u00e1 seguro de cancelar la venta? El carrito se perder\u00e1.', 'Cancelar Venta', 'S\u00ed, cancelar');
     if (ok) clearCart();
   });
-  document.getElementById('hold-cart-btn')?.addEventListener('click', holdCart);
-  document.getElementById('cart-tabs')?.addEventListener('click', function(e) {
+  qs(SEL.holdCartBtn)?.addEventListener('click', holdCart);
+  qs(SEL.cartTabs)?.addEventListener('click', function(e) {
     var tab = e.target.closest('.cart-tab');
     if (tab) unholdCart(parseInt(tab.dataset.cartId));
   });
@@ -339,7 +339,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   // Recent products quick-add
-  document.getElementById('recent-products')?.addEventListener('click', function(e) {
+  qs(SEL.recentProducts)?.addEventListener('click', function(e) {
     var chip = e.target.closest('.recent-chip');
     if (chip) addToCart(chip.dataset.codigo);
   });
@@ -483,7 +483,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (createUserBtn) createUserBtn.addEventListener('click', handleCreateUser);
   const userListRefreshBtn = qs(SEL.userListRefreshBtn);
   if (userListRefreshBtn) userListRefreshBtn.addEventListener('click', loadUserList);
-  const resetUsersBtn = qs('#reset-users-btn');
+  const resetUsersBtn = qs(SEL.resetUsersBtn);
   if (resetUsersBtn) resetUsersBtn.addEventListener('click', function() {
     confirmModal('\u00bfEliminar TODOS los usuarios y dejar solo superadmin? Esta acci\u00f3n no se puede deshacer.', 'Reset Usuarios', 'Resetear').then(ok => {
       if (!ok) return;
@@ -904,7 +904,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.abonoConfirmBtn).addEventListener('click', confirmAbono);
   qs(SEL.abonoMonto).addEventListener('input', function() {
     updateAbonoSaldoRestante();
-    if (qs('.abono-metodo-btn.active')?.dataset.method === METODO_MIXTO) distributeMixto('abono-mixto-items');
+    if (qs(SEL.abonoMetodoBtnActive)?.dataset.method === METODO_MIXTO) distributeMixto('abono-mixto-items');
   });
   qsa('.abono-metodo-btn').forEach(btn => {
     btn.addEventListener('click', () => selectAbonoMethod(btn));
@@ -1293,7 +1293,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     swipeDistX = touch.clientX - swipeStartX;
     var distY = Math.abs(touch.clientY - swipeStartY);
     if (Math.abs(swipeDistX) < 30 || distY > Math.abs(swipeDistX) * 1.5) return;
-  }, { passive: true });
+    e.preventDefault();
+  }, { passive: false });
   document.addEventListener('touchend', function(e) {
     if (!swiping) return;
     swiping = false;
@@ -1327,7 +1328,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (diff > KEYBOARD.THRESHOLD) {
         // Keyboard opened
         document.body.classList.add('keyboard-open');
-        var view = document.querySelector('.view.active');
+        var view = qs(SEL.viewActive);
         if (view) view.classList.add('mobile-keyboard');
         var el = document.activeElement;
         if (el) {
@@ -1339,7 +1340,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       } else if (diff < -KEYBOARD.THRESHOLD) {
         // Keyboard closed
         document.body.classList.remove('keyboard-open');
-        var view2 = document.querySelector('.view.active');
+        var view2 = qs(SEL.viewActive);
         if (view2) view2.classList.remove('mobile-keyboard');
         main.style.paddingBottom = '';
         window.scrollTo(0, 0);

@@ -2,7 +2,7 @@
 const calcState = { expr: '', result: '0', memory: null, op: null, reset: false };
 
 function initCalculator() {
-  if (IS_ANDROID) return;
+  if (window.innerWidth <= 480) return;
   qs(SEL.calcBtn).style.display = '';
   qs(SEL.calcBtn).addEventListener('click', openCalculator);
   qs(SEL.calcClose).addEventListener('click', closeCalculator);
@@ -103,7 +103,7 @@ function initGuide() {
 
 function openGuide() {
   showModal(qs(SEL.guideModal));
-  const active = qs('.guide-tab.active');
+  const active = qs(SEL.guideTabActive);
   if (!active) switchGuideTab('ventas');
 }
 
@@ -312,9 +312,16 @@ async function handleDeviceRegister() {
     const nombre = IS_ANDROID ? 'Tel\u00e9fono' : 'PC';
     const res = await invoke('register_device', { nombre });
     qs(SEL.regPending).classList.add('hidden');
-    qs(SEL.regSuccess).classList.remove('hidden');
-    // Descargar usuarios de Supabase para que estén disponibles al login
-    invoke('download_usuarios').catch(() => {});
+    var successEl = qs(SEL.regSuccess);
+    successEl.classList.remove('hidden');
+    successEl.innerHTML = '<div class="reg-check"><i class="nf nf-fa-check"></i></div><p class="reg-desc">Dispositivo registrado. Sincronizando datos...</p>';
+    // Descargar productos, clientes y usuarios en paralelo
+    await Promise.allSettled([
+      invoke('download_products'),
+      invoke('download_clientes'),
+      invoke('download_usuarios'),
+    ]);
+    successEl.innerHTML = '<div class="reg-check"><i class="nf nf-fa-check"></i></div><p class="reg-desc">Dispositivo registrado correctamente</p>';
     setTimeout(() => {
       qs(SEL.deviceRegScreen).style.display = 'none';
       qs(SEL.loginScreen).style.display = 'flex';
@@ -343,8 +350,7 @@ async function handleLogin() {
         localStorage.removeItem('recordar_usuario');
       }
       currentUser = res.usuario;
-      // password_change_required desactivado temporalmente
-      /* if (res.password_change_required) {
+      if (res.password_change_required) {
         const ok = await confirmModal(
           'Por seguridad, debe cambiar su contraseña antes de continuar.',
           'Cambio de contraseña requerido',
@@ -365,7 +371,7 @@ async function handleLogin() {
         }
         showToast('Cambie su contraseña para continuar usando la aplicación', 'warning');
         return;
-      } */
+      }
       qs(SEL.loginScreen).style.display = 'none';
       qs(SEL.mainApp).style.display = 'flex';
       qs(SEL.bottomTabs).style.display = '';

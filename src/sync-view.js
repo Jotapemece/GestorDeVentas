@@ -139,7 +139,7 @@ function showView(name) {
     renderRecentProducts();
   }
   document.dispatchEvent(new CustomEvent('viewChanged', { detail: name }));
-  if (IS_ANDROID) {
+  if (window.innerWidth <= 768) {
     const panel = qs(SEL.chatPanel);
     if (panel && !panel.classList.contains('hidden')) {
       panel.classList.add('hidden');

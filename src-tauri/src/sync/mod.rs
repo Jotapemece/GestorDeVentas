@@ -36,8 +36,16 @@ pub(crate) fn api_url(base: &str, path: &str) -> String {
     format!("{}/rest/v1{}", base, path)
 }
 
+pub(crate) fn supabase_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .timeout_read(std::time::Duration::from_secs(30))
+        .build()
+}
+
 pub(crate) fn supabase_post(url: &str, key: &str, body: &str) -> Result<(), String> {
-    match ureq::post(url)
+    let agent = supabase_agent();
+    match agent.post(url)
         .set("apikey", key)
         .set("Authorization", &format!("Bearer {}", key))
         .set("Content-Type", "application/json")
@@ -54,7 +62,8 @@ pub(crate) fn supabase_post(url: &str, key: &str, body: &str) -> Result<(), Stri
 }
 
 pub(crate) fn supabase_get(url: &str, key: &str) -> Result<Vec<serde_json::Value>, String> {
-    match ureq::get(url)
+    let agent = supabase_agent();
+    match agent.get(url)
         .set("apikey", key)
         .set("Authorization", &format!("Bearer {}", key))
         .call()
