@@ -661,8 +661,6 @@ const SEL = {
   loginGreetingTime: '#login-greeting-time',
   loginGreetingText: '#login-greeting-text',
   loginGreetingDate: '#login-greeting-date',
-  categoryFilterBar: '#category-filter-bar',
-  categoryFilterBtn: '.category-filter-btn',
   colToggleBtn: '.col-toggle-btn',
   globalSearchOverlay: '#global-search-overlay',
   globalSearchInput: '#global-search-input',

@@ -91,7 +91,6 @@ async function loadProductCache() {
   try {
     comboCache = await invoke('list_combos_simple');
   } catch (e) { comboCache = []; }
-  renderCategoryFilter();
 }
 
 /* ========== SALES ========== */
@@ -159,36 +158,13 @@ function handleProductSearch() {
   productSearchTimer = setTimeout(renderProductSearch, SEARCH_DEBOUNCE_MS);
 }
 
-let activeCategory = '';
-
-function renderCategoryFilter() {
-  const bar = qs(SEL.categoryFilterBar);
-  if (!bar) return;
-  const categories = new Set();
-  productCache.forEach(p => { if (p.categoria) categories.add(p.categoria); });
-  comboCache.forEach(c => { if (c.subcategoria) categories.add('Combos'); });
-  const sorted = Array.from(categories).sort();
-  let html = '<button class="category-filter-btn active" data-cat="">Todas</button>';
-  sorted.forEach(cat => {
-    const active = activeCategory === cat ? ' active' : '';
-    html += '<button class="category-filter-btn' + active + '" data-cat="' + escapeHtml(cat) + '">' + escapeHtml(cat) + '</button>';
-  });
-  bar.innerHTML = html;
-}
-
 function filterProducts(query) {
-  let results = productCache.filter(p => {
-    const matchesSearch = !query || p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query);
-    const matchesCat = !activeCategory || p.categoria === activeCategory || (activeCategory === 'Combos' ? false : true);
-    return matchesSearch && matchesCat;
-  });
+  if (!query) return [];
+  let results = productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
   // Include combos in search results
   comboCache.forEach(c => {
-    if (c.nombre.toLowerCase().includes(query || '')) {
-      const matchesCat = !activeCategory || activeCategory === 'Combos' || false;
-      if (matchesCat || !activeCategory) {
-        results.push({ codigo: 'COMBO-' + c.id, nombre: c.nombre + ' (Combo)', precio_usd: c.precio_usd, costo: 0, stock: 999, es_inari: true, subcategoria: 'combos' });
-      }
+    if (c.nombre.toLowerCase().includes(query)) {
+      results.push({ codigo: 'COMBO-' + c.id, nombre: c.nombre + ' (Combo)', precio_usd: c.precio_usd, costo: 0, stock: 999, es_inari: true, subcategoria: 'combos' });
     }
   });
   return results;
@@ -1303,16 +1279,5 @@ function flyToCart(codigo) {
   el.addEventListener('animationend', function() { el.remove(); }, { once: true });
 }
 
-function initCategoryFilter() {
-  const bar = qs(SEL.categoryFilterBar);
-  if (!bar) return;
-  bar.addEventListener('click', function(e) {
-    const btn = e.target.closest(SEL.categoryFilterBtn);
-    if (!btn) return;
-    activeCategory = btn.dataset.cat || '';
-    bar.querySelectorAll(SEL.categoryFilterBtn).forEach(function(b) { b.classList.toggle('active', b.dataset.cat === activeCategory); });
-    qs(SEL.productSearch).value = '';
-    renderProductSearch();
-  });
-}
+
 

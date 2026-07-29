@@ -58,6 +58,11 @@
     </div>
 
     <div id="login-screen">
+      <div class="login-greeting" id="login-greeting">
+        <div class="login-greeting-time" id="login-greeting-time"></div>
+        <div class="login-greeting-text" id="login-greeting-text"></div>
+        <div class="login-greeting-date" id="login-greeting-date"></div>
+      </div>
       <div class="login-card">
         <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.03</button>
         <div class="login-brand">
@@ -77,11 +82,6 @@
           </div>
           <h1>InariMarket</h1>
           <p class="login-subtitle">Sistema de Punto de Venta</p>
-        </div>
-        <div class="login-greeting" id="login-greeting">
-          <div class="login-greeting-time" id="login-greeting-time"></div>
-          <div class="login-greeting-text" id="login-greeting-text"></div>
-          <div class="login-greeting-date" id="login-greeting-date"></div>
         </div>
         <div class="form-group">
           <label for="login-username">Usuario</label>
@@ -189,9 +189,6 @@
               <div class="panel-header">Productos</div>
               <div class="product-list-container">
                 <div id="recent-products" class="recent-products" style="display:none"></div>
-                <div class="category-filter-bar" id="category-filter-bar">
-                  <button class="category-filter-btn active" data-cat="">Todas</button>
-                </div>
                 <table class="table" id="product-search-table" data-col-toggle="product-search">
                   <thead>
                     <tr>

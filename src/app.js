@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   initGlobalSearch();
   initHoverCard();
   initCompactToggle();
-  initCategoryFilter();
   window.addEventListener('beforeunload', function() { saveCartSnapshot(); });
   // Collapse all config cards by default
   qsa(SEL.configCardHeader).forEach(h => h.classList.add('collapsed'));
