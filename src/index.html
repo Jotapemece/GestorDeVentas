@@ -1652,26 +1652,30 @@
         <div class="changelog-section">
           <h4><i class="nf nf-fa-plus_circle" style="color:var(--success)"></i> Nuevas funcionalidades</h4>
           <ul>
-            <li><strong>Animaci&oacute;n de vuelo al carrito:</strong> Al agregar un producto desde la tabla de b&uacute;squeda, una animaci&oacute;n visual vuela hasta el carrito.</li>
-            <li><strong>Modo compacto/expandido en tablas:</strong> Bot&oacute;n en los encabezados de las tablas principales para alternar entre vista compacta y expandida.</li>
-            <li><strong>Filtro por categor&iacute;a en POS:</strong> Botones de categor&iacute;a sobre la tabla de productos para filtrar r&aacute;pidamente. Adaptado para m&oacute;vil.</li>
-            <li><strong>Tarjeta de saludo en login:</strong> Muestra la hora actual, un saludo seg&uacute;n el momento del d&iacute;a y la fecha completa.</li>
-            <li><strong>B&uacute;squeda global:</strong> Presiona <kbd>Ctrl+K</kbd> para abrir un buscador que encuentra productos, clientes y ventas r&aacute;pidamente.</li>
-            <li><strong>Hover card de producto:</strong> Al pasar el mouse sobre un producto en el POS, se muestra una tarjeta con informaci&oacute;n detallada.</li>
+            <li><strong>Animaci&oacute;n de vuelo al carrito:</strong> Al agregar un producto, una animaci&oacute;n visual vuela hasta el carrito.</li>
+            <li><strong>Modo compacto/expandido en tablas:</strong> Bot&oacute;n en los encabezados para alternar entre vista compacta y expandida.</li>
+            <li><strong>Tarjeta de saludo en login:</strong> Muestra la hora, saludo seg&uacute;n el momento del d&iacute;a y la fecha. Card independiente y responsive.</li>
+            <li><strong>B&uacute;squeda global:</strong> <kbd>Ctrl+K</kbd> para buscar productos y clientes al instante.</li>
+            <li><strong>Hover card de producto:</strong> Al pasar el mouse sobre un producto en el POS se muestra info detallada.</li>
+            <li><strong>Atajo <kbd>Ctrl+M</kbd>:</strong> Activa/desactiva el sonido al instante desde cualquier pantalla.</li>
+            <li><strong>Atajos en la gu&iacute;a:</strong> Todos los atajos de teclado documentados en la Gu&iacute;a r&aacute;pida (<kbd>?</kbd>).</li>
           </ul>
         </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-wrench" style="color:var(--accent)"></i> Mejoras y optimizaciones</h4>
           <ul>
-            <li>Filtro por categor&iacute;a dise&ntilde;ado para m&oacute;vil: botones compactos con scroll horizontal si es necesario.</li>
-            <li>La tarjeta de saludo se actualiza cada segundo con la hora en vivo.</li>
-            <li>B&uacute;squeda global con resultados en vivo, navegaci&oacute;n con teclado y cierre con Escape.</li>
+            <li>Tarjeta de saludo movida fuera del login-card como card independiente.</li>
+            <li>Tema Sistema movido entre Oscuro y Claro, icono corregido a <i class="nf nf-fa-display"></i>.</li>
+            <li>Tema Verde eliminado por baja utilidad.</li>
+            <li>Pantalla de login corregida (flex-direction: column) para centrar verticalmente.</li>
+            <li>B&uacute;squeda global con cierre al hacer clic fuera o presionar Escape.</li>
           </ul>
         </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-bug" style="color:var(--danger)"></i> Correcciones</h4>
           <ul>
-            <li>Ninguna correcci&oacute;n de bugs en esta versi&oacute;n.</li>
+            <li>Global search overlay no se ocultaba por conflicto de especificidad CSS (hidden vs flex).</li>
+            <li>Pantalla de login mostraba elementos en fila en vez de columna.</li>
           </ul>
         </div>
       </div>
