@@ -1705,6 +1705,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   function initShortcutsModal() {
     qs(SEL.shortcutsClose).addEventListener('click', function() { closeModal(qs(SEL.shortcutsModal)); });
     qs(SEL.shortcutsOkBtn).addEventListener('click', function() { closeModal(qs(SEL.shortcutsModal)); });
+    qs(SEL.shortcutsBtn).addEventListener('click', function() { showModal(qs(SEL.shortcutsModal)); });
   }
 
   /* Add ? key to existing keyboard handler */

@@ -1203,6 +1203,8 @@ th .col-toggle-btn { float: none; display: inline; }
     padding: 10px 14px;
     font-size: 13px;
   }
+  .sound-toggle-btn { display: none !important; }
+  .shortcuts-btn { display: none !important; }
 }
 
 /* CLIENT */
