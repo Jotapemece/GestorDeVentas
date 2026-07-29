@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   initGlobalSearch();
   initHoverCard();
   initCompactToggle();
+  initSoundToggle();
+  initShortcutsModal();
   window.addEventListener('beforeunload', function() { saveCartSnapshot(); });
   // Collapse all config cards by default
   qsa(SEL.configCardHeader).forEach(h => h.classList.add('collapsed'));
@@ -1681,4 +1683,38 @@ document.addEventListener('DOMContentLoaded', async function() {
       });
     });
   }
+
+  /* ========== SOUND TOGGLE (quick) ========== */
+  function initSoundToggle() {
+    const btn = qs(SEL.soundToggleBtn);
+    if (!btn) return;
+    btn.addEventListener('click', async function() {
+      soundEnabled = !soundEnabled;
+      btn.classList.toggle('muted', !soundEnabled);
+      btn.title = 'Sonido: ' + (soundEnabled ? 'activado' : 'desactivado');
+      try {
+        await setUserConfig(CFG_SONIDO_HABILITADO, soundEnabled ? SOUND_ENABLED : SOUND_DISABLED);
+        var toggle = qs(SEL.soundToggle);
+        if (toggle) toggle.checked = soundEnabled;
+      } catch (e) {}
+      playSound(soundEnabled ? 'add' : 'cancel');
+    });
+  }
+
+  /* ========== SHORTCUTS MODAL (press ?) ========== */
+  function initShortcutsModal() {
+    qs(SEL.shortcutsClose).addEventListener('click', function() { closeModal(qs(SEL.shortcutsModal)); });
+    qs(SEL.shortcutsOkBtn).addEventListener('click', function() { closeModal(qs(SEL.shortcutsModal)); });
+  }
+
+  /* Add ? key to existing keyboard handler */
+  var _origKeydown = document.addEventListener;
+  document.addEventListener('keydown', function(e) {
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      var tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      showModal(qs(SEL.shortcutsModal));
+    }
+  });
 });

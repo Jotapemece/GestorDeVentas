@@ -669,5 +669,9 @@ const SEL = {
   productHoverCard: '#product-hover-card',
   productHoverCardBody: '#product-hover-card-body',
   flyEl: '.fly-to-cart',
+  soundToggleBtn: '#sound-toggle-btn',
+  shortcutsModal: '#shortcuts-modal',
+  shortcutsClose: '#shortcuts-close',
+  shortcutsOkBtn: '#shortcuts-ok-btn',
 };
 
