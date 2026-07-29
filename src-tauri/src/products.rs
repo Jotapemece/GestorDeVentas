@@ -1,6 +1,6 @@
 use crate::constants;
 use crate::db::AppState;
-use crate::models::{PaginatedResult, Producto, TopProductItem};
+use crate::models::{Categoria, PaginatedResult, Producto, TopProductItem};
 use base64::Engine;
 use rusqlite::params;
 use rust_xlsxwriter::*;
@@ -618,6 +618,26 @@ pub fn get_top_products(
         .collect();
 
     Ok(products)
+}
+
+#[tauri::command]
+pub fn list_categorias(state: State<AppState>) -> Result<Vec<Categoria>, String> {
+    let db = state.lock_db()?;
+    let mut stmt = db
+        .prepare("SELECT id, nombre, color FROM categorias ORDER BY nombre ASC")
+        .map_err(|e| e.to_string())?;
+    let categorias = stmt
+        .query_map([], |row| {
+            Ok(Categoria {
+                id: row.get(0)?,
+                nombre: row.get(1)?,
+                color: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(categorias)
 }
 
 #[cfg(test)]

@@ -368,3 +368,10 @@ pub struct ProfitSeriesFilter {
     pub end_date: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Categoria {
+    pub id: i64,
+    pub nombre: String,
+    pub color: String,
+}
+

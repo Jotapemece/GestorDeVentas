@@ -24,25 +24,97 @@ function updateLoginGreeting() {
 
 /* ========== CALCULATOR ========== */
 const calcState = { expr: '', result: '0', memory: null, op: null, reset: false };
+let calcDocked = false;
 
 function initCalculator() {
   if (window.innerWidth <= 480) return;
   qs(SEL.calcBtn).style.display = '';
   qs(SEL.calcBtn).addEventListener('click', openCalculator);
   qs(SEL.calcClose).addEventListener('click', closeCalculator);
+  qs(SEL.calcDockBtn).addEventListener('click', dockCalculator);
   document.querySelectorAll('[data-calc]').forEach(btn => btn.addEventListener('click', () => calcInput(btn.dataset.calc)));
   qs(SEL.calcEquals).addEventListener('click', calcEquals);
   qs(SEL.calcTasaBtn).addEventListener('click', calcInsertTasa);
   document.addEventListener('keydown', calcKeydown);
+  // Backdrop click — use closeCalculator instead of closeModal for consistency
+  qs(SEL.calcModal).addEventListener('click', function(e) {
+    if (e.target === this) closeCalculator();
+  });
+  initCalcDock();
+}
+
+function initCalcDock() {
+  var dockBtn = qs(SEL.calcDockBarBtn);
+  if (!dockBtn) return;
+  dockBtn.addEventListener('click', function() {
+    if (calcDocked) {
+      openCalculator();
+      calcDocked = false;
+      qs(SEL.calcDockBar).classList.add('hidden');
+    }
+  });
 }
 
 function openCalculator() {
   showModal(qs(SEL.calcModal));
   calcRender();
+  calcDocked = false;
+  qs(SEL.calcDockBar).classList.add('hidden');
   setTimeout(() => qs(SEL.calcModal).querySelector('.calc-buttons').focus(), TIMING.FOCUS_DELAY_MS);
 }
 
-function closeCalculator() { closeModal(qs(SEL.calcModal)); }
+function dockCalculator() {
+  calcDocked = true;
+  var modal = qs(SEL.calcModal);
+  var dockBar = qs(SEL.calcDockBar);
+  var dockBtn = qs(SEL.calcDockBarBtn);
+  // Animate: shrink modal
+  var modalContent = modal.querySelector('.modal-content');
+  if (modalContent) {
+    var rect = modalContent.getBoundingClientRect();
+    if (rect.width && rect.height) {
+    modalContent.style.transition = 'transform 0.25s ease-in, opacity 0.2s ease-in';
+    modalContent.style.transformOrigin = 'center center';
+    modalContent.style.transform = 'scale(0.1)';
+    modalContent.style.opacity = '0';
+  }
+  setTimeout(function() {
+    closeModal(modal);
+    modalContent.style.transition = '';
+    modalContent.style.transform = '';
+    modalContent.style.opacity = '';
+    dockBar.classList.remove('hidden');
+    // Brief pulse on the dock button
+    dockBtn.style.transition = 'transform 0.2s ease-out';
+    dockBtn.style.transform = 'scale(1.25)';
+    setTimeout(function() {
+      dockBtn.style.transition = 'transform 0.15s ease-in';
+      dockBtn.style.transform = 'scale(1)';
+      setTimeout(function() { dockBtn.style.transition = ''; dockBtn.style.transform = ''; }, 150);
+    }, 200);
+    }, 250);
+  }
+}
+
+function closeCalculator() {
+  if (calcState.expr || calcState.result !== '0') {
+    if (qs && qs(SEL.confirmModal) && !qs(SEL.confirmModal).classList.contains('hidden')) return;
+    confirmModal(
+      '¿Seguro que quieres cerrar la calculadora? Esto eliminará las cuentas que tengas.',
+      'Cerrar calculadora',
+      'Sí, cerrar'
+    ).then(function(ok) {
+      if (ok) {
+        calcState.expr = ''; calcState.result = '0'; calcState.memory = null; calcState.op = null; calcState.reset = false;
+        calcDocked = false;
+        qs(SEL.calcDockBar).classList.add('hidden');
+        closeModal(qs(SEL.calcModal));
+      }
+    });
+  } else {
+    closeModal(qs(SEL.calcModal));
+  }
+}
 
 function calcInput(val) {
   if (val === 'clear') { calcState.expr = ''; calcState.result = '0'; calcState.memory = null; calcState.op = null; calcState.reset = false; calcRender(); return; }

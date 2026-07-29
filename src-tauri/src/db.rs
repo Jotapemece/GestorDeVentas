@@ -5,8 +5,7 @@ use rand::Rng;
 use rusqlite::{Connection, params};
 use tauri::State;
 use std::collections::HashMap;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 use tauri::AppHandle;
@@ -17,6 +16,24 @@ use tauri::Manager;
 const DEFAULT_PATH: &str = ".";
 pub const LOGIN_MAX_ATTEMPTS: i32 = 5;
 pub const LOGIN_BLOCK_SECS: u64 = 300;
+
+pub fn check_action_rate_limit(
+    attempts: &mut HashMap<String, (i32, Instant)>,
+    action_key: &str,
+) -> Result<(), String> {
+    if let Some(&(count, until)) = attempts.get(action_key) {
+        if count >= LOGIN_MAX_ATTEMPTS && Instant::now() < until {
+            return Err(format!(
+                "Demasiados intentos. Intente de nuevo en {} segundos.",
+                until.duration_since(Instant::now()).as_secs()
+            ));
+        }
+        if Instant::now() >= until {
+            attempts.remove(action_key);
+        }
+    }
+    Ok(())
+}
 
 pub struct AppState {
     pub db: Mutex<Connection>,
@@ -117,7 +134,10 @@ fn insert_default_admin(conn: &Connection) {
         .unwrap_or_else(|e| { eprintln!("Error contando usuarios (admin): {}", e); 0 });
 
     if count == 0 {
-        let admin_pw = crate::auth::hash_password(constants::DEFAULT_ADMIN_PASSWORD);
+        let admin_pw = match crate::auth::hash_password(constants::DEFAULT_ADMIN_PASSWORD) {
+            Ok(pw) => pw,
+            Err(e) => { eprintln!("[db] Error al generar hash admin: {}", e); return; }
+        };
         conn.execute(
             "INSERT INTO usuarios (username, password, rol, sync_id) VALUES (?1, ?2, ?3, ?4)",
             rusqlite::params![constants::DEFAULT_ADMIN_USERNAME, admin_pw, constants::ROL_ADMIN, "admin-1"],
@@ -236,6 +256,22 @@ fn decrypt_file(src: &Path, key: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|_| "Error al descifrar: clave incorrecta o archivo dañado".to_string())
 }
 
+fn sanitize_backup_path(path: &Path, db_path: &Path) -> Result<(), String> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|_| format!("Ruta no válida: {}", path.display()))?;
+    let db_dir = db_path
+        .parent()
+        .ok_or_else(|| "No se pudo determinar el directorio de la BD".to_string())?
+        .canonicalize()
+        .map_err(|_| "No se pudo resolver el directorio de la BD".to_string())?;
+    let temp_dir = std::env::temp_dir().canonicalize().unwrap_or_default();
+    if canonical.starts_with(&db_dir) || canonical.starts_with(&temp_dir) {
+        return Ok(());
+    }
+    Err("La ruta del backup debe estar en el directorio de la BD o en el directorio temporal".to_string())
+}
+
 #[tauri::command]
 pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<String, String> {
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
@@ -246,10 +282,12 @@ pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<Stri
 
     let backup_path = if dest_path.is_empty() {
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let parent = db_path.parent().unwrap_or(std::path::Path::new("."));
+        let parent = db_path.parent().unwrap_or(Path::new("."));
         parent.join(format!("{}_{}.enc", constants::BACKUP_FILENAME_PREFIX, timestamp))
     } else {
-        std::path::PathBuf::from(&dest_path)
+        let p = PathBuf::from(&dest_path);
+        sanitize_backup_path(&p, &db_path)?;
+        p
     };
 
     let temp_path = backup_path.with_extension("tmp");
@@ -263,16 +301,20 @@ pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<Stri
 
 #[tauri::command]
 pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "restore_backup",
+    )?;
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
     let src = PathBuf::from(&backup_path);
+    sanitize_backup_path(&src, &db_path)?;
     if !src.exists() {
         return Err("Archivo de backup no encontrado".to_string());
     }
 
-    // Read key and decrypt while holding the lock
     let key = {
         let db = state.lock_db()?;
-        let _admin = crate::auth::require_admin(&state, &db, "Restauró backup desde archivo")?;
+        crate::auth::require_admin(&state, &db, "Restauró backup desde archivo")?;
         get_backup_key_from_db(&db)?
     };
 
@@ -289,14 +331,12 @@ pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<Str
         .map_err(|_| "El archivo descifrado no contiene una base de datos válida".to_string())?;
     drop(test_conn);
 
-    // Re-acquire DB lock, checkpoint WAL, then copy
+    // Hold DB lock, checkpoint WAL, then copy — no race window
     let db = state.lock_db()?;
     let _ = db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-    drop(db);
-    // Small delay to ensure all WAL state is flushed
-    std::thread::sleep(std::time::Duration::from_millis(50));
     std::fs::copy(&temp_src, &db_path)
         .map_err(|e| format!("Error al restaurar BD: {}", e))?;
+    drop(db);
     std::fs::remove_file(&temp_src).ok();
 
     Ok("Base de datos restaurada exitosamente. Reinicie la aplicación para aplicar los cambios.".to_string())
@@ -304,6 +344,10 @@ pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<Str
 
 #[tauri::command]
 pub fn get_backup_key(state: State<AppState>) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "get_backup_key",
+    )?;
     let db = state.lock_db()?;
     let _admin = crate::auth::check_admin_role(&state)?;
     let key = get_backup_key_from_db(&db)?;

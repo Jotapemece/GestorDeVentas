@@ -114,7 +114,7 @@ function renderRecentProducts() {
     var p = productCache.find(function(x) { return x.codigo === codigo; });
     if (!p) return;
     var name = p.nombre || codigo;
-    html += '<button class="recent-chip" data-codigo="' + codigo + '" title="' + name + '">' + escapeHtml(name) + '</button>';
+    html += '<button class="recent-chip" data-codigo="' + escapeHtml(codigo) + '" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</button>';
   });
   container.innerHTML = html;
 }
@@ -906,14 +906,14 @@ async function confirmCloseCashier() {
       html += '<hr class="close-report-hr"><h4>Productos Vendidos</h4>';
       html += '<table class="compact-table"><tr><th>Producto</th><th>Cant</th><th>Total</th></tr>';
       reportData.productos_vendidos.forEach(p => {
-        html += '<tr><td>' + p.nombre + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>';
+        html += '<tr><td>' + escapeHtml(p.nombre) + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>';
       });
       html += '</table>';
     }
     if (reportData.clientes_credito && reportData.clientes_credito.length) {
       html += '<hr class="close-report-hr"><h4>Clientes a Cr\u00e9dito</h4>';
       reportData.clientes_credito.forEach(c => {
-        html += '<p>' + c.nombre + ': ' + formatUSD(c.total_usd) + '</p>';
+        html += '<p>' + escapeHtml(c.nombre) + ': ' + formatUSD(c.total_usd) + '</p>';
       });
     }
     html += '<div class="close-report-actions"><button class="btn btn-primary" data-action="print-close-report">Exportar PDF</button></div>';
@@ -1011,15 +1011,15 @@ function printCloseReport() {
   doc.write('<h4>Productos Vendidos</h4>');
   doc.write('<table><tr><th>Producto</th><th>Cantidad</th><th>Total USD</th></tr>');
   d.productos_vendidos.forEach(p => {
-    doc.write('<tr><td>' + p.nombre + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>');
+    doc.write('<tr><td>' + escapeHtml(p.nombre) + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>');
   });
   doc.write('</table>');
   if (d.clientes_credito && d.clientes_credito.length) {
     doc.write('<hr>');
     doc.write('<h4>Clientes a Cr\u00e9dito</h4>');
-    d.clientes_credito.forEach(c => {
-      doc.write('<p>' + c.nombre + ': ' + formatUSD(c.total_usd) + '</p>');
-    });
+  d.clientes_credito.forEach(c => {
+    doc.write('<p>' + escapeHtml(c.nombre) + ': ' + formatUSD(c.total_usd) + '</p>');
+  });
   }
   doc.write('<hr>');
   doc.write('<p class="total">--- Fin del Reporte ---</p>');
@@ -1041,7 +1041,7 @@ async function openHistorialCierres() {
     } else {
       let html = '<table class="table compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
       cierres.forEach(c => {
-        html += '<tr><td>' + c.id + '</td><td>' + c.fecha_hora + '</td><td>' + c.username + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><button class="btn btn-sm btn-outline" data-action="show-cierre-detalle" data-id="' + c.id + '">Ver</button></td></tr>';
+        html += '<tr><td>' + c.id + '</td><td>' + escapeHtml(c.fecha_hora) + '</td><td>' + escapeHtml(c.username) + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><button class="btn btn-sm btn-outline" data-action="show-cierre-detalle" data-id="' + c.id + '">Ver</button></td></tr>';
       });
       html += '</table>';
       container.innerHTML = html;
@@ -1064,8 +1064,8 @@ async function showCierreDetalle(cierreId) {
     let html = '<div style="text-align:center;padding:8px 20px;">';
     html += '<div style="font-size:28px;margin-bottom:4px;">' + ICON.FILE_TEXT + '</div>';
     html += '<h3>Reporte de Cierre #' + c.id + '</h3>';
-    html += '<p><strong>Fecha:</strong> ' + c.fecha_hora + '</p>';
-    html += '<p><strong>Usuario:</strong> ' + c.username + '</p>';
+    html += '<p><strong>Fecha:</strong> ' + escapeHtml(c.fecha_hora) + '</p>';
+    html += '<p><strong>Usuario:</strong> ' + escapeHtml(c.username) + '</p>';
     html += '<hr style="margin:8px 0;">';
     html += '<p><strong>Ventas realizadas:</strong> ' + d.total_ventas + '</p>';
     html += '<p><strong>Total USD:</strong> ' + formatUSD(d.total_usd) + '</p>';
@@ -1085,14 +1085,14 @@ async function showCierreDetalle(cierreId) {
       html += '<hr style="margin:8px 0;"><h4>Productos Vendidos</h4>';
       html += '<table class="table compact-table"><tr><th>Producto</th><th>Cant</th><th>Total</th></tr>';
       d.productos_vendidos.forEach(p => {
-        html += '<tr><td>' + p.nombre + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>';
+        html += '<tr><td>' + escapeHtml(p.nombre) + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>';
       });
       html += '</table>';
     }
     if (d.clientes_credito && d.clientes_credito.length) {
       html += '<hr style="margin:8px 0;"><h4>Clientes a Cr\u00e9dito</h4>';
       d.clientes_credito.forEach(cl => {
-        html += '<p>' + cl.nombre + ': ' + formatUSD(cl.total_usd) + '</p>';
+        html += '<p>' + escapeHtml(cl.nombre) + ': ' + formatUSD(cl.total_usd) + '</p>';
       });
     }
     html += '</div>';

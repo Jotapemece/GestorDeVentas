@@ -44,15 +44,7 @@ const SQL_CIERRE_BY_ID: &str = "
     FROM cierres_caja WHERE id = ?1";
 const SQL_DETALLE_JSON: &str =
     "SELECT detalle_json FROM cierres_detalle WHERE cierre_id = ?1";
-const SQL_LIST_DIARIAS: &str = "
-    SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
-           v.sync_id, v.dispositivo_origen
-    FROM ventas v
-    LEFT JOIN usuarios u ON v.usuario_id = u.id
-    LEFT JOIN clientes c ON v.cliente_id = c.id
-    WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2
-    ORDER BY v.id DESC";
+const SQL_LIST_DIARIAS: &str = "WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 ORDER BY v.id DESC";
 
 fn obtener_costo_periodo(
     db: &rusqlite::Connection,
@@ -194,7 +186,9 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
 
     let (total_ventas, total_usd, total_bs, _) = obtener_totales_del_dia(&db, &today, &tomorrow)?;
 
-    let mut stmt = db.prepare(SQL_LIST_DIARIAS).map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .prepare(&format!("{} {}", crate::sales::SQL_SELECT_VENTAS, SQL_LIST_DIARIAS))
+        .map_err(|e| e.to_string())?;
 
     let ventas: Vec<Venta> = stmt
         .query_map(params![today, tomorrow], crate::sales::row_to_venta)

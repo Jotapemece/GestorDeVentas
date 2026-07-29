@@ -238,6 +238,10 @@ fn validate_pay_debt_request(request: &PayDebtRequest) -> Result<(), String> {
 
 #[tauri::command]
 pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "pay_debt",
+    )?;
     validate_pay_debt_request(&request)?;
 
     let username = state.get_username()?;
@@ -300,6 +304,10 @@ pub fn add_quick_debt(
     cliente_id: i64,
     monto_usd: f64,
 ) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "add_quick_debt",
+    )?;
     if monto_usd <= 0.0 {
         return Err("El monto debe ser mayor a cero".to_string());
     }

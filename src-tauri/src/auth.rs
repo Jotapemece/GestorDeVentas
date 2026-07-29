@@ -14,12 +14,23 @@ const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol, COALESCE(password_cha
 const SQL_DELETE_USUARIO: &str = "DELETE FROM usuarios WHERE id = ?1 AND username != 'admin' AND username != 'Jota_admin'";
 
 
-pub fn hash_password(password: &str) -> String {
+pub fn hash_password(password: &str) -> Result<String, String> {
     let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
         .hash_password(password.as_bytes(), &salt)
-        .expect("Error al generar hash argon2")
-        .to_string()
+        .map(|h| h.to_string())
+        .map_err(|e| format!("Error al generar hash: {}", e))
+}
+
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result: u8 = 0;
+    for (ca, cb) in a.bytes().zip(b.bytes()) {
+        result |= ca ^ cb;
+    }
+    result == 0
 }
 
 pub fn verify_password(password: &str, stored_hash: &str) -> bool {
@@ -34,7 +45,7 @@ pub fn verify_password(password: &str, stored_hash: &str) -> bool {
     } else {
         let mut hasher = Sha256::new();
         hasher.update(password.as_bytes());
-        hex::encode(hasher.finalize()) == stored_hash
+        constant_time_eq(&hex::encode(hasher.finalize()), stored_hash)
     }
 }
 
@@ -159,12 +170,13 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
 
     // Upgrade legacy SHA-256 hash to argon2
     if !stored_hash.starts_with("$argon2") {
-        let new_hash = hash_password(&password);
-        db.execute(
-            "UPDATE usuarios SET password = ?1 WHERE id = ?2",
-            rusqlite::params![new_hash, usuario.id],
-        )
-        .ok();
+        if let Ok(new_hash) = hash_password(&password) {
+            db.execute(
+                "UPDATE usuarios SET password = ?1 WHERE id = ?2",
+                rusqlite::params![new_hash, usuario.id],
+            )
+            .ok();
+        }
     }
 
     let user_clone = usuario.clone();
@@ -245,7 +257,7 @@ pub fn create_usuario(
         &db,
         &format!("Cre\u{00f3} usuario '{}' con rol '{}'", username, rol),
     )?;
-    let hashed = hash_password(&password);
+    let hashed = hash_password(&password)?;
 
     match db.execute(SQL_INSERT_USUARIO, rusqlite::params![username, hashed, rol]) {
         Ok(_) => {
@@ -394,7 +406,7 @@ pub fn change_password(
         return Err("La contrasena actual no es correcta".to_string());
     }
 
-    let new_hashed = hash_password(&request.new_password);
+    let new_hashed = hash_password(&request.new_password)?;
     tx.execute(
         "UPDATE usuarios SET password = ?1, password_change_required = 0 WHERE id = ?2",
         params![new_hashed, user.id],
@@ -447,7 +459,7 @@ pub fn admin_change_password(
         eprintln!("[audit] Error al registrar acción: {}", e);
     }
 
-    let new_hashed = hash_password(&new_password);
+    let new_hashed = hash_password(&new_password)?;
     let affected = db
         .execute("UPDATE usuarios SET password = ?1, password_change_required = 0 WHERE id = ?2", params![new_hashed, usuario_id])
         .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
@@ -499,7 +511,7 @@ pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
         return Err(format!("Error al eliminar usuarios: {}", e));
     }
 
-    let hashed = hash_password(constants::DEFAULT_ADMIN_PASSWORD);
+    let hashed = hash_password(constants::DEFAULT_ADMIN_PASSWORD)?;
     db.execute(
         "INSERT INTO usuarios (username, password, rol, password_change_required) VALUES (?1, ?2, ?3, 1)",
         params![constants::DEFAULT_ADMIN_USERNAME, hashed, constants::ROL_ADMIN],
@@ -523,14 +535,14 @@ mod tests {
     #[test]
     fn test_hash_password_verify_roundtrip() {
         let pw = "admin";
-        let hash = hash_password(pw);
+        let hash = hash_password(pw).unwrap();
         assert!(verify_password(pw, &hash));
         assert!(!verify_password("wrong", &hash));
     }
 
     #[test]
     fn test_hash_password_empty() {
-        let hash = hash_password("");
+        let hash = hash_password("").unwrap();
         assert!(verify_password("", &hash));
         assert!(hash.starts_with("$argon2"));
     }
@@ -538,7 +550,7 @@ mod tests {
     #[test]
     fn test_hash_password_long() {
         let long = "a".repeat(1000);
-        let hash = hash_password(&long);
+        let hash = hash_password(&long).unwrap();
         assert!(verify_password(&long, &hash));
     }
 

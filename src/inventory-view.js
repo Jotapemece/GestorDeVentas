@@ -37,18 +37,9 @@ function renderInventoryPagination(total) {
     el.className = 'pagination';
     qs(SEL.inventoryTable).after(el);
   }
-  const totalPages = Math.ceil(total / INVENTORY_PAGE_SIZE);
-  if (totalPages <= 1) { el.style.display = 'none'; return; }
-  el.style.display = 'flex';
-  el.innerHTML = '<button class="btn btn-sm btn-outline" data-inv-page="' + (inventoryPage - 1) + '" ' + (inventoryPage <= 1 ? 'disabled' : '') + '>Anterior</button>' +
-    '<span class="pagination-info">P\u00e1gina ' + inventoryPage + ' de ' + totalPages + ' (' + total + ' productos)</span>' +
-    '<button class="btn btn-sm btn-outline" data-inv-page="' + (inventoryPage + 1) + '" ' + (inventoryPage >= totalPages ? 'disabled' : '') + '>Siguiente</button>';
-  el.querySelectorAll('[data-inv-page]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      if (this.disabled) return;
-      inventoryPage = parseInt(this.dataset.invPage);
-      loadInventory();
-    });
+  renderPagination(el, inventoryPage, total, INVENTORY_PAGE_SIZE, 'productos', function(page) {
+    inventoryPage = page;
+    loadInventory();
   });
 }
 

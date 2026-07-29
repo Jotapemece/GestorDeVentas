@@ -8,6 +8,7 @@ async function loadCreditos() {
     if (clientes.length === 0) {
       tbody.innerHTML = '<tr><td colspan="3">' + emptyState('<i class="nf nf-fa-credit_card"></i>', 'No hay clientes registrados', 'Registre personas para otorgar cr\u00e9dito') + '</td></tr>';
       creditoRows = [];
+      updateCreditoStats([]);
       return;
     }
     const frag = document.createDocumentFragment();
@@ -21,6 +22,7 @@ async function loadCreditos() {
     });
     tbody.appendChild(frag);
     creditoRows = rows;
+    updateCreditoStats(clientes);
     applyCreditoFilter();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }
@@ -374,5 +376,21 @@ async function confirmQuickDebt() {
     loadCreditos();
   } catch (e) { showToast('Error: ' + e, 'error'); }
   finally { btn.disabled = false; btn.innerHTML = origHtml; }
+}
+
+function updateCreditoStats(clientes) {
+  var total = clientes.length;
+  var conDeuda = 0;
+  var deudaTotal = 0;
+  clientes.forEach(function(c) {
+    if (c.credito_activo && (c.saldo_deuda_usd || 0) > 0) conDeuda++;
+    deudaTotal += (c.saldo_deuda_usd || 0);
+  });
+  var totalEl = document.getElementById('creditos-total-personas');
+  var deudaEl = document.getElementById('creditos-con-deuda');
+  var deudaTotalEl = document.getElementById('creditos-deuda-total');
+  if (totalEl) totalEl.textContent = total;
+  if (deudaEl) deudaEl.textContent = conDeuda;
+  if (deudaTotalEl) deudaTotalEl.textContent = formatUSD(deudaTotal);
 }
 

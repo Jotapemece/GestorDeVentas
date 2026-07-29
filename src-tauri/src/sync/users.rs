@@ -43,7 +43,7 @@ pub(crate) fn upload_usuarios_inner(
     }
 
     let mut usuarios_json: Vec<serde_json::Value> = Vec::with_capacity(rows.len());
-    for (id, username, password, rol, pwd_change, sync_id, updated_at) in &rows {
+    for (id, username, _password, rol, pwd_change, sync_id, updated_at) in &rows {
         let sid = if sync_id.is_empty() {
             let new_id = format!("{}-{}", dispositivo_id, id);
             db.execute(
@@ -60,7 +60,7 @@ pub(crate) fn upload_usuarios_inner(
             "sync_id": sid,
             "local_id": id,
             "username": username,
-            "password": password,
+            "password": _password,
             "rol": rol,
             "password_change_required": pwd_change,
             "dispositivo_origen": dispositivo_id,

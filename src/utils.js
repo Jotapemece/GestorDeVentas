@@ -89,38 +89,7 @@ function createReportRow(v) {
 
 const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
 
-let currentUser = null;
-let carts = [{ id: 1, items: [], folded: false }];
-let cart = carts[0].items;
-let cartIdCounter = 1;
-let recentProducts = [];
 const RECENT_MAX = 10;
-let tasaActual = 0;
-let tasaInventario = 0;
-let tasaInventarioFecha = '';
-let cartShowBs = false;
-let comboCache = [];
-let editingProduct = null;
-let editingClienteId = null;
-let abonoClienteId = null;
-let selectedClienteId = null;
-let productCache = [];
-let creditoRows = [];
-
-let lastCloseReportData = null;
-let lastViewName = VIEW.SALES;
-let comaAutomaticaEnabled = false;
-let calcularVuelto = true;
-let redondeoBs = false;
-let redondeoTotal = false;
-let soundEnabled = true;
-let soundVolume = 0.5;
-let auditOffset = 0;
-let auditLimit = AUDIT_LIMIT_DEFAULT;
-
-/* ========== TOAST QUEUE ========== */
-let toastQueue = [];
-let toastVisible = 0;
 
 function hideToast(el) {
   if (el._closing) return;
@@ -684,5 +653,22 @@ async function openConflictModal() {
     container.appendChild(card);
   });
   showModal(qs(SEL.conflictModal));
+}
+
+/* ========== PAGINATION HELPERS ========== */
+function renderPagination(container, currentPage, total, pageSize, label, onPageChange) {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) { container.style.display = 'none'; return; }
+  container.style.display = 'flex';
+  container.innerHTML =
+    '<button class="btn btn-sm btn-outline" data-page="' + (currentPage - 1) + '" ' + (currentPage <= 1 ? 'disabled' : '') + '>Anterior</button>' +
+    '<span class="pagination-info">P\u00e1gina ' + currentPage + ' de ' + totalPages + ' (' + total + ' ' + label + ')</span>' +
+    '<button class="btn btn-sm btn-outline" data-page="' + (currentPage + 1) + '" ' + (currentPage >= totalPages ? 'disabled' : '') + '>Siguiente</button>';
+  container.querySelectorAll('[data-page]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (this.disabled) return;
+      onPageChange(parseInt(this.dataset.page));
+    });
+  });
 }
 

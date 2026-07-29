@@ -45,6 +45,7 @@ const CFG_REDONDEO_TOTAL = 'redondeo_total';
 const CFG_SIDEBAR_AUTO_HIDE = 'sidebar_auto_hide';
 const CFG_CONFIRMAR_VENTA = 'confirmar_venta';
 const CFG_ANIMACIONES = 'animaciones_habilitadas';
+const CFG_HOVER_CARD = 'hover_card';
 const CFG_IA_HABILITADO = 'ia_habilitado';
 const CFG_OPENROUTER_API_KEY = 'openrouter_api_key';
 const CFG_OPENROUTER_MODEL = 'openrouter_model';
@@ -546,6 +547,9 @@ const SEL = {
   calcBtn: '#calc-btn',
   calcClose: '#calculator-close',
   calcEquals: '#calc-equals',
+  calcDockBtn: '#calculator-dock-btn',
+  calcDockBar: '#calc-dock-bar',
+  calcDockBarBtn: '#calc-dock-btn',
 
   // --- Guide ---
   guideModal: '#guide-modal',
@@ -668,6 +672,7 @@ const SEL = {
   globalSearchResults: '#global-search-results',
   productHoverCard: '#product-hover-card',
   productHoverCardBody: '#product-hover-card-body',
+  hoverCardToggle: '#hover-card-toggle',
   flyEl: '.fly-to-cart',
   soundToggleBtn: '#sound-toggle-btn',
 };

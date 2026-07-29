@@ -18,6 +18,14 @@ const SQL_INSERT_DETALLE: &str =
      VALUES (?1, ?2, ?3, ?4, ?5)";
 const SQL_UPDATE_STOCK: &str = "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1";
 const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
+pub(crate) const SQL_SELECT_VENTAS: &str = "
+    SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
+           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
+           v.sync_id, v.dispositivo_origen
+    FROM ventas v
+    LEFT JOIN usuarios u ON v.usuario_id = u.id
+    LEFT JOIN clientes c ON v.cliente_id = c.id";
+
 pub(crate) fn row_to_venta(row: &rusqlite::Row) -> rusqlite::Result<Venta> {
     Ok(Venta {
         id: row.get(0)?, fecha_hora: row.get(1)?, usuario_id: row.get(2)?,
@@ -31,14 +39,7 @@ pub(crate) fn row_to_venta(row: &rusqlite::Row) -> rusqlite::Result<Venta> {
     })
 }
 
-const SQL_LIST_VENTAS: &str = "
-    SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-           v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
-           v.sync_id, v.dispositivo_origen
-    FROM ventas v
-    LEFT JOIN usuarios u ON v.usuario_id = u.id
-    LEFT JOIN clientes c ON v.cliente_id = c.id
-    ORDER BY v.id DESC";
+const SQL_LIST_VENTAS: &str = "ORDER BY v.id DESC";
 
 pub(crate) fn validar_pago_detalle(detalle: &[PagoItem], total_usd: f64) -> Result<String, String> {
     let mut suma = 0.0;
@@ -182,6 +183,10 @@ fn execute_sale_transaction(
 
 #[tauri::command]
 pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result<Venta, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "create_sale",
+    )?;
     let mut db = state.lock_db()?;
     validate_sale_request(&request)?;
 
@@ -247,7 +252,7 @@ pub fn list_sales(
         .map_err(|e| e.to_string())?;
 
     let mut stmt = db
-        .prepare(&format!("{} LIMIT ?1 OFFSET ?2", SQL_LIST_VENTAS.trim_end_matches(" LIMIT ?1")))
+        .prepare(&format!("{} {} LIMIT ?1 OFFSET ?2", SQL_SELECT_VENTAS, SQL_LIST_VENTAS))
         .map_err(|e| e.to_string())?;
 
     let ventas: Vec<Venta> = stmt
@@ -312,6 +317,10 @@ pub fn get_tasa(state: State<AppState>) -> Result<f64, String> {
 
 #[tauri::command]
 pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "set_tasa",
+    )?;
     if tasa <= 0.0 {
         return Err("La tasa debe ser mayor a cero".to_string());
     }
@@ -594,14 +603,8 @@ fn get_sales_report_inner(
 
     // Fetch ventas with LIMIT/OFFSET
     let main_sql = format!(
-        "SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
-                v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
-                v.sync_id, v.dispositivo_origen
-         FROM ventas v
-         LEFT JOIN usuarios u ON v.usuario_id = u.id
-         LEFT JOIN clientes c ON v.cliente_id = c.id
-         WHERE {}
-         ORDER BY v.id DESC LIMIT ?{} OFFSET ?{}",
+        "{} WHERE {} ORDER BY v.id DESC LIMIT ?{} OFFSET ?{}",
+        SQL_SELECT_VENTAS,
         where_sql,
         param_count + 1,
         param_count + 2,
@@ -677,6 +680,10 @@ pub fn void_sale_items(
     state: State<AppState>,
     request: VoidItemRequest,
 ) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "void_sale_items",
+    )?;
     let mut db = state.lock_db()?;
     crate::auth::require_admin(&state, &db, &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id))?;
     let current_username = state.get_username()?;

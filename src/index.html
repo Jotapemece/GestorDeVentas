@@ -180,7 +180,7 @@
               <span id="tasa-connection-badge" class="tasa-connection-badge online" title="Conectado - tasa autom\u00e1tica"><i class="nf nf-fa-wifi"></i></span>
               <span id="tasa-warning" class="tasa-warning hidden" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
               <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV">Tasa</button>
-              <button id="calc-btn" class="btn tasa-fetch-btn" title="Calculadora" style="display:none"><i class="nf nf-fa-calculator"></i></button>
+              <button id="calc-btn" class="btn tasa-fetch-btn" title="Calculadora"><i class="nf nf-fa-calculator"></i></button>
             </div>
           </div>
           <div class="sales-body">
@@ -239,17 +239,22 @@
           <div class="view-header">
             <h2><i class="nf nf-fa-archive"></i> Inventario de Productos</h2>
             <div class="inventory-actions">
-              <button id="inventory-tasa-btn" class="btn btn-outline" title="Tasa hist&oacute;rica"><i class="nf nf-fa-calendar"></i> <span id="tasa-actual-label">Hoy</span></button>
-              <button id="inventory-inari-btn" class="btn btn-outline" title="Inari Bocados"><i class="nf nf-fa-fire"></i> Inari</button>
-              <button id="inventory-import-btn" class="btn btn-outline admin-only"><i class="nf nf-fa-upload"></i> Importar TSV</button>
-              <button id="inventory-export-btn" class="btn btn-accent"><i class="nf nf-fa-download"></i> Exportar</button>
               <button id="inventory-add-btn" class="btn btn-accent admin-only"><i class="nf nf-fa-plus"></i> Agregar Producto</button>
             </div>
           </div>
-          <div class="search-box flex-row">
+          <div class="search-box flex-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div class="search-clear-wrap">
-              <input type="text" id="inventory-search" placeholder="Buscar en inventario..." class="inventory-search-input" aria-label="Buscar en inventario">
+              <input type="text" id="inventory-search" placeholder="Buscar en inventario..." aria-label="Buscar en inventario">
               <button class="search-clear-btn" data-clear="inventory-search" aria-label="Limpiar b&uacute;squeda" tabindex="-1">&times;</button>
+            </div>
+            <button id="inventory-tasa-btn" class="btn btn-outline btn-sm" title="Tasa hist&oacute;rica" style="flex-shrink:0"><i class="nf nf-fa-calendar"></i> <span id="tasa-actual-label">Hoy</span></button>
+            <div class="dropdown" style="flex-shrink:0">
+              <button class="dropdown-btn" data-action="toggle-dropdown" title="M&aacute;s acciones" style="font-size:16px;padding:4px 8px"><i class="nf nf-fa-ellipsis_v"></i></button>
+              <div class="dropdown-menu" id="inventory-more-menu">
+                <button id="inventory-inari-btn"><i class="nf nf-fa-fire"></i> <span>Inari</span></button>
+                <button id="inventory-export-btn"><i class="nf nf-fa-download"></i> Exportar</button>
+                <button id="inventory-import-btn" class="admin-only"><i class="nf nf-fa-upload"></i> Importar TSV</button>
+              </div>
             </div>
           </div>
           <div id="inari-subcat-bar" class="inari-subcat-bar" style="display:none">
@@ -285,6 +290,11 @@
           <div class="view-header">
             <h2><i class="nf nf-fa-credit_card"></i> Gesti&oacute;n de Cr&eacute;dito</h2>
             <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
+          </div>
+          <div class="summary-cards" id="creditos-stats">
+            <div class="summary-card"><i class="nf nf-fa-users" style="font-size:24px;color:var(--primary);margin-bottom:8px"></i><div class="summary-label">Total Personas</div><div class="summary-value" id="creditos-total-personas">0</div></div>
+            <div class="summary-card"><i class="nf nf-fa-credit_card" style="font-size:24px;color:var(--accent);margin-bottom:8px"></i><div class="summary-label">Con Cr&eacute;dito</div><div class="summary-value" id="creditos-con-deuda">0</div></div>
+            <div class="summary-card"><i class="nf nf-fa-money" style="font-size:24px;color:var(--danger);margin-bottom:8px"></i><div class="summary-label">Deuda Total</div><div class="summary-value" id="creditos-deuda-total">$0.00</div></div>
           </div>
           <div style="margin-bottom:12px">
             <div class="search-clear-wrap" style="max-width:280px">
@@ -612,6 +622,13 @@
                 </label>
               </div>
               <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-info_circle"></i> Informaci&oacute;n al pasar el mouse</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="hover-card-toggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row">
                 <span class="config-label"><i class="nf nf-fa-robot"></i> Asistente IA (Enar)</span>
                 <label class="toggle-switch">
                   <input type="checkbox" id="ia-toggle" checked>
@@ -881,6 +898,12 @@
           </div>
         </section>
       </main>
+
+      <!-- Calculator dock indicator (desktop only) -->
+      <div id="calc-dock-bar" class="calc-dock-bar hidden">
+        <button id="calc-dock-btn" class="calc-dock-btn" title="Calculadora guardada"><i class="nf nf-fa-calculator"></i></button>
+      </div>
+
     </div>
 
     <nav id="bottom-tabs" class="bottom-tabs" style="display:none">
@@ -1606,7 +1629,10 @@
     <div class="modal-content calculator-content">
       <div class="modal-header">
         <h3>Calculadora</h3>
-        <span class="modal-close" id="calculator-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <div style="display:flex;gap:8px">
+          <span id="calculator-dock-btn" class="modal-close" aria-label="Guardar" title="Guardar calculadora" style="font-size:20px;cursor:pointer;color:var(--text-light)">&#x25BC;</span>
+          <span class="modal-close" id="calculator-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        </div>
       </div>
       <div class="modal-body calculator-body">
         <div class="calc-display">
@@ -1792,6 +1818,7 @@
   </div>
 
   <script src="constants.js"></script>
+  <script src="store.js"></script>
   <script src="utils.js"></script>
   <script src="views.js"></script>
   <script src="sync-view.js"></script>
@@ -1800,6 +1827,8 @@
   <script src="cashier-view.js"></script>
   <script src="config-view.js"></script>
   <script src="reports-view.js"></script>
+  <script src="shortcuts.js"></script>
+  <script src="fab.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

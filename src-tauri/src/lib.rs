@@ -119,6 +119,7 @@ pub fn run() {
             products::get_top_products,
             products::update_stock_minimo,
             products::set_product_inari,
+            products::list_categorias,
             // Sync
             sync::upload_products,
             sync::download_products,

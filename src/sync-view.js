@@ -110,12 +110,14 @@ function showView(name) {
       if (showInari) {
         showInari = false;
         qs(SEL.inventoryInariBtn).classList.remove('active');
+        qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-fire"></i> <span>Inari</span>';
       }
     } else {
       const hoy = new Date().getDay();
       if (INARI_DIAS.includes(hoy) && !showInari) {
         showInari = true;
         qs(SEL.inventoryInariBtn).classList.add('active');
+        qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-check"></i> <span>Inari</span>';
       }
     }
     qs(SEL.inariSubcatBar).style.display = showInari ? 'flex' : 'none';

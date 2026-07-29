@@ -91,6 +91,7 @@ pub(crate) fn upload_sales_inner(
             "dispositivo_origen": disp_origen,
             "fecha_hora": fecha_iso,
             "usuario_sync_id": usr_sync_id,
+            "usuario_id": uid,
             "metodo_pago": metodo,
             "referencia_pago_movil": refe,
             "pago_detalle": pago_det,
