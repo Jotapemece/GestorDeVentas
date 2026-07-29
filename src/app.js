@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   initHoverCard();
   initCompactToggle();
   initSoundToggle();
-  initShortcutsModal();
   window.addEventListener('beforeunload', function() { saveCartSnapshot(); });
   // Collapse all config cards by default
   qsa(SEL.configCardHeader).forEach(h => h.classList.add('collapsed'));
@@ -1684,38 +1683,28 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
   }
 
-  /* ========== SOUND TOGGLE (quick) ========== */
+  /* ========== SOUND TOGGLE (Ctrl+M) ========== */
   function initSoundToggle() {
-    const btn = qs(SEL.soundToggleBtn);
-    if (!btn) return;
-    btn.addEventListener('click', async function() {
-      soundEnabled = !soundEnabled;
-      btn.classList.toggle('muted', !soundEnabled);
-      btn.title = 'Sonido: ' + (soundEnabled ? 'activado' : 'desactivado');
-      try {
-        await setUserConfig(CFG_SONIDO_HABILITADO, soundEnabled ? SOUND_ENABLED : SOUND_DISABLED);
-        var toggle = qs(SEL.soundToggle);
-        if (toggle) toggle.checked = soundEnabled;
-      } catch (e) {}
-      playSound(soundEnabled ? 'add' : 'cancel');
-    });
+    /* No UI button — only Ctrl+M keyboard shortcut */
   }
 
-  /* ========== SHORTCUTS MODAL (press ?) ========== */
-  function initShortcutsModal() {
-    qs(SEL.shortcutsClose).addEventListener('click', function() { closeModal(qs(SEL.shortcutsModal)); });
-    qs(SEL.shortcutsOkBtn).addEventListener('click', function() { closeModal(qs(SEL.shortcutsModal)); });
-    qs(SEL.shortcutsBtn).addEventListener('click', function() { showModal(qs(SEL.shortcutsModal)); });
-  }
-
-  /* Add ? key to existing keyboard handler */
-  var _origKeydown = document.addEventListener;
+  /* ? key → open guide, Ctrl+M → toggle sound */
   document.addEventListener('keydown', function(e) {
     if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       var tag = e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       e.preventDefault();
-      showModal(qs(SEL.shortcutsModal));
+      showModal(qs(SEL.guideModal));
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
+      e.preventDefault();
+      soundEnabled = !soundEnabled;
+      setUserConfig(CFG_SONIDO_HABILITADO, soundEnabled ? SOUND_ENABLED : SOUND_DISABLED).catch(function() {});
+      var toggle = qs(SEL.soundToggle);
+      if (toggle) toggle.checked = soundEnabled;
+      playSound(soundEnabled ? 'add' : 'cancel');
+      showToast('Sonido ' + (soundEnabled ? 'activado' : 'desactivado'), 'info');
     }
   });
 });
