@@ -26,17 +26,22 @@ function updateLoginGreeting() {
 const calcState = { expr: '', result: '0', memory: null, op: null, reset: false };
 let calcDocked = false;
 
+let _calcInit = false;
 function initCalculator() {
+  if (_calcInit) return;
+  _calcInit = true;
   if (window.innerWidth <= 480) return;
   qs(SEL.calcBtn).style.display = '';
   qs(SEL.calcBtn).addEventListener('click', openCalculator);
   qs(SEL.calcClose).addEventListener('click', closeCalculator);
   qs(SEL.calcDockBtn).addEventListener('click', dockCalculator);
-  document.querySelectorAll('[data-calc]').forEach(btn => btn.addEventListener('click', () => calcInput(btn.dataset.calc)));
+  qs(SEL.calcButtons).addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-calc]');
+    if (btn) calcInput(btn.dataset.calc);
+  });
   qs(SEL.calcEquals).addEventListener('click', calcEquals);
   qs(SEL.calcTasaBtn).addEventListener('click', calcInsertTasa);
   document.addEventListener('keydown', calcKeydown);
-  // Backdrop click — use closeCalculator instead of closeModal for consistency
   qs(SEL.calcModal).addEventListener('click', function(e) {
     if (e.target === this) closeCalculator();
   });
@@ -191,10 +196,16 @@ function calcKeydown(e) {
 }
 
 /* ========== GUIDE ========== */
+let _guideInit = false;
 function initGuide() {
+  if (_guideInit) return;
+  _guideInit = true;
   qs(SEL.guideBtn).addEventListener('click', openGuide);
   qs(SEL.guideClose).addEventListener('click', closeGuide);
-  qsa(SEL.guideTabs).forEach(tab => tab.addEventListener('click', () => switchGuideTab(tab.dataset.section)));
+  qs(SEL.guideModal).addEventListener('click', function(e) {
+    var tab = e.target.closest(SEL.guideTabs);
+    if (tab) switchGuideTab(tab.dataset.section);
+  });
 }
 
 function openGuide() {
@@ -222,7 +233,10 @@ var TABLE_RELOADS = {
   'product-search': function() { if (typeof renderProductSearch === 'function') renderProductSearch(); },
 };
 
+let _colToggleInit = false;
 function initColumnToggle() {
+  if (_colToggleInit) return;
+  _colToggleInit = true;
   qsa('table[data-col-toggle]').forEach(function(table) {
     var storageKey = table.dataset.colToggle;
     var theadRow = table.querySelector('thead tr');
@@ -312,7 +326,9 @@ function initColumnToggle() {
 }
 
 /* ========== CLOCK ========== */
+let _clockInterval = null;
 function startClock() {
+  if (_clockInterval) return;
   const hourHand = qs(SEL.clockHour);
   const minuteHand = qs(SEL.clockMinute);
   const secondHand = qs(SEL.clockSecond);
@@ -325,14 +341,17 @@ function startClock() {
     secondHand.setAttribute('transform', `rotate(${s * 6}, 50, 50)`);
   }
   update();
-  setInterval(update, 1000);
+  _clockInterval = setInterval(update, 1000);
 }
 
 /* ========== SIDEBAR AUTO-HIDE ========== */
 let sidebarAutoHideEnabled = false;
 let sidebarHideTimeout = null;
 
+let _sidebarAutoHideInit = false;
 function initSidebarAutoHide() {
+  if (_sidebarAutoHideInit) return;
+  _sidebarAutoHideInit = true;
   if (IS_ANDROID) return;
   const sidebar = qs(SEL.sidebar);
   const mainApp = qs(SEL.mainApp);

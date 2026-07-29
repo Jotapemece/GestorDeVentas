@@ -550,6 +550,7 @@ const SEL = {
   calcDockBtn: '#calculator-dock-btn',
   calcDockBar: '#calc-dock-bar',
   calcDockBarBtn: '#calc-dock-btn',
+  calcButtons: '.calc-buttons',
 
   // --- Guide ---
   guideModal: '#guide-modal',
