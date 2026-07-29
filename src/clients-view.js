@@ -134,6 +134,7 @@ function closeDebtDetail() {
 function openAbonoModal(id) {
   abonoClienteId = id;
   qs(SEL.abonoMonto).value = '';
+  qs(SEL.abonoMontoBs).value = '';
   qs(SEL.abonoReferencia).value = '';
   qs(SEL.abonoReferenciaGroup).style.display = 'none';
   qs(SEL.abonoMixtoGroup).style.display = 'none';
@@ -143,6 +144,7 @@ function openAbonoModal(id) {
   qsa('.abono-metodo-btn').forEach(b => b.classList.remove('active'));
   qs(SEL.abonoReferenciaGroup).style.display = 'none';
   qs(SEL.abonoMixtoGroup).style.display = 'none';
+  updateTasaInfo('abono');
   loadAbonoClienteInfo(id);
   showModal(qs(SEL.abonoModal));
 }
@@ -178,44 +180,49 @@ function selectAbonoMethod(btn) {
 function updateAbonoSaldoRestante() {
   const deudaTexto = qs(SEL.abonoDeudaUsd).textContent;
   const deuda = parseFloat(deudaTexto.replace(/[^0-9.-]/g, '')) || 0;
-  const monto = parseInput(qs(SEL.abonoMonto).value);
+  var monto = parseInput(qs(SEL.abonoMonto).value);
+  const montoBs = parseInput(qs(SEL.abonoMontoBs).value);
+  if (montoBs > 0 && monto <= 0 && tasaActual > 0) monto = montoBs / tasaActual;
   const restante = Math.max(0, deuda - monto);
   qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: ' + formatUSD(restante);
 }
 
 let processingAbono = false;
-async function confirmAbono() {
-  if (processingAbono) return;
-  processingAbono = true;
-  qs(SEL.abonoConfirmBtn).disabled = true;
-  const monto = parseInput(qs(SEL.abonoMonto).value);
-  if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
+function confirmAbono() {
+  let monto = parseInput(qs(SEL.abonoMonto).value);
+  const montoBs = parseInput(qs(SEL.abonoMontoBs).value);
+  if ((monto <= 0 && montoBs <= 0)) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
   const metodoBtn = qs(SEL.abonoMetodoBtnActive);
-  if (!metodoBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
+  if (!metodoBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); return; }
   const metodo = metodoBtn.dataset.method;
   let referencia = null, pago_detalle = null;
   if (metodo === METODO_PAGO_MOVIL && metodo !== METODO_MIXTO) {
     referencia = qs(SEL.abonoReferencia).value.trim();
-    if (referencia.length !== PAGO_MOVIL_REF_LEN) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingAbono = false; qs(SEL.abonoConfirmBtn).disabled = false; return; }
+    if (referencia.length !== PAGO_MOVIL_REF_LEN) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); return; }
   }
   if (metodo === METODO_MIXTO) {
     pago_detalle = getMixtoData('abono-mixto-items');
-    if (!validarMixto(pago_detalle, monto, 'abono-mixto-error')) {
-      processingAbono = false;
-      qs(SEL.abonoConfirmBtn).disabled = false;
-      return;
-    }
+    if (!validarMixto(pago_detalle, monto, 'abono-mixto-error')) return;
   }
-  try {
-    const res = await invoke('pay_debt', {
-      request: { cliente_id: abonoClienteId, monto_usd: monto, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle, usuario_id: currentUser.id }
-    });
-    showToast('Abono procesado. Cuenta actualizada con \u00e9xito');
-    closeAbonoModal();
-    loadCreditos();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-  processingAbono = false;
-  qs(SEL.abonoConfirmBtn).disabled = false;
+  if (processingAbono) return;
+  processingAbono = true;
+  var btn = qs(SEL.abonoConfirmBtn);
+  var origHtml = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-spin"></i>';
+  (async function() {
+    try {
+      var tasa = tasaActual || await invoke('get_tasa');
+      if (montoBs > 0 && monto <= 0) monto = montoBs / tasa;
+      if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
+      await invoke('pay_debt', {
+        request: { cliente_id: abonoClienteId, monto_usd: monto, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle, usuario_id: currentUser.id }
+      });
+      showToast('Abono procesado. Cuenta actualizada con \u00e9xito');
+      closeAbonoModal();
+      loadCreditos();
+    } catch (e) { showToast('Error: ' + e, 'error'); }
+    finally { processingAbono = false; btn.disabled = false; btn.innerHTML = origHtml; }
+  })();
 }
 
 /* ========== TASA HISTORIAL ========== */
@@ -347,17 +354,25 @@ function clearTasaHistorial() {
 
 /* ========== QUICK DEBT ========== */
 async function confirmQuickDebt() {
-  var monto = parseInput(qs(SEL.quickDebtMonto).value);
+  let monto = parseInput(qs(SEL.quickDebtMonto).value);
+  const montoBs = parseInput(qs(SEL.quickDebtMontoBs).value);
+  if (monto <= 0 && montoBs <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
+  var tasa = tasaActual || await invoke('get_tasa');
+  if (montoBs > 0 && monto <= 0) monto = montoBs / tasa;
   if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
   var clienteId = parseInt(qs(SEL.quickDebtMonto).dataset.clienteId);
   var nombre = qs(SEL.quickDebtClienteNombre).textContent;
   var ok = await confirmModal('Registrar deuda de ' + formatUSD(monto) + ' a "' + nombre + '"?', 'Deuda R\u00e1pida', 'Registrar');
   if (!ok) return;
+  var btn = qs(SEL.quickDebtConfirm);
+  var origHtml = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-spin"></i>';
   try {
     await invoke('add_quick_debt', { clienteId: clienteId, montoUsd: monto });
     showToast('Deuda de ' + formatUSD(monto) + ' registrada');
     closeModal(qs(SEL.quickDebtModal));
     loadCreditos();
   } catch (e) { showToast('Error: ' + e, 'error'); }
+  finally { btn.disabled = false; btn.innerHTML = origHtml; }
 }
 

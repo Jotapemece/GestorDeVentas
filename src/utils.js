@@ -494,6 +494,59 @@ function getViewEl(name) {
   return document.getElementById('view-' + name);
 }
 
+/* ========== BS/USD BIDIRECTIONAL CONVERSION ========== */
+var _convLock = false;
+function initBsUsdConversion(bsSelector, usdSelector) {
+  var bsInput = qs(bsSelector);
+  var usdInput = qs(usdSelector);
+  if (!bsInput || !usdInput) return;
+  bsInput.addEventListener('input', function () {
+    if (_convLock) return;
+    _convLock = true;
+    var bs = parseInput(this.value);
+    if (bs > 0 && tasaActual > 0) {
+      usdInput.value = (bs / tasaActual).toFixed(2);
+    } else if (!this.value || parseFloat(this.value) === 0) {
+      usdInput.value = '';
+    }
+    _convLock = false;
+  });
+  usdInput.addEventListener('input', function () {
+    if (_convLock) return;
+    _convLock = true;
+    var usd = parseInput(this.value);
+    if (usd > 0 && tasaActual > 0) {
+      bsInput.value = (usd * tasaActual).toFixed(2);
+    } else if (!this.value || parseFloat(this.value) === 0) {
+      bsInput.value = '';
+    }
+    _convLock = false;
+  });
+}
+
+/* ========== TABLE SCROLL INDICATOR ========== */
+function initTableScrollIndicators() {
+  function checkScroll(container) {
+    if (container.scrollHeight > container.clientHeight) {
+      container.classList.add('scrollable');
+    } else {
+      container.classList.remove('scrollable');
+    }
+  }
+  var containers = qsa('.table-container');
+  for (var i = 0; i < containers.length; i++) {
+    checkScroll(containers[i]);
+  }
+  var ro = new ResizeObserver(function(entries) {
+    for (var j = 0; j < entries.length; j++) {
+      checkScroll(entries[j].target);
+    }
+  });
+  for (var k = 0; k < containers.length; k++) {
+    ro.observe(containers[k]);
+  }
+}
+
 /* ========== TABLE SORTING ========== */
 function initTableSorting(tableId) {
   const table = document.getElementById(tableId);

@@ -311,6 +311,28 @@ pub struct ProductHistoryItem {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MovimientoCaja {
+    pub id: i64,
+    pub tipo: String,
+    pub monto_bs: f64,
+    pub monto_usd: f64,
+    pub concepto: String,
+    pub usuario_id: i64,
+    pub username: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SaldoCaja {
+    pub saldo_usd: f64,
+    pub saldo_bs: f64,
+    pub total_ventas_usd: f64,
+    pub total_ventas_bs: f64,
+    pub total_ingresos_usd: f64,
+    pub total_egresos_usd: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VoidItemRequest {
     pub venta_id: i64,
     pub detalle_ids: Vec<i64>,

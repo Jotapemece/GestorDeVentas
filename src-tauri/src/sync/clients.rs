@@ -1,5 +1,5 @@
 use super::conflicts::{check_and_record_conflict, is_conflict};
-use super::{api_url, now_iso, supabase_config, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, now_iso, run_download, run_upload, supabase_get, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
@@ -12,6 +12,7 @@ pub(crate) fn upload_clientes_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
+    _dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -91,15 +92,16 @@ pub(crate) fn upload_clientes_inner(
 
 #[tauri::command]
 pub fn upload_clientes(state: State<AppState>) -> Result<String, String> {
-    let db = state.lock_db()?;
-    let (supabase_url, supabase_key) = supabase_config(&db)?;
-    upload_clientes_inner(&db, &supabase_url, &supabase_key)
+    run_upload(&state, |db, supabase_url, supabase_key, dispositivo_id| {
+        upload_clientes_inner(db, supabase_url, supabase_key, dispositivo_id)
+    })
 }
 
 pub(crate) fn download_clientes_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
+    _dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -234,10 +236,7 @@ pub(crate) fn download_clientes_inner(
 
 #[tauri::command]
 pub fn download_clientes(state: State<AppState>) -> Result<String, String> {
-    let mut db = state.secondary_conn()?;
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
-    let (supabase_url, supabase_key) = supabase_config(&tx)?;
-    let result = download_clientes_inner(&tx, &supabase_url, &supabase_key)?;
-    tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
-    Ok(result)
+    run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {
+        download_clientes_inner(tx, supabase_url, supabase_key, dispositivo_id)
+    })
 }

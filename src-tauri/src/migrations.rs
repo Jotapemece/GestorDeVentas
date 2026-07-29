@@ -114,6 +114,7 @@ const MIGRATIONS: &[(&str, fn(&Connection))] = &[
     ("023_add_inari_bebidas", add_inari_bebidas),
     ("024_add_usuarios_sync_fields", add_usuarios_sync_fields),
     ("025_add_ventas_sync_refs", add_ventas_sync_refs),
+    ("026_add_movimientos_caja", add_movimientos_caja),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -449,4 +450,19 @@ fn add_password_change_required(conn: &Connection) {
             [],
         ).ok();
     }
+}
+
+fn add_movimientos_caja(conn: &Connection) {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS movimientos_caja (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL CHECK(tipo IN ('ingreso','egreso')),
+            monto_bs REAL NOT NULL DEFAULT 0,
+            monto_usd REAL NOT NULL DEFAULT 0,
+            concepto TEXT NOT NULL,
+            usuario_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );"
+    ).ok();
 }

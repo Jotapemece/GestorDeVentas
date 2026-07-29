@@ -115,6 +115,53 @@ pub(crate) fn urlencoding(s: &str) -> String {
     out
 }
 
+/// Helper: ejecuta el boilerplate común de un comando Tauri de upload.
+/// Obtiene db, supabase_config y dispositivo_id, luego llama a `inner` con
+/// (db, supabase_url, supabase_key, dispositivo_id).
+pub(crate) fn run_upload<F>(state: &tauri::State<'_, crate::db::AppState>, inner: F) -> Result<String, String>
+where
+    F: FnOnce(&rusqlite::Connection, &str, &str, &str) -> Result<String, String>,
+{
+    let db = state.lock_db()?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
+    let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
+    inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
+}
+
+/// Helper: ejecuta el boilerplate común de un comando Tauri de download.
+/// Obtiene secondary_conn, transaction, supabase_config y dispositivo_id,
+/// luego llama a `inner` con (tx, supabase_url, supabase_key, dispositivo_id) y hace commit.
+pub(crate) fn run_download<F>(state: &tauri::State<'_, crate::db::AppState>, inner: F) -> Result<String, String>
+where
+    F: FnOnce(&rusqlite::Transaction<'_>, &str, &str, &str) -> Result<String, String>,
+{
+    let mut db = state.secondary_conn()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let (supabase_url, supabase_key) = supabase_config(&tx)?;
+    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
+    let result = inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+    tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
+    Ok(result)
+}
+
+/// Helper: formatea el resultado de un download con inserted/updated/conflicts.
+#[allow(dead_code)]
+pub(crate) fn format_download_result(inserted: u64, updated: u64, conflicts: u64, entity: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if inserted > 0 { parts.push(format!("{} {} nuevos", inserted, entity)); }
+    if updated > 0 { parts.push(format!("{} actualizados", updated)); }
+    if conflicts > 0 { parts.push(format!("{} conflictos", conflicts)); }
+    let body = if parts.is_empty() { "sin cambios".to_string() } else { parts.join(", ") };
+    let extra = if conflicts > 0 { " Revisa conflictos en Configuración".to_string() } else { String::new() };
+    format!("Descarga completada: {}.{}", body, extra)
+}
+
+/// Helper: formatea el resultado de un upload.
+#[allow(dead_code)]
+pub(crate) fn format_upload_result(count: usize, entity: &str) -> String {
+    format!("Subida completada: {} {} subidos", count, entity)
+}
+
 pub(crate) fn emit_progress(app: &tauri::AppHandle, step: &str, current: u32, total: u32) {
     let payload = json!({
         "step": step,

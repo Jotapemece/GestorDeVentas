@@ -66,6 +66,7 @@ pub fn list_clientes(
 ) -> Result<Vec<Cliente>, String> {
     let db = state.lock_db()?;
     let query = if let (Some(p), Some(ps)) = (page, page_size) {
+        let ps = ps.max(1);
         let offset = (p.max(1) - 1) * ps;
         format!("{} LIMIT {} OFFSET {}", SQL_LIST_CLIENTES, ps, offset)
     } else {

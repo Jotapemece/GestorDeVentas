@@ -195,7 +195,7 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
     emit_progress(&app_handle, "Subiendo productos...", 1, total);
     let r1 = upload_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo clientes...", 2, total);
-    let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key)?;
+    let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo usuarios...", 3, total);
     let r3 = upload_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo ventas...", 4, total);
@@ -215,9 +215,9 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
 
     let total = 4u32;
     emit_progress(&app_handle, "Descargando productos...", 1, total);
-    let r1 = download_products_inner(&tx, &supabase_url, &supabase_key)?;
+    let r1 = download_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Descargando clientes...", 2, total);
-    let r2 = download_clientes_inner(&tx, &supabase_url, &supabase_key)?;
+    let r2 = download_clientes_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Descargando ventas...", 3, total);
     let r3 = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Descargando usuarios...", 4, total);
@@ -239,15 +239,15 @@ pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<
     emit_progress(&app_handle, "Subiendo productos...", 1, total);
     let r1 = upload_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo clientes...", 2, total);
-    let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key)?;
+    let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo usuarios...", 3, total);
     let r3 = upload_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Subiendo ventas...", 4, total);
     let r4 = upload_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Descargando productos...", 5, total);
-    let r5 = download_products_inner(&tx, &supabase_url, &supabase_key)?;
+    let r5 = download_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Descargando clientes...", 6, total);
-    let r6 = download_clientes_inner(&tx, &supabase_url, &supabase_key)?;
+    let r6 = download_clientes_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Descargando ventas...", 7, total);
     let r7 = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     emit_progress(&app_handle, "Descargando usuarios...", 8, total);

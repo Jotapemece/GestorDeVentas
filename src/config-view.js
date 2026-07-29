@@ -79,26 +79,40 @@ const themes = {
 };
 
 let prevThemeKeys = null;
-function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  if (prevThemeKeys) {
-    prevThemeKeys.forEach(key => document.documentElement.style.removeProperty(key));
+let _systemThemeMq = null;
+function resolveTheme(theme) {
+  if (theme === 'sistema') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro';
   }
-  const t = themes[theme];
+  return theme;
+}
+function applyTheme(theme) {
+  var resolved = resolveTheme(theme);
+  document.documentElement.setAttribute('data-theme', resolved);
+  if (prevThemeKeys) {
+    prevThemeKeys.forEach(function(k) { document.documentElement.style.removeProperty(k); });
+  }
+  var t = themes[resolved];
   if (t) {
     prevThemeKeys = Object.keys(t);
-    Object.entries(t).forEach(([key, val]) => {
+    Object.entries(t).forEach(function(_ref) {
+      var key = _ref[0], val = _ref[1];
       document.documentElement.style.setProperty(key, val);
     });
     try { localStorage.setItem(CFG_TEMA, theme); } catch (e) {}
   } else {
     prevThemeKeys = null;
   }
+  if (_systemThemeMq) { _systemThemeMq.onchange = null; _systemThemeMq = null; }
+  if (theme === 'sistema') {
+    _systemThemeMq = window.matchMedia('(prefers-color-scheme: dark)');
+    _systemThemeMq.onchange = function() { applyTheme('sistema'); };
+  }
 }
 
 async function handleThemeClick(theme) {
   applyTheme(theme);
-  qsa('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
+  qsa('.theme-btn').forEach(function(b) { return b.classList.toggle('active', b.dataset.theme === theme); });
   try {
     await setUserConfig(CFG_TEMA, theme);
     showToast('Tema cambiado a ' + theme);

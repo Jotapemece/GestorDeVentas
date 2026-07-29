@@ -516,6 +516,67 @@ pub fn get_profit_series(
     Ok(points)
 }
 
+/* ========== MOVIMIENTOS CAJA ========== */
+const SQL_INSERT_MOVIMIENTO: &str =
+    "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+const SQL_LIST_MOVIMIENTOS: &str =
+    "SELECT id, tipo, monto_bs, monto_usd, concepto, usuario_id, username, created_at \
+     FROM movimientos_caja WHERE date(created_at) = date('now','localtime') ORDER BY id DESC";
+const SQL_TOTAL_MOVIMIENTOS: &str =
+    "SELECT COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto_usd ELSE 0 END), 0), \
+            COALESCE(SUM(CASE WHEN tipo='egreso' THEN monto_usd ELSE 0 END), 0) \
+     FROM movimientos_caja WHERE date(created_at) = date('now','localtime')";
+
+#[tauri::command]
+pub fn register_movimiento(state: State<AppState>, tipo: String, monto_bs: f64, monto_usd: f64, concepto: String, usuario_id: i64, username: String) -> Result<MovimientoCaja, String> {
+    let db = state.lock_db()?;
+    db.execute(SQL_INSERT_MOVIMIENTO, params![tipo, monto_bs, monto_usd, concepto, usuario_id, username])
+        .map_err(|e| format!("Error al registrar movimiento: {}", e))?;
+    let id = db.last_insert_rowid();
+    Ok(MovimientoCaja { id, tipo, monto_bs, monto_usd, concepto, usuario_id, username, created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string() })
+}
+
+#[tauri::command]
+pub fn list_movimientos(state: State<AppState>) -> Result<Vec<MovimientoCaja>, String> {
+    let db = state.lock_db()?;
+    let mut stmt = db.prepare(SQL_LIST_MOVIMIENTOS).map_err(|e| format!("Error al listar movimientos: {}", e))?;
+    let rows = stmt.query_map([], |row| {
+        Ok(MovimientoCaja {
+            id: row.get(0)?,
+            tipo: row.get(1)?,
+            monto_bs: row.get(2)?,
+            monto_usd: row.get(3)?,
+            concepto: row.get(4)?,
+            usuario_id: row.get(5)?,
+            username: row.get(6)?,
+            created_at: row.get(7)?,
+        })
+    }).map_err(|e| format!("Error al leer movimientos: {}", e))?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| format!("Error en fila: {}", e))?);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn get_saldo_caja(state: State<AppState>) -> Result<SaldoCaja, String> {
+    let db = state.lock_db()?;
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let tomorrow = crate::helpers::siguiente_dia(&today);
+    let (ventas_usd, ventas_bs): (f64, f64) = db
+        .query_row("SELECT COALESCE(SUM(total_usd),0), COALESCE(SUM(total_bs),0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0",
+            params![today, tomorrow], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| format!("Error al obtener ventas: {}", e))?;
+    let (ingresos_usd, egresos_usd): (f64, f64) = db
+        .query_row(SQL_TOTAL_MOVIMIENTOS, [], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| format!("Error al obtener movimientos: {}", e))?;
+    let saldo_usd = ventas_usd + ingresos_usd - egresos_usd;
+    let tasa = crate::db::get_tasa_from_db(&db).unwrap_or(0.0);
+    let saldo_bs = saldo_usd * tasa;
+    Ok(SaldoCaja { saldo_usd, saldo_bs, total_ventas_usd: ventas_usd, total_ventas_bs: ventas_bs, total_ingresos_usd: ingresos_usd, total_egresos_usd: egresos_usd })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

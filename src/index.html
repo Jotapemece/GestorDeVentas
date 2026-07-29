@@ -59,7 +59,7 @@
 
     <div id="login-screen">
       <div class="login-card">
-        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.01</button>
+        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.03</button>
         <div class="login-brand">
           <div class="login-icon">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -77,6 +77,11 @@
           </div>
           <h1>InariMarket</h1>
           <p class="login-subtitle">Sistema de Punto de Venta</p>
+        </div>
+        <div class="login-greeting" id="login-greeting">
+          <div class="login-greeting-time" id="login-greeting-time"></div>
+          <div class="login-greeting-text" id="login-greeting-text"></div>
+          <div class="login-greeting-date" id="login-greeting-date"></div>
         </div>
         <div class="form-group">
           <label for="login-username">Usuario</label>
@@ -135,6 +140,7 @@
           <button class="nav-btn" data-view="cashier">
             <span class="nav-icon"><i class="nf nf-fa-money"></i></span>
             <span class="nav-text">Caja</span>
+            <span id="cashier-nav-badge" class="nav-badge hidden" title="Ventas hoy">0</span>
           </button>
           <button class="nav-btn" data-view="audit">
             <span class="nav-icon"><i class="nf nf-fa-history"></i></span>
@@ -155,7 +161,6 @@
           </button>
         </nav>
         <div class="sidebar-footer">
-          <div class="sidebar-version">InariMarket v1.0</div>
           <div id="offline-indicator"><i class="nf nf-fa-wifi"></i> Sin conexión</div>
           <div id="sync-indicator" class="sync-indicator" title="Estado de sincronización"><i class="nf nf-fa-cloud"></i> <span id="sync-indicator-text">-</span></div>
           <button id="logout-btn"><i class="nf nf-fa-sign_out"></i> Salir</button>
@@ -184,10 +189,13 @@
               <div class="panel-header">Productos</div>
               <div class="product-list-container">
                 <div id="recent-products" class="recent-products" style="display:none"></div>
+                <div class="category-filter-bar" id="category-filter-bar">
+                  <button class="category-filter-btn active" data-cat="">Todas</button>
+                </div>
                 <table class="table" id="product-search-table" data-col-toggle="product-search">
                   <thead>
                     <tr>
-                      <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
+                      <th data-sortable="nombre">Nombre<span class="sort-arrow"></span><button class="col-toggle-btn" data-col-toggle="product-search" title="Compacto/expandido"><i class="nf nf-fa-compress"></i></button></th>
                       <th data-sortable="precio_usd">Precio ($)<span class="sort-arrow"></span></th>
                       <th data-sortable="precio_bs">Precio (Bs.)<span class="sort-arrow"></span></th>
                       <th data-sortable="stock">Stock<span class="sort-arrow"></span></th>
@@ -198,6 +206,7 @@
                 </table>
               </div>
             </div>
+            <div class="sales-divider" id="sales-divider" title="Arrastrar para redimensionar"></div>
             <div class="sales-panel sales-center" id="sales-center">
               <div class="panel-header">Carrito de Ventas <span id="cart-badge" class="cart-badge hidden">0</span></div>
               <div class="cart-container">
@@ -311,6 +320,7 @@
               <button id="close-cashier-btn" class="btn btn-danger hidden"><i class="nf nf-fa-lock"></i> Cerrar Jornada</button>
               <button id="historial-cierres-btn" class="btn btn-outline"><i class="nf nf-fa-history"></i> Cierres anteriores</button>
               <button id="goto-reports-btn" class="btn btn-outline"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
+              <button id="movimientos-btn" class="btn btn-outline"><i class="nf nf-fa-money"></i> Movimientos</button>
             </div>
           </div>
           <div id="caja-status-bar" class="caja-status cerrada">
@@ -332,6 +342,10 @@
             <div class="summary-card">
               <div class="summary-label">Tasa Aplicada</div>
               <div class="summary-value" id="daily-tasa">Bs. 0,00</div>
+            </div>
+            <div class="summary-card" id="saldo-card">
+              <div class="summary-label">Saldo Caja</div>
+              <div class="summary-value" id="movimientos-saldo">$0.00</div>
             </div>
           </div>
           <h3>Ventas del D&iacute;a</h3>
@@ -497,6 +511,7 @@
                 <button class="theme-btn" data-theme="naranja"><i class="nf nf-fa-palette"></i><span>Naranja</span></button>
                 <button class="theme-btn" data-theme="menta"><i class="nf nf-fa-palette"></i><span>Menta</span></button>
                 <button class="theme-btn" data-theme="rubi"><i class="nf nf-fa-gem"></i><span>Rub&iacute;</span></button>
+                <button class="theme-btn" data-theme="sistema"><i class="nf nf-fa-desktop"></i><span>Sistema</span></button>
               </div>
             </div>
           </div>
@@ -944,7 +959,9 @@
           <label>Seleccionar Cliente</label>
           <div class="custom-select" id="client-select-dropdown">
             <button class="custom-select-btn" id="client-select-btn">Seleccione un cliente...</button>
-            <div class="custom-select-menu" id="client-select-menu"></div>
+            <div class="custom-select-menu" id="client-select-menu">
+              <input type="text" id="client-select-search" class="custom-select-search" placeholder="Buscar cliente..." autocomplete="off">
+            </div>
           </div>
         </div>
         <div class="form-group hidden" id="mixto-group">
@@ -1105,10 +1122,18 @@
           <span class="abono-cliente-nombre" id="abono-cliente-nombre"></span>
           <span class="abono-deuda-total">Deuda: <strong id="abono-deuda-usd">$0.00</strong> / <strong id="abono-deuda-bs">Bs. 0,00</strong></span>
         </div>
+        <div class="abono-tasa-info" id="abono-tasa-info">
+          Tasa: <strong id="abono-tasa-valor">Bs. 0,00</strong>
+          <button id="abono-tasa-refresh" class="btn btn-outline btn-xs"><i class="nf nf-fa-refresh"></i></button>
+        </div>
         <div class="abono-cart">
           <div class="abono-input-group">
             <label>Monto a abonar ($)</label>
             <input type="number" id="abono-monto" step="any" min="0" placeholder="0.00" inputmode="decimal">
+          </div>
+          <div class="abono-input-group" style="margin-top:6px">
+            <label>&oacute; en Bs.</label>
+            <input type="number" id="abono-monto-bs" step="any" min="0" placeholder="0.00" inputmode="decimal">
           </div>
           <div class="abono-saldo-restante" id="abono-saldo-restante">Saldo Restante: $0.00</div>
           <div class="abono-metodo">
@@ -1204,6 +1229,10 @@
         <div class="form-group">
           <label>Monto en USD</label>
           <input type="number" id="quick-debt-monto" class="form-input" step="0.01" min="0.01" placeholder="0.00" style="width:100%">
+        </div>
+        <div class="form-group" style="margin-top:6px">
+          <label>&oacute; en Bs.</label>
+          <input type="number" id="quick-debt-monto-bs" class="form-input" step="0.01" min="0.01" placeholder="0.00" style="width:100%">
         </div>
       </div>
       <div class="modal-footer">
@@ -1421,12 +1450,14 @@
                 <li><strong>Abrir caja:</strong> al iniciar el d&iacute;a, abre la caja para habilitar las ventas.</li>
                 <li><strong>Cerrar caja:</strong> al finalizar, genera un reporte con totales por m&eacute;todo de pago, productos vendidos y clientes a cr&eacute;dito.</li>
                 <li><strong>Resumen diario:</strong> tarjetas con ventas totales, total en USD, tasa actual y cantidad de ventas del d&iacute;a.</li>
+                <li><strong>Saldo de caja:</strong> tarjeta que muestra el saldo calculado (ventas + ingresos &minus; egresos del d&iacute;a).</li>
+                <li><strong>Movimientos:</strong> bot&oacute;n para registrar gastos (egresos) e ingresos extraordinarios. &Uacute;til para anotar salidas de efectivo para cambio, pagos r&aacute;pidos o dep&oacute;sitos. Los movimientos se listan en orden cronol&oacute;gico inverso y se reflejan en el saldo de caja.</li>
                 <li><strong>Historial de cierres:</strong> consulta cierres anteriores con detalles.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-info_circle"></i>
-              <span><strong>Info:</strong> No se puede vender si la caja no est&aacute; abierta. El cierre es obligatorio al final de la jornada.</span>
+              <span><strong>Info:</strong> No se puede vender si la caja no est&aacute; abierta. El cierre es obligatorio al final de la jornada. Usa Movimientos para registrar cualquier entrada o salida de efectivo que no sea una venta.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-credito">
@@ -1619,36 +1650,33 @@
   <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
     <div class="modal-content changelog-content">
       <div class="modal-header">
-        <h3><i class="nf nf-fa-clipboard_list"></i> Notas de la versi&oacute;n v1.01</h3>
+        <h3><i class="nf nf-fa-clipboard_list"></i> Notas de la versi&oacute;n v1.03</h3>
         <span class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body changelog-body">
         <div class="changelog-section">
           <h4><i class="nf nf-fa-plus_circle" style="color:var(--success)"></i> Nuevas funcionalidades</h4>
           <ul>
-            <li><strong>Carrito m&uacute;ltiple (Hold):</strong> Ahora puedes plegar el carrito actual y abrir hasta 3 carritos simult&aacute;neamente. Los carritos en espera aparecen como pesta&ntilde;as con vista previa de productos.</li>
-            <li><strong>Notas de versi&oacute;n:</strong> Bot&oacute;n "v1.01" en la pantalla de inicio para consultar los cambios de cada versi&oacute;n.</li>
-            <li><strong>Productos recientes:</strong> Al agregar un producto desde la caja, aparece en "&Uacute;ltimos:" para acceso r&aacute;pido.</li>
-            <li><strong>Editar precio unitario:</strong> Doble clic o bot&oacute;n l&aacute;piz en el carrito para editar el precio (solo admins).</li>
-            <li><strong>Snapshot del carrito:</strong> El carrito se guarda autom&aacute;ticamente al cerrar la aplicaci&oacute;n y se restaura al abrir.</li>
+            <li><strong>Animaci&oacute;n de vuelo al carrito:</strong> Al agregar un producto desde la tabla de b&uacute;squeda, una animaci&oacute;n visual vuela hasta el carrito.</li>
+            <li><strong>Modo compacto/expandido en tablas:</strong> Bot&oacute;n en los encabezados de las tablas principales para alternar entre vista compacta y expandida.</li>
+            <li><strong>Filtro por categor&iacute;a en POS:</strong> Botones de categor&iacute;a sobre la tabla de productos para filtrar r&aacute;pidamente. Adaptado para m&oacute;vil.</li>
+            <li><strong>Tarjeta de saludo en login:</strong> Muestra la hora actual, un saludo seg&uacute;n el momento del d&iacute;a y la fecha completa.</li>
+            <li><strong>B&uacute;squeda global:</strong> Presiona <kbd>Ctrl+K</kbd> para abrir un buscador que encuentra productos, clientes y ventas r&aacute;pidamente.</li>
+            <li><strong>Hover card de producto:</strong> Al pasar el mouse sobre un producto en el POS, se muestra una tarjeta con informaci&oacute;n detallada.</li>
           </ul>
         </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-wrench" style="color:var(--accent)"></i> Mejoras y optimizaciones</h4>
           <ul>
-            <li><strong>Transacci&oacute;n en upload_all:</strong> Las subidas a la nube ahora usan una transacci&oacute;n, evitando estados inconsistentes si falla una sub-operaci&oacute;n.</li>
-            <li><strong>Registro autom&aacute;tico de dispositivo:</strong> Al crear una venta sin dispositivo registrado, se genera y guarda un UUID autom&aacute;ticamente.</li>
-            <li><strong>Auditor&iacute;a m&aacute;s robusta:</strong> Los errores al registrar acciones de auditor&iacute;a ya no se ignoran silenciosamente, se muestran en consola.</li>
-            <li><strong>Swipe-to-delete universal:</strong> El gesto de deslizar para eliminar en el carrito ahora funciona en iOS y cualquier dispositivo t&aacute;ctil.</li>
-            <li><strong>Navegaci&oacute;n t&aacute;ctil mejorada:</strong> Botones de navegaci&oacute;n m&aacute;s grandes y legibles en pantallas peque&ntilde;as (&le;480px).</li>
+            <li>Filtro por categor&iacute;a dise&ntilde;ado para m&oacute;vil: botones compactos con scroll horizontal si es necesario.</li>
+            <li>La tarjeta de saludo se actualiza cada segundo con la hora en vivo.</li>
+            <li>B&uacute;squeda global con resultados en vivo, navegaci&oacute;n con teclado y cierre con Escape.</li>
           </ul>
         </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-bug" style="color:var(--danger)"></i> Correcciones</h4>
           <ul>
-            <li>El editor de precio por doble clic ahora funciona correctamente.</li>
-            <li>Estructura del callback DOMContentLoaded corregida para evitar errores de sintaxis.</li>
-            <li>Los errores de creaci&oacute;n del usuario admin por defecto ahora se registran en consola.</li>
+            <li>Ninguna correcci&oacute;n de bugs en esta versi&oacute;n.</li>
           </ul>
         </div>
       </div>
@@ -1656,6 +1684,24 @@
   </div>
 
   <div id="toast-container"></div>
+
+  <div id="global-search-overlay" class="global-search-overlay hidden">
+    <div class="global-search-modal">
+      <div class="global-search-header">
+        <i class="nf nf-fa-search"></i>
+        <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar productos, clientes, ventas..." autocomplete="off">
+        <button id="global-search-close" class="global-search-close" title="Cerrar (Esc)">&times;</button>
+        <span class="global-search-hint"><kbd>ESC</kbd> cerrar</span>
+      </div>
+      <div class="global-search-results" id="global-search-results">
+        <div class="global-search-empty">Escribe para buscar...</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="product-hover-card" class="product-hover-card hidden">
+    <div class="product-hover-card-body" id="product-hover-card-body"></div>
+  </div>
 
   <!-- Chat IA -->
   <button id="chat-fab" class="chat-fab" title="Enar IA">
@@ -1672,6 +1718,38 @@
       <ellipse cx="50" cy="54" rx="3.5" ry="2.5" fill="currentColor" opacity="0.8"/>
     </svg>
   </button>
+  <div id="movimientos-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Movimientos de Caja">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-money"></i> Movimientos de Caja</h3>
+        <span class="modal-close" id="movimientos-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body" id="movimientos-body">
+        <div class="movimientos-form" id="movimientos-form">
+          <div class="movimientos-form-row">
+            <select id="movimientos-tipo" class="form-input">
+              <option value="egreso">Gasto (Egreso)</option>
+              <option value="ingreso">Ingreso</option>
+            </select>
+            <input type="number" id="movimientos-monto-bs" step="any" min="0" placeholder="Monto Bs." inputmode="decimal">
+            <input type="number" id="movimientos-monto-usd" step="any" min="0" placeholder="Monto USD" inputmode="decimal">
+            <input type="text" id="movimientos-concepto" placeholder="Concepto (ej: hielo, cambio...)" maxlength="100">
+            <button id="movimientos-save-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-plus"></i> Agregar</button>
+          </div>
+          <div class="movimientos-tasa-info" id="movimientos-tasa-info">
+            Tasa: <strong id="movimientos-tasa-valor">Bs. 0,00</strong>
+            <button id="movimientos-tasa-refresh" class="btn btn-outline btn-xs"><i class="nf nf-fa-refresh"></i></button>
+          </div>
+        </div>
+        <div class="movimientos-totals">
+          <span>Total ingresos: <strong id="movimientos-total-ingresos">$0.00</strong></span>
+          <span>Total egresos: <strong id="movimientos-total-egresos">$0.00</strong></span>
+        </div>
+        <div id="movimientos-list" class="movimientos-list"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="chat-panel" class="chat-panel hidden">
     <div class="chat-header">
       <div class="chat-header-brand">

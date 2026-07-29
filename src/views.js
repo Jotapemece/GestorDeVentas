@@ -1,3 +1,27 @@
+/* ========== LOGIN GREETING ========== */
+function initLoginGreeting() {
+  updateLoginGreeting();
+  setInterval(updateLoginGreeting, 1000);
+}
+
+function updateLoginGreeting() {
+  const timeEl = qs(SEL.loginGreetingTime);
+  const textEl = qs(SEL.loginGreetingText);
+  const dateEl = qs(SEL.loginGreetingDate);
+  if (!timeEl) return;
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  timeEl.textContent = h + ':' + m;
+  const hour = now.getHours();
+  let greeting = 'Buenos d\u00edas';
+  if (hour >= 12 && hour < 18) greeting = 'Buenas tardes';
+  else if (hour >= 18) greeting = 'Buenas noches';
+  textEl.textContent = greeting;
+  const opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  dateEl.textContent = now.toLocaleDateString('es-ES', opts);
+}
+
 /* ========== CALCULATOR ========== */
 const calcState = { expr: '', result: '0', memory: null, op: null, reset: false };
 
@@ -375,7 +399,10 @@ async function handleLogin() {
       qs(SEL.loginScreen).style.display = 'none';
       qs(SEL.mainApp).style.display = 'flex';
       qs(SEL.bottomTabs).style.display = '';
-      qs(SEL.sidebarUser).textContent = currentUser.username + ' (' + currentUser.rol + ')';
+      var initial = (currentUser.username || 'U')[0].toUpperCase();
+      var colors = ['#6C8EBF','#D47A4A','#6BAF8D','#C45050','#B4A0D4','#4DB8AC','#D49060','#80A880'];
+      var color = colors[currentUser.id % colors.length];
+      qs(SEL.sidebarUser).innerHTML = '<span class="sidebar-user-avatar" style="background:' + color + '">' + initial + '</span><span>' + escapeHtml(currentUser.username) + ' (' + escapeHtml(currentUser.rol) + ')</span>';
       startClock();
       initSidebarAutoHide();
       initCalculator();

@@ -1,5 +1,5 @@
 use super::conflicts::{check_and_record_conflict, is_conflict};
-use super::{api_url, get_config, now_iso, supabase_config, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, now_iso, run_download, run_upload, supabase_get, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
@@ -92,16 +92,16 @@ pub(crate) fn upload_products_inner(
 
 #[tauri::command]
 pub fn upload_products(state: State<AppState>) -> Result<String, String> {
-    let db = state.lock_db()?;
-    let (supabase_url, supabase_key) = supabase_config(&db)?;
-    let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
-    upload_products_inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
+    run_upload(&state, |db, supabase_url, supabase_key, dispositivo_id| {
+        upload_products_inner(db, supabase_url, supabase_key, dispositivo_id)
+    })
 }
 
 pub(crate) fn download_products_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
+    _dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -268,10 +268,7 @@ pub(crate) fn download_products_inner(
 
 #[tauri::command]
 pub fn download_products(state: State<AppState>) -> Result<String, String> {
-    let mut db = state.secondary_conn()?;
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
-    let (supabase_url, supabase_key) = supabase_config(&tx)?;
-    let result = download_products_inner(&tx, &supabase_url, &supabase_key)?;
-    tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
-    Ok(result)
+    run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {
+        download_products_inner(tx, supabase_url, supabase_key, dispositivo_id)
+    })
 }

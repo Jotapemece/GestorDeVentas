@@ -90,6 +90,9 @@ pub fn run() {
             cashier::get_dashboard_summary,
             cashier::get_dashboard_payment_methods,
             cashier::get_profit_series,
+            cashier::register_movimiento,
+            cashier::list_movimientos,
+            cashier::get_saldo_caja,
             // Audit
             audit::get_audit_logs,
             audit::get_cierres,

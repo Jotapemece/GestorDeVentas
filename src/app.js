@@ -1,6 +1,16 @@
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
   initConnectionMonitor();
+  initSalesDivider();
+  initBsUsdConversion(SEL.movimientosMontoBs, SEL.movimientosMontoUsd);
+  initBsUsdConversion(SEL.abonoMontoBs, SEL.abonoMonto);
+  initBsUsdConversion(SEL.quickDebtMontoBs, SEL.quickDebtMonto);
+  initTableScrollIndicators();
+  initLoginGreeting();
+  initGlobalSearch();
+  initHoverCard();
+  initCompactToggle();
+  initCategoryFilter();
   window.addEventListener('beforeunload', function() { saveCartSnapshot(); });
   // Collapse all config cards by default
   qsa(SEL.configCardHeader).forEach(h => h.classList.add('collapsed'));
@@ -324,6 +334,8 @@ document.addEventListener('DOMContentLoaded', async function() {
           loadInventory();
         } catch (e) {
           showToast('Error: ' + e, 'error');
+        }
+      });
     }
   });
 
@@ -342,9 +354,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.recentProducts)?.addEventListener('click', function(e) {
     var chip = e.target.closest('.recent-chip');
     if (chip) addToCart(chip.dataset.codigo);
-  });
-      return;
-    }
   });
 
   // Product modal
@@ -439,6 +448,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       const nombre = quickDebtBtn.dataset.nombre;
       qs(SEL.quickDebtClienteNombre).textContent = nombre;
       qs(SEL.quickDebtMonto).value = '';
+      qs(SEL.quickDebtMontoBs).value = '';
       qs(SEL.quickDebtMonto).dataset.clienteId = id;
       showModal(qs(SEL.quickDebtModal));
       return;
@@ -893,6 +903,13 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   qs(SEL.historialCierreDetalleClose).addEventListener('click', closeHistorialDetalle);
   qs(SEL.historialCierreDetalleOkBtn).addEventListener('click', closeHistorialDetalle);
+
+  // Movimientos caja
+  qs(SEL.movimientosBtn)?.addEventListener('click', openMovimientosModal);
+  qs(SEL.movimientosClose)?.addEventListener('click', function() { closeModal(qs(SEL.movimientosModal)); });
+  qs(SEL.movimientosSaveBtn)?.addEventListener('click', saveMovimiento);
+  qs(SEL.movimientosTasaRefresh)?.addEventListener('click', function() { refreshTasaFromInfo('movimientos'); });
+  qs(SEL.abonoTasaRefresh)?.addEventListener('click', function() { refreshTasaFromInfo('abono'); });
 
   // Debt detail
   qs(SEL.debtDetailClose).addEventListener('click', closeDebtDetail);
@@ -1517,4 +1534,152 @@ document.addEventListener('DOMContentLoaded', async function() {
       showToast('Vista recargada', 'info');
     }
   });
+
+  /* ========== COMPACT TOGGLE ========== */
+  function initCompactToggle() {
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest(SEL.colToggleBtn);
+      if (!btn) return;
+      const target = btn.dataset.colToggle;
+      const table = document.querySelector('table[data-col-toggle="' + target + '"]');
+      if (!table) return;
+      table.classList.toggle('compact-mode');
+      const icon = btn.querySelector('.nf');
+      if (icon) {
+        icon.className = table.classList.contains('compact-mode') ? 'nf nf-fa-expand' : 'nf nf-fa-compress';
+      }
+    });
+  }
+
+  /* ========== HOVER CARD ========== */
+  function initHoverCard() {
+    const table = qs(SEL.productSearchTable);
+    if (!table) return;
+    const card = qs(SEL.productHoverCard);
+    const body = qs(SEL.productHoverCardBody);
+    let hideTimer = null;
+    table.addEventListener('mouseover', function(e) {
+      const tr = e.target.closest('tr');
+      if (!tr) return;
+      const codigo = tr.querySelector('[data-action="add-to-cart"]')?.dataset.codigo;
+      if (!codigo) return;
+      clearTimeout(hideTimer);
+      const p = productCache.find(function(x) { return x.codigo === codigo; });
+      if (!p) return;
+      var html = '<div class="hover-title">' + escapeHtml(p.nombre) + '</div>';
+      html += '<div class="hover-row"><span class="hover-label">C&oacute;digo</span><span class="hover-value">' + escapeHtml(p.codigo) + '</span></div>';
+      html += '<div class="hover-row"><span class="hover-label">Precio</span><span class="hover-value">' + formatUSD(p.precio_usd) + '</span></div>';
+      html += '<div class="hover-row"><span class="hover-label">Stock</span><span class="hover-value">' + p.stock + '</span></div>';
+      if (p.costo > 0) html += '<div class="hover-row"><span class="hover-label">Costo</span><span class="hover-value">' + formatUSD(p.costo) + '</span></div>';
+      if (p.categoria) html += '<div class="hover-row"><span class="hover-label">Categor&iacute;a</span><span class="hover-value">' + escapeHtml(p.categoria) + '</span></div>';
+      body.innerHTML = html;
+      var rect = tr.getBoundingClientRect();
+      var left = rect.right + 12;
+      if (left + 280 > window.innerWidth) left = rect.left - 280 - 12;
+      card.style.left = left + 'px';
+      card.style.top = Math.max(8, rect.top + (rect.height - card.offsetHeight) / 2) + 'px';
+      card.classList.remove('hidden');
+    });
+    table.addEventListener('mouseout', function(e) {
+      var related = e.relatedTarget;
+      if (related && (related.closest('tr') || related.closest(SEL.productHoverCard))) return;
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(function() { card.classList.add('hidden'); }, 150);
+    });
+    card.addEventListener('mouseenter', function() { clearTimeout(hideTimer); });
+    card.addEventListener('mouseleave', function() { card.classList.add('hidden'); });
+  }
+
+  /* ========== GLOBAL SEARCH (Ctrl+K) ========== */
+  function initGlobalSearch() {
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const overlay = qs(SEL.globalSearchOverlay);
+        const input = qs(SEL.globalSearchInput);
+        if (overlay.classList.contains('hidden')) {
+          overlay.classList.remove('hidden');
+          input.value = '';
+          qs(SEL.globalSearchResults).innerHTML = '<div class="global-search-empty">Escribe para buscar...</div>';
+          setTimeout(function() { input.focus(); }, 50);
+        } else {
+          overlay.classList.add('hidden');
+        }
+      }
+      if (e.key === 'Escape') {
+        qs(SEL.globalSearchOverlay).classList.add('hidden');
+      }
+    });
+
+    qs(SEL.globalSearchClose).addEventListener('click', function() {
+      qs(SEL.globalSearchOverlay).classList.add('hidden');
+    });
+
+    qs(SEL.globalSearchOverlay).addEventListener('click', function(e) {
+      if (e.target === this) this.classList.add('hidden');
+    });
+
+    let searchTimer = null;
+    qs(SEL.globalSearchInput).addEventListener('input', function() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function() { performGlobalSearch(); }, 200);
+    });
+  }
+
+  async function performGlobalSearch() {
+    const query = qs(SEL.globalSearchInput).value.trim().toLowerCase();
+    const resultsEl = qs(SEL.globalSearchResults);
+    if (!query) {
+      resultsEl.innerHTML = '<div class="global-search-empty">Escribe para buscar...</div>';
+      return;
+    }
+    let html = '';
+
+    // Products
+    const products = productCache.filter(function(p) { return p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query); });
+    if (products.length > 0) {
+      html += '<div class="global-search-section-title"><i class="nf nf-fa-archive"></i> Productos (' + products.length + ')</div>';
+      products.slice(0, 8).forEach(function(p) {
+        html += '<a class="global-search-item" data-action="search-goto" data-view="sales" data-codigo="' + escapeHtml(p.codigo) + '">';
+        html += '<span class="global-search-item-icon" style="background:var(--accent);color:#fff"><i class="nf nf-fa-cube"></i></span>';
+        html += '<span class="global-search-item-info"><span class="global-search-item-title">' + escapeHtml(p.nombre) + '</span><span class="global-search-item-sub">' + escapeHtml(p.codigo) + ' &middot; ' + formatUSD(p.precio_usd) + ' &middot; Stock: ' + p.stock + '</span></span></a>';
+      });
+      if (products.length > 8) html += '<div class="global-search-item" style="opacity:0.6;font-size:12px;justify-content:center">+' + (products.length - 8) + ' m&aacute;s...</div>';
+    }
+
+    // Clients
+    try {
+      const clients = await invoke('list_clients_simple');
+      const matched = clients.filter(function(c) { return c.nombre.toLowerCase().includes(query); });
+      if (matched.length > 0) {
+        html += '<div class="global-search-section-title"><i class="nf nf-fa-users"></i> Clientes (' + matched.length + ')</div>';
+        matched.slice(0, 5).forEach(function(c) {
+          html += '<a class="global-search-item" data-action="search-goto" data-view="creditos">';
+          html += '<span class="global-search-item-icon" style="background:var(--primary);color:#fff"><i class="nf nf-fa-user"></i></span>';
+          html += '<span class="global-search-item-info"><span class="global-search-item-title">' + escapeHtml(c.nombre) + '</span><span class="global-search-item-sub">Deuda: ' + formatUSD(c.saldo_deuda_usd) + '</span></span></a>';
+        });
+      }
+    } catch (e) {}
+
+
+
+    if (!html) {
+      html = '<div class="global-search-empty">Sin resultados para "<strong>' + escapeHtml(query) + '</strong>"</div>';
+    }
+    resultsEl.innerHTML = html;
+
+    // Click handler for results
+    resultsEl.querySelectorAll('[data-action="search-goto"]').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        e.preventDefault();
+        qs(SEL.globalSearchOverlay).classList.add('hidden');
+        showView(this.dataset.view);
+        var codigo = this.dataset.codigo;
+        if (codigo) {
+          var input = qs(SEL.productSearch);
+          if (input) { input.value = codigo; renderProductSearch(); }
+        }
+      });
+    });
+  }
 });
