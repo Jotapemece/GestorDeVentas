@@ -102,7 +102,6 @@ function addRecentProduct(codigo) {
   recentProducts = recentProducts.filter(function(c) { return c !== codigo; });
   recentProducts.unshift(codigo);
   if (recentProducts.length > RECENT_MAX) recentProducts.pop();
-  if (!qs(SEL.productSearch).value.trim()) renderProductSearch();
 }
 
 
@@ -242,7 +241,7 @@ function renderProductSearch() {
     if (productCache.length === 0) {
       grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario') + '</div>';
     } else if (favorites.length === 0 && recent.length === 0) {
-      grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Agregue productos al carrito para verlos aqu\u00ed r\u00e1pidamente') + '</div>';
+      grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Los productos que vendas aparecer\u00e1n aqu\u00ed r\u00e1pidamente') + '</div>';
     }
     return;
   }
@@ -257,7 +256,7 @@ function renderProductSearch() {
   }
   if (favorites.length === 0 && recent.length === 0) {
     table.style.display = '';
-    tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Agregue productos al carrito para verlos aqu\u00ed r\u00e1pidamente') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Los productos que vendas aparecer\u00e1n aqu\u00ed r\u00e1pidamente') + '</td></tr>';
   }
 }
 
@@ -266,7 +265,6 @@ function addToCart(codigo) {
   if (!active) { showToast('M\u00e1ximo 3 carritos alcanzado', 'error'); return; }
   playSound('add');
   haptic(10);
-  addRecentProduct(codigo);
   flyToCart(codigo);
   const p = productCache.find(x => x.codigo === codigo);
   const esInari = p && p.es_inari;
@@ -898,6 +896,10 @@ async function confirmPayment() {
     saveCartSnapshot();
     await loadProductCache();
     renderCart(); updateCheckoutBtn(); closePaymentModal();
+    productos.forEach(function(i) {
+      if (productCache.some(function(p) { return p.codigo === i.codigo; })) addRecentProduct(i.codigo);
+    });
+    renderProductSearch();
     showPaymentSuccess(venta);
     /* Share receipt on mobile */
     shareReceipt(venta);
