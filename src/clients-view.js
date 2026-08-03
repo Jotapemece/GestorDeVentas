@@ -116,7 +116,7 @@ async function openDebtDetail(id) {
     const container = qs(SEL.debtDetailList);
     container.innerHTML = '';
     if (hist.ventas.length === 0) {
-      container.innerHTML = '<p class="empty-state">No hay ventas a cr\u00e9dito registradas.</p>';
+      container.innerHTML = emptyState('<i class="nf nf-fa-credit_card"></i>', 'Sin ventas a cr\u00e9dito', 'Las ventas a cr\u00e9dito de este cliente aparecer\u00e1n aqu\u00ed');
     } else {
       hist.ventas.forEach(v => {
         const card = document.createElement('div');
@@ -257,7 +257,7 @@ async function openTasaHistorialModal() {
 function renderTasaCalendar() {
   var wrap = qs(SEL.tasaCalendarWrap);
   if (!historialTasaData.length) {
-    wrap.innerHTML = '<div class="empty-state" style="padding:16px;font-size:13px">No hay tasas registradas</div>';
+    wrap.innerHTML = emptyState('<i class="nf nf-fa-dollar"></i>', 'No hay tasas registradas', 'El historial de tasas aparecer\u00e1 aqu\u00ed');
     return;
   }
   var tasaMap = {};
@@ -310,7 +310,7 @@ function renderTasaCalendar() {
 function renderTasaHistorialList() {
   var container = qs(SEL.tasaHistorialList);
   if (!historialTasaData.length) {
-    container.innerHTML = '<div class="empty-state" style="padding:24px;font-size:13px">No hay tasas registradas</div>';
+    container.innerHTML = emptyState('<i class="nf nf-fa-dollar"></i>', 'No hay tasas registradas', 'El historial de tasas aparecer\u00e1 aqu\u00ed');
     return;
   }
   container.innerHTML = historialTasaData.map(function(item) {
@@ -409,7 +409,7 @@ async function openTempHistoryModal() {
     const items = await invoke('list_clientes_eliminados');
     tbody.innerHTML = '';
     if (items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-clock_rotate_left"></i>', 'Sin historial', 'Los clientes temporales eliminados aparecer\u00e1n aqu\u00ed') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-history"></i>', 'Sin historial', 'Los clientes temporales eliminados aparecer\u00e1n aqu\u00ed') + '</td></tr>';
       return;
     }
     const frag = document.createDocumentFragment();

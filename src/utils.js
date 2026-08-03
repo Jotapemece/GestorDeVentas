@@ -108,9 +108,9 @@ function createAuditRow(log) {
 function createDailySaleRow(v, metodoLabel) {
   const nota = v.nota_anulacion ? escapeHtml(v.nota_anulacion) : '';
   const anuladaLabel = v.anulada
-    ? (v.nota_anulacion
-        ? '<span class="text-muted" title="' + nota + '"><i class="nf nf-fa-ban"></i> Anulada</span>'
-        : '<span class="text-muted"><i class="nf nf-fa-ban"></i> Anulada</span>')
+    ? (nota
+        ? '<span class="badge badge-danger" title="' + nota + '"><i class="nf nf-fa-ban"></i> Anulada</span>'
+        : '<span class="badge badge-danger"><i class="nf nf-fa-ban"></i> Anulada</span>')
     : '<button class="btn btn-sm btn-danger void-sale-btn" data-id="' + v.id + '" title="Anular venta"><i class="nf nf-fa-ban"></i></button>';
   const detailBtn = '<button class="btn btn-sm btn-outline sale-detail-btn" data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i></button>';
   return '<td data-label="#">' + v.id + '</td><td data-label="Hora">' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td data-label="Usuario">' + escapeHtml(v.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td data-label="Total (Bs.)">' + formatBS(v.total_bs) + '</td><td data-label="Acción">' + detailBtn + ' ' + anuladaLabel + '</td>';
@@ -131,15 +131,18 @@ function createReportRow(v) {
   const notaEsc = v.venta.nota_anulacion ? escapeHtml(v.venta.nota_anulacion) : '';
   const badge = v.venta.anulada
     ? (notaEsc
-        ? ' <span class="text-muted" title="' + notaEsc + '">(Anulada)</span>'
-        : ' <span class="text-muted">(Anulada)</span>')
+        ? ' <span class="badge badge-danger" title="' + notaEsc + '">Anulada</span>'
+        : ' <span class="badge badge-danger">Anulada</span>')
     : '';
   var costoTotal = 0;
   if (v.productos) {
     v.productos.forEach(function(d) { costoTotal += (d.costo || 0) * d.cantidad; });
   }
   var ganancia = v.venta.total_usd - costoTotal;
-  return '<td data-label="#">' + v.venta.id + '</td><td data-label="Fecha">' + escapeHtml(v.venta.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(v.venta.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(v.venta.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(v.venta.total_bs) + badge + '</td>';
+  const vv = v.venta;
+  const obs = vv.nota ? escapeHtml(vv.nota) : '';
+  const detailBtn = '<button class="btn btn-sm btn-outline sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i></button>';
+  return '<td data-label="#">' + vv.id + '</td><td data-label="Fecha">' + escapeHtml(vv.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(vv.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(vv.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(vv.total_bs) + badge + '</td><td data-label="Acción">' + detailBtn + '</td>';
 }
 
 const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
@@ -321,7 +324,7 @@ function confirmModal(msg, title, okText) {
     qs(SEL.confirmTitle).textContent = title || 'Confirmar';
     qs(SEL.confirmMessage).textContent = msg;
     const okBtn = qs(SEL.confirmOkBtn);
-    okBtn.textContent = okText || 'Confirmar';
+    okBtn.innerHTML = '<i class="nf nf-fa-check"></i> ' + (okText || 'Confirmar');
     okBtn.onclick = () => { closeModal(modal); resolve(true); };
     qs(SEL.confirmCancelBtn).onclick = () => { closeModal(modal); resolve(false); };
     qs(SEL.confirmClose).onclick = () => { closeModal(modal); resolve(false); };
@@ -341,7 +344,7 @@ function promptModal(msg, title, okText) {
     input.value = '';
     input.classList.remove('input-error');
     const okBtn = qs(SEL.promptOkBtn);
-    okBtn.textContent = okText || 'Aceptar';
+    okBtn.innerHTML = '<i class="nf nf-fa-check"></i> ' + (okText || 'Aceptar');
     const finish = (val) => { closeModal(modal); resolve(val); };
     okBtn.onclick = () => {
       const val = input.value.trim();

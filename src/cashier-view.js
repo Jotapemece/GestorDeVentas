@@ -1160,7 +1160,7 @@ async function openHistorialCierres() {
     const cierres = await invoke('list_cierres');
     const container = qs(SEL.historialCierresList);
     if (!cierres.length) {
-      container.innerHTML = '<p class="empty-state">No hay cierres registrados</p>';
+      container.innerHTML = emptyState('<i class="nf nf-fa-history"></i>', 'No hay cierres registrados', 'Los cierres de caja aparecer\u00e1n aqu\u00ed');
     } else {
       let html = '<table class="table compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
       cierres.forEach(c => {
@@ -1255,7 +1255,7 @@ async function loadMovimientos() {
     ]);
     var list = qs(SEL.movimientosList);
     if (movimientos.length === 0) {
-      list.innerHTML = '<div class="movimientos-empty">No hay movimientos hoy</div>';
+      list.innerHTML = '<div class="movimientos-empty">' + emptyState('<i class="nf nf-fa-money"></i>', 'No hay movimientos hoy', 'Registra gastos o ingresos con el bot\u00f3n de arriba') + '</div>';
     } else {
       list.innerHTML = movimientos.map(function(m) {
         var sign = m.tipo === 'egreso' ? '-' : '+';

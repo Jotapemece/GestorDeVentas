@@ -279,7 +279,7 @@
               <input type="text" id="inventory-search" placeholder="Buscar en inventario..." aria-label="Buscar en inventario">
               <button class="search-clear-btn" data-clear="inventory-search" aria-label="Limpiar b&uacute;squeda" tabindex="-1">&times;</button>
             </div>
-            <button id="inventory-add-btn" class="btn btn-accent admin-only inv-header-btn"><i class="nf nf-fa-plus"></i> <span class="btn-label">Agregar Producto</span></button>
+            <button id="inventory-add-btn" class="btn btn-primary admin-only inv-header-btn"><i class="nf nf-fa-plus"></i> <span class="btn-label">Agregar Producto</span></button>
             <button id="inventory-inari-btn" class="btn btn-outline btn-sm inv-header-btn" title="Filtrar productos Inari" style="flex-shrink:0"><i class="nf nf-fa-fire"></i> <span class="btn-label">Inari</span></button>
             <button id="inventory-tasa-btn" class="btn btn-outline btn-sm inv-header-btn" title="Tasa hist&oacute;rica" style="flex-shrink:0"><i class="nf nf-fa-calendar"></i> <span class="btn-label" id="tasa-actual-label">Hoy</span></button>
             <div class="dropdown" style="flex-shrink:0">
@@ -328,9 +328,9 @@
             </div>
           </div>
           <div class="summary-cards" id="creditos-stats">
-            <div class="summary-card"><i class="nf nf-fa-users" style="font-size:24px;color:var(--primary);margin-bottom:8px"></i><div class="summary-label">Total Personas</div><div class="summary-value" id="creditos-total-personas">0</div></div>
-            <div class="summary-card"><i class="nf nf-fa-credit_card" style="font-size:24px;color:var(--accent);margin-bottom:8px"></i><div class="summary-label">Con Cr&eacute;dito</div><div class="summary-value" id="creditos-con-deuda">0</div></div>
-            <div class="summary-card"><i class="nf nf-fa-money" style="font-size:24px;color:var(--danger);margin-bottom:8px"></i><div class="summary-label">Deuda Total</div><div class="summary-value" id="creditos-deuda-total">$0.00</div></div>
+            <div class="summary-card"><i class="nf nf-fa-users summary-icon" style="color:var(--primary)"></i><div class="summary-label">Total Personas</div><div class="summary-value" id="creditos-total-personas">0</div></div>
+            <div class="summary-card"><i class="nf nf-fa-credit_card summary-icon" style="color:var(--accent)"></i><div class="summary-label">Con Cr&eacute;dito</div><div class="summary-value" id="creditos-con-deuda">0</div></div>
+            <div class="summary-card"><i class="nf nf-fa-money summary-icon" style="color:var(--danger)"></i><div class="summary-label">Deuda Total</div><div class="summary-value" id="creditos-deuda-total">$0.00</div></div>
           </div>
           <div style="margin-bottom:12px">
             <div class="search-clear-wrap" style="max-width:280px">
@@ -371,22 +371,27 @@
           </div>
           <div class="summary-cards">
             <div class="summary-card">
+              <i class="nf nf-fa-shopping_cart summary-icon" style="color:var(--primary)"></i>
               <div class="summary-label">Ventas del D&iacute;a</div>
               <div class="summary-value" id="daily-count">0</div>
             </div>
             <div class="summary-card">
+              <i class="nf nf-fa-dollar summary-icon" style="color:var(--accent)"></i>
               <div class="summary-label">Total USD</div>
               <div class="summary-value" id="daily-usd">$0.00</div>
             </div>
             <div class="summary-card">
+              <i class="nf nf-fa-money summary-icon" style="color:var(--accent)"></i>
               <div class="summary-label">Total Bs.</div>
               <div class="summary-value" id="daily-bs">Bs. 0,00</div>
             </div>
             <div class="summary-card">
+              <i class="nf nf-fa-scale summary-icon" style="color:var(--primary)"></i>
               <div class="summary-label">Tasa Aplicada</div>
               <div class="summary-value" id="daily-tasa">Bs. 0,00</div>
             </div>
             <div class="summary-card" id="saldo-card">
+              <i class="nf nf-fa-database summary-icon" style="color:var(--danger)"></i>
               <div class="summary-label">Saldo Caja</div>
               <div class="summary-value" id="movimientos-saldo">$0.00</div>
             </div>
@@ -480,22 +485,27 @@
           </div>
           <div class="report-summary-cards">
             <div class="summary-card">
+              <i class="nf nf-fa-bar_chart summary-icon" style="color:var(--primary)"></i>
               <div class="summary-label">Ventas</div>
               <div class="summary-value" id="report-total-count">0</div>
             </div>
             <div class="summary-card">
+              <i class="nf nf-fa-dollar summary-icon" style="color:var(--accent)"></i>
               <div class="summary-label">Total USD</div>
               <div class="summary-value" id="report-total-usd">$0.00</div>
             </div>
             <div class="summary-card">
+              <i class="nf nf-fa-cube summary-icon" style="color:var(--primary)"></i>
               <div class="summary-label">Costo ($)</div>
               <div class="summary-value" id="report-total-costo">$0.00</div>
             </div>
             <div class="summary-card">
+              <i class="nf nf-fa-line_chart summary-icon" style="color:var(--accent)"></i>
               <div class="summary-label">Ganancia ($)</div>
               <div class="summary-value" id="report-total-ganancia">$0.00</div>
             </div>
             <div class="summary-card">
+              <i class="nf nf-fa-money summary-icon" style="color:var(--danger)"></i>
               <div class="summary-label">Total Bs.</div>
               <div class="summary-value" id="report-total-bs">Bs. 0,00</div>
             </div>
@@ -524,6 +534,7 @@
                   <th data-sortable="costo_usd">Costo ($)<span class="sort-arrow"></span></th>
                   <th data-sortable="ganancia_usd">Ganancia ($)<span class="sort-arrow"></span></th>
                   <th data-sortable="total_bs">Total (Bs.)<span class="sort-arrow"></span></th>
+                  <th>Acci&oacute;n</th>
                 </tr>
               </thead>
               <tbody id="report-sales-body"></tbody>
@@ -1216,7 +1227,7 @@
         <div id="sale-detail-nota-wrap" class="void-note" style="display:none">
           <i class="nf nf-fa-ban"></i> <strong>Motivo de anulaci&oacute;n:</strong> <span id="sale-detail-nota"></span>
         </div>
-        <div id="sale-detail-obs-wrap" class="void-note" style="display:none;margin-top:8px">
+        <div id="sale-detail-obs-wrap" class="sale-note" style="display:none;margin-top:8px">
           <i class="nf nf-fa-note_sticky"></i> <strong>Nota:</strong> <span id="sale-detail-obs"></span>
         </div>
         <div id="sale-detail-list"></div>
@@ -1563,7 +1574,7 @@
       </div>
       <div class="modal-footer">
         <button id="confirm-cancel-btn" class="btn btn-outline">Cancelar</button>
-        <button id="confirm-ok-btn" class="btn btn-danger">Confirmar</button>
+        <button id="confirm-ok-btn" class="btn btn-danger"><i class="nf nf-fa-check"></i> Confirmar</button>
       </div>
     </div>
   </div>
@@ -1580,7 +1591,7 @@
       </div>
       <div class="modal-footer">
         <button id="prompt-cancel-btn" class="btn btn-outline">Cancelar</button>
-        <button id="prompt-ok-btn" class="btn btn-danger">Aceptar</button>
+        <button id="prompt-ok-btn" class="btn btn-danger"><i class="nf nf-fa-check"></i> Aceptar</button>
       </div>
     </div>
   </div>
@@ -1928,6 +1939,20 @@
           <ul>
             <li>El bot&oacute;n flotante del carrito ya no aparece en la interfaz de PC.</li>
             <li>Ventas por vendedor: el filtro de fecha incluye el fin de d&iacute;a.</li>
+            <li>Iconos de Font Awesome que no exist&iacute;an (cloud, arrows, key) y variables CSS indefinidas (--text-rgb, --text-muted).</li>
+            <li>Toasts ahora visibles por encima de los modales; animaci&oacute;n fadeIn restaurada.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-paint_brush" style="color:var(--accent)"></i> Consistencia de UI</h4>
+          <ul>
+            <li>Empty states unificados con icono en cierres, movimientos, cr&eacute;dito, tasas y reportes.</li>
+            <li>Resumen (summary cards) con iconos consistentes en caja, cr&eacute;dito y reportes.</li>
+            <li>Reportes: columna de Acci&oacute;n con bot&oacute;n de detalle por venta.</li>
+            <li>Bot&oacute;n "Agregar Producto" unificado al color primario.</li>
+            <li>Confirmaciones con icono de check; botones de sync con transici&oacute;n.</li>
+            <li>Nota de venta con estilo propio (sale-note) separado del motivo de anulaci&oacute;n (void-note).</li>
+            <li>Estado Anulado/Activo como badges en detalle, ventas del d&iacute;a y reportes.</li>
           </ul>
         </div>
         <div class="changelog-section">

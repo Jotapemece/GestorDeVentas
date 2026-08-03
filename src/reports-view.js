@@ -47,7 +47,7 @@ async function loadReports(resetPage) {
     const tbody = qs(SEL.reportSalesBody);
     tbody.innerHTML = '';
     if (!result.ventas || result.ventas.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9">' + emptyState('<i class="nf nf-fa-bar_chart"></i>', 'Sin ventas en el per\u00edodo', '') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10">' + emptyState('<i class="nf nf-fa-bar_chart"></i>', 'Sin ventas en el per\u00edodo', '') + '</td></tr>';
     } else {
       const frag = document.createDocumentFragment();
       result.ventas.forEach(item => {
@@ -538,7 +538,7 @@ async function drawProfitLineChart(body) {
     });
     if (!points || points.length < 2) {
       ctx.font = '14px sans-serif';
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#999';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#999';
       ctx.textAlign = 'center';
       ctx.fillText('Datos insuficientes para el gr\u00e1fico de ganancias', w / 2, h / 2);
       return;
@@ -546,7 +546,7 @@ async function drawProfitLineChart(body) {
 
     var css = getComputedStyle(document.documentElement);
     var textColor = css.getPropertyValue('--text').trim() || '#e0e0e0';
-    var mutedColor = css.getPropertyValue('--text-muted').trim() || '#888';
+    var mutedColor = css.getPropertyValue('--text-secondary').trim() || '#888';
     var lineColor = css.getPropertyValue('--primary').trim() || '#7E6B90';
     var fillColor = lineColor + '33';
     var gridColor = css.getPropertyValue('--border').trim() || '#3A3450';
@@ -696,7 +696,7 @@ async function showProductHistory(codigo, nombre) {
       const items = await invoke('get_product_history', { productoCodigo: codigo });
       tbody.innerHTML = '';
       if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-muted">Sin ventas registradas</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7">' + emptyState('<i class="nf nf-fa-history"></i>', 'Sin ventas registradas', 'El historial de movimientos aparecer\u00e1 aqu\u00ed') + '</td></tr>';
       } else {
         items.forEach(function(item) {
           var tr = document.createElement('tr');
@@ -797,7 +797,7 @@ async function showSaleDetail(ventaId, btn) {
     const list = qs(SEL.saleDetailList);
     list.innerHTML = '';
     if (detalles.length === 0) {
-      list.innerHTML = '<p class="text-muted">No hay detalles.</p>';
+      list.innerHTML = emptyState('<i class="nf nf-fa-receipt"></i>', 'No hay detalles', 'Los productos de la venta aparecer\u00e1n aqu\u00ed');
       showModal(qs(SEL.saleDetailModal));
       return;
     }
@@ -810,9 +810,12 @@ async function showSaleDetail(ventaId, btn) {
       const tr = document.createElement('tr');
       if (d.anulado) tr.style.textDecoration = 'line-through';
       const voidBtn = d.anulado
-        ? '<span class="text-muted">Anulado</span>'
+        ? ''
         : '<button class="btn btn-sm btn-danger void-item-btn" data-detalle-id="' + d.id + '" data-venta-id="' + ventaId + '" ' + (allVoided ? 'disabled' : '') + '>Anular</button>';
-      tr.innerHTML = '<td>' + escapeHtml(d.producto_nombre || d.producto_codigo) + '</td><td>' + d.cantidad + '</td><td>' + formatUSD(d.precio_usd_unitario) + '</td><td>' + formatUSD(d.subtotal_usd) + '</td><td>' + (d.anulado ? '<span class="text-danger">Anulado</span>' : 'Activo') + '</td><td>' + voidBtn + '</td>';
+      const statusBadge = d.anulado
+        ? '<span class="badge badge-danger">Anulado</span>'
+        : '<span class="badge badge-success">Activo</span>';
+      tr.innerHTML = '<td>' + escapeHtml(d.producto_nombre || d.producto_codigo) + '</td><td>' + d.cantidad + '</td><td>' + formatUSD(d.precio_usd_unitario) + '</td><td>' + formatUSD(d.subtotal_usd) + '</td><td>' + statusBadge + '</td><td>' + voidBtn + '</td>';
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);

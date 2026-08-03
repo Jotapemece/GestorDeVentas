@@ -54,8 +54,10 @@
 .nf-fa-check_circle::before { content: "\f058"; }
 .nf-fa-refresh::before { content: "\f021"; }
 .nf-fa-cloud_download::before { content: "\f0ed"; }
+.nf-fa-cloud::before { content: "\f0c2"; }
 .nf-fa-pencil::before { content: "\f303"; }
 .nf-fa-ban::before { content: "\f05e"; }
+.nf-fa-arrows::before { content: "\f0b2"; }
 .nf-fa-chart_pie::before { content: "\f200"; }
 .nf-fa-calendar::before { content: "\f133"; }
 .nf-fa-save::before { content: "\f0c7"; }
@@ -97,6 +99,7 @@
 .nf-fa-compress::before { content: "\f066"; }
 .nf-fa-expand::before { content: "\f065"; }
 .nf-fa-copy::before { content: "\f0c5"; }
+.nf-fa-key::before { content: "\f084"; }
 .nf-fa-share::before { content: "\f064"; }
 .nf-fa-wifi::before { content: "\f1eb"; }
 .nf-fa-chevron_right::before { content: "\f054"; }

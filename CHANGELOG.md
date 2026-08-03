@@ -46,6 +46,19 @@
 ### Bugs
 - Ventas por vendedor: el filtro de fecha incluye el fin de día (END_OF_DAY_SUFFIX)
 - `DetalleVenta.costo` real en historial de clientes (antes hardcodeado a 0)
+- Iconos Font Awesome inexistentes en el subset (cloud, arrows, key, clock_rotate_left) y variables CSS indefinidas (`--text-rgb`, `--text-muted`)
+- Base `font-size` 16px restaurada (sobrescrita por 14px) y `@keyframes fadeIn` que faltaba
+- Toasts ahora por encima de los modales (z-index)
+
+### Consistencia de UI
+- Empty states unificados con `emptyState()` en cierres, movimientos, crédito, tasas e historial de productos
+- Summary cards con iconos consistentes en caja, crédito y reportes (`.summary-icon`)
+- Reportes: nueva columna Acción con botón de detalle por venta (reutiliza `sale-detail-btn`)
+- "Agregar Producto" unificado a `btn-primary`; botones de sync con transición
+- Confirmaciones con icono de check (helpers `confirmModal`/`promptModal`)
+- Nota de venta con estilo propio `.sale-note`, separado del motivo de anulación `.void-note`
+- Estado Anulado/Activo como badges (`.badge-danger`/`.badge-success`) en detalle, ventas del día y reportes
+- CSS duplicados fusionados (input:focus, col-toggle-btn, mixto-add-row, field-error, chat-header); `--info`/`--warning` definidos
 
 ## [1.0.5] - 2026-07-30
 
