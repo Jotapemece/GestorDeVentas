@@ -2,29 +2,23 @@
 async function loadCreditos() {
   const tbody = qs(SEL.creditosBody);
   showSkeleton(tbody, 5);
-  try {
-    const clientes = await invoke('list_clientes');
-    tbody.innerHTML = '';
-    if (clientes.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3">' + emptyState('<i class="nf nf-fa-credit_card"></i>', 'No hay clientes registrados', 'Registre personas para otorgar cr\u00e9dito') + '</td></tr>';
-      creditoRows = [];
-      updateCreditoStats([]);
-      return;
-    }
-    const frag = document.createDocumentFragment();
-    const rows = [];
-    clientes.forEach(c => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = createClientRow(c);
-      tr.dataset.nombre = c.nombre.toLowerCase();
-      frag.appendChild(tr);
-      rows.push(tr);
-    });
-    tbody.appendChild(frag);
-    creditoRows = rows;
-    updateCreditoStats(clientes);
-    applyCreditoFilter();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+  const clientes = await invokeOrError(invoke('list_clientes'));
+  if (clientes === undefined) return;
+  tbody.innerHTML = '';
+  if (clientes.length === 0) {
+    tbody.innerHTML = emptyTableRow(3, '<i class="nf nf-fa-credit_card"></i>', 'No hay clientes registrados', 'Registre personas para otorgar cr\u00e9dito');
+    creditoRows = [];
+    updateCreditoStats([]);
+    return;
+  }
+  const rows = [];
+  appendRows(tbody, clientes, createClientRow, function(tr, c) {
+    tr.dataset.nombre = c.nombre.toLowerCase();
+    rows.push(tr);
+  });
+  creditoRows = rows;
+  updateCreditoStats(clientes);
+  applyCreditoFilter();
 }
 
 let creditoFilterTimer = null;
@@ -94,11 +88,11 @@ async function saveClient() {
   if (btn) btn.disabled = true;
   try {
     if (editingClienteId) {
-      await invoke('update_cliente', { clienteId: editingClienteId, nombre });
+      if (await invokeOrError(invoke('update_cliente', { clienteId: editingClienteId, nombre })) === undefined) return;
       showToast('Cliente actualizado');
     } else {
       const esTemporal = qs(SEL.clientEsTemporal) ? qs(SEL.clientEsTemporal).checked : false;
-      await invoke('create_cliente', { nombre, esTemporal });
+      if (await invokeOrError(invoke('create_cliente', { nombre, esTemporal })) === undefined) return;
       showToast(esTemporal ? 'Cliente temporal creado' : 'Cliente creado');
     }
     editingClienteId = null;
@@ -109,28 +103,27 @@ async function saveClient() {
 
 /* ========== DEBT DETAIL ========== */
 async function openDebtDetail(id) {
-  try {
-    const hist = await invoke('get_cliente_history', { clienteId: id });
-    qs(SEL.debtDetailTitle).textContent = 'Deuda: ' + hist.cliente.nombre;
-    qs(SEL.debtDetailDebt).textContent = formatUSD(hist.total_deuda);
-    const container = qs(SEL.debtDetailList);
-    container.innerHTML = '';
-    if (hist.ventas.length === 0) {
-      container.innerHTML = emptyState('<i class="nf nf-fa-credit_card"></i>', 'Sin ventas a cr\u00e9dito', 'Las ventas a cr\u00e9dito de este cliente aparecer\u00e1n aqu\u00ed');
-    } else {
-      hist.ventas.forEach(v => {
-        const card = document.createElement('div');
-        card.className = 'debt-sale-card';
-        let prodHtml = '';
-        v.productos.forEach(p => {
-          prodHtml += '<div class="debt-prod"><span>' + p.producto_nombre + '</span><span>x' + p.cantidad + ' <strong>' + formatUSD(p.subtotal_usd) + '</strong></span></div>';
-        });
-        card.innerHTML = createDebtSaleCard(v, prodHtml);
-        container.appendChild(card);
+  const hist = await invokeOrError(invoke('get_cliente_history', { clienteId: id }));
+  if (hist === undefined) return;
+  qs(SEL.debtDetailTitle).textContent = 'Deuda: ' + hist.cliente.nombre;
+  qs(SEL.debtDetailDebt).textContent = formatUSD(hist.total_deuda);
+  const container = qs(SEL.debtDetailList);
+  container.innerHTML = '';
+  if (hist.ventas.length === 0) {
+    container.innerHTML = emptyState('<i class="nf nf-fa-credit_card"></i>', 'Sin ventas a cr\u00e9dito', 'Las ventas a cr\u00e9dito de este cliente aparecer\u00e1n aqu\u00ed');
+  } else {
+    hist.ventas.forEach(v => {
+      const card = document.createElement('div');
+      card.className = 'debt-sale-card';
+      let prodHtml = '';
+      v.productos.forEach(p => {
+        prodHtml += '<div class="debt-prod"><span>' + p.producto_nombre + '</span><span>x' + p.cantidad + ' <strong>' + formatUSD(p.subtotal_usd) + '</strong></span></div>';
       });
-    }
-    showModal(qs(SEL.debtDetailModal));
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+      card.innerHTML = createDebtSaleCard(v, prodHtml);
+      container.appendChild(card);
+    });
+  }
+  showModal(qs(SEL.debtDetailModal));
 }
 
 function closeDebtDetail() {
@@ -149,8 +142,6 @@ function openAbonoModal(id) {
   qs(SEL.abonoMixtoError).style.display = 'none';
   qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: $0.00';
   qsa('.abono-metodo-btn').forEach(b => b.classList.remove('active'));
-  qs(SEL.abonoReferenciaGroup).style.display = 'none';
-  qs(SEL.abonoMixtoGroup).style.display = 'none';
   updateTasaInfo('abono');
   loadAbonoClienteInfo(id);
   showModal(qs(SEL.abonoModal));
@@ -194,7 +185,6 @@ function updateAbonoSaldoRestante() {
   qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: ' + formatUSD(restante);
 }
 
-let processingAbono = false;
 function confirmAbono() {
   let monto = parseInput(qs(SEL.abonoMonto).value);
   const montoBs = parseInput(qs(SEL.abonoMontoBs).value);
@@ -211,26 +201,21 @@ function confirmAbono() {
     pago_detalle = getMixtoData('abono-mixto-items');
     if (!validarMixto(pago_detalle, monto, 'abono-mixto-error')) return;
   }
-  if (processingAbono) return;
-  processingAbono = true;
-  var btn = qs(SEL.abonoConfirmBtn);
-  var origHtml = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-spin"></i>';
-  (async function() {
+  withButtonLock(qs(SEL.abonoConfirmBtn), async () => {
     try {
       var tasa = await getTasaConFallback();
       if (montoBs > 0 && monto <= 0) monto = bsToUsd(montoBs, tasa);
       if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
-      const res = await invoke('pay_debt', {
+      const res = await invokeOrError(invoke('pay_debt', {
         request: { cliente_id: abonoClienteId, monto_usd: monto, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle }
-      });
+      }));
+      if (res === undefined) return;
       showToast(res || 'Abono procesado. Cuenta actualizada con \u00e9xito');
       haptic(30);
       closeAbonoModal();
       loadCreditos();
     } catch (e) { showToast('Error: ' + e, 'error'); }
-    finally { processingAbono = false; btn.disabled = false; btn.innerHTML = origHtml; }
-  })();
+  });
 }
 
 /* ========== TASA HISTORIAL ========== */
@@ -372,16 +357,14 @@ async function confirmQuickDebt() {
   var nombre = qs(SEL.quickDebtClienteNombre).textContent;
   var ok = await confirmModal('Registrar deuda de ' + formatUSD(monto) + ' a "' + nombre + '"?', 'Deuda R\u00e1pida', 'Registrar');
   if (!ok) return;
-  var btn = qs(SEL.quickDebtConfirm);
-  var origHtml = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-spin"></i>';
-  try {
-    await invoke('add_quick_debt', { clienteId: clienteId, montoUsd: monto });
-    showToast('Deuda de ' + formatUSD(monto) + ' registrada');
-    closeModal(qs(SEL.quickDebtModal));
-    loadCreditos();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-  finally { btn.disabled = false; btn.innerHTML = origHtml; }
+  await withButtonLock(qs(SEL.quickDebtConfirm), async () => {
+    try {
+      if (await invokeOrError(invoke('add_quick_debt', { clienteId: clienteId, montoUsd: monto })) === undefined) return;
+      showToast('Deuda de ' + formatUSD(monto) + ' registrada');
+      closeModal(qs(SEL.quickDebtModal));
+      loadCreditos();
+    } catch (e) { showToast('Error: ' + e, 'error'); }
+  });
 }
 
 function updateCreditoStats(clientes) {
@@ -403,32 +386,28 @@ function updateCreditoStats(clientes) {
 /* ========== TEMP CLIENTS HISTORY ========== */
 async function openTempHistoryModal() {
   const tbody = qs(SEL.tempHistoryBody);
-  tbody.innerHTML = '<tr><td colspan="5">Cargando...</td></tr>';
+  tbody.innerHTML = loadingTableRow(5);
   showModal(qs(SEL.tempHistoryModal));
   try {
     const items = await invoke('list_clientes_eliminados');
     tbody.innerHTML = '';
     if (items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-history"></i>', 'Sin historial', 'Los clientes temporales eliminados aparecer\u00e1n aqu\u00ed') + '</td></tr>';
+      tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-history"></i>', 'Sin historial', 'Los clientes temporales eliminados aparecer\u00e1n aqu\u00ed');
       return;
     }
-    const frag = document.createDocumentFragment();
-    items.forEach(function(item) {
-      const tr = document.createElement('tr');
+    appendRows(tbody, items, function(item) {
       const motivo = item.motivo === 'deuda_pagada'
         ? '<span class="badge badge-success" style="font-size:10px">Deuda pagada</span>'
         : (item.motivo === 'eliminacion_manual'
             ? '<span class="badge badge-danger" style="font-size:10px">Eliminado manual</span>'
             : escapeHtml(item.motivo));
-      tr.innerHTML = '<td>' + escapeHtml(item.nombre) + '</td>' +
+      return '<td>' + escapeHtml(item.nombre) + '</td>' +
         '<td>' + escapeHtml(item.creado_en) + '</td>' +
         '<td>' + escapeHtml(item.eliminado_en) + '</td>' +
         '<td>' + formatUSD(item.saldo_pagado_usd) + '</td>' +
         '<td>' + motivo + '</td>';
-      frag.appendChild(tr);
     });
-    tbody.appendChild(frag);
-  } catch (e) { tbody.innerHTML = '<tr><td colspan="5">Error: ' + escapeHtml(e) + '</td></tr>'; }
+  } catch (e) { tbody.innerHTML = errorTableRow(5, e); }
 }
 
 function closeTempHistoryModal() {

@@ -4,29 +4,39 @@ let showInari = false;
 let inariSubcat = '';
 const INARI_DIAS = [4, 5, 6, 0]; // jueves, viernes, sábado, domingo
 
+function updateInariBtn() {
+  const el = qs(SEL.inventoryInariBtn);
+  if (!el) return;
+  el.classList.toggle('active', showInari);
+  el.innerHTML = showInari
+    ? '<i class="nf nf-fa-check"></i> <span>Inari</span>'
+    : '<i class="nf nf-fa-fire"></i> <span>Inari</span>';
+}
+
 async function loadInventory() {
   const query = qs(SEL.inventorySearch).value.trim();
   const tbody = qs(SEL.inventoryBody);
   showSkeleton(tbody, 8);
-  try {
-    const result = await invoke('list_products', { search: query || null, page: inventoryPage, pageSize: INVENTORY_PAGE_SIZE, inari: showInari || null, subcategoria: inariSubcat || null });
-    const products = result.data || result;
-    tbody.innerHTML = '';
-    if (products.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8">' + emptyState('<i class="nf nf-fa-archive"></i>', query ? 'Sin resultados' : 'No hay productos', query ? 'Pruebe con otro t\u00e9rmino de b\u00fasqueda' : 'Agregue productos desde el bot\u00f3n superior') + '</td></tr>';
-      renderInventoryPagination(result.total || 0);
-      return;
-    }
-    const frag = document.createDocumentFragment();
-    products.forEach(p => {
-      const tr = document.createElement('tr');
-      const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button data-action="edit-product" data-codigo="' + p.codigo + '"><i class="nf nf-fa-pencil"></i> Editar</button>' : '';
-      tr.innerHTML = createInventoryRow(p, editBtn);
-      frag.appendChild(tr);
-    });
-    tbody.appendChild(frag);
+  const result = await invokeOrError(invoke('list_products', { search: query || null, page: inventoryPage, pageSize: INVENTORY_PAGE_SIZE, inari: showInari || null, subcategoria: inariSubcat || null }));
+  if (result === undefined) return;
+  const products = result.data || result;
+  tbody.innerHTML = '';
+  if (products.length === 0) {
+    tbody.innerHTML = emptyTableRow(8, '<i class="nf nf-fa-archive"></i>', query ? 'Sin resultados' : 'No hay productos', query ? 'Pruebe con otro t\u00e9rmino de b\u00fasqueda' : 'Agregue productos desde el bot\u00f3n superior');
     renderInventoryPagination(result.total || 0);
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+    return;
+  }
+  appendRows(tbody, products, function(p) {
+    const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button data-action="edit-product" data-codigo="' + p.codigo + '"><i class="nf nf-fa-pencil"></i> Editar</button>' : '';
+    return createInventoryRow(p, editBtn);
+  });
+  renderInventoryPagination(result.total || 0);
+}
+
+function refreshInventoryAfterSave() {
+  closeProductModal();
+  loadInventory();
+  renderProductSearch();
 }
 
 function renderInventoryPagination(total) {
@@ -84,7 +94,7 @@ function showProductDetail(codigo) {
   qs(SEL.detailNombre).textContent = p.nombre;
   qs(SEL.detailPrecio).textContent = formatUSD(p.precio_usd);
   qs(SEL.detailCosto).textContent = formatUSD(p.costo || 0);
-  const margen = (p.costo > 0 && p.precio_usd > 0) ? ((p.precio_usd - p.costo) / p.precio_usd * 100).toFixed(1) + '%' : '—';
+  const margen = calcularMargen(p.precio_usd, p.costo);
   qs(SEL.detailMargen).textContent = margen;
   if (p.es_pesable) {
     qs(SEL.detailPrecioLabel).textContent = 'Precio ($/kg)';
@@ -171,24 +181,22 @@ async function showPriceHistory(codigo, nombre) {
   const modal = qs(SEL.precioHistoryModal);
   const tbody = qs(SEL.precioHistoryBody);
   qs(SEL.precioHistoryTitle).textContent = nombre ? ('Historial de precios — ' + nombre) : 'Historial de precios';
-  tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-spinner nf-fa-spin"></i>', 'Cargando...', '') + '</td></tr>';
+  tbody.innerHTML = loadingTableRow(5);
   showModal(modal);
   try {
     const items = await invoke('get_precio_historial', { productoCodigo: codigo });
     tbody.innerHTML = '';
     if (!items || items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-line_chart"></i>', 'Sin cambios de precio', 'No se registraron cambios de precio para este producto') + '</td></tr>';
+      tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-line_chart"></i>', 'Sin cambios de precio', 'No se registraron cambios de precio para este producto');
       return;
     }
-    items.forEach(function(item) {
+    appendRows(tbody, items, function(item) {
       const diff = item.precio_nuevo - item.precio_anterior;
       const arrow = diff > 0 ? '<span style="color:var(--success)">▲</span>' : (diff < 0 ? '<span style="color:var(--danger)">▼</span>' : '');
-      const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + escapeHtml(item.fecha_hora) + '</td><td>' + formatUSD(item.precio_anterior) + '</td><td>' + formatUSD(item.precio_nuevo) + '</td><td>' + arrow + ' ' + formatUSD(diff) + '</td><td>' + escapeHtml(item.usuario || '—') + '</td>';
-      tbody.appendChild(tr);
+      return '<td>' + escapeHtml(item.fecha_hora) + '</td><td>' + formatUSD(item.precio_anterior) + '</td><td>' + formatUSD(item.precio_nuevo) + '</td><td>' + arrow + ' ' + formatUSD(diff) + '</td><td>' + escapeHtml(item.usuario || '—') + '</td>';
     });
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="5">Error: ' + escapeHtml(e) + '</td></tr>';
+    tbody.innerHTML = errorTableRow(5, e);
   }
 }
 
@@ -250,7 +258,7 @@ async function confirmStockAdjust() {
   const btn = qs(SEL.stockAdjustConfirmBtn);
   if (btn) btn.disabled = true;
   try {
-    await invoke('registrar_ajuste_stock', { codigo: stockAdjustCodigo, cantidad, motivo });
+    if (await invokeOrError(invoke('registrar_ajuste_stock', { codigo: stockAdjustCodigo, cantidad, motivo })) === undefined) return;
     showToast('Stock ajustado en ' + signo + cantidad);
     closeStockAdjustModal();
     loadInventory();
@@ -379,8 +387,8 @@ async function saveProduct() {
   const btn = qs(SEL.productSaveBtn);
   const codigo = editingProduct || '';
   const nombre = stripEmojis(qs(SEL.productNombre).value.trim());
-  const precio = parsePrecio(qs(SEL.productPrecio).value);
-  const costo = parsePrecio(qs(SEL.productCosto).value) || 0;
+  const precio = parseInput(qs(SEL.productPrecio).value);
+  const costo = parseInput(qs(SEL.productCosto).value) || 0;
   const stock = parseFloat(qs(SEL.productStock).value) || 0;
   const stockMinimo = parseFloat(qs(SEL.productStockMinimo).value) || 0;
   const esPesable = qs(SEL.productEsPesable).checked;
@@ -403,7 +411,7 @@ async function saveProduct() {
     }
     showToast(editingProduct ? 'Producto actualizado con \u00e9xito' : 'Producto registrado con \u00e9xito');
     playSound('success');
-    closeProductModal(); loadInventory(); renderProductSearch();
+    refreshInventoryAfterSave();
     loadProductCache();
   } catch (e) {
     showToast('Error: ' + e, 'error');
@@ -419,29 +427,28 @@ async function deleteProduct() {
   if (!ok) return;
   if (btn) btn.disabled = true;
   try {
-    await invoke('delete_product', { codigo: editingProduct });
+    if (await invokeOrError(invoke('delete_product', { codigo: editingProduct })) === undefined) return;
     showToast('Producto eliminado');
     playSound('remove');
-    closeProductModal(); loadInventory(); renderProductSearch();
+    refreshInventoryAfterSave();
   } catch (e) { showToast('Error: ' + e, 'error'); }
   finally { if (btn) btn.disabled = false; }
 }
 
 async function exportProducts() {
-  try {
-    const b64 = await invoke('export_products_xlsx', { tasa: tasaActual });
-    const byteChars = atob(b64);
-    const byteNums = new Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
-    const blob = new Blob([new Uint8Array(byteNums)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'productos_export.xlsx';
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('Exportado exitosamente');
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+  const b64 = await invokeOrError(invoke('export_products_xlsx', { tasa: tasaActual }));
+  if (b64 === undefined) return;
+  const byteChars = atob(b64);
+  const byteNums = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([new Uint8Array(byteNums)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'productos_export.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Exportado exitosamente');
 }
 
 function openImportModal() {

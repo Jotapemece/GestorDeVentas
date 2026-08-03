@@ -29,28 +29,21 @@ function initAuditObserver() {
 }
 
 async function loadAuditMore() {
-  try {
-    const logs = await invoke('get_audit_logs', { limit: auditLimit, offset: auditOffset });
-    const tbody = qs(SEL.auditBody);
-    if (auditOffset === 0) tbody.innerHTML = '';
-    if (logs.length === 0 && auditOffset === 0) {
-      tbody.innerHTML = '<tr><td colspan="4">' + emptyState('<i class="nf nf-fa-history"></i>', 'No hay registros de auditor\u00eda', 'Las acciones del sistema aparecer\u00e1n aqu\u00ed') + '</td></tr>';
-      qs(SEL.auditLoadMore).style.display = 'none';
-      return;
-    }
-    const frag = document.createDocumentFragment();
-    logs.forEach(log => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = createAuditRow(log);
-      frag.appendChild(tr);
-    });
-    tbody.appendChild(frag);
-    auditOffset += logs.length;
-    var hasMore = logs.length >= auditLimit;
-    qs(SEL.auditLoadMore).style.display = hasMore ? 'inline-flex' : 'none';
-    if (hasMore) initAuditObserver();
-    else disconnectAuditObserver();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+  const logs = await invokeOrError(invoke('get_audit_logs', { limit: auditLimit, offset: auditOffset }));
+  if (logs === undefined) return;
+  const tbody = qs(SEL.auditBody);
+  if (auditOffset === 0) tbody.innerHTML = '';
+  if (logs.length === 0 && auditOffset === 0) {
+    tbody.innerHTML = emptyTableRow(4, '<i class="nf nf-fa-history"></i>', 'No hay registros de auditor\u00eda', 'Las acciones del sistema aparecer\u00e1n aqu\u00ed');
+    qs(SEL.auditLoadMore).style.display = 'none';
+    return;
+  }
+  appendRows(tbody, logs, createAuditRow);
+  auditOffset += logs.length;
+  var hasMore = logs.length >= auditLimit;
+  qs(SEL.auditLoadMore).style.display = hasMore ? 'inline-flex' : 'none';
+  if (hasMore) initAuditObserver();
+  else disconnectAuditObserver();
 }
 
 /* ========== CONFIG ========== */
@@ -192,23 +185,16 @@ async function saveFontSize(pct) {
 
 /* ========== USER MANAGEMENT ========== */
 async function loadUserList() {
-  try {
-    const users = await invoke('list_usuarios');
-    const tbody = qs(SEL.userListBody);
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    if (!users || users.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3">' + emptyState('<i class="nf nf-fa-users"></i>', 'Sin usuarios', '') + '</td></tr>';
-    } else {
-      const frag = document.createDocumentFragment();
-      users.forEach(u => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = createUserRow(u);
-        frag.appendChild(tr);
-      });
-      tbody.appendChild(frag);
-    }
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+  const users = await invokeOrError(invoke('list_usuarios'));
+  if (users === undefined) return;
+  const tbody = qs(SEL.userListBody);
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (!users || users.length === 0) {
+    tbody.innerHTML = emptyTableRow(3, '<i class="nf nf-fa-users"></i>', 'Sin usuarios', '');
+  } else {
+    appendRows(tbody, users, createUserRow);
+  }
 }
 
 async function handleCreateUser() {
@@ -217,10 +203,10 @@ async function handleCreateUser() {
   const password = qs(SEL.newUserPassword).value;
   const rol = qs(SEL.newUserRol).value;
   if (!name || !password) { showToast('Complete todos los campos', 'error'); return; }
-  if (password.length < MIN_PASSWORD_LEN) { showToast(`La contrase\u00f1a debe tener al menos ${MIN_PASSWORD_LEN} caracteres`, 'error'); return; }
+  if (password.length < MIN_PASSWORD_LEN) { showToast(passwordTooShortMsg(), 'error'); return; }
   if (btn) btn.disabled = true;
   try {
-    await invoke('create_usuario', { username: name, password, rol });
+    if (await invokeOrError(invoke('create_usuario', { username: name, password, rol })) === undefined) return;
     showToast('Usuario creado exitosamente');
     qs(SEL.newUserName).value = '';
     qs(SEL.newUserPassword).value = '';
@@ -237,10 +223,10 @@ async function handleChangePassword() {
   const confirm = qs(SEL.changePwdConfirm).value;
   if (!old || !newPwd || !confirm) { showToast('Complete todos los campos', 'error'); return; }
   if (newPwd !== confirm) { showToast('Las contrase\u00f1as nuevas no coinciden', 'error'); return; }
-  if (newPwd.length < MIN_PASSWORD_LEN) { showToast(`La contrase\u00f1a debe tener al menos ${MIN_PASSWORD_LEN} caracteres`, 'error'); return; }
+  if (newPwd.length < MIN_PASSWORD_LEN) { showToast(passwordTooShortMsg(), 'error'); return; }
   if (btn) btn.disabled = true;
   try {
-    await invoke('change_password', { request: { old_password: old, new_password: newPwd } });
+    if (await invokeOrError(invoke('change_password', { request: { old_password: old, new_password: newPwd } })) === undefined) return;
     showToast('Contrase\u00f1a cambiada exitosamente');
     if (currentUser) currentUser.password_change_required = false;
     qs(SEL.changePwdOld).value = '';

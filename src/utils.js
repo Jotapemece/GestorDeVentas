@@ -5,6 +5,15 @@ function haptic(pattern) {
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
 }
 
+function calcularMargen(precio, costo) {
+  if (!(costo > 0) || !(precio > 0)) return '—';
+  return ((precio - costo) / precio * 100).toFixed(1) + '%';
+}
+
+function formatStock(n) {
+  return Number.isInteger(n) ? n : n.toFixed(3);
+}
+
 function createVendorSalesRow(v) {
   return '<td data-label="Vendedor">' + escapeHtml(v.username) + '</td><td data-label="Ventas">' + v.total_ventas + '</td><td data-label="Anuladas">' + v.ventas_anuladas + '</td><td data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(v.total_costo_usd) + '</td><td data-label="Ganancia ($)">' + formatUSD(v.total_ganancia_usd) + '</td><td data-label="Total (Bs.)"><span class="bs-price-cell">' + formatBS(v.total_bs) + '</span></td>';
 }
@@ -59,7 +68,7 @@ function createInventoryRow(p, editBtn) {
   var stockClass = (p.stock < p.stock_minimo) ? ' class="low-stock"' : '';
   var stockBadge = (p.stock < p.stock_minimo) ? '<span class="badge badge-danger" title="Debajo del stock mínimo">!</span>' : '';
   var costo = p.costo || 0;
-  var margen = (costo > 0 && p.precio_usd > 0) ? ((p.precio_usd - costo) / p.precio_usd * 100).toFixed(1) + '%' : '—';
+  var margen = calcularMargen(p.precio_usd, costo);
   var tasa = tasaInventario > 0 ? tasaInventario : tasaActual;
   var inariBadge = p.es_inari ? ' <span class="badge badge-inari">Inari</span>' : '';
   var pesableBadge = p.es_pesable ? ' <span class="badge badge-info" title="Pesable por kilo">kg</span>' : '';
@@ -71,8 +80,8 @@ function createInventoryRow(p, editBtn) {
   var adjustBtn = (currentUser && currentUser.rol === ROL_ADMIN)
     ? '<button data-action="open-stock-adjust" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-scale"></i> Ajustar stock</button>'
     : '';
-  var stockDisplay = Number.isInteger(p.stock) ? p.stock : p.stock.toFixed(3);
-  var stockMinDisplay = Number.isInteger(p.stock_minimo) ? p.stock_minimo : p.stock_minimo.toFixed(3);
+  var stockDisplay = formatStock(p.stock);
+  var stockMinDisplay = formatStock(p.stock_minimo);
   return '<td data-label="Producto">' + escapeHtml(p.nombre) + inariBadge + pesableBadge + '</td><td data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td><td data-label="Costo">' + formatUSD(costo) + '</td><td data-label="Margen">' + margen + '</td><td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + ' data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button><button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>' + editBtn + adjustBtn + inariToggleBtn + '</div></div></td>';
 }
 function createClientRow(c) {
@@ -209,16 +218,7 @@ function toastStartResume(el, cfg) {
   }, 1000);
 }
 
-function showToast(msg, type = 'success', action) {
-  const cfg = TOAST.TYPES[type] || TOAST.TYPES.info;
-  const container = qs(SEL.toastContainer);
-  if (!container) return;
-
-  if (toastVisible >= TOAST.MAX_VISIBLE) {
-    toastQueue.push({ msg, type, action });
-    return;
-  }
-
+function buildToastEl(msg, cfg, action) {
   const el = document.createElement('div');
   el.className = 'toast';
 
@@ -260,7 +260,10 @@ function showToast(msg, type = 'success', action) {
   });
   el.appendChild(closeBtn);
 
-  // Timer state
+  return el;
+}
+
+function toastBindLifecycle(el, cfg) {
   el._remaining = cfg.duration;
   el._lastTick = performance.now();
   el._pausedAt = null;
@@ -268,16 +271,13 @@ function showToast(msg, type = 'success', action) {
   el._timer = null;
   el._resumeTimer = null;
 
-  // Start border animation + auto-dismiss
   el._timer = setTimeout(() => hideToast(el), cfg.duration);
   el._frame = requestAnimationFrame(() => toastTick(el, cfg));
 
-  // Pause on hover / touch
   el.addEventListener('mouseenter', () => toastPause(el));
   el.addEventListener('mouseleave', () => toastStartResume(el, cfg));
   el.addEventListener('touchstart', () => toastPause(el), { passive: true });
   el.addEventListener('touchend', function(e) {
-    // Only pause on actual touch, not on swipe-dismiss
     const touch = e.changedTouches[0];
     const rect = el.getBoundingClientRect();
     if (touch.clientX - rect.left < rect.width * 0.7) {
@@ -285,7 +285,6 @@ function showToast(msg, type = 'success', action) {
     }
   }, { passive: true });
 
-  // Resume on click outside (mobile)
   function outsideClick(e) {
     if (el._pausedAt !== null && !el.contains(e.target)) {
       toastStartResume(el, cfg);
@@ -295,10 +294,9 @@ function showToast(msg, type = 'success', action) {
   document.addEventListener('mousedown', outsideClick);
 
   el.addEventListener('click', function(e) {
-    if (e.target === el || e.target === msgSpan) hideToast(el);
+    if (e.target === el || e.target.classList.contains('toast-msg')) hideToast(el);
   });
 
-  // Swipe to dismiss on mobile
   if (IS_ANDROID || window.innerWidth <= 768) {
     let startX = 0;
     el.addEventListener('touchstart', function(e) {
@@ -309,7 +307,24 @@ function showToast(msg, type = 'success', action) {
       if (dx > 60) hideToast(el);
     }, { passive: true });
   }
+}
 
+function passwordTooShortMsg() {
+  return 'La contrase\u00f1a debe tener al menos ' + MIN_PASSWORD_LEN + ' caracteres';
+}
+
+function showToast(msg, type = 'success', action) {
+  const cfg = TOAST.TYPES[type] || TOAST.TYPES.info;
+  const container = qs(SEL.toastContainer);
+  if (!container) return;
+
+  if (toastVisible >= TOAST.MAX_VISIBLE) {
+    toastQueue.push({ msg, type, action });
+    return;
+  }
+
+  const el = buildToastEl(msg, cfg, action);
+  toastBindLifecycle(el, cfg);
   container.appendChild(el);
   toastVisible++;
 }
@@ -397,8 +412,47 @@ function showLoadingModal(text) {
 function hideLoadingModal() {
   qs(SEL.loadingModal).classList.add('hidden');
 }
+async function withLoadingModal(text, fn) {
+  showLoadingModal(text);
+  await forcePaint();
+  try {
+    return await fn();
+  } finally {
+    hideLoadingModal();
+  }
+}
 function emptyState(icon, text, sub) {
   return '<div class="empty-state"><span class="empty-icon">' + icon + '</span><div class="empty-text">' + text + '</div>' + (sub ? '<div class="empty-sub">' + sub + '</div>' : '') + '</div>';
+}
+function tableRowWrap(colspan, contentHtml) {
+  return '<tr><td colspan="' + colspan + '">' + contentHtml + '</td></tr>';
+}
+function emptyTableRow(colspan, icon, text, sub) {
+  return tableRowWrap(colspan, emptyState(icon, text, sub));
+}
+function loadingTableRow(colspan, text) {
+  return tableRowWrap(colspan, '<div class="empty-state"><span class="empty-icon"><i class="nf nf-fa-spinner nf-fa-spin"></i></span><div class="empty-text">' + (text || 'Cargando...') + '</div></div>');
+}
+function errorTableRow(colspan, msg) {
+  return tableRowWrap(colspan, '<div class="empty-state"><span class="empty-text" style="color:var(--danger)">' + escapeHtml(msg) + '</span></div>');
+}
+function appendRows(tbody, items, rowFn, setupTr) {
+  const frag = document.createDocumentFragment();
+  items.forEach(function(item) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = rowFn(item);
+    if (setupTr) setupTr(tr, item);
+    frag.appendChild(tr);
+  });
+  tbody.appendChild(frag);
+}
+async function invokeOrError(promise, errMsg) {
+  try {
+    return await promise;
+  } catch (e) {
+    showToast(errMsg || ('Error: ' + e), 'error');
+    return undefined;
+  }
 }
 
 /* ========== MODAL HELPERS ========== */
@@ -588,7 +642,6 @@ function showPaymentSuccess(venta) {
     setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 400);
   }, 1200);
 }
-function parsePrecio(s) { return parseFloat(String(s).replace(',', '.')) || 0; }
 function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
 function totalBsRedondeado(totalUsd) {
   const bs = totalUsd * tasaActual;

@@ -32,26 +32,24 @@ async function fetchTasaBcv() {
   const origText = btn.textContent;
   btn.textContent = '...';
   btn.classList.add('loading');
-  showLoadingModal('Buscando tasa del BCV...');
-  await forcePaint();
-  try {
-    const rate = await invoke('fetch_tasa_bcv');
-    tasaActual = rate;
-    await invoke('set_tasa', { tasa: tasaActual });
-    qs(SEL.tasaInput).value = tasaActual.toFixed(2);
-    const warn = qs(SEL.tasaWarning);
-    if (warn) warn.style.display = 'none';
-    updateCartTotals();
-    renderProductSearch();
-    refreshAllBsPrices();
-    showToast('Tasa BCV actualizada: Bs. ' + rate.toFixed(2).replace('.', ','), 'success');
-  } catch (e) {
-    showToast('Error al obtener tasa: ' + e, 'error');
-  } finally {
-    btn.classList.remove('loading');
-    btn.textContent = origText;
-    hideLoadingModal();
-  }
+  await withLoadingModal('Buscando tasa del BCV...', async function() {
+    try {
+      const rate = await invoke('fetch_tasa_bcv');
+      tasaActual = rate;
+      await invoke('set_tasa', { tasa: tasaActual });
+      qs(SEL.tasaInput).value = tasaActual.toFixed(2);
+      const warn = qs(SEL.tasaWarning);
+      if (warn) warn.style.display = 'none';
+      updateCartTotals();
+      renderProductSearch();
+      refreshAllBsPrices();
+      showToast('Tasa BCV actualizada: ' + formatBS(rate), 'success');
+    } catch (e) {
+      showToast('Error al obtener tasa: ' + e, 'error');
+    }
+  });
+  btn.classList.remove('loading');
+  btn.textContent = origText;
 }
 
 function updateConnectionState() {
@@ -157,33 +155,7 @@ function filterProducts(query) {
 
 function isPhonePos() { return window.innerWidth <= BREAKPOINT.PHONE; }
 
-function renderProductSearch() {
-  const query = qs(SEL.productSearch).value.trim().toLowerCase();
-  const grid = qs(SEL.productSearchGrid);
-  const tbody = qs(SEL.productSearchBody);
-  const table = qs(SEL.productSearchTable);
-  const favSection = qs(SEL.productFavoritesSection);
-  const favBody = qs(SEL.productFavoritesBody);
-  const recentSection = qs(SEL.productRecentSection);
-  const recentBody = qs(SEL.productRecentBody);
-  const isPhone = isPhonePos();
-  grid.innerHTML = '';
-  tbody.innerHTML = '';
-  if (favBody) favBody.innerHTML = '';
-  if (recentBody) recentBody.innerHTML = '';
-  grid.style.display = isPhone ? '' : 'none';
-  if (table) table.style.display = 'none';
-
-  function appendRows(tbodyEl, items) {
-    const frag = document.createDocumentFragment();
-    items.forEach(function(p) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = createProductRow(p);
-      frag.appendChild(tr);
-    });
-    tbodyEl.appendChild(frag);
-  }
-
+function renderProductFavorites(grid, table, tbody, favSection, favBody, recentSection, recentBody, isPhone) {
   function appendCards(items) {
     const frag = document.createDocumentFragment();
     items.forEach(function(p) {
@@ -203,37 +175,13 @@ function renderProductSearch() {
     appendCards(items);
   }
 
-  function setSections(favorites, recent) {
-    if (favSection) favSection.classList.toggle('hidden', favorites.length === 0);
-    if (recentSection) recentSection.classList.toggle('hidden', recent.length === 0);
-  }
-
-  if (query) {
-    setSections([], []);
-    const filtered = filterProducts(query);
-    if (filtered.length === 0) {
-      if (isPhone) {
-        grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda') + '</div>';
-      } else {
-        table.style.display = '';
-        tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda') + '</td></tr>';
-      }
-      return;
-    }
-    if (isPhone) {
-      appendCards(filtered);
-    } else {
-      table.style.display = '';
-      appendRows(tbody, filtered);
-    }
-    return;
-  }
-
-  // No query — favorites and recent products in separate tables
-  var favorites = productCache.filter(function(p) { return p.favorito; });
-  var recent = recentProducts
+  const favorites = productCache.filter(function(p) { return p.favorito; });
+  const recent = recentProducts
     .map(function(c) { return productCache.find(function(x) { return x.codigo === c; }); })
     .filter(Boolean);
+
+  if (favSection) favSection.classList.toggle('hidden', favorites.length === 0);
+  if (recentSection) recentSection.classList.toggle('hidden', recent.length === 0);
 
   if (isPhone) {
     addGridSection('Favoritos', 'nf-fa-star', favorites);
@@ -246,18 +194,65 @@ function renderProductSearch() {
     return;
   }
 
-  setSections(favorites, recent);
-  appendRows(favBody, favorites);
-  appendRows(recentBody, recent);
+  appendRows(favBody, favorites, createProductRow);
+  appendRows(recentBody, recent, createProductRow);
   if (productCache.length === 0) {
     table.style.display = '';
-    tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario') + '</td></tr>';
+    tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario');
     return;
   }
   if (favorites.length === 0 && recent.length === 0) {
     table.style.display = '';
-    tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Los productos que vendas aparecer\u00e1n aqu\u00ed r\u00e1pidamente') + '</td></tr>';
+    tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Los productos que vendas aparecer\u00e1n aqu\u00ed r\u00e1pidamente');
   }
+}
+
+function renderProductSearch() {
+  const query = qs(SEL.productSearch).value.trim().toLowerCase();
+  const grid = qs(SEL.productSearchGrid);
+  const tbody = qs(SEL.productSearchBody);
+  const table = qs(SEL.productSearchTable);
+  const favSection = qs(SEL.productFavoritesSection);
+  const favBody = qs(SEL.productFavoritesBody);
+  const recentSection = qs(SEL.productRecentSection);
+  const recentBody = qs(SEL.productRecentBody);
+  const isPhone = isPhonePos();
+  grid.innerHTML = '';
+  tbody.innerHTML = '';
+  if (favBody) favBody.innerHTML = '';
+  if (recentBody) recentBody.innerHTML = '';
+  grid.style.display = isPhone ? '' : 'none';
+  if (table) table.style.display = 'none';
+
+  if (query) {
+    if (favSection) favSection.classList.add('hidden');
+    if (recentSection) recentSection.classList.add('hidden');
+    const filtered = filterProducts(query);
+    if (filtered.length === 0) {
+      if (isPhone) {
+        grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda') + '</div>';
+      } else {
+        table.style.display = '';
+        tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda');
+      }
+      return;
+    }
+    if (isPhone) {
+      const frag = document.createDocumentFragment();
+      filtered.forEach(function(p) {
+        const el = document.createElement('div');
+        el.innerHTML = createProductCard(p);
+        frag.appendChild(el.firstElementChild);
+      });
+      grid.appendChild(frag);
+    } else {
+      table.style.display = '';
+      appendRows(tbody, filtered, createProductRow);
+    }
+    return;
+  }
+
+  renderProductFavorites(grid, table, tbody, favSection, favBody, recentSection, recentBody, isPhone);
 }
 
 function addToCart(codigo) {
@@ -473,15 +468,9 @@ function renderCart() {
     empty.innerHTML = '';
     empty.style.display = 'none';
     qs(SEL.salesBody).classList.remove('cart-hidden');
-    const fragment = document.createDocumentFragment();
-    cart.forEach(item => {
-      const tr = document.createElement('tr');
+    appendRows(tbody, cart, createCartRow, function(tr, item) {
       tr.dataset.codigo = item.codigo;
-      const displayName = item.nombre || item.codigo;
-      tr.innerHTML = createCartRow(item);
-      fragment.appendChild(tr);
     });
-    tbody.appendChild(fragment);
   }
   updateCartTotals();
   updateCartBadge();
@@ -504,13 +493,12 @@ async function toggleProductFavorito(codigo, btn) {
   if (!p) return;
   const next = !p.favorito;
   if (btn) btn.disabled = true;
-  try {
-    await invoke('toggle_producto_favorito', { codigo, favorito: next });
-    p.favorito = next;
-    showToast(next ? 'Agregado a favoritos' : 'Quitado de favoritos', 'info');
-    renderProductSearch();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-  finally { if (btn) btn.disabled = false; }
+  const favRes = await invokeOrError(invoke('toggle_producto_favorito', { codigo, favorito: next }));
+  if (btn) btn.disabled = false;
+  if (favRes === undefined) return;
+  p.favorito = next;
+  showToast(next ? 'Agregado a favoritos' : 'Quitado de favoritos', 'info');
+  renderProductSearch();
 }
 
 /* ========== PAYMENT ========== */
@@ -556,8 +544,7 @@ function selectPaymentMethod(method) {
   }
 }
 
-function addMixtoRow(containerId, autoDistribute) {
-  autoDistribute = autoDistribute !== false;
+function addMixtoRow(containerId) {
   const container = document.getElementById(containerId);
   const row = document.createElement('div');
   row.className = 'mixto-row';
@@ -616,19 +603,19 @@ function addMixtoRow(containerId, autoDistribute) {
 
   sel.addEventListener('change', function() {
     updateMethodUI();
-    if (autoDistribute) distributeMixto(containerId);
+    distributeMixto(containerId);
   });
   montoInput.addEventListener('input', updateConversion);
 
   row.querySelector('.mixto-remove').addEventListener('click', function() {
     if (container.querySelectorAll('.mixto-row').length > 1) {
       row.remove();
-      if (autoDistribute) distributeMixto(containerId);
+      distributeMixto(containerId);
     }
   });
   container.appendChild(row);
   updateMethodUI();
-  if (autoDistribute) distributeMixto(containerId);
+  distributeMixto(containerId);
 }
 
 function distributeMixto(containerId) {
@@ -802,6 +789,16 @@ document.addEventListener('click', function(e) {
 });
 
 let processingPayment = false;
+function failPayment(msg) {
+  processingPayment = false;
+  const b = qs(SEL.paymentConfirmBtn);
+  if (b) {
+    b.disabled = false;
+    b.classList.remove('loading');
+    b.textContent = 'Confirmar Pago';
+  }
+  if (msg) showToast(msg, 'error');
+}
 async function confirmPayment() {
   if (processingPayment) return;
   const confirmarVenta = await getUserConfig(CFG_CONFIRMAR_VENTA);
@@ -812,23 +809,22 @@ async function confirmPayment() {
   processingPayment = true;
   qs(SEL.paymentConfirmBtn).disabled = true;
   const methodBtn = qs(SEL.paymentMethodActive);
-  if (!methodBtn) { showToast('Seleccione un m\u00e9todo de pago', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
+  if (!methodBtn) { failPayment('Seleccione un m\u00e9todo de pago'); return; }
   const metodo = methodBtn.dataset.method;
   let referencia = null, cliente_id = null, pago_detalle = null;
   if (metodo === METODO_PAGO_MOVIL) {
     referencia = qs(SEL.referenciaInput).value.trim();
-    if (!esRefPagoMovilValida(referencia)) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
+    if (!esRefPagoMovilValida(referencia)) { failPayment('Ingrese los \u00faltimos 4 d\u00edgitos'); return; }
   }
   if (metodo === METODO_CREDITO) {
-    if (!selectedClienteId) { showToast('Seleccione un cliente', 'error'); processingPayment = false; qs(SEL.paymentConfirmBtn).disabled = false; return; }
+    if (!selectedClienteId) { failPayment('Seleccione un cliente'); return; }
     cliente_id = selectedClienteId;
   }
   const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
   if (metodo === METODO_MIXTO) {
     pago_detalle = getMixtoData('mixto-items');
     if (!validarMixto(pago_detalle, total, 'mixto-error')) {
-      processingPayment = false;
-      qs(SEL.paymentConfirmBtn).disabled = false;
+      failPayment();
       return;
     }
   }
@@ -841,11 +837,7 @@ async function confirmPayment() {
     const recibido = parseInput(qs(SEL.cambioRecibido).value);
     if (recibido > 0) {
       if (recibido < totalMoneda) {
-        showToast('El monto recibido (Bs. ' + recibido.toFixed(2).replace('.', ',') + ') es menor al total (Bs. ' + totalMoneda.toFixed(2).replace('.', ',') + ')', 'error');
-        processingPayment = false;
-        qs(SEL.paymentConfirmBtn).disabled = false;
-        qs(SEL.paymentConfirmBtn).classList.remove('loading');
-        qs(SEL.paymentConfirmBtn).textContent = 'Confirmar Pago';
+        failPayment('El monto recibido (' + formatBS(recibido) + ') es menor al total (' + formatBS(totalMoneda) + ')');
         return;
       }
       total_bs_ingresado = recibido;
@@ -856,11 +848,7 @@ async function confirmPayment() {
     const recibidoUsd = parseInput(qs(SEL.cambioRecibido).value);
     if (recibidoUsd > 0) {
       if (recibidoUsd < total) {
-        showToast('El monto recibido ($' + recibidoUsd.toFixed(2) + ') es menor al total ($' + total.toFixed(2) + ')', 'error');
-        processingPayment = false;
-        qs(SEL.paymentConfirmBtn).disabled = false;
-        qs(SEL.paymentConfirmBtn).classList.remove('loading');
-        qs(SEL.paymentConfirmBtn).textContent = 'Confirmar Pago';
+        failPayment('El monto recibido ($' + recibidoUsd.toFixed(2) + ') es menor al total ($' + total.toFixed(2) + ')');
         return;
       }
       total_bs_ingresado = totalBsRedondeado(recibidoUsd);
@@ -916,12 +904,13 @@ async function confirmPayment() {
 async function loadDailySummary() {
   const tbody = qs(SEL.dailySalesBody);
   showSkeleton(tbody, 7);
-  try {
-    const [summary, cajaAbierta] = await Promise.all([
-      invoke('get_daily_summary'),
-      invoke('get_caja_abierta')
-    ]);
-    qs(SEL.dailyCount).textContent = summary.total_ventas;
+  const results = await invokeOrError(Promise.all([
+    invoke('get_daily_summary'),
+    invoke('get_caja_abierta')
+  ]));
+  if (results === undefined) return;
+  const [summary, cajaAbierta] = results;
+  qs(SEL.dailyCount).textContent = summary.total_ventas;
     var badge = qs(SEL.cashierNavBadge);
     if (badge) {
       var count = summary.total_ventas || 0;
@@ -933,23 +922,19 @@ async function loadDailySummary() {
     }
     qs(SEL.dailyUsd).textContent = formatUSD(summary.total_usd);
     qs(SEL.dailyBs).textContent = formatBS(summary.total_bs);
-    qs(SEL.dailyTasa).textContent = 'Bs. ' + summary.tasa_actual.toFixed(2).replace('.', ',');
+    qs(SEL.dailyTasa).textContent = formatBS(summary.tasa_actual);
 
     tbody.innerHTML = '';
     if (summary.ventas.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6">' + emptyState('<i class="nf nf-fa-receipt"></i>', 'Sin ventas hoy', 'Las ventas del d\u00eda aparecer\u00e1n aqu\u00ed') + '</td></tr>';
+      tbody.innerHTML = emptyTableRow(6, '<i class="nf nf-fa-receipt"></i>', 'Sin ventas hoy', 'Las ventas del d\u00eda aparecer\u00e1n aqu\u00ed');
     } else {
-      const frag = document.createDocumentFragment();
-      summary.ventas.forEach(v => {
-        const tr = document.createElement('tr');
+      appendRows(tbody, summary.ventas, function(v) {
         let metodoLabel = formatMetodoLabel(v.metodo_pago);
         if (v.metodo_pago === METODO_PAGO_MOVIL && v.referencia_pago_movil) {
           metodoLabel += ' (' + v.referencia_pago_movil + ')';
         }
-        tr.innerHTML = createDailySaleRow(v, metodoLabel);
-        frag.appendChild(tr);
+        return createDailySaleRow(v, metodoLabel);
       });
-      tbody.appendChild(frag);
     }
 
     const statusBar = qs(SEL.cajaStatusBar);
@@ -967,19 +952,17 @@ async function loadDailySummary() {
       openBtn.style.display = 'inline-flex';
       closeBtn.style.display = 'none';
     }
-  } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 async function handleOpenCashier() {
   const btn = qs(SEL.openCashierBtn);
   if (btn) btn.disabled = true;
-  try {
-    const res = await invoke('abrir_caja');
-    playSound('success');
-    showToast(res);
-    loadDailySummary();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-  finally { if (btn) btn.disabled = false; }
+  const res = await invokeOrError(invoke('abrir_caja'));
+  if (btn) btn.disabled = false;
+  if (res === undefined) return;
+  playSound('success');
+  showToast(res);
+  loadDailySummary();
 }
 
 function openCloseCashier() {
@@ -995,11 +978,13 @@ function closeCloseCashier() { closeModal(qs(SEL.closeCashierModal)); }
 async function confirmCloseCashier() {
   const btn = qs(SEL.closeCashierConfirmBtn);
   if (btn) btn.disabled = true;
-  try {
-    const [report, reportData] = await Promise.all([
-      invoke('close_cashier'),
-      invoke('get_close_report_data')
-    ]);
+  const results = await invokeOrError(Promise.all([
+    invoke('close_cashier'),
+    invoke('get_close_report_data')
+  ]));
+  if (btn) btn.disabled = false;
+  if (results === undefined) return;
+  const [report, reportData] = results;
     closeCloseCashier();
     let html = '<div class="close-report-content">';
     html += '<div class="close-report-icon">' + ICON.FILE_TEXT + '</div>';
@@ -1048,8 +1033,6 @@ async function confirmCloseCashier() {
       showToast(report.backup_msg, 'info');
     }
     loadDailySummary();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-  finally { if (btn) btn.disabled = false; }
 }
 
 function drawPieChart(canvasId, data) {
@@ -1156,21 +1139,20 @@ function closeReport() { closeModal(qs(SEL.closeReportModal)); }
 
 /* ========== HISTORIAL CIERRES ========== */
 async function openHistorialCierres() {
-  try {
-    const cierres = await invoke('list_cierres');
-    const container = qs(SEL.historialCierresList);
-    if (!cierres.length) {
-      container.innerHTML = emptyState('<i class="nf nf-fa-history"></i>', 'No hay cierres registrados', 'Los cierres de caja aparecer\u00e1n aqu\u00ed');
-    } else {
-      let html = '<table class="table compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
-      cierres.forEach(c => {
-        html += '<tr><td>' + c.id + '</td><td>' + escapeHtml(c.fecha_hora) + '</td><td>' + escapeHtml(c.username) + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><button class="btn btn-sm btn-outline" data-action="show-cierre-detalle" data-id="' + c.id + '">Ver</button></td></tr>';
-      });
-      html += '</table>';
-      container.innerHTML = html;
-    }
-    showModal(qs(SEL.historialCierresModal));
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+  const cierres = await invokeOrError(invoke('list_cierres'));
+  if (cierres === undefined) return;
+  const container = qs(SEL.historialCierresList);
+  if (!cierres.length) {
+    container.innerHTML = emptyState('<i class="nf nf-fa-history"></i>', 'No hay cierres registrados', 'Los cierres de caja aparecer\u00e1n aqu\u00ed');
+  } else {
+    let html = '<table class="table compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
+    cierres.forEach(c => {
+      html += '<tr><td>' + c.id + '</td><td>' + escapeHtml(c.fecha_hora) + '</td><td>' + escapeHtml(c.username) + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><button class="btn btn-sm btn-outline" data-action="show-cierre-detalle" data-id="' + c.id + '">Ver</button></td></tr>';
+    });
+    html += '</table>';
+    container.innerHTML = html;
+  }
+  showModal(qs(SEL.historialCierresModal));
 }
 
 function closeHistorialCierres() {
@@ -1178,12 +1160,12 @@ function closeHistorialCierres() {
 }
 
 async function showCierreDetalle(cierreId) {
-  try {
-    const detalle = await invoke('get_cierre_detalle', { cierreId });
-    showModal(qs(SEL.historialCierreDetalleModal));
-    closeModal(qs(SEL.historialCierresModal));
-    const d = detalle.detalle;
-    const c = detalle.cierre;
+  const detalle = await invokeOrError(invoke('get_cierre_detalle', { cierreId }));
+  if (detalle === undefined) return;
+  showModal(qs(SEL.historialCierreDetalleModal));
+  closeModal(qs(SEL.historialCierresModal));
+  const d = detalle.detalle;
+  const c = detalle.cierre;
     let html = '<div style="text-align:center;padding:8px 20px;">';
     html += '<div style="font-size:28px;margin-bottom:4px;">' + ICON.FILE_TEXT + '</div>';
     html += '<h3>Reporte de Cierre #' + c.id + '</h3>';
@@ -1221,7 +1203,6 @@ async function showCierreDetalle(cierreId) {
     html += '</div>';
     qs(SEL.historialCierreDetalleBody).innerHTML = html;
     requestAnimationFrame(() => drawHistorialChart(d));
-  } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 function drawHistorialChart(data) { drawPieChart('historial-pie-chart', data); }
@@ -1237,13 +1218,12 @@ function updateTasaInfo(prefix) {
 }
 
 async function refreshTasaFromInfo(prefix) {
-  try {
-    var rate = await invoke('fetch_tasa_bcv');
-    tasaActual = rate;
-    await invoke('set_tasa', { tasa: tasaActual });
-    updateTasaInfo(prefix);
-    showToast('Tasa actualizada: Bs. ' + rate.toFixed(2), 'success');
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+  var rate = await invokeOrError(invoke('fetch_tasa_bcv'));
+  if (rate === undefined) return;
+  tasaActual = rate;
+  if (await invokeOrError(invoke('set_tasa', { tasa: tasaActual })) === undefined) return;
+  updateTasaInfo(prefix);
+  showToast('Tasa actualizada: Bs. ' + rate.toFixed(2), 'success');
 }
 
 /* ========== MOVIMIENTOS CAJA ========== */
@@ -1283,34 +1263,28 @@ function openMovimientosModal() {
   loadMovimientos();
 }
 
-let _savingMov = false;
 async function saveMovimiento() {
-  if (_savingMov) return;
-  var tipo = qs(SEL.movimientosTipo).value;
-  var montoBs = parseInput(qs(SEL.movimientosMontoBs).value);
-  var montoUsd = parseInput(qs(SEL.movimientosMontoUsd).value);
-  var concepto = qs(SEL.movimientosConcepto).value.trim();
-  if (montoBs <= 0 && montoUsd <= 0) { showToast('Ingrese un monto v&aacute;lido', 'error'); return; }
-  if (!concepto) { showToast('Ingrese un concepto', 'error'); return; }
-  _savingMov = true;
-  var btn = qs(SEL.movimientosSaveBtn);
-  var origHtml = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-spin"></i>';
-  try {
-    var tasa = await getTasaConFallback();
-    if (montoBs > 0 && montoUsd <= 0) montoUsd = bsToUsd(montoBs, tasa);
-    if (montoUsd > 0 && montoBs <= 0) montoBs = montoUsd * tasa;
-    await invoke('register_movimiento', { tipo: tipo, montoBs: montoBs, montoUsd: montoUsd, concepto: concepto, usuarioId: currentUser.id, username: currentUser.username });
-    showToast('Movimiento registrado', 'success');
-    playSound('add');
-    qs(SEL.movimientosMontoBs).value = '';
-    qs(SEL.movimientosMontoUsd).value = '';
-    qs(SEL.movimientosConcepto).value = '';
-    loadMovimientos();
-    loadDailySummary();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-  _savingMov = false;
-  btn.disabled = false; btn.innerHTML = origHtml;
+  await withButtonLock(qs(SEL.movimientosSaveBtn), async () => {
+    var tipo = qs(SEL.movimientosTipo).value;
+    var montoBs = parseInput(qs(SEL.movimientosMontoBs).value);
+    var montoUsd = parseInput(qs(SEL.movimientosMontoUsd).value);
+    var concepto = qs(SEL.movimientosConcepto).value.trim();
+    if (montoBs <= 0 && montoUsd <= 0) { showToast('Ingrese un monto v&aacute;lido', 'error'); return; }
+    if (!concepto) { showToast('Ingrese un concepto', 'error'); return; }
+    try {
+      var tasa = await getTasaConFallback();
+      if (montoBs > 0 && montoUsd <= 0) montoUsd = bsToUsd(montoBs, tasa);
+      if (montoUsd > 0 && montoBs <= 0) montoBs = montoUsd * tasa;
+      if (await invokeOrError(invoke('register_movimiento', { tipo: tipo, montoBs: montoBs, montoUsd: montoUsd, concepto: concepto, usuarioId: currentUser.id, username: currentUser.username })) === undefined) return;
+      showToast('Movimiento registrado', 'success');
+      playSound('add');
+      qs(SEL.movimientosMontoBs).value = '';
+      qs(SEL.movimientosMontoUsd).value = '';
+      qs(SEL.movimientosConcepto).value = '';
+      loadMovimientos();
+      loadDailySummary();
+    } catch (e) { showToast('Error: ' + e, 'error'); }
+  });
 }
 
 /* ========== RESIZE DIVIDER (mobile vertical, desktop horizontal) ========== */

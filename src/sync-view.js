@@ -99,21 +99,18 @@ function showView(name) {
     if (!configActive) {
       if (showInari) {
         showInari = false;
-        qs(SEL.inventoryInariBtn).classList.remove('active');
-        qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-fire"></i> <span>Inari</span>';
+        updateInariBtn();
       }
     } else {
       const hoy = new Date().getDay();
       if (INARI_DIAS.includes(hoy)) {
         if (!showInari) {
           showInari = true;
-          qs(SEL.inventoryInariBtn).classList.add('active');
-          qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-check"></i> <span>Inari</span>';
+          updateInariBtn();
         }
       } else if (showInari) {
         showInari = false;
-        qs(SEL.inventoryInariBtn).classList.remove('active');
-        qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-fire"></i> <span>Inari</span>';
+        updateInariBtn();
       }
     }
     qs(SEL.inariSubcatBar).style.display = showInari ? 'flex' : 'none';

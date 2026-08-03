@@ -109,17 +109,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.tasaInput).addEventListener('blur', handleTasaChange);
   qs(SEL.tasaFetchBtn)?.addEventListener('click', fetchTasaBcv);
   qs(SEL.syncDownloadBtn)?.addEventListener('click', async function() {
-    showLoadingModal('Descargando datos...');
-    await forcePaint();
-    try {
-      const msg = await invoke('download_all');
+    await withLoadingModal('Descargando datos...', async function() {
+      const msg = await invokeOrError(invoke('download_all'));
+      if (msg === undefined) return;
       showToast(msg, 'success');
       await loadProductCache();
-    } catch (e) {
-      showToast('Error al descargar: ' + e, 'error');
-    } finally {
-      hideLoadingModal();
-    }
+    });
   });
   qs(SEL.inventoryTasaBtn)?.addEventListener('click', openTasaHistorialModal);
   qs(SEL.tasaHistorialApply)?.addEventListener('click', applyTasaHistorial);
@@ -292,12 +287,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     const montoEl = qs(SEL.cambioMonto);
     if (recibido > 0) {
       if (recibido < totalMoneda) {
-        montoEl.textContent = method === METODO_EFECTIVO_BS ? 'Faltan Bs. ' + (totalMoneda - recibido).toFixed(2).replace('.', ',') : 'Faltan ' + formatUSD(totalMoneda - recibido);
+        montoEl.textContent = method === METODO_EFECTIVO_BS ? 'Faltan ' + formatBS(totalMoneda - recibido) : 'Faltan ' + formatUSD(totalMoneda - recibido);
         cambioEl.classList.remove('hidden');
         cambioEl.style.color = 'var(--danger)';
       } else if (recibido > totalMoneda && calcularVuelto) {
         const cambio = recibido - totalMoneda;
-        const cambioTexto = method === METODO_EFECTIVO_BS ? 'Bs. ' + cambio.toFixed(2).replace('.', ',') : formatUSD(cambio);
+        const cambioTexto = method === METODO_EFECTIVO_BS ? formatBS(cambio) : formatUSD(cambio);
         montoEl.textContent = cambioTexto;
         cambioEl.classList.remove('hidden');
         cambioEl.style.color = '';
@@ -341,10 +336,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
     showInari = !showInari;
     inventoryPage = 1;
-    qs(SEL.inventoryInariBtn).classList.toggle('active', showInari);
-    qs(SEL.inventoryInariBtn).innerHTML = showInari
-      ? '<i class="nf nf-fa-check"></i> <span>Inari</span>'
-      : '<i class="nf nf-fa-fire"></i> <span>Inari</span>';
+    updateInariBtn();
     qs(SEL.inariSubcatBar).style.display = showInari ? 'flex' : 'none';
     if (!showInari) { inariSubcat = ''; }
     loadInventory();
@@ -468,7 +460,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Event delegation: creditos table
-  qs(SEL.creditosBody).addEventListener('click', e => {
+  qs(SEL.creditosBody).addEventListener('click', async e => {
     const dropdownBtn = e.target.closest('[data-action="toggle-dropdown"]');
     if (dropdownBtn) {
       e.stopPropagation();
@@ -497,28 +489,23 @@ document.addEventListener('DOMContentLoaded', async function() {
       const deuda = parseFloat(delBtn.dataset.deuda);
       let msg = '\u00bfEliminar a "' + nombre + '"? Esta acci\u00f3n no se puede deshacer.';
       if (deuda > 0) msg += ' Tiene una deuda de ' + formatUSD(deuda) + ' pendiente.';
-      confirmModal(msg, 'Eliminar Cliente', 'Eliminar').then(async ok => {
-        if (!ok) return;
-        try {
-          const res = await invoke('delete_cliente', { clienteId: id });
-          showToast(res || 'Cliente eliminado');
-          loadCreditos();
-        } catch (e) { showToast('Error: ' + e, 'error'); }
-      });
+      const ok = await confirmModal(msg, 'Eliminar Cliente', 'Eliminar');
+      if (!ok) return;
+      const res = await invokeOrError(invoke('delete_cliente', { clienteId: id }));
+      if (res === undefined) return;
+      showToast(res || 'Cliente eliminado');
+      loadCreditos();
       return;
     }
     const toggleBtn = e.target.closest('[data-action="toggle-cliente-credito"]');
     if (toggleBtn) {
       const id = parseInt(toggleBtn.dataset.id);
       const activo = toggleBtn.dataset.activo === 'true';
-      confirmModal((activo ? 'Desactivar' : 'Activar') + ' cr\u00e9dito para este cliente?', 'Cambiar Cr\u00e9dito', (activo ? 'Desactivar' : 'Activar')).then(async ok => {
-        if (!ok) return;
-        try {
-          await invoke('toggle_cliente_credito', { clienteId: id, activo: !activo });
-          showToast('Cr\u00e9dito ' + (!activo ? 'activado' : 'desactivado'));
-          loadCreditos();
-        } catch (e) { showToast('Error: ' + e, 'error'); }
-      });
+      const ok = await confirmModal((activo ? 'Desactivar' : 'Activar') + ' cr\u00e9dito para este cliente?', 'Cambiar Cr\u00e9dito', (activo ? 'Desactivar' : 'Activar'));
+      if (!ok) return;
+      if (await invokeOrError(invoke('toggle_cliente_credito', { clienteId: id, activo: !activo })) === undefined) return;
+      showToast('Cr\u00e9dito ' + (!activo ? 'activado' : 'desactivado'));
+      loadCreditos();
       return;
     }
     const quickDebtBtn = e.target.closest('[data-action="open-quick-debt"]');
@@ -565,11 +552,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   const userListRefreshBtn = qs(SEL.userListRefreshBtn);
   if (userListRefreshBtn) userListRefreshBtn.addEventListener('click', loadUserList);
   const resetUsersBtn = qs(SEL.resetUsersBtn);
-  if (resetUsersBtn) resetUsersBtn.addEventListener('click', function() {
-    confirmModal('\u00bfEliminar TODOS los usuarios y dejar solo superadmin? Esta acci\u00f3n no se puede deshacer.', 'Reset Usuarios', 'Resetear').then(ok => {
-      if (!ok) return;
-      invoke('reset_usuarios').then(msg => { showToast(msg); loadUserList(); }).catch(e => showToast('Error: ' + e, 'error'));
-    });
+  if (resetUsersBtn) resetUsersBtn.addEventListener('click', async function() {
+    const ok = await confirmModal('\u00bfEliminar TODOS los usuarios y dejar solo superadmin? Esta acci\u00f3n no se puede deshacer.', 'Reset Usuarios', 'Resetear');
+    if (!ok) return;
+    const msg = await invokeOrError(invoke('reset_usuarios'));
+    if (msg === undefined) return;
+    showToast(msg);
+    loadUserList();
   });
   document.addEventListener('click', function(e) {
     const delBtn = e.target.closest('.delete-user-btn');
@@ -578,11 +567,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         const id = parseInt(delBtn.dataset.id);
         const ok = await confirmModal('\u00bfEliminar este usuario?', 'Eliminar Usuario', 'Eliminar');
         if (!ok) return;
-        try {
-          const msg = await invoke('delete_usuario', { usuarioId: id });
-          showToast(msg);
-          loadUserList();
-        } catch (e) { showToast('Error: ' + e, 'error'); }
+        const msg = await invokeOrError(invoke('delete_usuario', { usuarioId: id }));
+        if (msg === undefined) return;
+        showToast(msg);
+        loadUserList();
       });
     }
   });
@@ -621,12 +609,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.adminPwdCancelBtn).addEventListener('click', closeAdminPwdModal);
   qs(SEL.adminPwdSaveBtn).addEventListener('click', async function() {
     const pwd = adminPwdInput.value.trim();
-    if (!pwd || pwd.length < MIN_PASSWORD_LEN) { showToast(`La contrase\u00f1a debe tener al menos ${MIN_PASSWORD_LEN} caracteres`, 'error'); return; }
-    try {
-      await invoke('admin_change_password', { usuarioId: adminPwdUserId, newPassword: pwd });
-      showToast('Contrase\u00f1a cambiada exitosamente');
-      closeAdminPwdModal();
-    } catch (e) { showToast('Error: ' + e, 'error'); }
+    if (!pwd || pwd.length < MIN_PASSWORD_LEN) { showToast(passwordTooShortMsg(), 'error'); return; }
+    if (await invokeOrError(invoke('admin_change_password', { usuarioId: adminPwdUserId, newPassword: pwd })) === undefined) return;
+    showToast('Contrase\u00f1a cambiada exitosamente');
+    closeAdminPwdModal();
   });
   document.addEventListener('click', function(e) {
     const btn = e.target.closest('.admin-pwd-btn');
@@ -704,17 +690,16 @@ document.addEventListener('DOMContentLoaded', async function() {
         display.style.display = 'none';
         return;
       }
-      try {
-        const stats = await invoke('get_sync_stats');
-        if (stats.dispositivo_id) {
-          if (display) {
-            display.textContent = 'ID: ' + stats.dispositivo_id;
-            display.style.display = 'block';
-          }
-        } else {
-          showToast('No hay dispositivo registrado', 'error');
+      const stats = await invokeOrError(invoke('get_sync_stats'));
+      if (stats === undefined) return;
+      if (stats.dispositivo_id) {
+        if (display) {
+          display.textContent = 'ID: ' + stats.dispositivo_id;
+          display.style.display = 'block';
         }
-      } catch (e) { showToast('Error: ' + e, 'error'); }
+      } else {
+        showToast('No hay dispositivo registrado', 'error');
+      }
     });
   }
 
@@ -727,12 +712,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     const useRemote = btn.classList.contains('conflict-use-remote');
     btn.disabled = true;
     btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i>';
-    try {
-      const msg = await invoke('resolve_conflicto', { conflictoId: id, useRemote });
-      showToast(msg);
-      openConflictModal();
-      loadConflictCount();
-    } catch (e) { showToast('Error: ' + e, 'error'); }
+    const msg = await invokeOrError(invoke('resolve_conflicto', { conflictoId: id, useRemote }));
+    if (msg === undefined) { btn.disabled = false; btn.innerHTML = '<i class="nf nf-fa-bolt"></i> ' + (useRemote ? 'Usar remoto' : 'Mantener local'); return; }
+    showToast(msg);
+    openConflictModal();
+    loadConflictCount();
   });
 
   /* Ver conflictos */
@@ -760,46 +744,45 @@ document.addEventListener('DOMContentLoaded', async function() {
     updateSyncProgress(d.step, d.current, d.total);
   });
 
+  async function runSyncCommand(opts) {
+    showSyncProgress();
+    updateSyncIndicator(opts.label, true);
+    await forcePaint();
+    try {
+      var r = await opts.cmd();
+      hideSyncProgress();
+      showToast(opts.successMsg || r || 'Sincronizaci\u00f3n completa');
+      if (opts.onSuccess) opts.onSuccess();
+      loadSyncStats();
+    } catch (e) {
+      hideSyncProgress();
+      updateSyncIndicator('Error en sync', false);
+      showToast('Error: ' + e, 'error');
+      loadSyncStats();
+    }
+  }
+
   /* Subir todo */
-  qs(SEL.uploadAllBtn)?.addEventListener('click', function() {
-    confirmModal('¿Subir productos, clientes y ventas a Supabase?', 'Subir todo', 'Subir').then(async function(ok) {
-      if (!ok) return;
-      showSyncProgress();
-      updateSyncIndicator('Subiendo...', true);
-      await forcePaint();
-      invoke('upload_all').then(function(r) {
-        hideSyncProgress();
-        showToast('Subida completa');
-        loadConflictCount();
-        loadSyncStats();
-      }).catch(function(e) {
-        hideSyncProgress();
-        updateSyncIndicator('Error en sync', false);
-        showToast('Error: ' + e, 'error');
-        loadSyncStats();
-      });
+  qs(SEL.uploadAllBtn)?.addEventListener('click', async function() {
+    const ok = await confirmModal('¿Subir productos, clientes y ventas a Supabase?', 'Subir todo', 'Subir');
+    if (!ok) return;
+    runSyncCommand({
+      cmd: () => invoke('upload_all'),
+      label: 'Subiendo...',
+      successMsg: 'Subida completa',
+      onSuccess: () => { loadConflictCount(); }
     });
   });
 
   /* Descargar todo */
-  qs(SEL.downloadAllBtn)?.addEventListener('click', function() {
-    confirmModal('¿Descargar productos, clientes y ventas desde Supabase?', 'Descargar todo', 'Descargar').then(async function(ok) {
-      if (!ok) return;
-      showSyncProgress();
-      updateSyncIndicator('Descargando...', true);
-      await forcePaint();
-      invoke('download_all').then(function(r) {
-        hideSyncProgress();
-        showToast('Descarga completa');
-        loadProductCache();
-        loadConflictCount();
-        loadSyncStats();
-      }).catch(function(e) {
-        hideSyncProgress();
-        updateSyncIndicator('Error en sync', false);
-        showToast('Error: ' + e, 'error');
-        loadSyncStats();
-      });
+  qs(SEL.downloadAllBtn)?.addEventListener('click', async function() {
+    const ok = await confirmModal('¿Descargar productos, clientes y ventas desde Supabase?', 'Descargar todo', 'Descargar');
+    if (!ok) return;
+    runSyncCommand({
+      cmd: () => invoke('download_all'),
+      label: 'Descargando...',
+      successMsg: 'Descarga completa',
+      onSuccess: () => { loadProductCache(); loadConflictCount(); }
     });
   });
 
@@ -807,38 +790,14 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.uploadUsuariosBtn)?.addEventListener('click', async function() {
     var ok = await confirmModal('¿Subir usuarios a Supabase?', 'Subir usuarios', 'Subir');
     if (!ok) return;
-    showSyncProgress();
-    updateSyncIndicator('Subiendo usuarios...', true);
-    await forcePaint();
-    try {
-      var r = await invoke('upload_usuarios');
-      hideSyncProgress();
-      showToast(r);
-      loadSyncStats();
-    } catch (e) {
-      hideSyncProgress();
-      updateSyncIndicator('Error en sync', false);
-      showToast('Error: ' + e, 'error');
-    }
+    runSyncCommand({ cmd: () => invoke('upload_usuarios'), label: 'Subiendo usuarios...' });
   });
 
   /* Descargar usuarios */
   qs(SEL.downloadUsuariosBtn)?.addEventListener('click', async function() {
     var ok = await confirmModal('¿Descargar usuarios de otros dispositivos desde Supabase?', 'Descargar usuarios', 'Descargar');
     if (!ok) return;
-    showSyncProgress();
-    updateSyncIndicator('Descargando usuarios...', true);
-    await forcePaint();
-    try {
-      var r = await invoke('download_usuarios');
-      hideSyncProgress();
-      showToast(r);
-      loadSyncStats();
-    } catch (e) {
-      hideSyncProgress();
-      updateSyncIndicator('Error en sync', false);
-      showToast('Error: ' + e, 'error');
-    }
+    runSyncCommand({ cmd: () => invoke('download_usuarios'), label: 'Descargando usuarios...' });
   });
 
   /* Sincronizar todo */
@@ -846,22 +805,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     withButtonLock(this, async function() {
       const ok = await confirmModal('\u00bfSincronizar completamente (subir y descargar todo) con Supabase?', 'Sincronizar todo', 'Sincronizar');
       if (!ok) return;
-      showSyncProgress();
-      updateSyncIndicator('Sincronizando...', true);
-      await forcePaint();
-      try {
-        var r = await invoke('sync_all');
-        hideSyncProgress();
-        showToast('Sincronizaci\u00f3n completa');
-        loadProductCache();
-        loadConflictCount();
-        loadSyncStats();
-      } catch (e) {
-        hideSyncProgress();
-        updateSyncIndicator('Error en sync', false);
-        showToast('Error: ' + e, 'error');
-        loadSyncStats();
-      }
+      runSyncCommand({
+        cmd: () => invoke('sync_all'),
+        label: 'Sincronizando...',
+        successMsg: 'Sincronizaci\u00f3n completa',
+        onSuccess: () => { loadProductCache(); loadConflictCount(); }
+      });
     });
   });
 
@@ -872,28 +821,26 @@ document.addEventListener('DOMContentLoaded', async function() {
     var btn = this;
     btn.disabled = true;
     btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Probando...';
-    statusEl.style.color = cssVar('--text-secondary');
+statusEl.style.color = cssVar('--text-secondary');
     statusEl.title = 'Probando...';
-    showLoadingModal('Probando conexión con Supabase...');
-    await forcePaint();
-    try {
-      var ok = await invoke('test_supabase_connection');
-      if (ok) {
-        statusEl.style.color = cssVar('--success');
-        statusEl.title = 'Conectado';
-        showToast('Conexión exitosa');
-      } else {
+    await withLoadingModal('Probando conexión con Supabase...', async function() {
+      try {
+        var ok = await invoke('test_supabase_connection');
+        if (ok) {
+          statusEl.style.color = cssVar('--success');
+          statusEl.title = 'Conectado';
+          showToast('Conexión exitosa');
+        } else {
+          statusEl.style.color = cssVar('--danger');
+          statusEl.title = 'Error de conexión';
+          showToast('No se pudo conectar a Supabase', 'error');
+        }
+      } catch (e) {
         statusEl.style.color = cssVar('--danger');
-        statusEl.title = 'Error de conexi\u00f3n';
-        showToast('No se pudo conectar a Supabase', 'error');
+        statusEl.title = 'Error: ' + e;
+        showToast('Error: ' + e, 'error');
       }
-    } catch (e) {
-      statusEl.style.color = cssVar('--danger');
-      statusEl.title = 'Error: ' + e;
-      showToast('Error: ' + e, 'error');
-    } finally {
-      hideLoadingModal();
-    }
+    });
     btn.disabled = false;
     btn.innerHTML = '<i class="nf nf-fa-plug"></i> Probar conexión';
     loadSyncStats();
@@ -1250,15 +1197,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   const inariToggle = qs(SEL.inariConfigToggle);
   function applyInariConfig(active) {
     var dayOk = active && INARI_DIAS.includes(new Date().getDay());
-    if (dayOk) {
-      showInari = true;
-      qs(SEL.inventoryInariBtn).classList.add('active');
-      qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-check"></i> <span>Inari</span>';
-    } else {
-      showInari = false;
-      qs(SEL.inventoryInariBtn).classList.remove('active');
-      qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-fire"></i> <span>Inari</span>';
-    }
+    showInari = dayOk;
+    updateInariBtn();
   }
   if (inariToggle) {
     inariToggle.addEventListener('change', function() {
@@ -1291,11 +1231,9 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (isNaN(val) || val < 0) val = 0;
       if (val > HISTORIAL_MAX_DAYS) val = HISTORIAL_MAX_DAYS;
       input.value = val;
-      try {
-        await invoke('set_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS, value: String(val) });
-        updateHistoryCleanupStatus(val);
-        showToast('Configuraci\u00f3n guardada');
-      } catch (e) { showToast('Error: ' + e, 'error'); }
+      if (await invokeOrError(invoke('set_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS, value: String(val) })) === undefined) return;
+      updateHistoryCleanupStatus(val);
+      showToast('Configuraci\u00f3n guardada');
     });
   }
 
@@ -1313,10 +1251,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (isNaN(val) || val < 0) val = 0;
       if (val > 100) val = 100;
       input.value = val;
-      try {
-        await invoke('set_config_value', { key: CFG_MAX_BACKUPS, value: String(val) });
-        showToast('Configuraci\u00f3n guardada');
-      } catch (e) { showToast('Error: ' + e, 'error'); }
+      if (await invokeOrError(invoke('set_config_value', { key: CFG_MAX_BACKUPS, value: String(val) })) === undefined) return;
+      showToast('Configuraci\u00f3n guardada');
     });
   }
 
@@ -1326,14 +1262,12 @@ document.addEventListener('DOMContentLoaded', async function() {
       btn.addEventListener('click', async () => {
         const ok = await confirmModal('\u00bfEliminar todo el historial de auditor\u00eda? Esta acci\u00f3n no se puede deshacer.', 'Limpiar Historial', 'Eliminar todo');
         if (!ok) return;
-        try {
-          await invoke('clear_audit');
-          showToast('Historial eliminado');
-          playSound('remove');
-          qs(SEL.auditBody).innerHTML = emptyState('<i class="nf nf-fa-history"></i>', 'Historial vac\u00edo', 'No hay registros de auditor\u00eda');
-          qs(SEL.auditLoadMore).classList.add('hidden');
-          disconnectAuditObserver();
-        } catch (e) { showToast('Error: ' + e, 'error'); }
+        if (await invokeOrError(invoke('clear_audit')) === undefined) return;
+        showToast('Historial eliminado');
+        playSound('remove');
+        qs(SEL.auditBody).innerHTML = emptyTableRow(4, '<i class="nf nf-fa-history"></i>', 'Historial vac\u00edo', 'No hay registros de auditor\u00eda');
+        qs(SEL.auditLoadMore).classList.add('hidden');
+        disconnectAuditObserver();
       });
     }
   }
@@ -1497,76 +1431,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   loadOpenRouterKey();
 
   /* ========== CHAT IA ========== */
-  /* FAB — always start at default position */
-  (function initFabPos() {
-    var fab = qs(SEL.chatFab);
-    fab.style.left = (window.innerWidth - 72) + 'px';
-    fab.style.top = (window.innerHeight - 152) + 'px';
-  })();
-
-  var fabDragActive = false, fabTouchDrag = false;
-  var fabStartX, fabStartY, fabOrigLeft, fabOrigTop, fabDragTimer;
-
-  function fabStart(e, isTouch) {
-    var t = isTouch ? e.touches[0] : e;
-    fabDragActive = false;
-    fabTouchDrag = false;
-    fabStartX = t.clientX;
-    fabStartY = t.clientY;
-    fabOrigLeft = parseInt(qs(SEL.chatFab).style.left) || 0;
-    fabOrigTop = parseInt(qs(SEL.chatFab).style.top) || 0;
-    clearTimeout(fabDragTimer);
-    fabDragTimer = setTimeout(function() {
-      fabDragActive = true;
-      qs(SEL.chatFab).classList.add('dragging');
-    }, TIMING.FAB_DRAG_START_MS);
-  }
-
-  function fabMove(e, isTouch) {
-    if (fabStartX === undefined) return;
-    var t = isTouch ? e.touches[0] : e;
-    var dx = t.clientX - fabStartX;
-    var dy = t.clientY - fabStartY;
-    if (!fabDragActive && Math.abs(dx) < TIMING.FAB_DRAG_THRESHOLD && Math.abs(dy) < TIMING.FAB_DRAG_THRESHOLD) return;
-    if (!fabDragActive) {
-      fabDragActive = true;
-      qs(SEL.chatFab).classList.add('dragging');
-      clearTimeout(fabDragTimer);
-    }
-    e.preventDefault();
-    var bottomMargin = 100;
-    qs(SEL.chatFab).style.left = Math.max(4, Math.min(window.innerWidth - 56, fabOrigLeft + dx)) + 'px';
-    qs(SEL.chatFab).style.top = Math.max(4, Math.min(window.innerHeight - 52 - bottomMargin, fabOrigTop + dy)) + 'px';
-  }
-
-  function fabEnd(isTouch) {
-    clearTimeout(fabDragTimer);
-    fabDragTimer = null;
-    if (fabDragActive) {
-      qs(SEL.chatFab).classList.remove('dragging');
-      if (isTouch) {
-        fabTouchDrag = true;
-        setTimeout(function() { fabTouchDrag = false; }, TIMING.FAB_TOUCH_RESET_MS);
-      }
-    }
-    fabStartX = fabStartY = undefined;
-  }
-
-  qs(SEL.chatFab).addEventListener('mousedown', function(e) {
-    if (fabTouchDrag) return; // ignore synthetic mousedown after touch drag
-    fabStart(e, false);
-  });
-  document.addEventListener('mousemove', function(e) { fabMove(e, false); });
-  document.addEventListener('mouseup', function() { fabEnd(false); });
-  qs(SEL.chatFab).addEventListener('touchstart', function(e) { fabStart(e, true); }, { passive: true });
-  document.addEventListener('touchmove', function(e) { fabMove(e, true); }, { passive: false });
-  document.addEventListener('touchend', function() { fabEnd(true); });
-
-  qs(SEL.chatFab).addEventListener('click', function() {
-    if (fabDragActive || fabTouchDrag) { fabDragActive = false; fabTouchDrag = false; return; }
-    toggleChat();
-  });
-
   qs(SEL.chatCloseBtn).addEventListener('click', toggleChat);
   qs(SEL.chatSendBtn).addEventListener('click', handleChatSend);
   qs(SEL.chatInput).addEventListener('keydown', function(e) {

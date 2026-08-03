@@ -33,32 +33,25 @@ async function loadReports(resetPage) {
   if (resetPage) reportPage = 1;
   const searchBtn = qs(SEL.reportSearchBtn);
   const btnHtml = searchBtn.innerHTML;
-  try {
-    showLoading(searchBtn);
-    const result = await invoke('get_sales_report', { filter: buildReportFilter(true) });
-    qs(SEL.reportTotalCount).textContent = result.total_ventas;
-    qs(SEL.reportTotalUsd).textContent = formatUSD(result.total_usd);
-    qs(SEL.reportTotalCosto).textContent = formatUSD(result.total_costo_usd || 0);
-    qs(SEL.reportTotalGanancia).textContent = formatUSD(result.total_ganancia_usd || 0);
-    qs(SEL.reportTotalBs).textContent = formatBS(result.total_bs);
+  showLoading(searchBtn);
+  const result = await invokeOrError(invoke('get_sales_report', { filter: buildReportFilter(true) }));
+  searchBtn.innerHTML = btnHtml;
+  if (result === undefined) return;
+  qs(SEL.reportTotalCount).textContent = result.total_ventas;
+  qs(SEL.reportTotalUsd).textContent = formatUSD(result.total_usd);
+  qs(SEL.reportTotalCosto).textContent = formatUSD(result.total_costo_usd || 0);
+  qs(SEL.reportTotalGanancia).textContent = formatUSD(result.total_ganancia_usd || 0);
+  qs(SEL.reportTotalBs).textContent = formatBS(result.total_bs);
 
-    renderReportPagination(result.total_ventas);
+  renderReportPagination(result.total_ventas);
 
-    const tbody = qs(SEL.reportSalesBody);
-    tbody.innerHTML = '';
-    if (!result.ventas || result.ventas.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10">' + emptyState('<i class="nf nf-fa-bar_chart"></i>', 'Sin ventas en el per\u00edodo', '') + '</td></tr>';
-    } else {
-      const frag = document.createDocumentFragment();
-      result.ventas.forEach(item => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = createReportRow(item);
-        frag.appendChild(tr);
-      });
-      tbody.appendChild(frag);
-    }
-  } catch (e) { showToast('Error: ' + e, 'error'); }
-  finally { searchBtn.innerHTML = btnHtml; }
+  const tbody = qs(SEL.reportSalesBody);
+  tbody.innerHTML = '';
+  if (!result.ventas || result.ventas.length === 0) {
+    tbody.innerHTML = emptyTableRow(10, '<i class="nf nf-fa-bar_chart"></i>', 'Sin ventas en el per\u00edodo', '');
+  } else {
+    appendRows(tbody, result.ventas, createReportRow);
+  }
 }
 
 async function loadReportsAndTopProducts(resetPage) {
@@ -201,6 +194,20 @@ function hideChartTooltip() {
 }
 
 /* ========== BAR CHART ========== */
+function drawBarLegend(ctx, w, isMobile, textColor, barColors, periodLabels) {
+    const legendX = w - (isMobile ? 130 : 160), legendY = isMobile ? 4 : 6;
+    const lSize = isMobile ? 8 : 10;
+    for (let li = 0; li < 3; li++) {
+      ctx.fillStyle = barColors[li];
+      ctx.fillRect(legendX + li * (isMobile ? 44 : 52), legendY, lSize, lSize);
+      ctx.fillStyle = textColor;
+      ctx.font = (isMobile ? '8px' : '10px') + ' sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(periodLabels[li], legendX + li * (isMobile ? 44 : 52) + lSize + 3, legendY);
+    }
+  }
+
 function drawDashboardBarChart(body, data, periods) {
   const canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
@@ -294,17 +301,7 @@ function drawDashboardBarChart(body, data, periods) {
       ctx.fillText(metrics[mi].label, gx + groupW / 2, pad.top + chartH + 8);
     }
 
-    const legendX = w - (isMobile ? 130 : 160), legendY = isMobile ? 4 : 6;
-    const lSize = isMobile ? 8 : 10;
-    for (let li = 0; li < 3; li++) {
-      ctx.fillStyle = barColors[li];
-      ctx.fillRect(legendX + li * (isMobile ? 44 : 52), legendY, lSize, lSize);
-      ctx.fillStyle = textColor;
-      ctx.font = (isMobile ? '8px' : '10px') + ' sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText(periodLabels[li], legendX + li * (isMobile ? 44 : 52) + lSize + 3, legendY);
-    }
+    drawBarLegend(ctx, w, isMobile, textColor, barColors, periodLabels);
   }
 
   function animate(timestamp) {
@@ -318,6 +315,25 @@ function drawDashboardBarChart(body, data, periods) {
 }
 
 /* ========== PIE CHART ========== */
+function drawPieLegend(ctx, slices, total, textColor, textLight, legX, isMobile) {
+    let legY = 24;
+    const sq = isMobile ? 10 : 12;
+    for (let li = 0; li < slices.length; li++) {
+      ctx.fillStyle = slices[li].color;
+      ctx.fillRect(legX, legY, sq, sq);
+      ctx.fillStyle = textColor;
+      ctx.font = (isMobile ? '10px' : '12px') + ' sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(slices[li].label, legX + sq + (isMobile ? 4 : 6), legY);
+      const pct = ((slices[li].value / total) * 100).toFixed(1);
+      ctx.fillStyle = textLight;
+      ctx.font = (isMobile ? '8px' : '11px') + ' sans-serif';
+      ctx.fillText('$' + slices[li].value.toFixed(1) + ' (' + pct + '%)', legX + sq + (isMobile ? 4 : 6), legY + sq + 2);
+      legY += (isMobile ? 34 : 50);
+    }
+  }
+
 function drawDashboardPieChart(body, paymentMethods) {
   const periodLabels = { day: 'Hoy', week: 'Semana', month: 'Mes' };
   const periodBar = document.createElement('div');
@@ -423,22 +439,7 @@ function drawDashboardPieChart(body, paymentMethods) {
     ctx.fillText(periodLabels[piePeriod] || 'Total', cx, cy + 14);
 
     const legX = chartW + (isMobile ? 6 : 12);
-    let legY = 24;
-    const sq = isMobile ? 10 : 12;
-    for (let li = 0; li < slices.length; li++) {
-      ctx.fillStyle = slices[li].color;
-      ctx.fillRect(legX, legY, sq, sq);
-      ctx.fillStyle = textColor;
-      ctx.font = (isMobile ? '10px' : '12px') + ' sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText(slices[li].label, legX + sq + (isMobile ? 4 : 6), legY);
-      const pct = ((slices[li].value / total) * 100).toFixed(1);
-      ctx.fillStyle = textLight;
-      ctx.font = (isMobile ? '8px' : '11px') + ' sans-serif';
-      ctx.fillText('$' + slices[li].value.toFixed(1) + ' (' + pct + '%)', legX + sq + (isMobile ? 4 : 6), legY + sq + 2);
-      legY += (isMobile ? 34 : 50);
-    }
+    drawPieLegend(ctx, slices, total, textColor, textLight, legX, isMobile);
   }
 
   function animate(timestamp) {
@@ -511,6 +512,13 @@ function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
 }
 
 /* ========== PROFIT LINE CHART ========== */
+function linePoint(padding, chartW, chartH, minVal, range, count, i, val) {
+  return {
+    x: padding.left + (i / (count - 1)) * chartW,
+    y: padding.top + chartH - ((val - minVal) / range) * chartH
+  };
+}
+
 async function drawProfitLineChart(body) {
   var canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
@@ -590,21 +598,19 @@ async function drawProfitLineChart(body) {
     var step = Math.max(1, Math.floor(points.length / 10));
     points.forEach(function(p, idx) {
       if (idx % step !== 0 && idx !== points.length - 1) return;
-      var x = padding.left + (idx / (points.length - 1)) * chartW;
+      var pt = linePoint(padding, chartW, chartH, minVal, range, points.length, idx, p.profit_usd);
       ctx.fillStyle = mutedColor;
-      ctx.fillText(p.date.slice(5), x, h - padding.bottom + 15);
+      ctx.fillText(p.date.slice(5), pt.x, h - padding.bottom + 15);
     });
 
     // Area fill
     ctx.beginPath();
-    var firstX = padding.left;
-    var firstY = padding.top + chartH - ((points[0].profit_usd - minVal) / range) * chartH;
-    ctx.moveTo(firstX, padding.top + chartH);
-    ctx.lineTo(firstX, firstY);
+    var first = linePoint(padding, chartW, chartH, minVal, range, points.length, 0, points[0].profit_usd);
+    ctx.moveTo(first.x, padding.top + chartH);
+    ctx.lineTo(first.x, first.y);
     for (var j = 1; j < points.length; j++) {
-      var x = padding.left + (j / (points.length - 1)) * chartW;
-      var y = padding.top + chartH - ((points[j].profit_usd - minVal) / range) * chartH;
-      ctx.lineTo(x, y);
+      var pj = linePoint(padding, chartW, chartH, minVal, range, points.length, j, points[j].profit_usd);
+      ctx.lineTo(pj.x, pj.y);
     }
     ctx.lineTo(padding.left + chartW, padding.top + chartH);
     ctx.closePath();
@@ -614,10 +620,9 @@ async function drawProfitLineChart(body) {
     // Line
     ctx.beginPath();
     for (var k = 0; k < points.length; k++) {
-      var x = padding.left + (k / (points.length - 1)) * chartW;
-      var y = padding.top + chartH - ((points[k].profit_usd - minVal) / range) * chartH;
-      if (k === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      var pk = linePoint(padding, chartW, chartH, minVal, range, points.length, k, points[k].profit_usd);
+      if (k === 0) ctx.moveTo(pk.x, pk.y);
+      else ctx.lineTo(pk.x, pk.y);
     }
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = 2;
@@ -625,10 +630,9 @@ async function drawProfitLineChart(body) {
 
     // Dots
     points.forEach(function(p, idx) {
-      var x = padding.left + (idx / (points.length - 1)) * chartW;
-      var y = padding.top + chartH - ((p.profit_usd - minVal) / range) * chartH;
+      var pd = linePoint(padding, chartW, chartH, minVal, range, points.length, idx, p.profit_usd);
       ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.arc(pd.x, pd.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = lineColor;
       ctx.fill();
     });
@@ -690,21 +694,19 @@ async function showProductHistory(codigo, nombre) {
   const tbody = qs(SEL.productHistoryBody);
   if (title) title.textContent = 'Producto: ' + escapeHtml(nombre) + ' (C\u00f3digo: ' + escapeHtml(codigo) + ')';
   if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="7">Cargando...</td></tr>';
+    tbody.innerHTML = loadingTableRow(7);
     showModal(qs(SEL.productHistoryModal));
     try {
       const items = await invoke('get_product_history', { productoCodigo: codigo });
       tbody.innerHTML = '';
       if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7">' + emptyState('<i class="nf nf-fa-history"></i>', 'Sin ventas registradas', 'El historial de movimientos aparecer\u00e1 aqu\u00ed') + '</td></tr>';
+        tbody.innerHTML = emptyTableRow(7, '<i class="nf nf-fa-history"></i>', 'Sin ventas registradas', 'El historial de movimientos aparecer\u00e1 aqu\u00ed');
       } else {
-        items.forEach(function(item) {
-          var tr = document.createElement('tr');
-          tr.innerHTML = '<td>' + item.venta_id + '</td><td>' + escapeHtml(item.fecha_hora) + '</td><td>' + item.cantidad + '</td><td>' + formatUSD(item.precio_usd_unitario) + '</td><td>' + formatUSD(item.subtotal_usd) + '</td><td>' + escapeHtml(item.metodo_pago) + '</td><td>' + escapeHtml(item.username) + '</td>';
-          tbody.appendChild(tr);
+        appendRows(tbody, items, function(item) {
+          return '<td>' + item.venta_id + '</td><td>' + escapeHtml(item.fecha_hora) + '</td><td>' + item.cantidad + '</td><td>' + formatUSD(item.precio_usd_unitario) + '</td><td>' + formatUSD(item.subtotal_usd) + '</td><td>' + escapeHtml(item.metodo_pago) + '</td><td>' + escapeHtml(item.username) + '</td>';
         });
       }
-    } catch (e) { tbody.innerHTML = '<tr><td colspan="7">Error: ' + escapeHtml(e) + '</td></tr>'; }
+    } catch (e) { tbody.innerHTML = errorTableRow(7, e); }
   } else {
     showModal(qs(SEL.productHistoryModal));
   }
@@ -753,7 +755,8 @@ async function handleVoidSale(ventaId, btn) {
     if (!ok) return;
     const nota = await promptModal('Indique el motivo de la anulaci\u00f3n de la venta #' + ventaId + ':', 'Motivo de Anulaci\u00f3n', 'Anular venta');
     if (!nota) return;
-    const msg = await invoke('void_sale', { ventaId, nota });
+    const msg = await invokeOrError(invoke('void_sale', { ventaId, nota }));
+    if (msg === undefined) return;
     showToast(msg);
     playSound('remove');
     haptic([50, 50, 50]);
@@ -765,9 +768,9 @@ async function handleVoidSale(ventaId, btn) {
 
 /* ========== SALE DETAIL MODAL + PARTIAL VOID ========== */
 async function showSaleDetail(ventaId, btn) {
-  try {
-    const detalles = await invoke('get_sale_detail', { ventaId });
-    qs(SEL.saleDetailId).textContent = ventaId;
+  const detalles = await invokeOrError(invoke('get_sale_detail', { ventaId }));
+  if (detalles === undefined) return;
+  qs(SEL.saleDetailId).textContent = ventaId;
     const notaWrap = qs(SEL.saleDetailNotaWrap);
     const notaEl = qs(SEL.saleDetailNota);
     if (btn) {
@@ -823,7 +826,6 @@ async function showSaleDetail(ventaId, btn) {
     qs(SEL.saleDetailShareBtn).style.display = 'inline-flex';
     qs(SEL.saleDetailShareBtn).dataset.ventaId = ventaId;
     showModal(qs(SEL.saleDetailModal));
-  } catch (e) { showToast('Error: ' + e, 'error'); }
 }
 
 async function handleVoidItem(ventaId, detalleId) {
@@ -831,12 +833,10 @@ async function handleVoidItem(ventaId, detalleId) {
   if (!ok) return;
   const nota = await promptModal('Indique el motivo de la anulaci\u00f3n de este \u00edtem:', 'Motivo de Anulaci\u00f3n', 'Anular \u00edtem');
   if (!nota) return;
-  try {
-    await invoke('void_sale_items', { request: { venta_id: ventaId, detalle_ids: [detalleId], nota } });
-    showToast('Item anulado correctamente');
-    playSound('remove');
-    showSaleDetail(ventaId);
-    if (qs(SEL.viewCashier)?.classList.contains('active')) loadDailySummary();
-    if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+  if (await invokeOrError(invoke('void_sale_items', { request: { venta_id: ventaId, detalle_ids: [detalleId], nota } })) === undefined) return;
+  showToast('Item anulado correctamente');
+  playSound('remove');
+  showSaleDetail(ventaId);
+  if (qs(SEL.viewCashier)?.classList.contains('active')) loadDailySummary();
+  if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
 }

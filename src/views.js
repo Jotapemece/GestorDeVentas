@@ -101,21 +101,20 @@ function dockCalculator() {
   }
 }
 
-function closeCalculator() {
+async function closeCalculator() {
   if (calcState.expr || calcState.result !== '0') {
     if (qs && qs(SEL.confirmModal) && !qs(SEL.confirmModal).classList.contains('hidden')) return;
-    confirmModal(
+    const ok = await confirmModal(
       '¿Seguro que quieres cerrar la calculadora? Esto eliminará las cuentas que tengas.',
       'Cerrar calculadora',
       'Sí, cerrar'
-    ).then(function(ok) {
-      if (ok) {
-        calcState.expr = ''; calcState.result = '0'; calcState.memory = null; calcState.op = null; calcState.reset = false;
-        calcDocked = false;
-        qs(SEL.calcDockBar).classList.add('hidden');
-        closeModal(qs(SEL.calcModal));
-      }
-    });
+    );
+    if (ok) {
+      calcState.expr = ''; calcState.result = '0'; calcState.memory = null; calcState.op = null; calcState.reset = false;
+      calcDocked = false;
+      qs(SEL.calcDockBar).classList.add('hidden');
+      closeModal(qs(SEL.calcModal));
+    }
   } else {
     closeModal(qs(SEL.calcModal));
   }
@@ -234,94 +233,97 @@ var TABLE_RELOADS = {
 };
 
 let _colToggleInit = false;
+function initTableColumnToggle(table, storageKey) {
+  const theadRow = table.querySelector('thead tr');
+  if (!theadRow) return;
+  const ths = theadRow.querySelectorAll('th');
+  if (ths.length === 0) return;
+
+  const savedKey = 'col-vis-' + storageKey;
+  let hiddenCols = new Set();
+  try {
+    const saved = JSON.parse(localStorage.getItem(savedKey));
+    if (Array.isArray(saved)) hiddenCols = new Set(saved);
+  } catch (e) {}
+
+  const protectedCols = new Set();
+  ths.forEach(function(th, idx) {
+    const text = th.textContent.trim();
+    if (text === 'Nombre' || text.indexOf('$') !== -1 || text === 'Acción' || text === 'Acciones') protectedCols.add(idx);
+  });
+  // Always protect first column (holds the refresh button)
+  protectedCols.add(0);
+
+  const styleId = 'col-style-' + storageKey;
+  let styleEl = document.getElementById(styleId);
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    document.head.appendChild(styleEl);
+  }
+
+  function applyVisibility() {
+    const tableId = table.id;
+    if (!tableId) return;
+    const rules = [];
+    for (let i = 0; i < ths.length; i++) {
+      if (hiddenCols.has(i) && !protectedCols.has(i)) {
+        rules.push('#' + tableId + ' th:nth-child(' + (i + 1) + '), #' + tableId + ' td:nth-child(' + (i + 1) + ') { display: none !important; }');
+      }
+    }
+    styleEl.textContent = rules.join('\n');
+  }
+
+  let resetAdded = false;
+  ths.forEach(function(th, idx) {
+    if (idx === 0 && !resetAdded) {
+      resetAdded = true;
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'col-toggle-btn col-restore-btn';
+      resetBtn.type = 'button';
+      resetBtn.title = 'Restaurar todas las columnas';
+      resetBtn.innerHTML = '<i class="nf nf-fa-refresh"></i>';
+      resetBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        hiddenCols.clear();
+        localStorage.setItem(savedKey, JSON.stringify([]));
+        applyVisibility();
+        const reload = TABLE_RELOADS[storageKey];
+        if (reload) reload();
+      });
+      th.appendChild(resetBtn);
+    }
+    if (protectedCols.has(idx)) return;
+    const btn = document.createElement('button');
+    btn.className = 'col-toggle-btn';
+    btn.type = 'button';
+    btn.title = 'Ocultar columna';
+    btn.innerHTML = '<i class="nf nf-fa-eye"></i>';
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (hiddenCols.has(idx)) {
+        hiddenCols.delete(idx);
+        btn.title = 'Ocultar columna';
+        btn.innerHTML = '<i class="nf nf-fa-eye"></i>';
+      } else {
+        hiddenCols.add(idx);
+        btn.title = 'Mostrar columna';
+        btn.innerHTML = '<i class="nf nf-fa-eye_slash"></i>';
+      }
+      localStorage.setItem(savedKey, JSON.stringify(Array.from(hiddenCols)));
+      applyVisibility();
+    });
+    th.appendChild(btn);
+  });
+
+  applyVisibility();
+}
+
 function initColumnToggle() {
   if (_colToggleInit) return;
   _colToggleInit = true;
   qsa('table[data-col-toggle]').forEach(function(table) {
-    var storageKey = table.dataset.colToggle;
-    var theadRow = table.querySelector('thead tr');
-    if (!theadRow) return;
-    var ths = theadRow.querySelectorAll('th');
-    if (ths.length === 0) return;
-
-    var savedKey = 'col-vis-' + storageKey;
-    var hiddenCols = new Set();
-    try {
-      var saved = JSON.parse(localStorage.getItem(savedKey));
-      if (Array.isArray(saved)) hiddenCols = new Set(saved);
-    } catch(e) {}
-
-    var protectedCols = new Set();
-    ths.forEach(function(th, idx) {
-      var text = th.textContent.trim();
-      if (text === 'Nombre' || text.indexOf('$') !== -1 || text === 'Acción' || text === 'Acciones') protectedCols.add(idx);
-    });
-    // Always protect first column (holds the refresh button)
-    protectedCols.add(0);
-
-    var styleId = 'col-style-' + storageKey;
-    var styleEl = document.getElementById(styleId);
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = styleId;
-      document.head.appendChild(styleEl);
-    }
-
-    function applyVisibility() {
-      var tableId = table.id;
-      if (!tableId) return;
-      var rules = [];
-      for (var i = 0; i < ths.length; i++) {
-        if (hiddenCols.has(i) && !protectedCols.has(i)) {
-          rules.push('#' + tableId + ' th:nth-child(' + (i + 1) + '), #' + tableId + ' td:nth-child(' + (i + 1) + ') { display: none !important; }');
-        }
-      }
-      styleEl.textContent = rules.join('\n');
-    }
-
-    var resetAdded = false;
-    ths.forEach(function(th, idx) {
-      if (idx === 0 && !resetAdded) {
-        resetAdded = true;
-        var resetBtn = document.createElement('button');
-        resetBtn.className = 'col-toggle-btn col-restore-btn';
-        resetBtn.type = 'button';
-        resetBtn.title = 'Restaurar todas las columnas';
-        resetBtn.innerHTML = '<i class="nf nf-fa-refresh"></i>';
-        resetBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          hiddenCols.clear();
-          localStorage.setItem(savedKey, JSON.stringify([]));
-          applyVisibility();
-          var reload = TABLE_RELOADS[storageKey];
-          if (reload) reload();
-        });
-        th.appendChild(resetBtn);
-      }
-      if (protectedCols.has(idx)) return;
-      var btn = document.createElement('button');
-      btn.className = 'col-toggle-btn';
-      btn.type = 'button';
-      btn.title = 'Ocultar columna';
-      btn.innerHTML = '<i class="nf nf-fa-eye"></i>';
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (hiddenCols.has(idx)) {
-          hiddenCols.delete(idx);
-          btn.title = 'Ocultar columna';
-          btn.innerHTML = '<i class="nf nf-fa-eye"></i>';
-        } else {
-          hiddenCols.add(idx);
-          btn.title = 'Mostrar columna';
-          btn.innerHTML = '<i class="nf nf-fa-eye_slash"></i>';
-        }
-        localStorage.setItem(savedKey, JSON.stringify(Array.from(hiddenCols)));
-        applyVisibility();
-      });
-      th.appendChild(btn);
-    });
-
-    applyVisibility();
+    initTableColumnToggle(table, table.dataset.colToggle);
   });
 }
 
@@ -548,10 +550,8 @@ function setDefaultReportDates() {
 async function saveOpenRouterKey() {
   const key = qs(SEL.openrouterApiKey).value.trim();
   if (!key) { showToast('Ingresa una API key', 'error'); return; }
-  try {
-    await invoke('set_config_value', { key: CFG_OPENROUTER_API_KEY, value: key });
-    showToast('API key guardada');
-  } catch (e) { showToast('Error: ' + e, 'error'); }
+  if (await invokeOrError(invoke('set_config_value', { key: CFG_OPENROUTER_API_KEY, value: key })) === undefined) return;
+  showToast('API key guardada');
 }
 
 async function loadOpenRouterKey() {
@@ -567,17 +567,12 @@ async function generateOrder() {
   const apiKey = qs(SEL.openrouterApiKey).value.trim();
   if (!apiKey) { showToast('Configura la API key de OpenRouter primero', 'error'); return; }
   const model = qs(SEL.openrouterModelWrap).dataset.value || '';
-  showLoadingModal('Generando orden de compra...');
-  await forcePaint();
-  try {
-    const content = await invoke('generate_purchase_suggestion', { apiKey, model });
-    hideLoadingModal();
+  await withLoadingModal('Generando orden de compra...', async function() {
+    const content = await invokeOrError(invoke('generate_purchase_suggestion', { apiKey, model }));
+    if (content === undefined) return;
     qs(SEL.suggestionContent).textContent = content;
     showModal(qs(SEL.suggestionModal));
-  } catch (e) {
-    hideLoadingModal();
-    showToast('Error: ' + e, 'error');
-  }
+  });
 }
 
 async function copySuggestion() {
@@ -670,28 +665,11 @@ function hideChatThinking() {
 
 var chatPending = false;
 
-async function handleChatSend(forcedText) {
-  if (chatPending) return;
-  const input = qs(SEL.chatInput);
-  const text = forcedText || input.value.trim();
-  if (!text) return;
-
-  chatPending = true;
-  const btn = qs(SEL.chatSendBtn);
-  btn.disabled = true;
-
-  input.value = '';
-  input.style.height = 'auto';
-
-  addChatMessage('user', text);
-  appendChatBubble('user', text);
-  showChatThinking();
-
-  // Get live context (parallel)
+async function buildChatContext() {
   var contextLines = [];
   var now = new Date();
   contextLines.push('- Fecha/hora: ' + now.toLocaleString('es-VE'));
-  var results = await Promise.allSettled([
+  await Promise.allSettled([
     invoke('list_products', { search: null, page: 1, pageSize: 20 }).then(function(r) {
       if (r && r.data) {
         contextLines.push('- Productos activos: ' + (r.total || 0));
@@ -756,6 +734,28 @@ async function handleChatSend(forcedText) {
       }
     }),
   ]);
+  return contextLines;
+}
+
+async function handleChatSend(forcedText) {
+  if (chatPending) return;
+  const input = qs(SEL.chatInput);
+  const text = forcedText || input.value.trim();
+  if (!text) return;
+
+  chatPending = true;
+  const btn = qs(SEL.chatSendBtn);
+  btn.disabled = true;
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  addChatMessage('user', text);
+  appendChatBubble('user', text);
+  showChatThinking();
+
+  // Get live context (parallel)
+  const contextLines = await buildChatContext();
 
   var systemPrompt = CHAT_SYSTEM_PROMPT;
   if (contextLines.length > 0) {

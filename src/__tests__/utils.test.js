@@ -4,7 +4,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
-function parsePrecio(s) { return parseFloat(String(s).replace(',', '.')) || 0; }
 function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
 function isBsMethod(m) { return m === 'efectivo_bs' || m === 'biopago' || m === 'punto' || m === 'pago_movil'; }
 function emptyState(icon, text, sub) {
@@ -67,21 +66,6 @@ describe('formatBS', () => {
 
   it('redondea y usa coma (no agrega separador de miles)', () => {
     expect(formatBS(1234.56)).toBe('Bs. 1234,56');
-  });
-});
-
-describe('parsePrecio', () => {
-  it('parsea con punto decimal', () => {
-    expect(parsePrecio('10.50')).toBe(10.5);
-  });
-
-  it('parsea con coma decimal', () => {
-    expect(parsePrecio('10,50')).toBe(10.5);
-  });
-
-  it('retorna 0 para inválido', () => {
-    expect(parsePrecio('abc')).toBe(0);
-    expect(parsePrecio('')).toBe(0);
   });
 });
 
