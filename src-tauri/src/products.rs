@@ -1,10 +1,11 @@
 use crate::constants;
 use crate::db::AppState;
-use crate::models::{Categoria, PaginatedResult, Producto, TopProductItem};
+use crate::models::{Categoria, PaginatedResult, PrecioHistorialItem, Producto, TopProductItem};
 use base64::Engine;
 use rusqlite::params;
 use rust_xlsxwriter::*;
 use tauri::State;
+use uuid::Uuid;
 
 fn row_to_producto(row: &rusqlite::Row) -> rusqlite::Result<Producto> {
     Ok(Producto {
@@ -12,13 +13,16 @@ fn row_to_producto(row: &rusqlite::Row) -> rusqlite::Result<Producto> {
         costo: row.get(3)?, stock: row.get(4)?, stock_minimo: row.get(5)?,
         created_at: row.get(6)?, updated_at: row.get(7)?,
         es_inari: row.get::<_, i64>(8)? != 0,
-        subcategoria: row.get(9)?,
+        es_pesable: row.get::<_, i64>(9)? != 0,
+        subcategoria: row.get(10)?,
+        favorito: row.get::<_, i64>(11)? != 0,
     })
 }
 
 const SQL_BASE_PRODUCTOS: &str =
     "SELECT p.codigo, p.nombre, p.precio_usd, COALESCE(p.costo,0), p.stock, COALESCE(p.stock_minimo,0), \
-     COALESCE(p.created_at,''), p.updated_at, COALESCE(p.es_inari,0), p.subcategoria \
+     COALESCE(p.created_at,''), p.updated_at, COALESCE(p.es_inari,0), COALESCE(p.es_pesable,0), p.subcategoria, \
+     COALESCE(p.favorito,0) \
      FROM productos p WHERE p.activo = 1";
 
 const SQL_NEXT_CODIGO: &str =
@@ -26,12 +30,12 @@ const SQL_NEXT_CODIGO: &str =
      FROM productos WHERE activo = 1 AND codigo GLOB 'P[0-9]*'";
 
 const SQL_UPDATE_REACTIVATE: &str =
-    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, costo = ?3, stock = ?4, updated_at = ?5 \
-     WHERE codigo = ?6";
+    "UPDATE productos SET activo = 1, nombre = ?1, precio_usd = ?2, costo = ?3, stock = ?4, updated_at = ?5, es_pesable = ?6 \
+     WHERE codigo = ?7";
 
 const SQL_INSERT_PRODUCTO: &str =
-    "INSERT INTO productos (codigo, nombre, precio_usd, costo, stock, created_at, updated_at, es_inari) \
-     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6, ?7) ON CONFLICT(codigo) DO NOTHING";
+    "INSERT INTO productos (codigo, nombre, precio_usd, costo, stock, created_at, updated_at, es_inari, es_pesable) \
+     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now','localtime'), ?6, ?7, ?8) ON CONFLICT(codigo) DO NOTHING";
 
 const SQL_UPDATE_PRODUCTO: &str =
     "UPDATE productos SET nombre = ?1, precio_usd = ?2, costo = ?3, stock = ?4, updated_at = ?5 WHERE codigo = ?6";
@@ -120,16 +124,18 @@ pub fn create_product(
     nombre: String,
     precio_usd: f64,
     costo: f64,
-    stock: i64,
+    stock: f64,
     es_inari: Option<bool>,
+    es_pesable: Option<bool>,
 ) -> Result<String, String> {
     if precio_usd <= 0.0 {
         return Err("El precio debe ser mayor a cero".to_string());
     }
-    if stock < 0 {
+    if stock < 0.0 {
         return Err("El stock no puede ser negativo".to_string());
     }
     let es_inari = es_inari.unwrap_or(false);
+    let es_pesable = es_pesable.unwrap_or(false);
     let mut db = state.lock_db()?;
     let codigo = if codigo.is_empty() {
         let next_id: i64 = db
@@ -149,13 +155,13 @@ pub fn create_product(
     let costo_real = if costo > 0.0 { costo } else { 0.0 };
     tx.execute(
         SQL_UPDATE_REACTIVATE,
-        params![nombre, precio_usd, costo_real, stock, ts, codigo],
+        params![nombre, precio_usd, costo_real, stock, ts, es_pesable, codigo],
     )
     .ok();
 
     match tx.execute(
         SQL_INSERT_PRODUCTO,
-        params![codigo, nombre, precio_usd, costo_real, stock, ts, es_inari],
+        params![codigo, nombre, precio_usd, costo_real, stock, ts, es_inari, es_pesable],
     ) {
         Ok(_) => {
             tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
@@ -172,29 +178,86 @@ pub fn update_product(
     nombre: String,
     precio_usd: f64,
     costo: f64,
-    stock: i64,
+    stock: f64,
 ) -> Result<String, String> {
     if precio_usd <= 0.0 {
         return Err("El precio debe ser mayor a cero".to_string());
     }
-    if stock < 0 {
+    if stock < 0.0 {
         return Err("El stock no puede ser negativo".to_string());
     }
     let db = state.lock_db()?;
     let ts = crate::helpers::now_iso();
-    crate::auth::require_admin(
+    let username = crate::auth::require_admin(
         &state,
         &db,
         &format!("Actualizó producto '{}'", codigo),
     )?;
+    let precio_anterior: f64 = db
+        .query_row(
+            "SELECT COALESCE(precio_usd, 0) FROM productos WHERE codigo = ?1",
+            params![codigo],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
 
     match db.execute(
         SQL_UPDATE_PRODUCTO,
         params![nombre, precio_usd, costo, stock, ts, codigo],
     ) {
-        Ok(_) => Ok("Producto actualizado exitosamente".to_string()),
+        Ok(_) => {
+            if (precio_anterior - precio_usd).abs() > f64::EPSILON {
+                registrar_precio_historial(&db, &codigo, precio_anterior, precio_usd, &username)?;
+            }
+            Ok("Producto actualizado exitosamente".to_string())
+        }
         Err(e) => Err(format!("Error al actualizar producto: {}", e)),
     }
+}
+
+fn registrar_precio_historial(
+    db: &rusqlite::Connection,
+    codigo: &str,
+    precio_anterior: f64,
+    precio_nuevo: f64,
+    usuario: &str,
+) -> Result<(), String> {
+    db.execute(
+        "INSERT INTO historial_precios (producto_codigo, precio_anterior, precio_nuevo, usuario, fecha_hora) \
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![codigo, precio_anterior, precio_nuevo, usuario, crate::helpers::fecha_hora_local()],
+    )
+    .map(|_| ())
+    .map_err(|e| format!("Error al guardar historial de precio: {}", e))
+}
+
+#[tauri::command]
+pub fn get_precio_historial(
+    state: State<AppState>,
+    producto_codigo: String,
+) -> Result<Vec<PrecioHistorialItem>, String> {
+    let db = state.lock_db()?;
+    let mut stmt = db
+        .prepare(
+            "SELECT id, producto_codigo, precio_anterior, precio_nuevo, usuario, fecha_hora \
+             FROM historial_precios WHERE producto_codigo = ?1 ORDER BY id DESC LIMIT 100",
+        )
+        .map_err(|e| e.to_string())?;
+    let items = stmt
+        .query_map(params![producto_codigo], |row| {
+            Ok(PrecioHistorialItem {
+                id: row.get(0)?,
+                producto_codigo: row.get(1)?,
+                precio_anterior: row.get(2)?,
+                precio_nuevo: row.get(3)?,
+                usuario: row.get(4)?,
+                fecha_hora: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(items)
 }
 
 #[tauri::command]
@@ -212,6 +275,23 @@ pub fn set_product_inari(
     db.execute(SQL_SET_INARI, params![es_inari, codigo])
         .map_err(|e| format!("Error al actualizar: {}", e))?;
     Ok(if es_inari { "Producto marcado como Inari Bocados" } else { "Producto quitado de Inari Bocados" }.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_producto_favorito(
+    state: State<AppState>,
+    codigo: String,
+    favorito: bool,
+) -> Result<String, String> {
+    crate::auth::employee_guard(
+        &state,
+        "toggle_producto_favorito",
+        &format!("{} '{}' como favorito", if favorito { "Marcó" } else { "Quitó" }, codigo),
+    )?;
+    let db = state.lock_db()?;
+    db.execute("UPDATE productos SET favorito = ?1 WHERE codigo = ?2", params![favorito as i64, codigo])
+        .map_err(|e| format!("Error al actualizar: {}", e))?;
+    Ok(if favorito { "Producto agregado a favoritos" } else { "Producto quitado de favoritos" }.to_string())
 }
 
 #[tauri::command]
@@ -271,14 +351,14 @@ pub fn import_products_from_db(
         .prepare("SELECT codigo, nombre, precio_usd, stock, COALESCE(stock_minimo, 0) FROM productos WHERE activo = 1 OR activo IS NULL")
         .map_err(|e| format!("Error leyendo productos: {}", e))?;
 
-    let products: Vec<(String, String, f64, i64, i64)> = stmt
+    let products: Vec<(String, String, f64, f64, f64)> = stmt
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, f64>(2)?,
-                row.get::<_, i64>(3)?,
-                row.get::<_, i64>(4)?,
+                row.get::<_, f64>(3)?,
+                row.get::<_, f64>(4)?,
             ))
         })
         .map_err(|e| format!("Error iterando productos: {}", e))?
@@ -372,7 +452,7 @@ pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String,
         sheet
             .write_number_with_format(r, 5, product.precio_usd * tasa, &bs_format)
             .ok();
-        sheet.write_number(r, 6, product.stock as f64).ok();
+        sheet.write_number(r, 6, product.stock).ok();
     }
 
     sheet.set_column_width(0, 15).ok();
@@ -420,7 +500,7 @@ pub fn replace_all_products(
         let stock_str = cols[1].trim();
         let precio_str = cols[2].trim().replace(',', ".");
 
-        let stock: i64 = match stock_str.parse() {
+        let stock: f64 = match stock_str.parse() {
             Ok(s) => s,
             Err(_) => { errors.push(format!("Línea {}: stock inválido '{}'", line_no + 1, stock_str)); continue; }
         };
@@ -455,7 +535,7 @@ pub fn replace_all_products(
     }
 }
 
-pub(crate) fn parse_product_tsv_line(line: &str, line_no: usize, count: i64) -> Result<(String, String, i64, f64), String> {
+pub(crate) fn parse_product_tsv_line(line: &str, line_no: usize, count: i64) -> Result<(String, String, f64, f64), String> {
     let cols: Vec<&str> = line.split('\t').collect();
     if cols.len() < 3 {
         return Err(format!("Línea {}: columnas insuficientes ({})", line_no + 1, cols.len()));
@@ -483,7 +563,7 @@ pub(crate) fn parse_product_tsv_line(line: &str, line_no: usize, count: i64) -> 
         }
     };
 
-    let stock: i64 = stock_str.parse().map_err(|_| format!("Línea {}: stock inválido '{}'", line_no + 1, stock_str))?;
+    let stock: f64 = stock_str.parse().map_err(|_| format!("Línea {}: stock inválido '{}'", line_no + 1, stock_str))?;
     let precio_usd: f64 = precio_str.parse().map_err(|_| format!("Línea {}: precio inválido '{}'", line_no + 1, precio_str))?;
     let codigo = codigo.unwrap_or_else(|| format!("P{:04}", count + 1));
     let nombre = nombre.trim_end_matches("*UND*-").trim_end_matches(',').to_string();
@@ -549,9 +629,9 @@ pub fn import_products_from_file(
 pub fn update_stock_minimo(
     state: State<AppState>,
     codigo: String,
-    stock_minimo: i64,
+    stock_minimo: f64,
 ) -> Result<String, String> {
-    if stock_minimo < 0 {
+    if stock_minimo < 0.0 {
         return Err("El stock mínimo no puede ser negativo".to_string());
     }
     let db = state.lock_db()?;
@@ -562,6 +642,80 @@ pub fn update_stock_minimo(
     )
     .map_err(|e| format!("Error al actualizar stock mínimo: {}", e))?;
     Ok("Stock mínimo actualizado".to_string())
+}
+
+/// Ajuste manual de stock con auditoría. `cantidad` es el delta (positivo = entrada,
+/// negativo = salida). Se registra en `ajustes_stock` y en el historial de auditoría.
+#[tauri::command]
+pub fn registrar_ajuste_stock(
+    state: State<AppState>,
+    codigo: String,
+    cantidad: f64,
+    motivo: String,
+) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "registrar_ajuste_stock",
+    )?;
+    if cantidad == 0.0 {
+        return Err("La cantidad debe ser distinta de cero".to_string());
+    }
+    let motivo = motivo.trim().to_string();
+    if motivo.is_empty() {
+        return Err("Debe indicar un motivo para el ajuste".to_string());
+    }
+    let username = state.get_username()?;
+    let mut db = state.lock_db()?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Ajustó stock de '{}' ({:+}) — {}", codigo, cantidad, motivo),
+    )?;
+
+    let ts = crate::helpers::now_iso();
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+
+    let existe: bool = tx
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM productos WHERE codigo = ?1 AND activo = 1",
+            params![codigo],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Error al verificar producto: {}", e))?;
+    if !existe {
+        return Err("Producto no encontrado".to_string());
+    }
+
+    let affected = tx.execute(
+        "UPDATE productos SET stock = stock + ?1, updated_at = ?2 WHERE codigo = ?3 AND stock + ?1 >= 0",
+        params![cantidad, ts, codigo],
+    )
+    .map_err(|e| format!("Error al actualizar stock: {}", e))?;
+    if affected == 0 {
+        return Err("El ajuste dejaría el stock en negativo".to_string());
+    }
+
+    let sync_id = Uuid::new_v4().to_string();
+    let dispositivo = crate::db::get_config_value(&tx, constants::CFG_DISPOSITIVO_ID)
+        .unwrap_or_default()
+        .unwrap_or_default();
+    tx.execute(
+        "INSERT INTO ajustes_stock (sync_id, producto_codigo, cantidad, motivo, usuario, dispositivo_origen, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+        params![sync_id, codigo, cantidad, motivo, username, dispositivo, ts],
+    )
+    .map_err(|e| format!("Error al registrar ajuste: {}", e))?;
+
+    tx.commit().map_err(|e| format!("Error al confirmar ajuste: {}", e))?;
+
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, "registrar_ajuste_stock");
+    }
+
+    Ok(format!(
+        "Stock de '{}' ajustado en {:+}. Motivo: {}",
+        codigo, cantidad, motivo
+    ))
 }
 
 #[tauri::command]
@@ -652,7 +806,7 @@ mod tests {
         let (codigo, nombre, stock, precio) = result.unwrap();
         assert_eq!(codigo, "P001");
         assert_eq!(nombre, "Nombre, Producto");
-        assert_eq!(stock, 100);
+        assert!((stock - 100.0).abs() < 0.01);
         assert!((precio - 10.50).abs() < 0.01);
     }
 
@@ -664,7 +818,7 @@ mod tests {
         let (codigo, nombre, stock, precio) = result.unwrap();
         assert_eq!(codigo, "P0006");
         assert_eq!(nombre, "Nombre");
-        assert_eq!(stock, 50);
+        assert!((stock - 50.0).abs() < 0.01);
         assert!((precio - 25.00).abs() < 0.01);
     }
 
@@ -676,7 +830,7 @@ mod tests {
         let (codigo, nombre, stock, precio) = result.unwrap();
         assert_eq!(codigo, "P0011");
         assert_eq!(nombre, "Nombre");
-        assert_eq!(stock, 30);
+        assert!((stock - 30.0).abs() < 0.01);
         assert!((precio - 15.50).abs() < 0.01);
     }
 

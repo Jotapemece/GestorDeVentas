@@ -12,6 +12,20 @@ function renderReportPagination(total) {
   qs(SEL.reportPageInfo).textContent = 'P\u00e1gina ' + reportPage + ' de ' + totalPages + ' (' + total + ' ventas)';
 }
 
+function buildReportFilter(withPagination) {
+  const filter = {
+    start_date: qs(SEL.reportStartDate).value + START_OF_DAY_SUFFIX,
+    end_date: qs(SEL.reportEndDate).value + END_OF_DAY_SUFFIX,
+    producto_codigo: qs(SEL.reportProductFilter).value.trim() || null,
+    username: qs(SEL.reportVendorFilter).value.trim() || null,
+  };
+  if (withPagination) {
+    filter.page = reportPage;
+    filter.page_size = REPORT_PAGE_SIZE;
+  }
+  return filter;
+}
+
 async function loadReports(resetPage) {
   const startDate = qs(SEL.reportStartDate).value;
   const endDate = qs(SEL.reportEndDate).value;
@@ -21,15 +35,7 @@ async function loadReports(resetPage) {
   const btnHtml = searchBtn.innerHTML;
   try {
     showLoading(searchBtn);
-    const filter = {
-      start_date: startDate + START_OF_DAY_SUFFIX,
-      end_date: endDate + END_OF_DAY_SUFFIX,
-      producto_codigo: qs(SEL.reportProductFilter).value.trim() || null,
-      username: qs(SEL.reportVendorFilter).value.trim() || null,
-      page: reportPage,
-      page_size: REPORT_PAGE_SIZE,
-    };
-    const result = await invoke('get_sales_report', { filter });
+    const result = await invoke('get_sales_report', { filter: buildReportFilter(true) });
     qs(SEL.reportTotalCount).textContent = result.total_ventas;
     qs(SEL.reportTotalUsd).textContent = formatUSD(result.total_usd);
     qs(SEL.reportTotalCosto).textContent = formatUSD(result.total_costo_usd || 0);
@@ -58,6 +64,30 @@ async function loadReports(resetPage) {
 async function loadReportsAndTopProducts(resetPage) {
   await loadReports(resetPage);
   await loadTopProducts();
+  await loadVendorSales();
+}
+
+async function loadVendorSales() {
+  const section = qs(SEL.vendorSalesSection);
+  const tbody = qs(SEL.vendorSalesBody);
+  if (!section || !tbody) return;
+  const startDate = qs(SEL.reportStartDate).value;
+  const endDate = qs(SEL.reportEndDate).value;
+  if (!startDate || !endDate) { section.style.display = 'none'; return; }
+  try {
+    const items = await invoke('get_sales_by_vendor', {
+      startDate: startDate + START_OF_DAY_SUFFIX,
+      endDate: endDate + END_OF_DAY_SUFFIX
+    });
+    if (!items || items.length === 0) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    tbody.innerHTML = '';
+    items.forEach(function(v) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = createVendorSalesRow(v);
+      tbody.appendChild(tr);
+    });
+  } catch (e) { section.style.display = 'none'; }
 }
 
 async function loadTopProducts() {
@@ -685,14 +715,7 @@ async function handleExportReport() {
   const endDate = qs(SEL.reportEndDate).value;
   if (!startDate || !endDate) { showToast('Seleccione fecha de inicio y fin', 'error'); return; }
   try {
-    const b64 = await invoke('export_report_xlsx', {
-      filter: {
-        start_date: startDate + START_OF_DAY_SUFFIX,
-        end_date: endDate + END_OF_DAY_SUFFIX,
-        producto_codigo: qs(SEL.reportProductFilter).value.trim() || null,
-        username: qs(SEL.reportVendorFilter).value.trim() || null,
-      }
-    });
+    const b64 = await invoke('export_report_xlsx', { filter: buildReportFilter(false) });
     var url = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + b64;
     var a = document.createElement('a');
     a.href = url;
@@ -704,18 +727,37 @@ async function handleExportReport() {
   } catch (e) { showToast('Error al exportar: ' + e, 'error'); }
 }
 
+async function handleExportReportPdf() {
+  const startDate = qs(SEL.reportStartDate).value;
+  const endDate = qs(SEL.reportEndDate).value;
+  if (!startDate || !endDate) { showToast('Seleccione fecha de inicio y fin', 'error'); return; }
+  try {
+    const b64 = await invoke('export_report_pdf', { filter: buildReportFilter(false) });
+    var url = 'data:application/pdf;base64,' + b64;
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'reporte_ventas_' + startDate + '_' + endDate + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Reporte PDF exportado');
+  } catch (e) { showToast('Error al exportar PDF: ' + e, 'error'); }
+}
+
 /* ========== VOID SALE ========== */
 async function handleVoidSale(ventaId, btn) {
   if (btn) btn.disabled = true;
-  const ok = await confirmModal('\u00bfEst\u00e1 seguro de anular la venta #' + ventaId + '? Se devolver\u00e1 el stock al inventario.', 'Anular Venta', 'S\u00ed, anular');
-  if (!ok) { if (btn) btn.disabled = false; return; }
   try {
-    const msg = await invoke('void_sale', { ventaId });
+    const ok = await confirmModal('\u00bfEst\u00e1 seguro de anular la venta #' + ventaId + '? Se devolver\u00e1 el stock al inventario.', 'Anular Venta', 'S\u00ed, anular');
+    if (!ok) return;
+    const nota = await promptModal('Indique el motivo de la anulaci\u00f3n de la venta #' + ventaId + ':', 'Motivo de Anulaci\u00f3n', 'Anular venta');
+    if (!nota) return;
+    const msg = await invoke('void_sale', { ventaId, nota });
     showToast(msg);
     playSound('remove');
+    haptic([50, 50, 50]);
     if (qs(SEL.viewCashier)?.classList.contains('active')) loadDailySummary();
     if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
-    scheduleSaleUpload();
   } catch (e) { showToast('Error: ' + e, 'error'); }
   finally { if (btn) btn.disabled = false; }
 }
@@ -725,11 +767,31 @@ async function showSaleDetail(ventaId, btn) {
   try {
     const detalles = await invoke('get_sale_detail', { ventaId });
     qs(SEL.saleDetailId).textContent = ventaId;
+    const notaWrap = qs(SEL.saleDetailNotaWrap);
+    const notaEl = qs(SEL.saleDetailNota);
     if (btn) {
       qs(SEL.saleDetailTotal).textContent = formatUSD(parseFloat(btn.dataset.total));
       qs(SEL.saleDetailMetodo).textContent = btn.dataset.metodo;
       qs(SEL.saleDetailUsuario).textContent = btn.dataset.usuario;
       qs(SEL.saleDetailFecha).textContent = btn.dataset.fecha;
+      const nota = btn.dataset.nota || '';
+      if (nota) {
+        notaEl.textContent = nota;
+        notaWrap.style.display = 'block';
+      } else {
+        notaEl.textContent = '';
+        notaWrap.style.display = 'none';
+      }
+      const obsEl = qs(SEL.saleDetailObs);
+      const obsWrap = qs(SEL.saleDetailObsWrap);
+      const obs = btn.dataset.obs || '';
+      if (obs) {
+        obsEl.textContent = obs;
+        obsWrap.style.display = 'block';
+      } else {
+        obsEl.textContent = '';
+        obsWrap.style.display = 'none';
+      }
     }
     const list = qs(SEL.saleDetailList);
     list.innerHTML = '';
@@ -763,13 +825,14 @@ async function showSaleDetail(ventaId, btn) {
 async function handleVoidItem(ventaId, detalleId) {
   const ok = await confirmModal('\u00bfAnular este \u00edtem de la venta? Se devolver\u00e1 el stock al inventario.', 'Anular \u00cdtem', 'S\u00ed, anular');
   if (!ok) return;
+  const nota = await promptModal('Indique el motivo de la anulaci\u00f3n de este \u00edtem:', 'Motivo de Anulaci\u00f3n', 'Anular \u00edtem');
+  if (!nota) return;
   try {
-    await invoke('void_sale_items', { request: { venta_id: ventaId, detalle_ids: [detalleId] } });
+    await invoke('void_sale_items', { request: { venta_id: ventaId, detalle_ids: [detalleId], nota } });
     showToast('Item anulado correctamente');
     playSound('remove');
     showSaleDetail(ventaId);
     if (qs(SEL.viewCashier)?.classList.contains('active')) loadDailySummary();
     if (qs(SEL.viewReports)?.classList.contains('active')) loadReportsAndTopProducts();
-    scheduleSaleUpload();
   } catch (e) { showToast('Error: ' + e, 'error'); }
 }

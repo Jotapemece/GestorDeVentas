@@ -32,6 +32,32 @@ pub struct ComboProductoDetalle {
     pub cantidad: i64,
 }
 
+const SQL_COMBO_COLUMNS: &str = "id, nombre, precio_usd, subcategoria, created_at, updated_at";
+
+fn row_to_combo(row: &rusqlite::Row) -> rusqlite::Result<Combo> {
+    Ok(Combo {
+        id: row.get(0)?,
+        nombre: row.get(1)?,
+        precio_usd: row.get(2)?,
+        subcategoria: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+    })
+}
+
+fn list_combos_inner(db: &rusqlite::Connection) -> Result<Vec<Combo>, String> {
+    let mut stmt = db.prepare(&format!(
+        "SELECT {} FROM combos ORDER BY nombre ASC",
+        SQL_COMBO_COLUMNS
+    )).map_err(|e| e.to_string())?;
+
+    let combos: Vec<Combo> = stmt.query_map([], row_to_combo)
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(combos)
+}
+
 #[tauri::command]
 pub fn create_combo(
     state: State<AppState>,
@@ -89,23 +115,7 @@ pub fn create_combo(
 pub fn list_combos(state: State<AppState>) -> Result<Vec<ComboDetalle>, String> {
     let db = state.lock_db()?;
 
-    let mut stmt = db.prepare(
-        "SELECT id, nombre, precio_usd, subcategoria, created_at, updated_at FROM combos ORDER BY nombre ASC"
-    ).map_err(|e| e.to_string())?;
-
-    let combos: Vec<Combo> = stmt.query_map([], |row| {
-        Ok(Combo {
-            id: row.get(0)?,
-            nombre: row.get(1)?,
-            precio_usd: row.get(2)?,
-            subcategoria: row.get(3)?,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
-        })
-    }).map_err(|e| e.to_string())?
-    .filter_map(|r| r.ok())
-    .collect();
-    drop(stmt);
+    let combos = list_combos_inner(&db)?;
 
     let mut detalle_stmt = db.prepare(
         "SELECT cp.id, cp.producto_codigo, COALESCE(p.nombre, cp.producto_codigo), cp.cantidad
@@ -139,16 +149,9 @@ pub fn get_combo_detail(state: State<AppState>, combo_id: i64) -> Result<ComboDe
     let db = state.lock_db()?;
 
     let combo = db.query_row(
-        "SELECT id, nombre, precio_usd, subcategoria, created_at, updated_at FROM combos WHERE id = ?1",
+        &format!("SELECT {} FROM combos WHERE id = ?1", SQL_COMBO_COLUMNS),
         rusqlite::params![combo_id],
-        |row| Ok(Combo {
-            id: row.get(0)?,
-            nombre: row.get(1)?,
-            precio_usd: row.get(2)?,
-            subcategoria: row.get(3)?,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
-        })
+        row_to_combo,
     ).map_err(|_| "Combo no encontrado".to_string())?;
 
     let mut stmt = db.prepare(
@@ -201,22 +204,5 @@ pub fn delete_combo(state: State<AppState>, combo_id: i64) -> Result<String, Str
 #[tauri::command]
 pub fn list_combos_simple(state: State<AppState>) -> Result<Vec<Combo>, String> {
     let db = state.lock_db()?;
-    let mut stmt = db.prepare(
-        "SELECT id, nombre, precio_usd, subcategoria, created_at, updated_at FROM combos ORDER BY nombre ASC"
-    ).map_err(|e| e.to_string())?;
-
-    let combos: Vec<Combo> = stmt.query_map([], |row| {
-        Ok(Combo {
-            id: row.get(0)?,
-            nombre: row.get(1)?,
-            precio_usd: row.get(2)?,
-            subcategoria: row.get(3)?,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
-        })
-    }).map_err(|e| e.to_string())?
-    .filter_map(|r| r.ok())
-    .collect();
-
-    Ok(combos)
+    list_combos_inner(&db)
 }

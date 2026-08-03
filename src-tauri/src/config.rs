@@ -1,21 +1,10 @@
 use crate::db::AppState;
-use rusqlite::params;
-use std::time::Instant;
 use tauri::State;
-
-const SQL_GET_CONFIG: &str = "SELECT valor FROM configuracion WHERE clave = ?1";
-const SQL_UPSERT_CONFIG: &str =
-    "INSERT INTO configuracion (clave, valor) VALUES (?1, ?2) \
-     ON CONFLICT(clave) DO UPDATE SET valor = ?2";
 
 #[tauri::command]
 pub fn get_config_value(state: State<AppState>, key: String) -> Result<String, String> {
     let db = state.lock_db()?;
-    match db.query_row(SQL_GET_CONFIG, params![key], |row| row.get::<_, String>(0)) {
-        Ok(val) => Ok(val),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(String::new()),
-        Err(e) => Err(format!("Error al leer configuración '{}': {}", key, e)),
-    }
+    Ok(crate::db::get_config_value(&db, &key)?.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -24,44 +13,20 @@ pub fn set_config_value(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    {
-        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
-        if let Some(&(count, until)) = attempts.get("set_config_value") {
-            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
-                return Err(format!(
-                    "Demasiados intentos. Intente de nuevo en {} segundos.",
-                    until.duration_since(Instant::now()).as_secs()
-                ));
-            }
-            if Instant::now() >= until {
-                attempts.remove("set_config_value");
-            }
-        }
-    }
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "set_config_value",
+    )?;
     let db = state.lock_db()?;
-    if let Err(e) = crate::auth::check_admin_role(&state) {
+    crate::auth::check_admin_role(&state)?;
+    crate::db::set_config_value(&db, &key, &value).map_err(|e| {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            let entry = attempts.entry("set_config_value".to_string()).or_insert((0, Instant::now()));
-            entry.0 += 1;
-            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-            }
+            crate::db::rate_limit_fail(&mut attempts, "set_config_value");
         }
-        return Err(e);
-    }
-    db.execute(SQL_UPSERT_CONFIG, params![key, value])
-        .map_err(|e| {
-            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-                let entry = attempts.entry("set_config_value".to_string()).or_insert((0, Instant::now()));
-                entry.0 += 1;
-                if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                    entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-                }
-            }
-            e.to_string()
-        })?;
+        e
+    })?;
     if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        attempts.remove("set_config_value");
+        crate::db::rate_limit_success(&mut attempts, "set_config_value");
     }
     Ok(())
 }
@@ -71,16 +36,9 @@ pub fn get_user_config_value(state: State<AppState>, key: String) -> Result<Stri
     let db = state.lock_db()?;
     let username = state.get_username()?;
     let prefixed = format!("{}:{}", username, key);
-    match db.query_row(SQL_GET_CONFIG, params![prefixed], |row| row.get::<_, String>(0)) {
-        Ok(val) => Ok(val),
-        Err(rusqlite::Error::QueryReturnedNoRows) => {
-            match db.query_row(SQL_GET_CONFIG, params![key], |row| row.get::<_, String>(0)) {
-                Ok(val) => Ok(val),
-                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(String::new()),
-                Err(e) => Err(format!("Error al leer configuración '{}': {}", key, e)),
-            }
-        }
-        Err(e) => Err(format!("Error al leer configuración '{}': {}", key, e)),
+    match crate::db::get_config_value(&db, &prefixed)? {
+        Some(val) => Ok(val),
+        None => Ok(crate::db::get_config_value(&db, &key)?.unwrap_or_default()),
     }
 }
 
@@ -93,9 +51,7 @@ pub fn set_user_config_value(
     let db = state.lock_db()?;
     let username = state.get_username()?;
     let prefixed = format!("{}:{}", username, key);
-    db.execute(SQL_UPSERT_CONFIG, params![prefixed, value])
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    crate::db::set_config_value(&db, &prefixed, &value).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

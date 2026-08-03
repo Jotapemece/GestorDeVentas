@@ -65,8 +65,8 @@ fn build_prompt(products: &[LowStockProduct]) -> String {
 pub struct LowStockProduct {
     pub codigo: String,
     pub nombre: String,
-    pub stock: i64,
-    pub stock_minimo: i64,
+    pub stock: f64,
+    pub stock_minimo: f64,
 }
 
 #[tauri::command]
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn test_build_prompt_single_product() {
         let products = vec![
-            LowStockProduct { codigo: "P001".into(), nombre: "Arroz".into(), stock: 2, stock_minimo: 10 },
+            LowStockProduct { codigo: "P001".into(), nombre: "Arroz".into(), stock: 2.0, stock_minimo: 10.0 },
         ];
         let result = build_prompt(&products);
         assert!(result.contains("| Arroz | 2 | 10 |"));
@@ -159,9 +159,9 @@ mod tests {
     #[test]
     fn test_build_prompt_multiple_products() {
         let products = vec![
-            LowStockProduct { codigo: "P001".into(), nombre: "Arroz".into(), stock: 2, stock_minimo: 10 },
-            LowStockProduct { codigo: "P002".into(), nombre: "Harina".into(), stock: 1, stock_minimo: 15 },
-            LowStockProduct { codigo: "P003".into(), nombre: "Aceite".into(), stock: 0, stock_minimo: 8 },
+            LowStockProduct { codigo: "P001".into(), nombre: "Arroz".into(), stock: 2.0, stock_minimo: 10.0 },
+            LowStockProduct { codigo: "P002".into(), nombre: "Harina".into(), stock: 1.0, stock_minimo: 15.0 },
+            LowStockProduct { codigo: "P003".into(), nombre: "Aceite".into(), stock: 0.0, stock_minimo: 8.0 },
         ];
         let result = build_prompt(&products);
         assert!(result.contains("| Arroz | 2 | 10 |"));
@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn test_build_prompt_contains_instruction() {
         let products = vec![
-            LowStockProduct { codigo: "P001".into(), nombre: "Leche".into(), stock: 3, stock_minimo: 12 },
+            LowStockProduct { codigo: "P001".into(), nombre: "Leche".into(), stock: 3.0, stock_minimo: 12.0 },
         ];
         let result = build_prompt(&products);
         assert!(result.contains("cantidad a ordenar = minimo - stock actual"));
@@ -181,11 +181,11 @@ mod tests {
 
     #[test]
     fn test_low_stock_product_serialize() {
-        let p = LowStockProduct { codigo: "P001".into(), nombre: "Test".into(), stock: 5, stock_minimo: 10 };
+        let p = LowStockProduct { codigo: "P001".into(), nombre: "Test".into(), stock: 5.0, stock_minimo: 10.0 };
         let json = serde_json::to_string(&p).unwrap();
         assert!(json.contains("\"codigo\":\"P001\""));
         assert!(json.contains("\"nombre\":\"Test\""));
-        assert!(json.contains("\"stock\":5"));
-        assert!(json.contains("\"stock_minimo\":10"));
+        assert!(json.contains("\"stock\":5.0"));
+        assert!(json.contains("\"stock_minimo\":10.0"));
     }
 }

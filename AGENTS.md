@@ -275,44 +275,83 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 ## Work State
 
 ### Objective
-Auditoría: race conditions, selectores SEL, paginación, rate limiting, contraseñas por defecto.
+Optimización y limpieza: ejecutar Fases 1 y 2 del Auditoría Plan (bugs de correctitud + DRY Rust).
 
 ### Completed (this session)
-- **Race conditions**: `delete_product`, `create_sale`, `void_sale`, `change_password` ahora envuelven read+write en transacciones (products.rs, sales.rs, auth.rs)
-- **SEL selectors**: agregados 9 IDs + 2 selectores a `SEL` en constants.js; migrados todos los `document.getElementById()` y `qs('...')` hardcodeados en app.js, utils.js, cashier-view.js, config-view.js, views.js, clients-view.js
-- **list_sales pagination**: ahora acepta `page`/`page_size`, retorna `PaginatedResult<Venta>` (sales.rs)
-- **Rate limiting**: `set_config_value` y `void_sale` protegidos con `admin_action_attempts` (config.rs, sales.rs)
-- **Default password**: `reset_usuarios` crea admin con `password_change_required=1`; frontend activó handler forzando cambio de contraseña (auth.rs, views.js)
-- **Tests**: 80 Rust passed, `cargo check` ✅, `node --check` ✅ en todos los JS
+- **Plan de optimización anotado** en AGENTS.md (6 fases, 20 ítems)
+- **Fase 1 completa**:
+  - Rate limit real: helpers `rate_limit_fail`/`rate_limit_success` (db.rs) + guards `admin_guard`/`employee_guard` (auth.rs: rate-limit check + lock_db + require_admin/require_employee + audit). Aplicado a create_sale, set_tasa, void_sale_items, void_sale, pay_debt, add_quick_debt, restore_backup, get_backup_key, clear_audit; comandos refactorizados (create_usuario, delete_usuario, reset_usuarios, admin_change_password, change_password, set_config_value)
+  - Contadores reales en sync/products.rs (`updated`/`inserted` = filas afectadas)
+  - Migraciones Result-based; no se marca versión en fallo; 002 idempotente
+  - sync/users.rs ya NO sube hashes Argon2; download fuerza `password_change_required=1` con hash aleatorio (`random_password_hash`)
+- **Fase 2 completa**:
+  - Helpers SQL en db.rs: `get_config_value` (Option), `set_config_value`, `add_stock`, `sub_stock`; `fallback_total_bs` (helpers.rs). Refactorizados config.rs, sync/mod.rs, sales.rs, sync/sales.rs, cashier.rs, orchestrator.rs, tasa_bcv.rs
+  - combos.rs: `row_to_combo`, `list_combos_inner`
+  - Eliminado `PayDebtRequest.usuario_id` (models.rs + clients-view.js) y `ExportReportFilter` (export_report_xlsx usa `SalesReportFilter`)
+  - Código muerto eliminado: `format_download_result`/`format_upload_result` (sync/mod.rs), constantes `CFG_OPENROUTER_*`, `CFG_INARI_ACTIVO`, `INARI_DIAS` (constants.rs), `#[allow(dead_code)]` de `ROL_VENDEDOR`
+  - `DetalleVenta.costo` real (COALESCE p.costo) en get_cliente_history en vez de `0.0`
+- **Tests**: 80 Rust + 66 vitest ✅
+- **Fase 3 completa**:
+  - Eliminadas constantes muertas `DROPDOWN` y `FONT.SIZE_MIN/MAX/DEFAULT` (queda `FONT.SIZE_STEP`); eliminado `SEL.soundToggleBtn`
+  - Helpers compartidos en utils.js: `esRefPagoMovilValida`, `bsToUsd`, `getTasaConFallback` (reemplazan 3+ copias en cashier-view.js/clients-view.js); `buildReportFilter` en reports-view.js (filtro reporte 2 copias)
+  - Migrados a SEL: `clientNombreError`, `creditosTotalPersonas`, `creditosConDeuda`, `creditosDeudaTotal`; app.js usa SEL para report dates; los getElementById restantes son dinámicos (params/data attrs)
+  - Eliminados ids HTML sin uso: `historial-cierres-body`, `historial-cierre-detalle-title`, `sale-detail-bar`, `debt-detail-bar`, `user-management-card`, `dashboard-card`
+- **Fase 4 completa**:
+  - Eliminados duplicados exactos: `.compact .reports-filters`/`.compact .reports-filter-row` (2ª copia), `.payment-method-btn` `{padding:8px 4px;font-size:11px}` (muerta, la sobreescribe la siguiente), `.view.active.mobile-keyboard` (2ª copia), `.col-toggle-btn:hover` (2ª copia)
+  - Resto de selectores repetidos revisados: son overrides responsive intencionales (media queries 768/600/480px), NO fusionados para no romper nada
+  - CSS faltante aplicado: `.form-error` (error combo), `.toggle-row` (flex label+toggle), `.abono-saldo-restante`, `.top-product-info` (flex:1 en card), `.bs-price-cell` (white-space:nowrap), `.modal-content.resizing` (user-select:none)
+  - Corregido comentario engañoso "2-col method grid" → "compact method grid"
+- **Fase 5 completa**:
+  - `PRAGMA busy_timeout=5000` en conexión principal (init_db) y secundaria (secondary_conn) → evita "database is locked" en sync paralelo
+  - Helper `sumar_ventas_rango(db, start, end)` en cashier.rs: consolida la query duplicada `SQL_SUM_VENTAS_RANGE` en `obtener_totales_del_dia` y `get_dashboard_summary`
+  - Eliminadas 5 llamadas redundantes `renderCartTabs()` tras `renderCart()` (cashier-view.js) — renderCart ya la invoca internamente
+- **Tests**: 80 Rust + 66 vitest ✅
+
+### Nuevas features (2026-08-02)
+- **Backup diario automático** al cerrar caja: helper `do_backup` + `ensure_daily_backup` (db.rs, sin chequear admin), `close_cashier` lo invoca tras commit (una vez por día vía `CFG_ULTIMO_BACKUP_DIARIO`), resultado en `CloseReport.backup_msg` → toast en frontend
+- **Ajuste manual de stock** con auditoría: comando `registrar_ajuste_stock` (products.rs, rate-limit + require_admin), delta +/-, motivo obligatorio, registra en `ajustes_stock` (sync_id, usuario) + auditoría. UI: "Ajustar stock" en dropdown del inventario (modal con cantidad/motivo)
+- **Clientes temporales de crédito**: migración 029 (`clientes.es_temporal`, `clientes.created_at`, `clientes_eliminados`, `ajustes_stock.usuario`). `create_cliente(es_temporal)`, `pay_debt` elimina el temporal al saldar deuda (audit + historial `clientes_eliminados`), `delete_cliente` registra temporales eliminados manualmente, comando `list_clientes_eliminados`. Frontend: badge "Temporal", checkbox en modal de cliente, botón "Historial Temporales" en Crédito. Sync: los temporales NO se suben a Supabase
+- **Verificado**: cargo check limpio, 80/80 Rust, 66/66 vitest, minify OK
 
 ### Active
-- (ninguno)
+- Nada en curso — features completadas y verificadas
 
 ### Next Move
-- Auditoría: DRY Rust (A2.5), SQL injection surface (A2.7), HTML templates inline (A2.9)
-- Probar build Android / Windows
+- Opcional: añadir tests Rust de `eliminar_cliente_temporal`/`registrar_ajuste_stock` (requieren infraestructura de test con BD temporal); revisar que WAL no pierda datos en backups (copiar .db sin checkpoint previo).
 
 ---
 
 ## Auditoría Plan
 
-### Fase 1 — Integridad de datos (bugs)
-1. Revisar cada `#[tauri::command]` con ≥2 writes — ¿en transacción? ✅ (create_product, create_sale, void_sale, pay_debt, delete_cliente, set_tasa, import_products, replace_all_products todos en transacción)
-2. Stock inconsistencies: `void_sale` sync, doble descarga, stock negativo paths
-3. Race conditions: read-then-write sin lock atómico ✅ (delete_product, create_sale, void_sale, change_password fijados con transacciones)
-4. Error paths silenciosos: `unwrap()`, `.ok()`, `catch(_)` que traguen errores
+### Fase 1 — Bugs de correctitud
+1. Rate limiting inoperante: `check_action_rate_limit` (db.rs:20-36) solo lee, nunca incrementa. 9 comandos sin bloqueo real (create_sale, set_tasa, void_sale_items, void_sale, pay_debt, add_quick_debt, restore_backup, get_backup_key, clear_audit). Solo auth.rs/config.rs incrementan manualmente.
+2. Contadores falsos en sync: sync/products.rs:233 `updated += 1` aunque el UPDATE falle o afecte 0 filas.
+3. Migración frágil: `migrate_ventas_check_constraint` (migrations.rs:193-222) hace DROP+rebuild con `.ok()`; si falla, la versión queda marcada aplicada (INSERT schema_version:149 usa `.ok()`).
+4. Seguridad: sync/users.rs:63 sube hash Argon2 de contraseñas a Supabase con anon key pública.
 
-### Fase 2 — Deuda técnica (normas)
-5. DRY Rust: lógica repetida sales/clients/sync
-6. Anti-hardcoding JS: strings remanentes ✅ (todos los `document.getElementById()` migrados a `qs(SEL.xxx)`)
-7. SQL injection surface: `format!()` con input de usuario
-8. Selectores DOM fuera de `SEL` ✅ (12 IDs + 2 selectores agregados a SEL, migradas todas las referencias)
-9. HTML templates inline vs `<template>`
+### Fase 2 — DRY Rust (deuda técnica)
+5. Extraer guard unificado `admin_guard` (rate limit + require_admin/require_employee + audit): reemplaza 15 bloques (auth.rs:263,339,395,466,510; config.rs:27; sales.rs:351, etc.).
+6. Helpers SQL: upsert configuracion (4 copias: config.rs:7, sync/mod.rs:98, sales.rs:338, tasa_bcv.rs:69); SELECT valor config (6 copias); stock +/- (4 copias: sales.rs:19/399/716, sync/sales.rs:371); fallback total_bs (3 copias: sales.rs:35, cashier.rs:340/382).
+7. combos.rs: `Combo` se mapea 3 veces (96, 144, 208) y `list_combos`/`list_combos_simple` casi idénticos → `row_to_combo` + un list.
+8. Eliminar campo muerto `PayDebtRequest.usuario_id` (models.rs:179) y struct redundante `ExportReportFilter` (models.rs:355).
+9. Código muerto: `format_download_result`/`format_upload_result` (sync/mod.rs:149,161); constantes `CFG_OPENROUTER_API_KEY`, `CFG_OPENROUTER_MODEL`, `CFG_INARI_ACTIVO`, `INARI_DIAS` (constants.rs:47,49,75,77); quitar `#[allow(dead_code)]` espurio de `ROL_VENDEDOR` (constants.rs:55).
+10. `DetalleVenta` con `costo: 0.0` hardcodeado (clients.rs:180) vs real (sales.rs:651) → unificar.
 
-### Fase 3 — Performance
-10. N+1 queries (reportes, historial) ✅ (no se encontraron N+1 significativos; reportes usan batch fetching, void_sale_items loop es pequeño y está en transacción)
-11. Paginación faltante (list_sales) ✅ (list_sales ahora acepta page/page_size, retorna PaginatedResult<Venta>)
+### Fase 3 — Limpieza frontend JS
+11. Constantes muertas: `DROPDOWN` (constants.js:103), `FONT.SIZE_MIN/MAX/DEFAULT` (constants.js:104).
+12. `SEL.soundToggleBtn` (constants.js:698) → id inexistente; corregir a `#sound-toggle` o eliminar.
+13. Helpers compartidos: validación ref pago móvil (3 copias: cashier-view.js:712/619, clients-view.js:203); conversión Bs→USD (3 copias: clients-view.js:187/217/363); fallback tasa (2 copias: clients-view.js:216/362); filtro reporte (2 copias: reports-view.js:24-31 vs 689-694).
+14. Migrar ~16 `document.getElementById`/strings fuera de `SEL` (inventory-view.js:170-178, app.js:134/856/1520, utils.js:590/648, cashier-view.js:453/606/934, views.js:263, clients-view.js:73-85/389-391).
+15. ids HTML sin uso: `historial-cierres-body`, `historial-cierre-detalle-title`, `sale-detail-bar`, `debt-detail-bar`, `user-management-card`, `dashboard-card`.
 
-### Fase 4 — Seguridad
-12. Rate limiting faltante (create_usuario, change_password) ✅ (ya tenían rate limiting via admin_action_attempts; se agregó a set_config_value y void_sale)
-13. Default passwords: forzar cambio ✅ (reset_usuarios crea con password_change_required=1; frontend activó handler de cambio forzado)
+### Fase 4 — CSS
+16. Reglas duplicadas: `.compact .reports-filters`/`.reports-filter-row` (style.css:1267-1270 y 1523-1524); `.payment-method-btn` definida 3 veces (1656, 1657, 1764).
+17. Pasada sistemática de deduplicación.
+
+### Fase 5 — Performance y robustez
+18. WAL ya activo (db.rs:54). Falta `PRAGMA busy_timeout` → riesgo "database is locked" al correr sync (secondary_conn) en paralelo.
+19. `get_dashboard_summary` (cashier.rs:447-461) y `obtener_totales_del_dia` (cashier.rs:63-79) duplican `SQL_SUM_VENTAS_RANGE` → consolidar.
+20. Revisar re-renders innecesarios del carrito (`renderCart()` en cadena).
+
+### Estado de ejecución
+- **Fase 1 + 2 + 3 + 4 + 5**: ✅ completadas

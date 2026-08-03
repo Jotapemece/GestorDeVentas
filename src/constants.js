@@ -46,6 +46,7 @@ const CFG_SIDEBAR_AUTO_HIDE = 'sidebar_auto_hide';
 const CFG_CONFIRMAR_VENTA = 'confirmar_venta';
 const CFG_ANIMACIONES = 'animaciones_habilitadas';
 const CFG_HOVER_CARD = 'hover_card';
+const CFG_MODAL_DRAG = 'modal_drag';
 const CFG_IA_HABILITADO = 'ia_habilitado';
 const CFG_OPENROUTER_API_KEY = 'openrouter_api_key';
 const CFG_OPENROUTER_MODEL = 'openrouter_model';
@@ -85,6 +86,8 @@ const ROL_ADMIN = 'admin';
 const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
 const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
+const CFG_MAX_BACKUPS = 'max_backups';
+const DEFAULT_MAX_BACKUPS = 10;
 
 // UI Timing & Layout Constants
 const TOAST = {
@@ -99,9 +102,8 @@ const TOAST = {
 };
 const KEYBOARD = { THRESHOLD: 100, PAD_OFFSET: 40, SCROLL_DELAY_MS: 300 };
 const SIDEBAR = { HIDE_DELAY: 250, HOVER_MARGIN: 14, HOVER_CHECK_MS: 350 };
-const DROPDOWN = { MIN_PADDING: 4 };
-const FONT = { SIZE_STEP: 5, SIZE_MIN: 75, SIZE_MAX: 150, SIZE_DEFAULT: 100 };
-const BREAKPOINT = { DESKTOP: 768, MOBILE: 500 };
+const FONT = { SIZE_STEP: 5 };
+const BREAKPOINT = { DESKTOP: 768, MOBILE: 500, PHONE: 600 };
 const TIMING = {
   FOCUS_DELAY_MS: 100,
   SCROLL_DELAY_MS: 300,
@@ -140,7 +142,7 @@ const PRINT = {
 
 // Sync Constants
 const SYNC = {
-  AUTO_MIN: 30,
+  AUTO_MIN: 10,
   AUTO_MAX: 480,
   SALE_DEBOUNCE_MS: 10 * 60 * 1000,
 };
@@ -237,6 +239,10 @@ const SEL = {
   productSearch: '#product-search',
   productSearchBody: '#product-search-body',
   productSearchTable: '#product-search-table',
+  productSearchGrid: '#product-search-grid',
+  cartFab: '#cart-fab',
+  cartFabBadge: '#cart-fab-badge',
+  cartBackdrop: '#cart-backdrop',
   checkoutBtn: '#checkout-btn',
   cancelSaleBtn: '#cancel-sale-btn',
   cartBody: '#cart-body',
@@ -261,6 +267,7 @@ const SEL = {
   referenciaGroup: '#referencia-group',
   clienteGroup: '#cliente-group',
   mixtoGroup: '#mixto-group',
+  paymentNota: '#payment-nota',
 
   // --- Inventory ---
   inventorySearch: '#inventory-search',
@@ -300,16 +307,24 @@ const SEL = {
   productDeleteBtn: '#product-delete-btn',
   productNombre: '#product-nombre',
   productPrecio: '#product-precio',
+  productPrecioLabel: '#product-precio-label',
+  productCostoLabel: '#product-costo-label',
   productStock: '#product-stock',
+  productStockLabel: '#product-stock-label',
   productStockMinimo: '#product-stock-minimo',
+  productStockMinimoLabel: '#product-stock-minimo-label',
   productCosto: '#product-costo',
   productDetailModal: '#product-detail-modal',
   detailNombre: '#detail-nombre',
   detailPrecio: '#detail-precio',
+  detailPrecioLabel: '#detail-precio-label',
   detailCosto: '#detail-costo',
+  detailCostoLabel: '#detail-costo-label',
   detailMargen: '#detail-margen',
   detailStock: '#detail-stock',
+  detailStockLabel: '#detail-stock-label',
   detailStockMinimo: '#detail-stock-minimo',
+  detailStockMinimoLabel: '#detail-stock-minimo-label',
   detailCreated: '#detail-created',
 
   // --- Creditos / Clientes ---
@@ -325,6 +340,10 @@ const SEL = {
   clientModal: '#client-modal',
   clientModalTitle: '#client-modal-title',
   clientNombre: '#client-nombre',
+  clientNombreError: '#client-nombre-error',
+  creditosTotalPersonas: '#creditos-total-personas',
+  creditosConDeuda: '#creditos-con-deuda',
+  creditosDeudaTotal: '#creditos-deuda-total',
   debtDetailModal: '#debt-detail-modal',
   debtDetailTitle: '#debt-detail-title',
   debtDetailDebt: '#debt-detail-debt',
@@ -375,6 +394,7 @@ const SEL = {
   fontSizeDisplay: '#font-size-display',
   fullscreenToggle: '#fullscreen-toggle',
   soundToggle: '#sound-toggle',
+  modalDragToggle: '#modal-drag-toggle',
   animationsToggle: '#animations-toggle',
   soundVolume: '#sound-volume',
   historialLimpiezaDias: '#historial-limpieza-dias',
@@ -404,6 +424,7 @@ const SEL = {
   // --- Tasa ---
   tasaFetchBtn: '#tasa-fetch-btn',
   tasaConnectionBadge: '#tasa-connection-badge',
+  syncDownloadBtn: '#sync-download-btn',
 
   // --- Cambio (vuelto) ---
   cambioGroup: '#cambio-group',
@@ -424,6 +445,9 @@ const SEL = {
   reportTotalBs: '#report-total-bs',
   reportSalesBody: '#report-sales-body',
   reportExportBtn: '#report-export-btn',
+  reportPdfBtn: '#report-pdf-btn',
+  vendorSalesSection: '#vendor-sales-section',
+  vendorSalesBody: '#vendor-sales-body',
   reportPagination: '#report-pagination',
   reportPrevBtn: '#report-prev-btn',
   reportNextBtn: '#report-next-btn',
@@ -444,6 +468,10 @@ const SEL = {
   saleDetailClose: '#sale-detail-close',
   saleDetailOkBtn: '#sale-detail-ok-btn',
   saleDetailShareBtn: '#sale-detail-share-btn',
+  saleDetailNotaWrap: '#sale-detail-nota-wrap',
+  saleDetailNota: '#sale-detail-nota',
+  saleDetailObsWrap: '#sale-detail-obs-wrap',
+  saleDetailObs: '#sale-detail-obs',
   viewReports: '#view-reports',
   gotoReportsBtn: '#goto-reports-btn',
 
@@ -471,6 +499,11 @@ const SEL = {
   productHistoryBody: '#product-history-body',
   productHistoryModalClose: '#product-history-modal-close',
   productHistoryOkBtn: '#product-history-ok-btn',
+  precioHistoryModal: '#precio-history-modal',
+  precioHistoryTitle: '#precio-history-title',
+  precioHistoryBody: '#precio-history-body',
+  precioHistoryClose: '#precio-history-close',
+  precioHistoryOkBtn: '#precio-history-ok-btn',
 
   // --- Confirm / Loading Modals ---
   confirmModal: '#confirm-modal',
@@ -479,11 +512,20 @@ const SEL = {
   confirmOkBtn: '#confirm-ok-btn',
   confirmCancelBtn: '#confirm-cancel-btn',
   confirmClose: '#confirm-close',
+  promptModal: '#prompt-modal',
+  promptTitle: '#prompt-title',
+  promptMessage: '#prompt-message',
+  promptInput: '#prompt-input',
+  promptOkBtn: '#prompt-ok-btn',
+  promptCancelBtn: '#prompt-cancel-btn',
+  promptClose: '#prompt-close',
   loadingText: '#loading-text',
   loadingModal: '#loading-modal',
 
   // --- Sync buttons ---
   backupDbBtn: '#backup-db-btn',
+  backupMaxInput: '#backup-max-input',
+  backupMaxSave: '#backup-max-save',
   viewDeviceIdBtn: '#view-device-id-btn',
   deviceIdDisplay: '#device-id-display',
   viewConflictsBtn: '#view-conflicts-btn',
@@ -505,13 +547,30 @@ const SEL = {
   paymentCancelBtn: '#payment-cancel-btn',
   abonoMixtoAddRow: '#abono-mixto-add-row',
   productModalClose: '#product-modal-close',
+  productEsPesable: '#product-es-pesable',
   productCancelBtn: '#product-cancel-btn',
   productSaveBtn: '#product-save-btn',
   productDetailClose: '#product-detail-close',
   productDetailOkBtn: '#product-detail-ok-btn',
+  stockAdjustModal: '#stock-adjust-modal',
+  stockAdjustClose: '#stock-adjust-close',
+  stockAdjustNombre: '#stock-adjust-nombre',
+  stockAdjustActual: '#stock-adjust-actual',
+  stockAdjustCantidad: '#stock-adjust-cantidad',
+  stockAdjustCantidadError: '#stock-adjust-cantidad-error',
+  stockAdjustMotivo: '#stock-adjust-motivo',
+  stockAdjustMotivoError: '#stock-adjust-motivo-error',
+  stockAdjustConfirmBtn: '#stock-adjust-confirm-btn',
+  stockAdjustCancelBtn: '#stock-adjust-cancel-btn',
   clientModalClose: '#client-modal-close',
   clientCancelBtn: '#client-cancel-btn',
   clientSaveBtn: '#client-save-btn',
+  clientEsTemporal: '#client-es-temporal',
+  tempHistoryBtn: '#temp-history-btn',
+  tempHistoryModal: '#temp-history-modal',
+  tempHistoryBody: '#temp-history-body',
+  tempHistoryClose: '#temp-history-close',
+  tempHistoryOkBtn: '#temp-history-ok-btn',
   closeCashierClose: '#close-cashier-close',
   closeCashierCancelBtn: '#close-cashier-cancel-btn',
   closeCashierConfirmBtn: '#close-cashier-confirm-btn',
@@ -596,8 +655,7 @@ const SEL = {
   changelogModal: '#changelog-modal',
   changelogClose: '#changelog-close',
 
-  // --- Cart hold / recent products ---
-  recentProducts: '#recent-products',
+  // --- Cart hold ---
   cartTabs: '#cart-tabs',
   holdCartBtn: '#hold-cart-btn',
 
@@ -675,6 +733,5 @@ const SEL = {
   productHoverCardBody: '#product-hover-card-body',
   hoverCardToggle: '#hover-card-toggle',
   flyEl: '.fly-to-cart',
-  soundToggleBtn: '#sound-toggle-btn',
 };
 

@@ -43,15 +43,13 @@ pub const CFG_ULTIMO_DOWNLOAD_USUARIOS: &str = "ultimo_download_usuarios";
 pub const CFG_DISPOSITIVO_ID: &str = "dispositivo_id";
 pub const CFG_SUPABASE_URL: &str = "supabase_url";
 pub const CFG_SUPABASE_KEY: &str = "supabase_key";
-#[allow(dead_code)]
-pub const CFG_OPENROUTER_API_KEY: &str = "openrouter_api_key";
-#[allow(dead_code)]
-pub const CFG_OPENROUTER_MODEL: &str = "openrouter_model";
 pub const CFG_BACKUP_KEY: &str = "backup_encryption_key";
+pub const CFG_ULTIMO_BACKUP_DIARIO: &str = "ultimo_backup_diario";
+pub const CFG_MAX_BACKUPS: &str = "max_backups";
+pub const DEFAULT_MAX_BACKUPS: usize = 10;
 
 // Roles
 pub const ROL_ADMIN: &str = "admin";
-#[allow(dead_code)]
 pub const ROL_VENDEDOR: &str = "vendedor";
 
 // Default values
@@ -69,12 +67,6 @@ pub const SUPABASE_KEY: &str = "sb_publishable_3XXhx5ktfhrUvngJDYAQAA_xPCRMFzh";
 // Pagination
 pub const PAGE_SIZE_DEFAULT: i64 = 200;
 pub const PAGE_SIZE_MAX: i64 = 5000;
-
-// Inari Bocados
-#[allow(dead_code)]
-pub const CFG_INARI_ACTIVO: &str = "inari_activo";
-#[allow(dead_code)]
-pub const INARI_DIAS: [u32; 4] = [4, 5, 6, 0]; // jueves, viernes, sábado, domingo
 
 // Rounding
 pub const ROUNDING_FACTOR: f64 = 100.0;

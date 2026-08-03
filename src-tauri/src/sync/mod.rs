@@ -13,7 +13,6 @@ pub use conflicts::*;
 pub use orchestrator::*;
 
 use crate::constants;
-use rusqlite::params;
 use serde_json::json;
 use tauri::Emitter;
 
@@ -87,21 +86,12 @@ pub(crate) fn supabase_config(db: &rusqlite::Connection) -> Result<(String, Stri
 }
 
 pub(crate) fn get_config(db: &rusqlite::Connection, key: &str) -> Result<String, String> {
-    db.query_row(
-        "SELECT valor FROM configuracion WHERE clave = ?1",
-        params![key],
-        |r| r.get::<_, String>(0),
-    )
-    .map_err(|_| format!("Configura '{}' primero en Ajustes", key))
+    crate::db::get_config_value(db, key)?
+        .ok_or_else(|| format!("Configura '{}' primero en Ajustes", key))
 }
 
 pub(crate) fn upsert_config(db: &rusqlite::Connection, key: &str, value: &str) {
-    db.execute(
-        "INSERT INTO configuracion (clave, valor) VALUES (?1, ?2) \
-         ON CONFLICT(clave) DO UPDATE SET valor = ?2",
-        params![key, value],
-    )
-    .ok();
+    let _ = crate::db::set_config_value(db, key, value);
 }
 
 pub(crate) fn urlencoding(s: &str) -> String {
@@ -142,24 +132,6 @@ where
     let result = inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
     tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
     Ok(result)
-}
-
-/// Helper: formatea el resultado de un download con inserted/updated/conflicts.
-#[allow(dead_code)]
-pub(crate) fn format_download_result(inserted: u64, updated: u64, conflicts: u64, entity: &str) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    if inserted > 0 { parts.push(format!("{} {} nuevos", inserted, entity)); }
-    if updated > 0 { parts.push(format!("{} actualizados", updated)); }
-    if conflicts > 0 { parts.push(format!("{} conflictos", conflicts)); }
-    let body = if parts.is_empty() { "sin cambios".to_string() } else { parts.join(", ") };
-    let extra = if conflicts > 0 { " Revisa conflictos en Configuración".to_string() } else { String::new() };
-    format!("Descarga completada: {}.{}", body, extra)
-}
-
-/// Helper: formatea el resultado de un upload.
-#[allow(dead_code)]
-pub(crate) fn format_upload_result(count: usize, entity: &str) -> String {
-    format!("Subida completada: {} {} subidos", count, entity)
 }
 
 pub(crate) fn emit_progress(app: &tauri::AppHandle, step: &str, current: u32, total: u32) {

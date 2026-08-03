@@ -50,7 +50,7 @@ async function loadSyncStats() {
 
 /* ========== SYNC AUTO TIMERS ========== */
 let syncAutoIntervalId = null;
-let saleUploadTimer = null;
+let currentAutoMinutes = 0;
 let isSyncing = false;
 
 function loadSyncAutoConfig() {
@@ -71,6 +71,8 @@ function loadSyncAutoConfig() {
 }
 
 function startSyncAutoInterval(minutes) {
+  if (minutes === currentAutoMinutes && syncAutoIntervalId) return;
+  currentAutoMinutes = minutes;
   if (syncAutoIntervalId) clearInterval(syncAutoIntervalId);
   syncAutoIntervalId = null;
   if (minutes <= 0) return;
@@ -81,18 +83,6 @@ function startSyncAutoInterval(minutes) {
       invoke('sync_all').then(() => { isSyncing = false; loadSyncStats(); }).catch(() => { isSyncing = false; loadSyncStats(); });
     }
   }, minutes * 60 * 1000);
-}
-
-function scheduleSaleUpload() {
-  if (saleUploadTimer) clearTimeout(saleUploadTimer);
-  saleUploadTimer = setTimeout(() => {
-    if (!isSyncing) {
-      isSyncing = true;
-      updateSyncIndicator('Sincronizando...', true);
-      invoke('sync_all').then(() => { isSyncing = false; loadSyncStats(); }).catch(() => { isSyncing = false; loadSyncStats(); });
-    }
-    saleUploadTimer = null;
-  }, SYNC.SALE_DEBOUNCE_MS);
 }
 
 function showView(name) {
@@ -114,10 +104,16 @@ function showView(name) {
       }
     } else {
       const hoy = new Date().getDay();
-      if (INARI_DIAS.includes(hoy) && !showInari) {
-        showInari = true;
-        qs(SEL.inventoryInariBtn).classList.add('active');
-        qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-check"></i> <span>Inari</span>';
+      if (INARI_DIAS.includes(hoy)) {
+        if (!showInari) {
+          showInari = true;
+          qs(SEL.inventoryInariBtn).classList.add('active');
+          qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-check"></i> <span>Inari</span>';
+        }
+      } else if (showInari) {
+        showInari = false;
+        qs(SEL.inventoryInariBtn).classList.remove('active');
+        qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-fire"></i> <span>Inari</span>';
       }
     }
     qs(SEL.inariSubcatBar).style.display = showInari ? 'flex' : 'none';
@@ -138,7 +134,6 @@ function showView(name) {
     if (!IS_ANDROID) qs(SEL.productSearch).focus();
     renderProductSearch();
     renderCart();
-    renderRecentProducts();
   }
   document.dispatchEvent(new CustomEvent('viewChanged', { detail: name }));
   if (window.innerWidth <= 768) {

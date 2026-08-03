@@ -77,16 +77,15 @@ pub fn get_cierres(
 
 #[tauri::command]
 pub fn clear_audit(state: State<AppState>) -> Result<(), String> {
-    crate::db::check_action_rate_limit(
-        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
-        "clear_audit",
-    )?;
+    crate::auth::admin_guard(&state, "clear_audit", "Limpió el historial de auditoría")?;
     let mut db = state.lock_db()?;
-    crate::auth::require_admin(&state, &db, "Limpió el historial de auditoría")?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
     tx.execute("DELETE FROM historial_acciones", [])
         .map_err(|e| format!("Error al limpiar auditoría: {}", e))?;
     log_action(&tx, "sistema", "Historial de auditoría limpiado")?;
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, "clear_audit");
+    }
     Ok(())
 }

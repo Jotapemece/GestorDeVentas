@@ -6,15 +6,19 @@ pub struct Producto {
     pub nombre: String,
     pub precio_usd: f64,
     pub costo: f64,
-    pub stock: i64,
-    pub stock_minimo: i64,
+    pub stock: f64,
+    pub stock_minimo: f64,
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
     #[serde(default)]
     pub es_inari: bool,
     #[serde(default)]
+    pub es_pesable: bool,
+    #[serde(default)]
     pub subcategoria: Option<String>,
+    #[serde(default)]
+    pub favorito: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -49,6 +53,19 @@ pub struct Cliente {
     pub updated_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ultima_compra: Option<String>,
+    #[serde(default)]
+    pub es_temporal: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ClienteEliminado {
+    pub id: i64,
+    pub cliente_id: i64,
+    pub nombre: String,
+    pub saldo_pagado_usd: f64,
+    pub creado_en: String,
+    pub eliminado_en: String,
+    pub motivo: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -67,9 +84,13 @@ pub struct Venta {
     pub total_bs: f64,
     pub anulada: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub nota_anulacion: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dispositivo_origen: Option<String>,
+    #[serde(default)]
+    pub nota: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -78,7 +99,7 @@ pub struct DetalleVenta {
     pub venta_id: i64,
     pub producto_codigo: String,
     pub producto_nombre: String,
-    pub cantidad: i64,
+    pub cantidad: f64,
     pub precio_usd_unitario: f64,
     pub subtotal_usd: f64,
     #[serde(default)]
@@ -97,7 +118,7 @@ pub struct SaleDetailItem {
     pub venta_id: i64,
     pub producto_codigo: String,
     pub producto_nombre: String,
-    pub cantidad: i64,
+    pub cantidad: f64,
     pub precio_usd_unitario: f64,
     pub subtotal_usd: f64,
     pub anulado: bool,
@@ -128,12 +149,14 @@ pub struct CloseReport {
     pub total_bs: f64,
     pub usuario: String,
     pub tasa_cierre: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup_msg: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProductoVenta {
     pub codigo: String,
-    pub cantidad: i64,
+    pub cantidad: f64,
     #[serde(default)]
     pub es_inari: bool,
 }
@@ -155,6 +178,8 @@ pub struct CreateSaleRequest {
     pub tasa: f64,
     pub pago_detalle: Option<Vec<PagoItem>>,
     pub total_bs_ingresado: Option<f64>,
+    #[serde(default)]
+    pub nota: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -172,7 +197,6 @@ pub struct PayDebtRequest {
     pub monto_usd: f64,
     pub metodo_pago: String,
     pub referencia_pago_movil: Option<String>,
-    pub usuario_id: i64,
     pub pago_detalle: Option<Vec<PagoItem>>,
 }
 
@@ -215,7 +239,7 @@ pub struct CierreDetalle {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProductoReporte {
     pub nombre: String,
-    pub cantidad: i64,
+    pub cantidad: f64,
     pub total_usd: f64,
 }
 
@@ -279,7 +303,7 @@ pub struct VentaDetallada {
 pub struct TopProductItem {
     pub codigo: String,
     pub nombre: String,
-    pub cantidad_vendida: i64,
+    pub cantidad_vendida: f64,
     pub total_usd: f64,
 }
 
@@ -303,7 +327,7 @@ pub struct DashboardSummary {
 pub struct ProductHistoryItem {
     pub venta_id: i64,
     pub fecha_hora: String,
-    pub cantidad: i64,
+    pub cantidad: f64,
     pub precio_usd_unitario: f64,
     pub subtotal_usd: f64,
     pub metodo_pago: String,
@@ -336,6 +360,7 @@ pub struct SaldoCaja {
 pub struct VoidItemRequest {
     pub venta_id: i64,
     pub detalle_ids: Vec<i64>,
+    pub nota: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -344,14 +369,6 @@ pub struct PaginatedResult<T> {
     pub page: i64,
     pub page_size: i64,
     pub data: Vec<T>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ExportReportFilter {
-    pub start_date: String,
-    pub end_date: String,
-    pub producto_codigo: Option<String>,
-    pub username: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -373,5 +390,26 @@ pub struct Categoria {
     pub id: i64,
     pub nombre: String,
     pub color: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PrecioHistorialItem {
+    pub id: i64,
+    pub producto_codigo: String,
+    pub precio_anterior: f64,
+    pub precio_nuevo: f64,
+    pub usuario: String,
+    pub fecha_hora: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct VendorSales {
+    pub username: String,
+    pub total_ventas: i64,
+    pub total_usd: f64,
+    pub total_bs: f64,
+    pub total_costo_usd: f64,
+    pub total_ganancia_usd: f64,
+    pub ventas_anuladas: i64,
 }
 

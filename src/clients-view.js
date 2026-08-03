@@ -59,6 +59,10 @@ function openCreditoModal(cliente) {
   qs(SEL.clientNombre).value = cliente ? cliente.nombre : '';
   qs(SEL.clientModalTitle).textContent = cliente ? 'Editar Cliente' : 'Registrar Persona para Cr\u00e9dito';
   qs(SEL.clientSaveBtn).textContent = cliente ? 'Guardar Cambios' : 'Guardar';
+  if (qs(SEL.clientEsTemporal)) {
+    qs(SEL.clientEsTemporal).checked = cliente ? !!cliente.es_temporal : false;
+    qs(SEL.clientEsTemporal).disabled = !!cliente;
+  }
   clearClientErrors();
   showModal(qs(SEL.clientModal));
 }
@@ -70,8 +74,8 @@ function closeClientModal() {
 }
 
 function clearClientErrors() {
-  var err = document.getElementById('client-nombre-error');
-  var input = document.getElementById('client-nombre');
+  var err = qs(SEL.clientNombreError);
+  var input = qs(SEL.clientNombre);
   if (err) { err.textContent = ''; err.classList.remove('visible'); }
   if (input) input.classList.remove('input-error');
 }
@@ -81,8 +85,8 @@ async function saveClient() {
   const nombre = qs(SEL.clientNombre).value.trim();
   clearClientErrors();
   if (!nombre) {
-    var err = document.getElementById('client-nombre-error');
-    var input = document.getElementById('client-nombre');
+    var err = qs(SEL.clientNombreError);
+    var input = qs(SEL.clientNombre);
     if (err) { err.textContent = 'El nombre del cliente es obligatorio'; err.classList.add('visible'); }
     if (input) input.classList.add('input-error');
     return;
@@ -93,8 +97,9 @@ async function saveClient() {
       await invoke('update_cliente', { clienteId: editingClienteId, nombre });
       showToast('Cliente actualizado');
     } else {
-      await invoke('create_cliente', { nombre });
-      showToast('Cliente creado');
+      const esTemporal = qs(SEL.clientEsTemporal) ? qs(SEL.clientEsTemporal).checked : false;
+      await invoke('create_cliente', { nombre, esTemporal });
+      showToast(esTemporal ? 'Cliente temporal creado' : 'Cliente creado');
     }
     editingClienteId = null;
     closeClientModal(); loadCreditos();
@@ -184,7 +189,7 @@ function updateAbonoSaldoRestante() {
   const deuda = parseFloat(deudaTexto.replace(/[^0-9.-]/g, '')) || 0;
   var monto = parseInput(qs(SEL.abonoMonto).value);
   const montoBs = parseInput(qs(SEL.abonoMontoBs).value);
-  if (montoBs > 0 && monto <= 0 && tasaActual > 0) monto = montoBs / tasaActual;
+  if (montoBs > 0 && monto <= 0 && tasaActual > 0) monto = bsToUsd(montoBs, tasaActual);
   const restante = Math.max(0, deuda - monto);
   qs(SEL.abonoSaldoRestante).textContent = 'Saldo Restante: ' + formatUSD(restante);
 }
@@ -200,7 +205,7 @@ function confirmAbono() {
   let referencia = null, pago_detalle = null;
   if (metodo === METODO_PAGO_MOVIL && metodo !== METODO_MIXTO) {
     referencia = qs(SEL.abonoReferencia).value.trim();
-    if (referencia.length !== PAGO_MOVIL_REF_LEN) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); return; }
+    if (!esRefPagoMovilValida(referencia)) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); return; }
   }
   if (metodo === METODO_MIXTO) {
     pago_detalle = getMixtoData('abono-mixto-items');
@@ -213,13 +218,14 @@ function confirmAbono() {
   btn.disabled = true; btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-spin"></i>';
   (async function() {
     try {
-      var tasa = tasaActual || await invoke('get_tasa');
-      if (montoBs > 0 && monto <= 0) monto = montoBs / tasa;
+      var tasa = await getTasaConFallback();
+      if (montoBs > 0 && monto <= 0) monto = bsToUsd(montoBs, tasa);
       if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
-      await invoke('pay_debt', {
-        request: { cliente_id: abonoClienteId, monto_usd: monto, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle, usuario_id: currentUser.id }
+      const res = await invoke('pay_debt', {
+        request: { cliente_id: abonoClienteId, monto_usd: monto, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle }
       });
-      showToast('Abono procesado. Cuenta actualizada con \u00e9xito');
+      showToast(res || 'Abono procesado. Cuenta actualizada con \u00e9xito');
+      haptic(30);
       closeAbonoModal();
       loadCreditos();
     } catch (e) { showToast('Error: ' + e, 'error'); }
@@ -359,8 +365,8 @@ async function confirmQuickDebt() {
   let monto = parseInput(qs(SEL.quickDebtMonto).value);
   const montoBs = parseInput(qs(SEL.quickDebtMontoBs).value);
   if (monto <= 0 && montoBs <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
-  var tasa = tasaActual || await invoke('get_tasa');
-  if (montoBs > 0 && monto <= 0) monto = montoBs / tasa;
+  var tasa = await getTasaConFallback();
+  if (montoBs > 0 && monto <= 0) monto = bsToUsd(montoBs, tasa);
   if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
   var clienteId = parseInt(qs(SEL.quickDebtMonto).dataset.clienteId);
   var nombre = qs(SEL.quickDebtClienteNombre).textContent;
@@ -386,11 +392,46 @@ function updateCreditoStats(clientes) {
     if (c.credito_activo && (c.saldo_deuda_usd || 0) > 0) conDeuda++;
     deudaTotal += (c.saldo_deuda_usd || 0);
   });
-  var totalEl = document.getElementById('creditos-total-personas');
-  var deudaEl = document.getElementById('creditos-con-deuda');
-  var deudaTotalEl = document.getElementById('creditos-deuda-total');
+  var totalEl = qs(SEL.creditosTotalPersonas);
+  var deudaEl = qs(SEL.creditosConDeuda);
+  var deudaTotalEl = qs(SEL.creditosDeudaTotal);
   if (totalEl) totalEl.textContent = total;
   if (deudaEl) deudaEl.textContent = conDeuda;
   if (deudaTotalEl) deudaTotalEl.textContent = formatUSD(deudaTotal);
+}
+
+/* ========== TEMP CLIENTS HISTORY ========== */
+async function openTempHistoryModal() {
+  const tbody = qs(SEL.tempHistoryBody);
+  tbody.innerHTML = '<tr><td colspan="5">Cargando...</td></tr>';
+  showModal(qs(SEL.tempHistoryModal));
+  try {
+    const items = await invoke('list_clientes_eliminados');
+    tbody.innerHTML = '';
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-clock_rotate_left"></i>', 'Sin historial', 'Los clientes temporales eliminados aparecer\u00e1n aqu\u00ed') + '</td></tr>';
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    items.forEach(function(item) {
+      const tr = document.createElement('tr');
+      const motivo = item.motivo === 'deuda_pagada'
+        ? '<span class="badge badge-success" style="font-size:10px">Deuda pagada</span>'
+        : (item.motivo === 'eliminacion_manual'
+            ? '<span class="badge badge-danger" style="font-size:10px">Eliminado manual</span>'
+            : escapeHtml(item.motivo));
+      tr.innerHTML = '<td>' + escapeHtml(item.nombre) + '</td>' +
+        '<td>' + escapeHtml(item.creado_en) + '</td>' +
+        '<td>' + escapeHtml(item.eliminado_en) + '</td>' +
+        '<td>' + formatUSD(item.saldo_pagado_usd) + '</td>' +
+        '<td>' + motivo + '</td>';
+      frag.appendChild(tr);
+    });
+    tbody.appendChild(frag);
+  } catch (e) { tbody.innerHTML = '<tr><td colspan="5">Error: ' + escapeHtml(e) + '</td></tr>'; }
+}
+
+function closeTempHistoryModal() {
+  closeModal(qs(SEL.tempHistoryModal));
 }
 

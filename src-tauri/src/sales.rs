@@ -1,6 +1,5 @@
 use base64::Engine;
 use std::collections::HashMap;
-use std::time::Instant;
 use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
@@ -11,17 +10,16 @@ use uuid::Uuid;
 const SQL_PRODUCTO_PRECIO_STOCK: &str = "SELECT precio_usd, stock FROM productos WHERE codigo = ?1";
 const SQL_INSERT_VENTA: &str =
     "INSERT INTO ventas (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
-     cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at) \
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)";
+     cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at, nota) \
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)";
 const SQL_INSERT_DETALLE: &str =
     "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
      VALUES (?1, ?2, ?3, ?4, ?5)";
-const SQL_UPDATE_STOCK: &str = "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1";
 const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
 pub(crate) const SQL_SELECT_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
            v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
-           v.sync_id, v.dispositivo_origen
+           v.sync_id, v.dispositivo_origen, v.nota_anulacion, v.nota
     FROM ventas v
     LEFT JOIN usuarios u ON v.usuario_id = u.id
     LEFT JOIN clientes c ON v.cliente_id = c.id";
@@ -32,10 +30,16 @@ pub(crate) fn row_to_venta(row: &rusqlite::Row) -> rusqlite::Result<Venta> {
         username: row.get(3)?, metodo_pago: row.get(4)?, referencia_pago_movil: row.get(5)?,
         pago_detalle: row.get(6)?, cliente_id: row.get(7)?, cliente_nombre: row.get(8)?,
         total_usd: row.get(9)?, tasa_aplicada: row.get(10)?,
-        total_bs: { let bs: f64 = row.get(11)?; if bs > 0.0 { bs } else { row.get::<_, f64>(9)? * row.get::<_, f64>(10)? } },
+        total_bs: crate::helpers::fallback_total_bs(
+            row.get(11)?,
+            row.get(9)?,
+            row.get(10)?,
+        ),
         anulada: { let a: i64 = row.get(12)?; a != 0 },
+        nota_anulacion: row.get(15)?,
         sync_id: row.get(13)?,
         dispositivo_origen: row.get(14)?,
+        nota: row.get(16)?,
     })
 }
 
@@ -96,10 +100,10 @@ fn execute_sale_transaction(
     now_iso: &str,
 ) -> Result<(i64, String, f64, f64), String> {
     let mut total_usd = 0.0;
-    let mut producto_cache: HashMap<String, (f64, i64)> = HashMap::new();
+    let mut producto_cache: HashMap<String, (f64, f64)> = HashMap::new();
 
     for pv in &request.productos {
-        let (precio, stock): (f64, i64) = tx
+        let (precio, stock): (f64, f64) = tx
             .query_row(SQL_PRODUCTO_PRECIO_STOCK, params![pv.codigo], |row| {
                 Ok((row.get(0)?, row.get(1)?))
             })
@@ -110,7 +114,7 @@ fn execute_sale_transaction(
                 pv.codigo, stock, pv.cantidad
             ));
         }
-        total_usd += precio * pv.cantidad as f64;
+        total_usd += precio * pv.cantidad;
         producto_cache.insert(pv.codigo.clone(), (precio, stock));
     }
 
@@ -139,6 +143,7 @@ fn execute_sale_transaction(
             now, request.usuario_id, request.metodo_pago,
             request.referencia_pago_movil, pago_json, request.cliente_id,
             total_usd, request.tasa, total_bs, venta_sync_id, dispositivo_origen, now_iso,
+            request.nota.clone(),
         ],
     )
     .map_err(|e| format!("Error al crear venta: {}", e))?;
@@ -152,8 +157,7 @@ fn execute_sale_transaction(
         tx.execute(SQL_INSERT_DETALLE, params![venta_id, pv.codigo, pv.cantidad, precio, detalle_sync_id])
             .map_err(|e| format!("Error al insertar detalle: {}", e))?;
         if !pv.es_inari {
-            let affected = tx
-                .execute(SQL_UPDATE_STOCK, params![pv.cantidad, pv.codigo])
+            let affected = crate::db::sub_stock(&tx, &pv.codigo, pv.cantidad)
                 .map_err(|e| format!("Error al actualizar stock: {}", e))?;
             if affected == 0 {
                 return Err(format!("Stock insuficiente para '{}'", pv.codigo));
@@ -188,7 +192,12 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         "create_sale",
     )?;
     let mut db = state.lock_db()?;
-    validate_sale_request(&request)?;
+    validate_sale_request(&request).map_err(|e| {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            crate::db::rate_limit_fail(&mut attempts, "create_sale");
+        }
+        e
+    })?;
 
     let now = crate::helpers::fecha_hora_local();
     let current_username = state.get_username()?;
@@ -197,17 +206,12 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
 
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
-    let dispositivo_origen: String = match tx.query_row(
-        "SELECT valor FROM configuracion WHERE clave = ?1",
-        params![constants::CFG_DISPOSITIVO_ID], |r| r.get(0),
-    ) {
-        Ok(id) => id,
-        Err(_) => {
+    let dispositivo_origen: String = match crate::db::get_config_value(&tx, constants::CFG_DISPOSITIVO_ID) {
+        Ok(Some(id)) => id,
+        _ => {
             let new_id = Uuid::new_v4().to_string();
-            tx.execute(
-                "INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?1, ?2)",
-                params![constants::CFG_DISPOSITIVO_ID, new_id],
-            ).map_err(|e| format!("Error al registrar dispositivo: {}", e))?;
+            crate::db::set_config_value(&tx, constants::CFG_DISPOSITIVO_ID, &new_id)
+                .map_err(|e| format!("Error al registrar dispositivo: {}", e))?;
             new_id
         }
     };
@@ -221,14 +225,18 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
 
     let pago_detalle_opt = if pago_json.is_empty() { None } else { Some(pago_json) };
 
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, "create_sale");
+    }
+
     Ok(Venta {
         id: venta_id, fecha_hora: now, usuario_id: request.usuario_id,
         username, metodo_pago: request.metodo_pago,
         referencia_pago_movil: request.referencia_pago_movil,
         pago_detalle: pago_detalle_opt, cliente_id: request.cliente_id,
         cliente_nombre: None, total_usd, tasa_aplicada: request.tasa,
-        total_bs, anulada: false, sync_id: Some(venta_sync_id),
-        dispositivo_origen: Some(dispositivo_origen),
+        total_bs, anulada: false, nota_anulacion: None, sync_id: Some(venta_sync_id),
+        dispositivo_origen: Some(dispositivo_origen), nota: request.nota.clone(),
     })
 }
 
@@ -288,7 +296,7 @@ pub fn get_sale_detail(
 
     let detalles: Vec<SaleDetailItem> = stmt
         .query_map(params![venta_id], |row| {
-            let cantidad: i64 = row.get(4)?;
+            let cantidad: f64 = row.get(4)?;
             let precio: f64 = row.get(5)?;
             let anulado: i64 = row.get(6)?;
             Ok(SaleDetailItem {
@@ -298,7 +306,7 @@ pub fn get_sale_detail(
                 producto_nombre: row.get(3)?,
                 cantidad,
                 precio_usd_unitario: precio,
-                subtotal_usd: cantidad as f64 * precio,
+                subtotal_usd: cantidad * precio,
                 anulado: anulado != 0,
             })
         })
@@ -322,6 +330,9 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
         "set_tasa",
     )?;
     if tasa <= 0.0 {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            crate::db::rate_limit_fail(&mut attempts, "set_tasa");
+        }
         return Err("La tasa debe ser mayor a cero".to_string());
     }
     let mut db = state.lock_db()?;
@@ -333,37 +344,41 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
         &format!("UPDATE configuracion SET valor = ?1 WHERE clave = '{}'", constants::CFG_TASA_DOLAR),
         params![tasa.to_string()],
     ).map_err(|e| format!("Error al guardar tasa: {}", e))?;
-    tx.execute(
-        &format!("INSERT INTO configuracion (clave, valor) VALUES ('{}', ?1) ON CONFLICT(clave) DO UPDATE SET valor = ?1", constants::CFG_TASA_UPDATED_AT),
-        params![now],
-    ).map_err(|e| format!("Error al guardar fecha de tasa: {}", e))?;
+    crate::db::set_config_value(&tx, constants::CFG_TASA_UPDATED_AT, &now)
+        .map_err(|e| format!("Error al guardar fecha de tasa: {}", e))?;
     tx.execute(
         "INSERT OR REPLACE INTO historial_tasas (fecha, tasa) VALUES (?1, ?2)",
         params![now, tasa],
     ).ok();
     tx.commit().map_err(|e| format!("Error al confirmar tasa: {}", e))?;
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, "set_tasa");
+    }
     Ok(())
 }
 
 #[tauri::command]
-pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String> {
-    {
-        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
-        if let Some(&(count, until)) = attempts.get("void_sale") {
-            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
-                return Err(format!(
-                    "Demasiados intentos. Intente de nuevo en {} segundos.",
-                    until.duration_since(Instant::now()).as_secs()
-                ));
-            }
-            if Instant::now() >= until {
-                attempts.remove("void_sale");
-            }
+pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "void_sale",
+    )?;
+    let nota = nota.trim().to_string();
+    if nota.is_empty() {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            crate::db::rate_limit_fail(&mut attempts, "void_sale");
         }
+        return Err("Debe escribir una nota explicando el motivo de la anulación".to_string());
     }
+    if nota.len() > 500 {
+        return Err("La nota de anulación no puede superar los 500 caracteres".to_string());
+    }
+    let current_username = crate::auth::employee_guard(
+        &state,
+        "void_sale",
+        &format!("Anuló venta #{}: {}", venta_id, nota),
+    )?;
     let mut db = state.lock_db()?;
-    crate::auth::require_admin(&state, &db, &format!("Anuló venta #{}", venta_id))?;
-    let current_username = state.get_username()?;
 
     let tx = db.transaction().map_err(|e| e.to_string())?;
 
@@ -387,11 +402,7 @@ pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String
     let rows: Vec<(String, i64)> = mapped.filter_map(|r| r.ok()).collect();
     drop(stmt);
     for (codigo, cantidad) in &rows {
-        tx.execute(
-            "UPDATE productos SET stock = stock + ?1 WHERE codigo = ?2",
-            params![cantidad, codigo],
-        )
-        .map_err(|e| format!("Error al restaurar stock: {}", e))?;
+        crate::db::add_stock(&tx, codigo, *cantidad as f64)?;
     }
 
     // Revert credit debt if applicable
@@ -411,19 +422,19 @@ pub fn void_sale(state: State<AppState>, venta_id: i64) -> Result<String, String
     let void_ts = crate::helpers::now_iso();
     // Mark as voided
     tx.execute(
-        "UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2",
-        params![void_ts, venta_id],
+        "UPDATE ventas SET anulada = 1, nota_anulacion = ?1, updated_at = ?2 WHERE id = ?3",
+        params![nota, void_ts, venta_id],
     )
     .map_err(|e| e.to_string())?;
 
-    if let Err(e) = crate::audit::log_action(&tx, &current_username, &format!("Anuló venta #{}", venta_id)) {
+    if let Err(e) = crate::audit::log_action(&tx, &current_username, &format!("Anuló venta #{} con nota: {}", venta_id, nota)) {
     eprintln!("[audit] Error al registrar acción: {}", e);
 }
 
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
     if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        attempts.remove("void_sale");
+        crate::db::rate_limit_success(&mut attempts, "void_sale");
     }
 
     Ok(format!("Venta #{} anulada exitosamente. {} producto(s) restaurado(s).", venta_id, rows.len()))
@@ -477,21 +488,13 @@ pub fn get_product_history(
 #[tauri::command]
 pub fn export_report_xlsx(
     state: State<AppState>,
-    filter: ExportReportFilter,
+    filter: SalesReportFilter,
 ) -> Result<String, String> {
     use rust_xlsxwriter::*;
 
     let db = state.lock_db()?;
 
-    let s = SalesReportFilter {
-        start_date: filter.start_date.clone(),
-        end_date: filter.end_date.clone(),
-        producto_codigo: filter.producto_codigo.clone(),
-        username: filter.username.clone(),
-        page: None,
-        page_size: None,
-    };
-    let report = get_sales_report_inner(&db, s)?;
+    let report = get_sales_report_inner(&db, filter)?;
 
     let mut workbook = Workbook::new();
     let sheet = workbook.add_worksheet();
@@ -524,11 +527,9 @@ pub fn export_report_xlsx(
     for (i, item) in report.ventas.iter().enumerate() {
         let r = (i + 1) as u32;
         let costo_total: f64 = item.productos.iter()
-            .map(|d| costo_by_code.get(&d.producto_codigo).unwrap_or(&0.0) * d.cantidad as f64)
+            .map(|d| costo_by_code.get(&d.producto_codigo).unwrap_or(&0.0) * d.cantidad)
             .sum();
         let ganancia = item.venta.total_usd - costo_total;
-
-        sheet.write_number(r, 0, item.venta.id as f64).ok();
         sheet.write_string(r, 1, &item.venta.fecha_hora).ok();
         sheet.write_string(r, 2, &item.venta.username).ok();
         let ml = format_metodo_label(&item.venta.metodo_pago);
@@ -544,6 +545,52 @@ pub fn export_report_xlsx(
 
     let buffer = workbook.save_to_buffer().map_err(|e| format!("Error al exportar: {}", e))?;
     Ok(base64::engine::general_purpose::STANDARD.encode(&buffer))
+}
+
+#[tauri::command]
+pub fn export_report_pdf(
+    state: State<AppState>,
+    filter: SalesReportFilter,
+) -> Result<String, String> {
+    let db = state.lock_db()?;
+    let report = get_sales_report_inner(&db, filter.clone())?;
+
+    let costo_by_code: HashMap<String, f64> = {
+        let mut stmt = db.prepare("SELECT codigo, COALESCE(costo,0) FROM productos WHERE activo = 1")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    let headers = ["#", "Fecha", "Usuario", "Metodo", "Total ($)", "Costo ($)", "Ganancia ($)", "Total (Bs.)"];
+    let mut rows: Vec<Vec<String>> = Vec::with_capacity(report.ventas.len());
+    for (i, item) in report.ventas.iter().enumerate() {
+        let costo_total: f64 = item.productos.iter()
+            .map(|d| costo_by_code.get(&d.producto_codigo).unwrap_or(&0.0) * d.cantidad)
+            .sum();
+        let ganancia = item.venta.total_usd - costo_total;
+        rows.push(vec![
+            (i + 1).to_string(),
+            item.venta.fecha_hora.clone(),
+            item.venta.username.clone(),
+            format_metodo_label(&item.venta.metodo_pago).to_string(),
+            format!("{:.2}", item.venta.total_usd),
+            format!("{:.2}", costo_total),
+            format!("{:.2}", ganancia),
+            format!("{:.2}", item.venta.total_bs),
+        ]);
+    }
+
+    let title = format!("Reporte de ventas: {} ventas - Total ${:.2}", report.total_ventas, report.total_usd);
+    let subtitle = format!(
+        "Período: {} a {} - Ganancia ${:.2}",
+        filter.start_date, filter.end_date, report.total_ganancia_usd
+    );
+    let pdf = crate::pdf::build_report_pdf(&title, &subtitle, &headers, &rows);
+    Ok(base64::engine::general_purpose::STANDARD.encode(&pdf))
 }
 
 fn format_metodo_label(m: &str) -> String {
@@ -639,13 +686,13 @@ fn get_sales_report_inner(
         let mut detail_stmt = db.prepare(&detail_sql).map_err(|e| e.to_string())?;
         let det_params: Vec<&dyn rusqlite::types::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
         let rows = match detail_stmt.query_map(det_params.as_slice(), |row| {
-            let cantidad: i64 = row.get(4)?;
+            let cantidad: f64 = row.get(4)?;
             let precio: f64 = row.get(5)?;
             let costo: f64 = row.get(6)?;
             Ok(DetalleVenta {
                 id: row.get(0)?, venta_id: row.get(1)?, producto_codigo: row.get(2)?,
                 producto_nombre: row.get(3)?, cantidad, precio_usd_unitario: precio,
-                subtotal_usd: cantidad as f64 * precio, costo,
+                subtotal_usd: cantidad * precio, costo,
             })
         }) {
             Ok(r) => r,
@@ -668,11 +715,77 @@ fn get_sales_report_inner(
 
     let total_costo_usd: f64 = items.iter()
         .flat_map(|item| &item.productos)
-        .map(|d| d.costo * d.cantidad as f64)
+        .map(|d| d.costo * d.cantidad)
         .sum();
     let total_ganancia_usd = total_usd - total_costo_usd;
 
     Ok(SalesReportResult { total_ventas, total_usd, total_bs, total_costo_usd, total_ganancia_usd, ventas: items, page, page_size })
+}
+
+#[tauri::command]
+pub fn get_sales_by_vendor(
+    state: State<AppState>,
+    start_date: String,
+    end_date: String,
+) -> Result<Vec<VendorSales>, String> {
+    let db = state.lock_db()?;
+    let end = crate::helpers::siguiente_dia(&end_date);
+
+    let mut stmt = db
+        .prepare(
+            "SELECT COALESCE(u.username, 'Desconocido'), COUNT(v.id), \
+                    COALESCE(SUM(CASE WHEN v.anulada = 0 THEN v.total_usd ELSE 0 END), 0), \
+                    COALESCE(SUM(CASE WHEN v.anulada = 0 THEN v.total_bs ELSE 0 END), 0), \
+                    SUM(CASE WHEN v.anulada = 1 THEN 1 ELSE 0 END) \
+             FROM ventas v \
+             LEFT JOIN usuarios u ON v.usuario_id = u.id \
+             WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 \
+             GROUP BY v.usuario_id \
+             ORDER BY 3 DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut result: Vec<VendorSales> = stmt
+        .query_map(params![start_date, end], |row| {
+            Ok(VendorSales {
+                username: row.get(0)?,
+                total_ventas: row.get(1)?,
+                total_usd: row.get(2)?,
+                total_bs: row.get(3)?,
+                ventas_anuladas: row.get(4)?,
+                total_costo_usd: 0.0,
+                total_ganancia_usd: 0.0,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut cost_stmt = db
+        .prepare(
+            "SELECT COALESCE(u.username, 'Desconocido'), COALESCE(SUM(COALESCE(p.costo, 0) * dv.cantidad), 0) \
+             FROM ventas v \
+             LEFT JOIN usuarios u ON v.usuario_id = u.id \
+             JOIN detalles_ventas dv ON dv.venta_id = v.id \
+             LEFT JOIN productos p ON p.codigo = dv.producto_codigo \
+             WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.anulada = 0 \
+             GROUP BY v.usuario_id",
+        )
+        .map_err(|e| e.to_string())?;
+    let costs: HashMap<String, f64> = cost_stmt
+        .query_map(params![start_date, end], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    for v in result.iter_mut() {
+        let costo = costs.get(&v.username).copied().unwrap_or(0.0);
+        v.total_costo_usd = costo;
+        v.total_ganancia_usd = v.total_usd - costo;
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -684,9 +797,23 @@ pub fn void_sale_items(
         &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
         "void_sale_items",
     )?;
+    let nota = request.nota.clone().unwrap_or_default();
+    let nota = nota.trim().to_string();
+    if nota.is_empty() {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            crate::db::rate_limit_fail(&mut attempts, "void_sale_items");
+        }
+        return Err("Debe escribir una nota explicando el motivo de la anulación".to_string());
+    }
+    if nota.len() > 500 {
+        return Err("La nota de anulación no puede superar los 500 caracteres".to_string());
+    }
+    let current_username = crate::auth::employee_guard(
+        &state,
+        "void_sale_items",
+        &format!("Anuló {} item(s) de venta #{}: {}", request.detalle_ids.len(), request.venta_id, nota),
+    )?;
     let mut db = state.lock_db()?;
-    crate::auth::require_admin(&state, &db, &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id))?;
-    let current_username = state.get_username()?;
 
     let tx = db.transaction().map_err(|e| e.to_string())?;
 
@@ -699,14 +826,13 @@ pub fn void_sale_items(
             )
             .map_err(|_| format!("Detalle #{} no encontrado o ya anulado", det_id))?;
 
-        tx.execute("UPDATE productos SET stock = stock + ?1 WHERE codigo = ?2", params![cantidad, codigo])
-            .map_err(|e| format!("Error al restaurar stock: {}", e))?;
+        crate::db::add_stock(&tx, &codigo, cantidad as f64)?;
 
         tx.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = ?1", params![det_id])
             .map_err(|e| format!("Error al anular detalle: {}", e))?;
     }
 
-    recalculate_sale_after_void(&tx, request.venta_id)?;
+    recalculate_sale_after_void(&tx, request.venta_id, &nota)?;
 
     if let Err(e) = crate::audit::log_action(&tx, &current_username,
         &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id))
@@ -716,10 +842,14 @@ pub fn void_sale_items(
 
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, "void_sale_items");
+    }
+
     Ok(format!("{} item(es) anulado(s) de venta #{}. Stock restaurado.", request.detalle_ids.len(), request.venta_id))
 }
 
-fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64) -> Result<(), String> {
+fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64, nota: &str) -> Result<(), String> {
     let new_total_usd: f64 = tx
         .query_row(
             "SELECT COALESCE(SUM(CAST(anulado IS NULL OR anulado = 0 AS INTEGER) * cantidad * precio_usd_unitario), 0) \
@@ -746,10 +876,12 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64) -> Res
         )
         .map_err(|e| format!("Error al contar items restantes: {}", e))?;
     if remaining == 0 {
-        tx.execute("UPDATE ventas SET anulada = 1, updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id])
+        tx.execute("UPDATE ventas SET anulada = 1, nota_anulacion = ?1, updated_at = ?2 WHERE id = ?3",
+            params![nota, void_ts, venta_id])
             .map_err(|e| format!("Error al anular venta: {}", e))?;
     } else {
-        tx.execute("UPDATE ventas SET updated_at = ?1 WHERE id = ?2", params![void_ts, venta_id])
+        tx.execute("UPDATE ventas SET nota_anulacion = ?1, updated_at = ?2 WHERE id = ?3",
+            params![nota, void_ts, venta_id])
             .map_err(|e| format!("Error al actualizar timestamp: {}", e))?;
     }
     Ok(())
@@ -903,6 +1035,7 @@ mod tests {
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_err());
@@ -916,10 +1049,11 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
             tasa: 0.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_err());
@@ -933,10 +1067,11 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
             tasa: -1.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_err());
@@ -950,10 +1085,11 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_err());
@@ -966,10 +1102,11 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: Some("AB".into()),
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_err());
@@ -982,10 +1119,11 @@ mod tests {
             metodo_pago: "credito".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_err());
@@ -999,10 +1137,11 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2.0, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_ok());
@@ -1015,10 +1154,11 @@ mod tests {
             metodo_pago: "credito".into(),
             referencia_pago_movil: None,
             cliente_id: Some(5),
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_ok());
@@ -1031,10 +1171,11 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: Some("ABCD".into()),
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
+            nota: String::new(),
         };
         let result = validate_sale_request(&req);
         assert!(result.is_ok());

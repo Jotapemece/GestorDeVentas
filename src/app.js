@@ -2,6 +2,8 @@
 document.addEventListener('DOMContentLoaded', async function() {
   initConnectionMonitor();
   initSalesDivider();
+  initModalDrag();
+  initModalResize();
   initBsUsdConversion(SEL.movimientosMontoBs, SEL.movimientosMontoUsd);
   initBsUsdConversion(SEL.abonoMontoBs, SEL.abonoMonto);
   initBsUsdConversion(SEL.quickDebtMontoBs, SEL.quickDebtMonto);
@@ -106,6 +108,19 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   qs(SEL.tasaInput).addEventListener('blur', handleTasaChange);
   qs(SEL.tasaFetchBtn)?.addEventListener('click', fetchTasaBcv);
+  qs(SEL.syncDownloadBtn)?.addEventListener('click', async function() {
+    showLoadingModal('Descargando datos...');
+    await forcePaint();
+    try {
+      const msg = await invoke('download_all');
+      showToast(msg, 'success');
+      await loadProductCache();
+    } catch (e) {
+      showToast('Error al descargar: ' + e, 'error');
+    } finally {
+      hideLoadingModal();
+    }
+  });
   qs(SEL.inventoryTasaBtn)?.addEventListener('click', openTasaHistorialModal);
   qs(SEL.tasaHistorialApply)?.addEventListener('click', applyTasaHistorial);
   qs(SEL.tasaHistorialClear)?.addEventListener('click', clearTasaHistorial);
@@ -143,6 +158,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (btn) addToCart(btn.dataset.codigo);
   });
 
+  // Event delegation: toggle product favorite
+  qs(SEL.productSearchBody).addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="toggle-favorito"]');
+    if (btn) {
+      e.stopPropagation();
+      toggleProductFavorito(btn.dataset.codigo, btn);
+    }
+  });
+
+  // Quantity shortcut: typing a number + Enter in the product search fixes the quantity for the next add
+  qs(SEL.productSearch).addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const val = qs(SEL.productSearch).value.trim();
+    const num = parseFloat(val);
+    const isCodeMatch = productCache.some(p => p.codigo === val);
+    if (!isNaN(num) && String(num) === val && !isCodeMatch) {
+      pendingCartQty = Math.max(1, Math.round(num));
+      qs(SEL.productSearch).value = '';
+      qs(SEL.productSearch).placeholder = 'Cantidad: ' + pendingCartQty + ' — busca el producto o escribe c\u00f3digo';
+      handleProductSearch();
+      showToast('Cantidad fijada: ' + pendingCartQty, 'info');
+    }
+  });
+
   // Currency toggle for cart totals column
   const currencyToggle = qs(SEL.cartCurrencyToggle);
   if (currencyToggle) {
@@ -155,6 +194,16 @@ document.addEventListener('DOMContentLoaded', async function() {
       updateCartTotals();
     });
   }
+
+  // Mobile cart FAB + backdrop (cart bottom-sheet)
+  const cartFab = qs(SEL.cartFab);
+  if (cartFab) cartFab.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (cart.length === 0) { showToast('El carrito est\u00e1 vac\u00edo', 'info'); return; }
+    toggleCartSheet();
+  });
+  const cartBackdrop = qs(SEL.cartBackdrop);
+  if (cartBackdrop) cartBackdrop.addEventListener('click', closeCartSheet);
 
   // Event delegation: cart qty input and remove
   qs(SEL.cartBody).addEventListener('focusin', e => {
@@ -284,6 +333,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.inventoryExportBtn).addEventListener('click', exportProducts);
   qs(SEL.inventoryImportBtn).addEventListener('click', openImportModal);
   qs(SEL.inventoryInariBtn).addEventListener('click', () => {
+    var hoy = new Date().getDay();
+    var allowed = INARI_DIAS.includes(hoy);
+    if (!allowed && !showInari) {
+      showToast('Inari solo está disponible de jueves a domingo', 'error');
+      return;
+    }
     showInari = !showInari;
     inventoryPage = 1;
     qs(SEL.inventoryInariBtn).classList.toggle('active', showInari);
@@ -332,6 +387,16 @@ document.addEventListener('DOMContentLoaded', async function() {
       showProductHistory(histBtn.dataset.codigo, histBtn.dataset.nombre);
       return;
     }
+    const priceHistBtn = e.target.closest('[data-action="show-price-history"]');
+    if (priceHistBtn) {
+      showPriceHistory(priceHistBtn.dataset.codigo, priceHistBtn.dataset.nombre);
+      return;
+    }
+    const adjustBtn = e.target.closest('[data-action="open-stock-adjust"]');
+    if (adjustBtn) {
+      openStockAdjustModal(adjustBtn.dataset.codigo);
+      return;
+    }
     const inariBtn = e.target.closest('[data-action="toggle-inari"]');
     if (inariBtn) {
       const codigo = inariBtn.dataset.codigo;
@@ -359,18 +424,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     cartEditPrice(codigo);
   });
 
-  // Recent products quick-add
-  qs(SEL.recentProducts)?.addEventListener('click', function(e) {
-    var chip = e.target.closest('.recent-chip');
-    if (chip) addToCart(chip.dataset.codigo);
-  });
-
   // Product modal
   qs(SEL.productModalClose).addEventListener('click', closeProductModal);
   qs(SEL.productCancelBtn).addEventListener('click', closeProductModal);
   qs(SEL.productSaveBtn).addEventListener('click', saveProduct);
   qs(SEL.productDeleteBtn).addEventListener('click', deleteProduct);
   qs(SEL.productPrecio).addEventListener('input', function() { applyComaAutomatica(this); });
+  qs(SEL.productEsPesable).addEventListener('change', function() { updateProductFormLabels(this.checked); });
 
   // Combo modal
   qs(SEL.comboSaveBtn).addEventListener('click', saveCombo);
@@ -385,11 +445,21 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.productDetailClose).addEventListener('click', closeProductDetail);
   qs(SEL.productDetailOkBtn).addEventListener('click', closeProductDetail);
 
+  // Stock adjust modal
+  qs(SEL.stockAdjustClose).addEventListener('click', closeStockAdjustModal);
+  qs(SEL.stockAdjustCancelBtn).addEventListener('click', closeStockAdjustModal);
+  qs(SEL.stockAdjustConfirmBtn).addEventListener('click', confirmStockAdjust);
+
   // Creditos
   qs(SEL.creditoAddBtn).addEventListener('click', () => openCreditoModal());
   qs(SEL.clientModalClose).addEventListener('click', closeClientModal);
   qs(SEL.clientCancelBtn).addEventListener('click', closeClientModal);
   qs(SEL.clientSaveBtn).addEventListener('click', saveClient);
+
+  // Temp clients history
+  qs(SEL.tempHistoryBtn).addEventListener('click', openTempHistoryModal);
+  qs(SEL.tempHistoryClose).addEventListener('click', closeTempHistoryModal);
+  qs(SEL.tempHistoryOkBtn).addEventListener('click', closeTempHistoryModal);
 
   // Creditos search
   const creditosSearch = qs(SEL.creditosSearch);
@@ -430,8 +500,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       confirmModal(msg, 'Eliminar Cliente', 'Eliminar').then(async ok => {
         if (!ok) return;
         try {
-          await invoke('delete_cliente', { clienteId: id });
-          showToast('Cliente eliminado');
+          const res = await invoke('delete_cliente', { clienteId: id });
+          showToast(res || 'Cliente eliminado');
           loadCreditos();
         } catch (e) { showToast('Error: ' + e, 'error'); }
       });
@@ -836,8 +906,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   /* ========== REPORTS ========== */
   const reportSearchBtn = qs(SEL.reportSearchBtn);
   if (reportSearchBtn) reportSearchBtn.addEventListener('click', function() { loadReportsAndTopProducts(true); });
-  ['report-start-date', 'report-end-date'].forEach(function(id) {
-    const el = document.getElementById(id);
+  [SEL.reportStartDate, SEL.reportEndDate].forEach(function(sel) {
+    const el = qs(sel);
     if (el) el.addEventListener('change', setDefaultReportDates);
   });
   const topLimitSelect = qs(SEL.topProductsLimit);
@@ -848,6 +918,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   /* ========== EXPORT REPORT ========== */
   const exportBtn = qs(SEL.reportExportBtn);
   if (exportBtn) exportBtn.addEventListener('click', handleExportReport);
+  const pdfBtn = qs(SEL.reportPdfBtn);
+  if (pdfBtn) pdfBtn.addEventListener('click', handleExportReportPdf);
+
+  /* ========== PRECIO HISTORY MODAL ========== */
+  qs(SEL.precioHistoryClose)?.addEventListener('click', function() { closeModal(qs(SEL.precioHistoryModal)); });
+  qs(SEL.precioHistoryOkBtn)?.addEventListener('click', function() { closeModal(qs(SEL.precioHistoryModal)); });
 
   /* ========== PRODUCT HISTORY MODAL ========== */
   qs(SEL.productHistoryModalClose)?.addEventListener('click', function() { closeModal(qs(SEL.productHistoryModal)); });
@@ -887,7 +963,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Config: load user list on show
   observeView(qs(SEL.viewConfig), function() { loadUserList(); });
 
-  // Goto reports from cashier
+  // Go to reports (cashier header button)
   const gotoReportsBtn = qs(SEL.gotoReportsBtn);
   if (gotoReportsBtn) gotoReportsBtn.addEventListener('click', function() { showView(VIEW.REPORTS); });
 
@@ -1155,10 +1231,26 @@ document.addEventListener('DOMContentLoaded', async function() {
     } catch (e) {}
   }
 
+  // Modal drag toggle
+  const dragToggle = qs(SEL.modalDragToggle);
+  if (dragToggle) {
+    dragToggle.addEventListener('change', function() {
+      modalDragEnabled = this.checked;
+      setUserConfig(CFG_MODAL_DRAG, this.checked ? '1' : '0').catch(() => {});
+    });
+    try {
+      const val = await getUserConfig(CFG_MODAL_DRAG);
+      var dragOn = val !== '0';
+      modalDragEnabled = dragOn;
+      if (dragToggle) dragToggle.checked = dragOn;
+    } catch (e) {}
+  }
+
   // Inari config toggle
   const inariToggle = qs(SEL.inariConfigToggle);
   function applyInariConfig(active) {
-    if (active) {
+    var dayOk = active && INARI_DIAS.includes(new Date().getDay());
+    if (dayOk) {
       showInari = true;
       qs(SEL.inventoryInariBtn).classList.add('active');
       qs(SEL.inventoryInariBtn).innerHTML = '<i class="nf nf-fa-check"></i> <span>Inari</span>';
@@ -1207,6 +1299,27 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
   }
 
+  // Load backup retention config
+  try {
+    const maxBackups = await invoke('get_config_value', { key: CFG_MAX_BACKUPS });
+    const backupInput = qs(SEL.backupMaxInput);
+    if (backupInput) backupInput.value = (parseInt(maxBackups) || DEFAULT_MAX_BACKUPS);
+  } catch (e) {}
+  const backupSaveBtn = qs(SEL.backupMaxSave);
+  if (backupSaveBtn) {
+    backupSaveBtn.addEventListener('click', async () => {
+      const input = qs(SEL.backupMaxInput);
+      let val = parseInt(input.value);
+      if (isNaN(val) || val < 0) val = 0;
+      if (val > 100) val = 100;
+      input.value = val;
+      try {
+        await invoke('set_config_value', { key: CFG_MAX_BACKUPS, value: String(val) });
+        showToast('Configuraci\u00f3n guardada');
+      } catch (e) { showToast('Error: ' + e, 'error'); }
+    });
+  }
+
   // Manual clear history buttons
   for (const btn of [qs(SEL.auditClearBtn), qs(SEL.auditClearConfigBtn)]) {
     if (btn) {
@@ -1226,7 +1339,14 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Ensure sales panels are visible on desktop
+  var lastPhoneBreakpoint = window.innerWidth <= BREAKPOINT.PHONE;
   window.addEventListener('resize', function() {
+    var isPhone = window.innerWidth <= BREAKPOINT.PHONE;
+    if (isPhone !== lastPhoneBreakpoint) {
+      lastPhoneBreakpoint = isPhone;
+      renderProductSearch();
+      if (!isPhone) closeCartSheet();
+    }
     if (window.innerWidth > BREAKPOINT.DESKTOP) {
       document.querySelectorAll(SEL.salesLeftCenter).forEach(el => el.style.display = '');
     }
@@ -1414,8 +1534,9 @@ document.addEventListener('DOMContentLoaded', async function() {
       clearTimeout(fabDragTimer);
     }
     e.preventDefault();
-    qs(SEL.chatFab).style.left = Math.max(0, Math.min(window.innerWidth - 52, fabOrigLeft + dx)) + 'px';
-    qs(SEL.chatFab).style.top = Math.max(0, Math.min(window.innerHeight - 52, fabOrigTop + dy)) + 'px';
+    var bottomMargin = 100;
+    qs(SEL.chatFab).style.left = Math.max(4, Math.min(window.innerWidth - 56, fabOrigLeft + dx)) + 'px';
+    qs(SEL.chatFab).style.top = Math.max(4, Math.min(window.innerHeight - 52 - bottomMargin, fabOrigTop + dy)) + 'px';
   }
 
   function fabEnd(isTouch) {
@@ -1528,7 +1649,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (!table) return;
     const card = qs(SEL.productHoverCard);
     const body = qs(SEL.productHoverCardBody);
-    let hideTimer = null;
+    let showTimer = null, hideTimer = null;
+    let lastCodigo = null, lastX = 0, lastY = 0;
 
     async function isHoverEnabled() {
       try {
@@ -1537,7 +1659,34 @@ document.addEventListener('DOMContentLoaded', async function() {
       } catch (_) { return true; }
     }
 
-    document.addEventListener('viewChanged', function() { card.classList.add('hidden'); });
+    function showCard(p, codigo) {
+      if (codigo !== lastCodigo) return;
+      var pesable = !!p.es_pesable;
+      var html = '<div class="hover-title">' + escapeHtml(p.nombre) + (pesable ? ' <span class="badge badge-info" title="Pesable por kilo">kg</span>' : '') + '</div>';
+      html += '<div class="hover-row"><span class="hover-label">C&oacute;digo</span><span class="hover-value">' + escapeHtml(p.codigo) + '</span></div>';
+      html += '<div class="hover-row"><span class="hover-label">' + (pesable ? 'Precio por kg' : 'Precio') + '</span><span class="hover-value">' + formatUSD(p.precio_usd) + '</span></div>';
+      var stockDisplay = (pesable && !Number.isInteger(p.stock)) ? p.stock.toFixed(3) : p.stock;
+      html += '<div class="hover-row"><span class="hover-label">' + (pesable ? 'Kilos' : 'Stock') + '</span><span class="hover-value">' + stockDisplay + '</span></div>';
+      if (p.costo > 0) html += '<div class="hover-row"><span class="hover-label">' + (pesable ? 'Costo por kg' : 'Costo') + '</span><span class="hover-value">' + formatUSD(p.costo) + '</span></div>';
+      if (p.categoria) html += '<div class="hover-row"><span class="hover-label">Categor&iacute;a</span><span class="hover-value">' + escapeHtml(p.categoria) + '</span></div>';
+      body.innerHTML = html;
+
+      var left = lastX + 16;
+      var top = lastY + 16;
+      card.style.left = left + 'px';
+      card.style.top = top + 'px';
+      card.classList.remove('hidden');
+      var cw = card.offsetWidth;
+      var ch = card.offsetHeight;
+      if (left + cw > window.innerWidth - 8) left = lastX - cw - 16;
+      if (top + ch > window.innerHeight - 8) top = window.innerHeight - ch - 8;
+      if (top < 8) top = 8;
+      if (left < 8) left = 8;
+      card.style.left = left + 'px';
+      card.style.top = top + 'px';
+    }
+
+    document.addEventListener('viewChanged', function() { card.classList.add('hidden'); clearTimeout(showTimer); });
 
     table.addEventListener('mouseover', async function(e) {
       if (!(await isHoverEnabled())) return;
@@ -1546,33 +1695,17 @@ document.addEventListener('DOMContentLoaded', async function() {
       const codigo = tr.querySelector('[data-action="add-to-cart"]')?.dataset.codigo;
       if (!codigo) return;
       clearTimeout(hideTimer);
+      clearTimeout(showTimer);
+      lastCodigo = codigo;
+      lastX = e.clientX; lastY = e.clientY;
       const p = productCache.find(function(x) { return x.codigo === codigo; });
       if (!p) return;
-      var html = '<div class="hover-title">' + escapeHtml(p.nombre) + '</div>';
-      html += '<div class="hover-row"><span class="hover-label">C&oacute;digo</span><span class="hover-value">' + escapeHtml(p.codigo) + '</span></div>';
-      html += '<div class="hover-row"><span class="hover-label">Precio</span><span class="hover-value">' + formatUSD(p.precio_usd) + '</span></div>';
-      html += '<div class="hover-row"><span class="hover-label">Stock</span><span class="hover-value">' + p.stock + '</span></div>';
-      if (p.costo > 0) html += '<div class="hover-row"><span class="hover-label">Costo</span><span class="hover-value">' + formatUSD(p.costo) + '</span></div>';
-      if (p.categoria) html += '<div class="hover-row"><span class="hover-label">Categor&iacute;a</span><span class="hover-value">' + escapeHtml(p.categoria) + '</span></div>';
-      body.innerHTML = html;
-
-      var left = e.clientX + 16;
-      var top = e.clientY + 16;
-      card.style.left = left + 'px';
-      card.style.top = top + 'px';
-      card.classList.remove('hidden');
-      var cw = card.offsetWidth;
-      var ch = card.offsetHeight;
-      if (left + cw > window.innerWidth - 8) left = e.clientX - cw - 16;
-      if (top + ch > window.innerHeight - 8) top = window.innerHeight - ch - 8;
-      if (top < 8) top = 8;
-      if (left < 8) left = 8;
-      card.style.left = left + 'px';
-      card.style.top = top + 'px';
+      showTimer = setTimeout(function() { showCard(p, codigo); }, 300);
     });
     table.addEventListener('mouseout', function(e) {
       var related = e.relatedTarget;
       if (related && (related.closest('tr') || related.closest(SEL.productHoverCard))) return;
+      clearTimeout(showTimer);
       clearTimeout(hideTimer);
       hideTimer = setTimeout(function() { card.classList.add('hidden'); }, 150);
     });

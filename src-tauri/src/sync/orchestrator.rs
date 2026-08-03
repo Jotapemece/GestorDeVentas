@@ -288,12 +288,9 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
         .unwrap_or(0);
 
     let gc = |key: &str| -> String {
-        db.query_row(
-            "SELECT valor FROM configuracion WHERE clave = ?1",
-            rusqlite::params![key],
-            |r| r.get::<_, String>(0),
-        )
-        .unwrap_or_default()
+        crate::db::get_config_value(&db, key)
+            .unwrap_or_default()
+            .unwrap_or_default()
     };
 
     Ok(SyncStats {

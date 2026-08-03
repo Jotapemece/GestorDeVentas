@@ -86,8 +86,21 @@ function showProductDetail(codigo) {
   qs(SEL.detailCosto).textContent = formatUSD(p.costo || 0);
   const margen = (p.costo > 0 && p.precio_usd > 0) ? ((p.precio_usd - p.costo) / p.precio_usd * 100).toFixed(1) + '%' : '—';
   qs(SEL.detailMargen).textContent = margen;
-  qs(SEL.detailStock).textContent = p.stock;
-  qs(SEL.detailStockMinimo).textContent = p.stock_minimo;
+  if (p.es_pesable) {
+    qs(SEL.detailPrecioLabel).textContent = 'Precio ($/kg)';
+    qs(SEL.detailCostoLabel).textContent = 'Costo ($/kg)';
+    qs(SEL.detailStockLabel).textContent = 'Kilos';
+    qs(SEL.detailStockMinimoLabel).textContent = 'Kilos Mín';
+    qs(SEL.detailStock).textContent = Number.isInteger(p.stock) ? p.stock : p.stock.toFixed(3);
+    qs(SEL.detailStockMinimo).textContent = Number.isInteger(p.stock_minimo) ? p.stock_minimo : p.stock_minimo.toFixed(3);
+  } else {
+    qs(SEL.detailPrecioLabel).textContent = 'Precio ($)';
+    qs(SEL.detailCostoLabel).textContent = 'Costo ($)';
+    qs(SEL.detailStockLabel).textContent = 'Stock';
+    qs(SEL.detailStockMinimoLabel).textContent = 'Stock Min';
+    qs(SEL.detailStock).textContent = p.stock;
+    qs(SEL.detailStockMinimo).textContent = p.stock_minimo;
+  }
   qs(SEL.detailCreated).textContent = p.created_at || 'No disponible';
   showModal(qs(SEL.productDetailModal));
 }
@@ -102,8 +115,30 @@ function openNewProductModal() {
   qs(SEL.productSaveText).textContent = 'Registrar';
   [SEL.productNombre, SEL.productPrecio, SEL.productCosto, SEL.productStock, SEL.productStockMinimo].forEach(id => qs(id).value = '');
   qs(SEL.productDeleteBtn).style.display = 'none';
+  qs(SEL.productEsPesable).checked = false;
+  updateProductFormLabels(false);
   clearProductErrors();
   showModal(qs(SEL.productModal));
+}
+
+function updateProductFormLabels(pesable) {
+  if (pesable) {
+    qs(SEL.productPrecioLabel).textContent = 'Precio en USD ($/kg)';
+    qs(SEL.productCostoLabel).textContent = 'Costo en USD ($/kg)';
+    qs(SEL.productStockLabel).textContent = 'Stock (kg)';
+    qs(SEL.productStockMinimoLabel).textContent = 'Stock Mínimo (kg)';
+  } else {
+    qs(SEL.productPrecioLabel).textContent = 'Precio en USD ($)';
+    qs(SEL.productCostoLabel).textContent = 'Costo en USD ($)';
+    qs(SEL.productStockLabel).textContent = 'Stock';
+    qs(SEL.productStockMinimoLabel).textContent = 'Stock Mínimo';
+  }
+  updateStockStep(pesable);
+}
+function updateStockStep(pesable) {
+  const step = pesable ? '0.001' : '1';
+  qs(SEL.productStock).step = step;
+  qs(SEL.productStockMinimo).step = step;
 }
 
 function editProduct(codigo) {
@@ -118,6 +153,8 @@ function editProduct(codigo) {
   qs(SEL.productCosto).value = p.costo || 0;
   qs(SEL.productStock).value = p.stock;
   qs(SEL.productStockMinimo).value = p.stock_minimo;
+  qs(SEL.productEsPesable).checked = !!p.es_pesable;
+  updateProductFormLabels(!!p.es_pesable);
   qs(SEL.productDeleteBtn).style.display = 'inline-flex';
   showModal(qs(SEL.productModal));
 }
@@ -125,6 +162,102 @@ function editProduct(codigo) {
 function closeProductModal() {
   closeModal(qs(SEL.productModal));
   clearProductErrors();
+}
+
+/* ========== STOCK ADJUST ========== */
+let stockAdjustCodigo = null;
+
+async function showPriceHistory(codigo, nombre) {
+  const modal = qs(SEL.precioHistoryModal);
+  const tbody = qs(SEL.precioHistoryBody);
+  qs(SEL.precioHistoryTitle).textContent = nombre ? ('Historial de precios — ' + nombre) : 'Historial de precios';
+  tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-spinner nf-fa-spin"></i>', 'Cargando...', '') + '</td></tr>';
+  showModal(modal);
+  try {
+    const items = await invoke('get_precio_historial', { productoCodigo: codigo });
+    tbody.innerHTML = '';
+    if (!items || items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-line_chart"></i>', 'Sin cambios de precio', 'No se registraron cambios de precio para este producto') + '</td></tr>';
+      return;
+    }
+    items.forEach(function(item) {
+      const diff = item.precio_nuevo - item.precio_anterior;
+      const arrow = diff > 0 ? '<span style="color:var(--success)">▲</span>' : (diff < 0 ? '<span style="color:var(--danger)">▼</span>' : '');
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + escapeHtml(item.fecha_hora) + '</td><td>' + formatUSD(item.precio_anterior) + '</td><td>' + formatUSD(item.precio_nuevo) + '</td><td>' + arrow + ' ' + formatUSD(diff) + '</td><td>' + escapeHtml(item.usuario || '—') + '</td>';
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5">Error: ' + escapeHtml(e) + '</td></tr>';
+  }
+}
+
+function openStockAdjustModal(codigo) {
+  stockAdjustCodigo = codigo;
+  const p = productCache.find(x => x.codigo === codigo);
+  if (!p) { showToast('Producto no encontrado', 'error'); return; }
+  qs(SEL.stockAdjustNombre).textContent = p.nombre;
+  qs(SEL.stockAdjustActual).textContent = Number.isInteger(p.stock) ? p.stock : p.stock.toFixed(3);
+  qs(SEL.stockAdjustCantidad).value = '';
+  qs(SEL.stockAdjustMotivo).value = '';
+  clearStockAdjustErrors();
+  showModal(qs(SEL.stockAdjustModal));
+}
+
+function closeStockAdjustModal() {
+  closeModal(qs(SEL.stockAdjustModal));
+  stockAdjustCodigo = null;
+  clearStockAdjustErrors();
+}
+
+function clearStockAdjustErrors() {
+  ['stock-adjust-cantidad', 'stock-adjust-motivo'].forEach(function(id) {
+    var err = qs('#' + id + '-error');
+    var input = qs('#' + id);
+    if (err) { err.textContent = ''; err.classList.remove('visible'); }
+    if (input) input.classList.remove('input-error');
+  });
+}
+
+async function confirmStockAdjust() {
+  if (!stockAdjustCodigo) return;
+  const cantidad = parseFloat(qs(SEL.stockAdjustCantidad).value);
+  const motivo = qs(SEL.stockAdjustMotivo).value.trim();
+  clearStockAdjustErrors();
+  let hasError = false;
+  if (!cantidad || cantidad === 0) {
+    qs(SEL.stockAdjustCantidadError).textContent = 'Indique una cantidad distinta de cero';
+    qs(SEL.stockAdjustCantidadError).classList.add('visible');
+    qs(SEL.stockAdjustCantidad).classList.add('input-error');
+    hasError = true;
+  }
+  if (!motivo) {
+    qs(SEL.stockAdjustMotivoError).textContent = 'El motivo es obligatorio';
+    qs(SEL.stockAdjustMotivoError).classList.add('visible');
+    qs(SEL.stockAdjustMotivo).classList.add('input-error');
+    hasError = true;
+  }
+  if (hasError) return;
+  const p = productCache.find(x => x.codigo === stockAdjustCodigo);
+  const nuevo = (p ? p.stock : 0) + cantidad;
+  if (nuevo < 0) { showToast('El ajuste dejar\u00eda el stock en negativo', 'error'); return; }
+  const signo = cantidad > 0 ? '+' : '';
+  const ok = await confirmModal(
+    '\u00bfAjustar stock de "' + (p ? p.nombre : stockAdjustCodigo) + '" en ' + signo + cantidad + ' (queda ' + nuevo + ')?\nMotivo: ' + motivo,
+    'Ajustar Stock', 'Aplicar'
+  );
+  if (!ok) return;
+  const btn = qs(SEL.stockAdjustConfirmBtn);
+  if (btn) btn.disabled = true;
+  try {
+    await invoke('registrar_ajuste_stock', { codigo: stockAdjustCodigo, cantidad, motivo });
+    showToast('Stock ajustado en ' + signo + cantidad);
+    closeStockAdjustModal();
+    loadInventory();
+    renderProductSearch();
+    loadProductCache();
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+  finally { if (btn) btn.disabled = false; }
 }
 
 /* Inline validation errors */
@@ -248,8 +381,9 @@ async function saveProduct() {
   const nombre = stripEmojis(qs(SEL.productNombre).value.trim());
   const precio = parsePrecio(qs(SEL.productPrecio).value);
   const costo = parsePrecio(qs(SEL.productCosto).value) || 0;
-  const stock = parseInt(qs(SEL.productStock).value) || 0;
-  const stockMinimo = parseInt(qs(SEL.productStockMinimo).value) || 0;
+  const stock = parseFloat(qs(SEL.productStock).value) || 0;
+  const stockMinimo = parseFloat(qs(SEL.productStockMinimo).value) || 0;
+  const esPesable = qs(SEL.productEsPesable).checked;
   clearProductErrors();
   var hasError = false;
   if (!nombre || nombre.length < 1) { showProductError('product-nombre', 'El nombre es obligatorio'); hasError = true; }
@@ -262,7 +396,7 @@ async function saveProduct() {
       await invoke('update_product', { codigo, nombre, precioUsd: precio, costo, stock });
       await invoke('update_stock_minimo', { codigo, stockMinimo });
     } else {
-      await invoke('create_product', { codigo, nombre, precioUsd: precio, costo, stock });
+      await invoke('create_product', { codigo, nombre, precioUsd: precio, costo, stock, esPesable });
       if (stockMinimo > 0) {
         await invoke('update_stock_minimo', { codigo, stockMinimo });
       }

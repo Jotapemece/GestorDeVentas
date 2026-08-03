@@ -199,6 +199,8 @@ pub(crate) fn download_products_inner(
             "categoria_id": cat_id,
             "es_inari": es_inari,
             "subcategoria": &subcategoria,
+            "local_updated_at": remote_ts,
+            "remote_updated_at": remote_ts,
         });
 
         if let Some((local_ts, local_nombre, local_precio, local_costo, local_stock_min, local_activo, local_cat_id, local_es_inari, local_subcategoria)) = local_map.get(&codigo) {
@@ -214,6 +216,8 @@ pub(crate) fn download_products_inner(
                     "categoria_id": local_cat_id,
                     "es_inari": local_es_inari,
                     "subcategoria": local_subcategoria,
+                    "local_updated_at": local_ts,
+                    "remote_updated_at": remote_ts,
                 });
                 check_and_record_conflict(
                     db, "productos", &codigo,
@@ -226,14 +230,12 @@ pub(crate) fn download_products_inner(
             upd.execute(params![
                 nombre, precio_usd, costo, stock_minimo, activo, cat_id, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts), codigo,
-            ]).unwrap_or(0);
-            updated += 1;
+            ]).map(|affected| updated += affected as i64).unwrap_or_default();
         } else {
             ins.execute(params![
                 codigo, nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts),
-            ]).ok();
-            inserted += 1;
+            ]).map(|affected| inserted += affected as i64).unwrap_or_default();
         }
     }
     drop(upd);

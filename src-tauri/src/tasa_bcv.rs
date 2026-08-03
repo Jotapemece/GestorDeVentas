@@ -12,13 +12,17 @@ struct BcvRate {
 
 fn fetch_tasa_bcv_inner() -> Result<f64, String> {
     let response = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(10))
-        .timeout_read(std::time::Duration::from_secs(10))
+        .timeout_connect(std::time::Duration::from_secs(15))
+        .timeout_read(std::time::Duration::from_secs(15))
         .build()
         .get("https://dolar-vzla.rafnixg.dev/api/v1/bcv/realtime")
         .set("User-Agent", "GestorDeVentas/1.0")
         .call()
-        .map_err(|e| format!("Error de conexión: {}", e))?;
+        .map_err(|e| {
+            let msg = e.to_string();
+            let clean = msg.split(": ").last().unwrap_or(&msg);
+            format!("Error al conectar con el servidor BCV: {}", clean)
+        })?;
 
     let rates: Vec<BcvRate> = response
         .into_json()
@@ -43,12 +47,8 @@ pub fn check_tasa_update(state: State<AppState>) -> Result<Option<f64>, String> 
     let db = state.lock_db()?;
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
-    let last_check: String = db
-        .query_row(
-            "SELECT valor FROM configuracion WHERE clave = 'bcv_ultima_fecha'",
-            [],
-            |row| row.get(0),
-        )
+    let last_check = crate::db::get_config_value(&db, "bcv_ultima_fecha")
+        .unwrap_or_default()
         .unwrap_or_default();
 
     if last_check == today {
@@ -61,12 +61,7 @@ pub fn check_tasa_update(state: State<AppState>) -> Result<Option<f64>, String> 
 
     match fetch_tasa_bcv_inner() {
         Ok(new_rate) => {
-            db.execute(
-                "INSERT INTO configuracion (clave, valor) VALUES ('bcv_ultima_fecha', ?1) \
-                 ON CONFLICT(clave) DO UPDATE SET valor = ?1",
-                params![today],
-            )
-            .ok();
+            let _ = crate::db::set_config_value(&db, "bcv_ultima_fecha", &today);
 
             db.execute(
                 "INSERT OR REPLACE INTO historial_tasas (fecha, tasa) VALUES (?1, ?2)",

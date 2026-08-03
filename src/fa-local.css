@@ -22,6 +22,7 @@
 .nf-fa-credit_card::before { content: "\f09d"; }
 .nf-fa-money::before { content: "\f0d6"; }
 .nf-fa-users::before { content: "\f0c0"; }
+.nf-fa-user::before { content: "\f007"; }
 .nf-fa-history::before { content: "\f1da"; }
 .nf-fa-cog::before { content: "\f013"; }
 .nf-fa-sign_out::before { content: "\f08b"; }
@@ -84,6 +85,7 @@
 .nf-fa-robot::before { content: "\f544"; }
 .nf-fa-film::before { content: "\f008"; }
 .nf-fa-ellipsis_h::before { content: "\f141"; }
+.nf-fa-ellipsis_v::before { content: "\f142"; }
 .nf-fa-bolt::before { content: "\f0e7"; }
 .nf-fa-toggle-on::before { content: "\f205"; }
 .nf-fa-toggle-off::before { content: "\f204"; }
@@ -102,6 +104,11 @@
 .nf-fa-utensils::before { content: "\f2e7"; }
 .nf-fa-fire::before { content: "\f06d"; }
 .nf-fa-gem::before { content: "\f3a5"; }
+.nf-fa-star::before { content: "\f005"; }
+.nf-fa-file_pdf::before { content: "\f1c1"; }
+.nf-fa-note_sticky::before { content: "\f249"; }
+.nf-fa-layer_group::before { content: "\f5fd"; }
+.nf-fa-scale::before { content: "\f24e"; }
 @keyframes nf-spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }

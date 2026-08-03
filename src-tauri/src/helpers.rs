@@ -24,6 +24,10 @@ pub fn validate_pago_movil_ref(referencia: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
+pub fn fallback_total_bs(total_bs: f64, total_usd: f64, tasa: f64) -> f64 {
+    if total_bs > 0.0 { total_bs } else { total_usd * tasa }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

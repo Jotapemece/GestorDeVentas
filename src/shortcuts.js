@@ -8,7 +8,6 @@ document.addEventListener('keydown', function(e) {
     case 'F3': e.preventDefault(); showView(VIEW.CREDITOS); break;
     case 'F4': e.preventDefault(); showView(VIEW.CASHIER); break;
     case 'F5': e.preventDefault(); showView(VIEW.AUDIT); break;
-    case 'F6': e.preventDefault(); showView(VIEW.REPORTS); break;
     case 'F7': e.preventDefault(); showView(VIEW.CONFIG); break;
     case 'F8':
       e.preventDefault();

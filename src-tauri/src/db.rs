@@ -35,6 +35,18 @@ pub fn check_action_rate_limit(
     Ok(())
 }
 
+pub fn rate_limit_fail(attempts: &mut HashMap<String, (i32, Instant)>, action_key: &str) {
+    let entry = attempts.entry(action_key.to_string()).or_insert((0, Instant::now()));
+    entry.0 += 1;
+    if entry.0 >= LOGIN_MAX_ATTEMPTS {
+        entry.1 = Instant::now() + std::time::Duration::from_secs(LOGIN_BLOCK_SECS);
+    }
+}
+
+pub fn rate_limit_success(attempts: &mut HashMap<String, (i32, Instant)>, action_key: &str) {
+    attempts.remove(action_key);
+}
+
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub db_path: Mutex<PathBuf>,
@@ -53,6 +65,7 @@ impl AppState {
         let conn = Connection::open(&path).map_err(|e| format!("Error al abrir conexión secundaria: {}", e))?;
         conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
         conn.execute_batch("PRAGMA foreign_keys=ON;").ok();
+        conn.execute_batch("PRAGMA busy_timeout=5000;").ok();
         Ok(conn)
     }
 
@@ -93,6 +106,7 @@ pub fn init_db(app_handle: &AppHandle) -> Result<(Connection, PathBuf), String> 
 
     conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
     conn.execute_batch("PRAGMA foreign_keys=ON;").ok();
+    conn.execute_batch("PRAGMA busy_timeout=5000;").ok();
 
     conn.execute_batch(crate::migrations::SQL_CREATE_TABLES)
         .map_err(|e| format!("Error al crear tablas: {}", e))?;
@@ -193,11 +207,52 @@ fn insert_default_config(conn: &Connection) {
         [],
     )
     .ok();
+    conn.execute(
+        &format!("INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('{}', '{}')", constants::CFG_MAX_BACKUPS, constants::DEFAULT_MAX_BACKUPS),
+        [],
+    )
+    .ok();
 }
 
 pub fn get_tasa_from_db(db: &Connection) -> Result<f64, String> {
     db.query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
         .map_err(|e| format!("Error al obtener tasa de cambio: {}", e))
+}
+
+const SQL_GET_CONFIG: &str = "SELECT valor FROM configuracion WHERE clave = ?1";
+const SQL_UPSERT_CONFIG: &str =
+    "INSERT INTO configuracion (clave, valor) VALUES (?1, ?2) \
+     ON CONFLICT(clave) DO UPDATE SET valor = ?2";
+
+pub fn get_config_value(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+    match conn.query_row(SQL_GET_CONFIG, params![key], |row| row.get::<_, String>(0)) {
+        Ok(val) => Ok(Some(val)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(format!("Error al leer configuración '{}': {}", key, e)),
+    }
+}
+
+pub fn set_config_value(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+    conn.execute(SQL_UPSERT_CONFIG, params![key, value])
+        .map(|_| ())
+        .map_err(|e| format!("Error al guardar configuración '{}': {}", key, e))
+}
+
+pub fn add_stock(conn: &Connection, codigo: &str, cantidad: f64) -> Result<(), String> {
+    conn.execute(
+        "UPDATE productos SET stock = stock + ?1 WHERE codigo = ?2",
+        params![cantidad, codigo],
+    )
+    .map(|_| ())
+    .map_err(|e| format!("Error al restaurar stock: {}", e))
+}
+
+pub fn sub_stock(conn: &Connection, codigo: &str, cantidad: f64) -> Result<usize, String> {
+    conn.execute(
+        "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1",
+        params![cantidad, codigo],
+    )
+    .map_err(|e| format!("Error al actualizar stock: {}", e))
 }
 
 fn get_backup_key_from_db(db: &Connection) -> Result<Vec<u8>, String> {
@@ -277,26 +332,89 @@ pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<Stri
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
     let db = state.lock_db()?;
     let _admin = crate::auth::require_admin(&state, &db, "Respaldó la base de datos")?;
-    let key = ensure_backup_key(&db)?;
-    drop(db);
+    do_backup(&db, &db_path, if dest_path.is_empty() { None } else { Some(&dest_path) })
+}
 
-    let backup_path = if dest_path.is_empty() {
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let parent = db_path.parent().unwrap_or(Path::new("."));
-        parent.join(format!("{}_{}.enc", constants::BACKUP_FILENAME_PREFIX, timestamp))
-    } else {
-        let p = PathBuf::from(&dest_path);
-        sanitize_backup_path(&p, &db_path)?;
+/// Copia y cifra la BD en una ruta de backup. `dest_path` opcional; si es None se
+/// genera un nombre con timestamp. NO comprueba permisos de admin (usado también
+/// desde cierre de caja). Requiere conexión `&Connection` viva para poder leer la
+/// clave de cifrado antes de copiar.
+pub fn do_backup(
+    db: &rusqlite::Connection,
+    db_path: &std::path::Path,
+    dest_path: Option<&str>,
+) -> Result<String, String> {
+    let key = ensure_backup_key(db)?;
+
+    let backup_path = if let Some(dest) = dest_path.filter(|d| !d.is_empty()) {
+        let p = std::path::PathBuf::from(dest);
+        sanitize_backup_path(&p, db_path)?;
         p
+    } else {
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let parent = db_path.parent().unwrap_or(std::path::Path::new("."));
+        parent.join(format!("{}_{}.enc", constants::BACKUP_FILENAME_PREFIX, timestamp))
     };
 
     let temp_path = backup_path.with_extension("tmp");
-    std::fs::copy(&db_path, &temp_path)
+    std::fs::copy(db_path, &temp_path)
         .map_err(|e| format!("Error al copiar BD: {}", e))?;
     encrypt_file(&temp_path, &backup_path, &key)?;
     std::fs::remove_file(&temp_path).ok();
 
+    let _ = prune_old_backups(db, db_path);
+
     Ok(format!("Base de datos respaldada y cifrada en: {}", backup_path.display()))
+}
+
+/// Elimina backups antiguos en el directorio de la BD hasta dejar `CFG_MAX_BACKUPS`.
+/// Devuelve la cantidad de archivos eliminados. Si `CFG_MAX_BACKUPS` es 0 no elimina nada.
+fn prune_old_backups(db: &rusqlite::Connection, db_path: &std::path::Path) -> Result<usize, String> {
+    let max: usize = crate::db::get_config_value(db, constants::CFG_MAX_BACKUPS)
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(constants::DEFAULT_MAX_BACKUPS);
+    if max == 0 {
+        return Ok(0);
+    }
+    let parent = db_path.parent().unwrap_or(std::path::Path::new("."));
+    let prefix = constants::BACKUP_FILENAME_PREFIX;
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(parent)
+        .map_err(|e| format!("Error al listar backups: {}", e))?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension().and_then(|x| x.to_str()) == Some("enc")
+                && p.file_name().and_then(|f| f.to_str()).map_or(false, |f| f.starts_with(prefix))
+        })
+        .collect();
+    files.sort();
+    files.reverse();
+    let mut removed = 0;
+    for old in files.iter().skip(max) {
+        if std::fs::remove_file(old).is_ok() {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
+/// Genera un backup diario si aún no se hizo uno hoy. Devuelve `Ok(None)` si ya
+/// existe uno para el día. Pensado para llamarse al cerrar caja.
+pub fn ensure_daily_backup(state: &AppState) -> Result<Option<String>, String> {
+    let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let db = state.lock_db()?;
+    let last = crate::db::get_config_value(&db, constants::CFG_ULTIMO_BACKUP_DIARIO)
+        .unwrap_or_default()
+        .unwrap_or_default();
+    if last == today {
+        return Ok(None);
+    }
+    let msg = do_backup(&db, &db_path, None)?;
+    crate::db::set_config_value(&db, constants::CFG_ULTIMO_BACKUP_DIARIO, &today)?;
+    Ok(Some(msg))
 }
 
 #[tauri::command]
@@ -309,6 +427,9 @@ pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<Str
     let src = PathBuf::from(&backup_path);
     sanitize_backup_path(&src, &db_path)?;
     if !src.exists() {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            crate::db::rate_limit_fail(&mut attempts, "restore_backup");
+        }
         return Err("Archivo de backup no encontrado".to_string());
     }
 
@@ -339,6 +460,10 @@ pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<Str
     drop(db);
     std::fs::remove_file(&temp_src).ok();
 
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, "restore_backup");
+    }
+
     Ok("Base de datos restaurada exitosamente. Reinicie la aplicación para aplicar los cambios.".to_string())
 }
 
@@ -351,5 +476,8 @@ pub fn get_backup_key(state: State<AppState>) -> Result<String, String> {
     let db = state.lock_db()?;
     let _admin = crate::auth::check_admin_role(&state)?;
     let key = get_backup_key_from_db(&db)?;
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, "get_backup_key");
+    }
     Ok(hex::encode(key))
 }

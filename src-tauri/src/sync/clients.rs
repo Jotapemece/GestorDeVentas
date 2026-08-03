@@ -19,7 +19,7 @@ pub(crate) fn upload_clientes_inner(
     let mut stmt = db
         .prepare(
             "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at \
-             FROM clientes ORDER BY id ASC",
+             FROM clientes WHERE COALESCE(es_temporal, 0) = 0 ORDER BY id ASC",
         )
         .map_err(|e| e.to_string())?;
 
@@ -168,6 +168,8 @@ pub(crate) fn download_clientes_inner(
             "nombre": &nombre,
             "credito_activo": credito_activo,
             "saldo_deuda_usd": saldo,
+            "local_updated_at": remote_ts,
+            "remote_updated_at": remote_ts,
         });
 
         if let Some((local_ts, local_nombre, local_credito, local_saldo)) = local_map.get(sync_id) {
@@ -178,6 +180,8 @@ pub(crate) fn download_clientes_inner(
                     "nombre": local_nombre,
                     "credito_activo": local_credito,
                     "saldo_deuda_usd": local_saldo,
+                    "local_updated_at": local_ts_opt,
+                    "remote_updated_at": remote_ts,
                 });
                 check_and_record_conflict(
                     db, "clientes", sync_id,
@@ -197,8 +201,8 @@ pub(crate) fn download_clientes_inner(
             }
         } else {
             let result = db.execute(
-                "INSERT OR IGNORE INTO clientes (nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT OR IGNORE INTO clientes (nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
                 params![nombre, credito_activo, saldo, sync_id, remote_ts.unwrap_or(&ts)],
             ).map_err(|e| format!("Error insertando cliente remoto: {}", e))?;
             if result > 0 {

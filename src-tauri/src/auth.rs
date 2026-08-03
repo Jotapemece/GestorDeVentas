@@ -73,6 +73,56 @@ pub(crate) fn require_admin(
     Ok(username)
 }
 
+pub(crate) fn require_employee(
+    state: &State<AppState>,
+    db: &rusqlite::Connection,
+    action: &str,
+) -> Result<String, String> {
+    let username = check_employee_role(state)?;
+    if let Err(e) = crate::audit::log_action(db, &username, &crate::constants::sanitize_audit(action)) {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
+    Ok(username)
+}
+
+pub(crate) fn check_employee_role(state: &State<AppState>) -> Result<String, String> {
+    let current = state
+        .current_user
+        .lock()
+        .map_err(|e| format!("Error interno: {}", e))?;
+    let user = current.clone().ok_or("No autenticado")?;
+    if user.rol != constants::ROL_ADMIN && user.rol != constants::ROL_VENDEDOR {
+        return Err("No tienes permisos para realizar esta acción".to_string());
+    }
+    Ok(user.username)
+}
+
+pub(crate) fn admin_guard(
+    state: &State<AppState>,
+    action_key: &str,
+    action: &str,
+) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        action_key,
+    )?;
+    let db = state.lock_db()?;
+    require_admin(state, &db, action)
+}
+
+pub(crate) fn employee_guard(
+    state: &State<AppState>,
+    action_key: &str,
+    action: &str,
+) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        action_key,
+    )?;
+    let db = state.lock_db()?;
+    require_employee(state, &db, action)
+}
+
 #[tauri::command]
 pub fn login(state: State<AppState>, username: String, password: String) -> LoginResponse {
     {
@@ -236,43 +286,24 @@ pub fn create_usuario(
             constants::PASSWORD_MIN_LENGTH
         ));
     }
-    {
-        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
-        if let Some(&(count, until)) = attempts.get("create_usuario") {
-            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
-                return Err(format!(
-                    "Demasiados intentos. Intente de nuevo en {} segundos.",
-                    until.duration_since(Instant::now()).as_secs()
-                ));
-            }
-            if Instant::now() >= until {
-                attempts.remove("create_usuario");
-            }
-        }
-    }
-
-    let db = state.lock_db()?;
-    crate::auth::require_admin(
+    crate::auth::admin_guard(
         &state,
-        &db,
+        "create_usuario",
         &format!("Cre\u{00f3} usuario '{}' con rol '{}'", username, rol),
     )?;
+    let db = state.lock_db()?;
     let hashed = hash_password(&password)?;
 
     match db.execute(SQL_INSERT_USUARIO, rusqlite::params![username, hashed, rol]) {
         Ok(_) => {
             if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-                attempts.remove("create_usuario");
+                crate::db::rate_limit_success(&mut attempts, "create_usuario");
             }
             Ok("Usuario creado exitosamente".to_string())
         }
         Err(e) => {
             if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-                let entry = attempts.entry("create_usuario".to_string()).or_insert((0, Instant::now()));
-                entry.0 += 1;
-                if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                    entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-                }
+                crate::db::rate_limit_fail(&mut attempts, "create_usuario");
             }
             let msg = if e.to_string().contains("UNIQUE constraint failed") {
                 "El nombre de usuario ya existe".to_string()
@@ -311,37 +342,23 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
 
 #[tauri::command]
 pub fn delete_usuario(state: State<AppState>, usuario_id: i64) -> Result<String, String> {
-    {
-        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
-        if let Some(&(count, until)) = attempts.get("delete_usuario") {
-            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
-                return Err(format!(
-                    "Demasiados intentos. Intente de nuevo en {} segundos.",
-                    until.duration_since(Instant::now()).as_secs()
-                ));
-            }
-            if Instant::now() >= until {
-                attempts.remove("delete_usuario");
-            }
-        }
-    }
+    crate::auth::admin_guard(
+        &state,
+        "delete_usuario",
+        &format!("Eliminó usuario id={}", usuario_id),
+    )?;
     let db = state.lock_db()?;
-    let _admin_user = crate::auth::require_admin(&state, &db, &format!("Eliminó usuario id={}", usuario_id))?;
     let affected = db
         .execute(SQL_DELETE_USUARIO, params![usuario_id])
         .map_err(|e| format!("Error al eliminar usuario: {}", e))?;
     if affected == 0 {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            let entry = attempts.entry("delete_usuario".to_string()).or_insert((0, Instant::now()));
-            entry.0 += 1;
-            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-            }
+            crate::db::rate_limit_fail(&mut attempts, "delete_usuario");
         }
         Err("No se puede eliminar: usuario no encontrado o es 'admin'".to_string())
     } else {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            attempts.remove("delete_usuario");
+            crate::db::rate_limit_success(&mut attempts, "delete_usuario");
         }
         Ok("Usuario eliminado exitosamente".to_string())
     }
@@ -368,20 +385,10 @@ pub fn change_password(
         .ok_or("No autenticado")?;
 
     let rate_key = format!("change_password_{}", user.id);
-    {
-        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
-        if let Some(&(count, until)) = attempts.get(&rate_key) {
-            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
-                return Err(format!(
-                    "Demasiados intentos. Intente de nuevo en {} segundos.",
-                    until.duration_since(Instant::now()).as_secs()
-                ));
-            }
-            if Instant::now() >= until {
-                attempts.remove(&rate_key);
-            }
-        }
-    }
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        &rate_key,
+    )?;
 
     let mut db = state.lock_db()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
@@ -397,11 +404,7 @@ pub fn change_password(
     if !verify_password(&request.old_password, &stored_hash) {
         drop(tx);
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            let entry = attempts.entry(rate_key.clone()).or_insert((0, Instant::now()));
-            entry.0 += 1;
-            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-            }
+            crate::db::rate_limit_fail(&mut attempts, &rate_key);
         }
         return Err("La contrasena actual no es correcta".to_string());
     }
@@ -416,7 +419,7 @@ pub fn change_password(
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
     if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        attempts.remove(&rate_key);
+        crate::db::rate_limit_success(&mut attempts, &rate_key);
     }
 
     Ok("Contrasena cambiada exitosamente".to_string())
@@ -439,20 +442,10 @@ pub fn admin_change_password(
             .ok_or("Solo administradores pueden realizar esta acción")?
     };
 
-    {
-        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
-        if let Some(&(count, until)) = attempts.get("admin_change_password") {
-            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
-                return Err(format!(
-                    "Demasiados intentos. Intente de nuevo en {} segundos.",
-                    until.duration_since(Instant::now()).as_secs()
-                ));
-            }
-            if Instant::now() >= until {
-                attempts.remove("admin_change_password");
-            }
-        }
-    }
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "admin_change_password",
+    )?;
 
     let db = state.lock_db()?;
     if let Err(e) = crate::audit::log_action(&db, &admin_username, &format!("Cambió password del usuario id={}", usuario_id)) {
@@ -466,16 +459,12 @@ pub fn admin_change_password(
 
     if affected == 0 {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            let entry = attempts.entry("admin_change_password".to_string()).or_insert((0, Instant::now()));
-            entry.0 += 1;
-            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-            }
+            crate::db::rate_limit_fail(&mut attempts, "admin_change_password");
         }
         Err("Usuario no encontrado".to_string())
     } else {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            attempts.remove("admin_change_password");
+            crate::db::rate_limit_success(&mut attempts, "admin_change_password");
         }
         Ok("Contraseña cambiada exitosamente".to_string())
     }
@@ -483,30 +472,12 @@ pub fn admin_change_password(
 
 #[tauri::command]
 pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
-    {
-        let mut attempts = state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?;
-        if let Some(&(count, until)) = attempts.get("reset_usuarios") {
-            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
-                return Err(format!(
-                    "Demasiados intentos. Intente de nuevo en {} segundos.",
-                    until.duration_since(Instant::now()).as_secs()
-                ));
-            }
-            if Instant::now() >= until {
-                attempts.remove("reset_usuarios");
-            }
-        }
-    }
+    crate::auth::admin_guard(&state, "reset_usuarios", "Reset usuarios a solo superadmin")?;
     let db = state.lock_db()?;
-    let _admin_user = crate::auth::require_admin(&state, &db, "Reset usuarios a solo superadmin")?;
 
     if let Err(e) = db.execute("DELETE FROM usuarios", []) {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            let entry = attempts.entry("reset_usuarios".to_string()).or_insert((0, Instant::now()));
-            entry.0 += 1;
-            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-            }
+            crate::db::rate_limit_fail(&mut attempts, "reset_usuarios");
         }
         return Err(format!("Error al eliminar usuarios: {}", e));
     }
@@ -519,7 +490,7 @@ pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
     .map_err(|e| format!("Error al crear superadmin: {}", e))?;
 
     if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        attempts.remove("reset_usuarios");
+        crate::db::rate_limit_success(&mut attempts, "reset_usuarios");
     }
 
     Ok(format!(

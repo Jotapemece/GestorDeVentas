@@ -35,8 +35,9 @@
       clearTimeout(fabDragTimer);
     }
     e.preventDefault();
-    fab.style.left = Math.max(0, Math.min(window.innerWidth - 52, fabOrigLeft + dx)) + 'px';
-    fab.style.top = Math.max(0, Math.min(window.innerHeight - 52, fabOrigTop + dy)) + 'px';
+    var bottomMargin = 100;
+    fab.style.left = Math.max(4, Math.min(window.innerWidth - 56, fabOrigLeft + dx)) + 'px';
+    fab.style.top = Math.max(4, Math.min(window.innerHeight - 52 - bottomMargin, fabOrigTop + dy)) + 'px';
   }
 
   function fabEnd(isTouch) {

@@ -144,11 +144,20 @@ pub(crate) fn upload_sales_inner(
         .map(|(id, sync_id, ..)| (*id, sync_id.as_str()))
         .collect();
 
+    let mut updated_sync_ids: Vec<(i64, String)> = Vec::new();
+
     for (venta_id, codigo, cantidad, precio, det_sync_id, local_det_id) in &dets {
         if let Some(venta_sync_id) = sale_sync_map.get(venta_id) {
-            let det_id = det_sync_id.as_deref().unwrap_or("").to_string();
+            let det_id = match det_sync_id {
+                Some(sid) if !sid.is_empty() => sid.clone(),
+                _ => {
+                    let new_id = uuid::Uuid::new_v4().to_string();
+                    updated_sync_ids.push((*local_det_id, new_id.clone()));
+                    new_id
+                }
+            };
             all_detalles.push(json!({
-                "id": if det_id.is_empty() { serde_json::Value::Null } else { json!(det_id) },
+                "id": det_id,
                 "venta_id": venta_sync_id,
                 "local_id": local_det_id,
                 "producto_codigo": codigo,
@@ -176,6 +185,14 @@ pub(crate) fn upload_sales_inner(
             supabase_key,
             &detalles_body,
         )?;
+    }
+
+    // Persist newly generated sync_ids for old rows that didn't have one
+    for (local_id, new_sync_id) in &updated_sync_ids {
+        db.execute(
+            "UPDATE detalles_ventas SET sync_id = ?1 WHERE id = ?2 AND (sync_id IS NULL OR sync_id = '')",
+            params![new_sync_id, local_id],
+        ).ok();
     }
 
     upsert_config(db, constants::CFG_ULTIMO_UPLOAD_VENTAS, &ts);
@@ -350,10 +367,8 @@ pub(crate) fn download_sales_inner(
                 ).map_err(|e| format!("Error insertando detalle remoto: {}", e))?;
 
                 if !is_anulada {
-                    db.execute(
-                        "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1",
-                        params![cantidad, prod_codigo],
-                    ).map_err(|e| format!("Error ajustando stock: {}", e))?;
+                    crate::db::sub_stock(db, &prod_codigo, cantidad as f64)
+                        .map_err(|e| format!("Error ajustando stock: {}", e))?;
                     adjusted_stock_items += cantidad;
                 }
             }

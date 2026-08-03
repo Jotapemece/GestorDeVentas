@@ -26,9 +26,6 @@ const SQL_CLIENTES_CREDITO: &str = "
     WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.metodo_pago = ?3 AND v.anulada = 0
     GROUP BY c.id
     ORDER BY c.nombre";
-const SQL_CAJA_ABIERTA: &str =
-    "SELECT valor FROM configuracion WHERE clave = ?1";
-const SQL_SET_CAJA: &str = "UPDATE configuracion SET valor = ?1 WHERE clave = ?2";
 const SQL_INSERT_CIERRE: &str = "
     INSERT INTO cierres_caja (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
@@ -45,6 +42,17 @@ const SQL_CIERRE_BY_ID: &str = "
 const SQL_DETALLE_JSON: &str =
     "SELECT detalle_json FROM cierres_detalle WHERE cierre_id = ?1";
 const SQL_LIST_DIARIAS: &str = "WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 ORDER BY v.id DESC";
+
+fn sumar_ventas_rango(
+    db: &rusqlite::Connection,
+    start: &str,
+    end: &str,
+) -> Result<(i64, f64, f64), String> {
+    db.query_row(SQL_SUM_VENTAS_RANGE, params![start, end], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    })
+    .map_err(|e| format!("Error al obtener totales del período: {}", e))
+}
 
 fn obtener_costo_periodo(
     db: &rusqlite::Connection,
@@ -65,11 +73,7 @@ fn obtener_totales_del_dia(
     today: &str,
     tomorrow: &str,
 ) -> Result<(i64, f64, f64, f64), String> {
-    let (cnt, usd, bs): (i64, f64, f64) = db
-        .query_row(SQL_SUM_VENTAS_RANGE, params![today, tomorrow], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })
-        .map_err(|e| format!("Error al obtener totales del día: {}", e))?;
+    let (cnt, usd, bs) = sumar_ventas_rango(db, today, tomorrow)?;
 
     let tasa: f64 = db
         .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
@@ -209,9 +213,8 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
 pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
     let username = state.get_username()?;
     let db = state.lock_db()?;
-    db.execute(SQL_SET_CAJA, params![
-        "true", constants::CFG_CAJA_ABIERTA,
-    ]).map_err(|e| e.to_string())?;
+    crate::db::set_config_value(&db, constants::CFG_CAJA_ABIERTA, "true")
+        .map_err(|e| e.to_string())?;
 
     if let Err(e) = crate::audit::log_action(&db, &username, "Caja abierta") {
         eprintln!("[audit] Error al registrar acción: {}", e);
@@ -223,9 +226,9 @@ pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
 #[tauri::command]
 pub fn get_caja_abierta(state: State<AppState>) -> Result<bool, String> {
     let db = state.lock_db()?;
-    let val: String = db
-        .query_row(SQL_CAJA_ABIERTA, params![constants::CFG_CAJA_ABIERTA], |row| row.get(0))
-        .unwrap_or_else(|_| "false".to_string());
+    let val = crate::db::get_config_value(&db, constants::CFG_CAJA_ABIERTA)
+        .unwrap_or_default()
+        .unwrap_or_else(|| "false".to_string());
     Ok(val == "true")
 }
 
@@ -252,9 +255,9 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         .transaction()
         .map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
-    let caja_abierta: String = tx
-        .query_row(SQL_CAJA_ABIERTA, params![constants::CFG_CAJA_ABIERTA], |row| row.get(0))
-        .unwrap_or_else(|_| "false".to_string());
+    let caja_abierta = crate::db::get_config_value(&tx, constants::CFG_CAJA_ABIERTA)
+        .unwrap_or_default()
+        .unwrap_or_else(|| "false".to_string());
     if caja_abierta != "true" {
         return Err("La caja no está abierta. Ábrela primero.".to_string());
     }
@@ -275,9 +278,8 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
     tx.execute(SQL_INSERT_CIERRE_DETALLE, params![cierre_id, detalle_json])
         .map_err(|e| format!("Error al guardar detalle del cierre: {}", e))?;
 
-    tx.execute(SQL_SET_CAJA, params![
-        "false", constants::CFG_CAJA_ABIERTA,
-    ]).map_err(|e| format!("Error al cerrar caja: {}", e))?;
+    crate::db::set_config_value(&tx, constants::CFG_CAJA_ABIERTA, "false")
+        .map_err(|e| format!("Error al cerrar caja: {}", e))?;
 
     let accion = format!(
         "Cierre de caja - Ventas: {}, Total USD: ${:.2}, Total Bs.: Bs. {:.2}",
@@ -290,6 +292,14 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
     tx.commit()
         .map_err(|e| format!("Error al confirmar cierre: {}", e))?;
 
+    drop(db);
+
+    let backup_msg = match crate::db::ensure_daily_backup(&state) {
+        Ok(Some(msg)) => Some(msg),
+        Ok(None) => None,
+        Err(e) => Some(format!("Aviso: backup automático no realizado — {}", e)),
+    };
+
     Ok(CloseReport {
         fecha_cierre: now,
         total_ventas,
@@ -297,6 +307,7 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         total_bs,
         usuario: username,
         tasa_cierre: tasa,
+        backup_msg,
     })
 }
 
@@ -337,7 +348,7 @@ pub fn list_cierres(
                 username: row.get(2)?,
                 total_ventas: row.get(3)?,
                 total_usd: row.get(4)?,
-                total_bs: if bs > 0.0 { bs } else { row.get::<_, f64>(4)? * tasa_cierre },
+                total_bs: crate::helpers::fallback_total_bs(bs, row.get(4)?, tasa_cierre),
                 tasa_cierre,
             })
         })
@@ -379,7 +390,7 @@ pub fn get_cierre_detalle(
         .query_row(crate::constants::SQL_USERNAME_BY_ID, params![usuario_id], |row| row.get(0))
         .unwrap_or_default();
 
-    let total_bs = if total_bs > 0.0 { total_bs } else { total_usd * tasa_cierre };
+    let total_bs = crate::helpers::fallback_total_bs(total_bs, total_usd, tasa_cierre);
 
     let detalle_json: String = db
         .query_row(SQL_DETALLE_JSON, params![cierre_id], |row| row.get(0))
@@ -445,11 +456,7 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
     let after_month = crate::helpers::siguiente_dia(&chrono::Local::now().format("%Y-%m-%d").to_string());
 
     fn period(db: &rusqlite::Connection, start: &str, end: &str) -> Result<DashboardPeriod, String> {
-        let (cnt, usd, bs): (i64, f64, f64) = db
-            .query_row(SQL_SUM_VENTAS_RANGE, params![start, end], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })
-            .map_err(|e| format!("Error al obtener totales del período: {}", e))?;
+        let (cnt, usd, bs) = sumar_ventas_rango(db, start, end)?;
         let costo = obtener_costo_periodo(db, start, end)?;
         Ok(DashboardPeriod {
             total_ventas: cnt,

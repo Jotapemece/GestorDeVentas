@@ -10,6 +10,7 @@ mod helpers;
 mod migrations;
 mod models;
 mod openrouter;
+mod pdf;
 mod products;
 mod sales;
 mod sync;
@@ -69,7 +70,9 @@ pub fn run() {
             sales::get_sales_report,
             sales::get_product_history,
             sales::export_report_xlsx,
+            sales::export_report_pdf,
             sales::void_sale_items,
+            sales::get_sales_by_vendor,
             // Clients
             clients::list_clientes,
             clients::create_cliente,
@@ -79,6 +82,7 @@ pub fn run() {
             clients::update_cliente,
             clients::delete_cliente,
             clients::add_quick_debt,
+            clients::list_clientes_eliminados,
             // Cashier
             cashier::get_daily_summary,
             cashier::close_cashier,
@@ -120,6 +124,9 @@ pub fn run() {
             products::update_stock_minimo,
             products::set_product_inari,
             products::list_categorias,
+            products::registrar_ajuste_stock,
+            products::toggle_producto_favorito,
+            products::get_precio_historial,
             // Sync
             sync::upload_products,
             sync::download_products,

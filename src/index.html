@@ -63,7 +63,7 @@
         <div class="login-greeting-date" id="login-greeting-date"></div>
       </div>
       <div class="login-card">
-        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.04</button>
+        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.1</button>
         <div class="login-brand">
           <div class="login-icon">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -179,15 +179,15 @@
               <input type="number" id="tasa-input" step="any" min="0" value="0" inputmode="decimal" aria-label="Tasa de cambio Bs. por USD">
               <span id="tasa-connection-badge" class="tasa-connection-badge online" title="Conectado - tasa autom\u00e1tica"><i class="nf nf-fa-wifi"></i></span>
               <span id="tasa-warning" class="tasa-warning hidden" title="Actualizar tasa del d\u00eda"><i class="nf nf-fa-exclamation_triangle"></i></span>
-              <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV">Tasa</button>
+              <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV">$</button>
               <button id="calc-btn" class="btn tasa-fetch-btn" title="Calculadora"><i class="nf nf-fa-calculator"></i></button>
             </div>
+
           </div>
           <div class="sales-body">
             <div class="sales-panel sales-left">
               <div class="panel-header">Productos</div>
               <div class="product-list-container">
-                <div id="recent-products" class="recent-products" style="display:none"></div>
                 <table class="table" id="product-search-table" data-col-toggle="product-search">
                   <thead>
                     <tr>
@@ -200,6 +200,7 @@
                   </thead>
                   <tbody id="product-search-body"></tbody>
                 </table>
+                <div id="product-search-grid" class="product-grid"></div>
               </div>
             </div>
             <div class="sales-divider" id="sales-divider" title="Arrastrar para redimensionar"></div>
@@ -238,17 +239,15 @@
         <section id="view-inventory" class="view">
           <div class="view-header">
             <h2><i class="nf nf-fa-archive"></i> Inventario de Productos</h2>
-            <div class="inventory-actions">
-              <button id="inventory-add-btn" class="btn btn-accent admin-only"><i class="nf nf-fa-plus"></i> Agregar Producto</button>
-            </div>
           </div>
           <div class="search-box flex-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div class="search-clear-wrap">
               <input type="text" id="inventory-search" placeholder="Buscar en inventario..." aria-label="Buscar en inventario">
               <button class="search-clear-btn" data-clear="inventory-search" aria-label="Limpiar b&uacute;squeda" tabindex="-1">&times;</button>
             </div>
-            <button id="inventory-inari-btn" class="btn btn-outline btn-sm" title="Filtrar productos Inari" style="flex-shrink:0"><i class="nf nf-fa-fire"></i> <span>Inari</span></button>
-            <button id="inventory-tasa-btn" class="btn btn-outline btn-sm" title="Tasa hist&oacute;rica" style="flex-shrink:0"><i class="nf nf-fa-calendar"></i> <span id="tasa-actual-label">Hoy</span></button>
+            <button id="inventory-add-btn" class="btn btn-accent admin-only inv-header-btn"><i class="nf nf-fa-plus"></i> <span class="btn-label">Agregar Producto</span></button>
+            <button id="inventory-inari-btn" class="btn btn-outline btn-sm inv-header-btn" title="Filtrar productos Inari" style="flex-shrink:0"><i class="nf nf-fa-fire"></i> <span class="btn-label">Inari</span></button>
+            <button id="inventory-tasa-btn" class="btn btn-outline btn-sm inv-header-btn" title="Tasa hist&oacute;rica" style="flex-shrink:0"><i class="nf nf-fa-calendar"></i> <span class="btn-label" id="tasa-actual-label">Hoy</span></button>
             <div class="dropdown" style="flex-shrink:0">
               <button class="dropdown-btn" data-action="toggle-dropdown" title="M&aacute;s acciones" style="font-size:16px;padding:4px 8px"><i class="nf nf-fa-ellipsis_v"></i></button>
               <div class="dropdown-menu" id="inventory-more-menu">
@@ -268,7 +267,7 @@
             <button id="inari-create-combo-btn" class="btn btn-sm btn-primary admin-only" style="margin-left:auto"><i class="nf nf-fa-plus"></i> Crear Combo</button>
           </div>
           <div class="table-container">
-              <table class="table" id="inventory-table" data-col-toggle="inventory">
+              <table class="table table-cards" id="inventory-table" data-col-toggle="inventory">
                 <thead>
                     <tr>
                       <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
@@ -289,7 +288,10 @@
         <section id="view-creditos" class="view">
           <div class="view-header">
             <h2><i class="nf nf-fa-credit_card"></i> Gesti&oacute;n de Cr&eacute;dito</h2>
-            <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
+            <div class="view-header-actions">
+              <button id="temp-history-btn" class="btn btn-outline btn-sm admin-only" title="Clientes temporales creados y eliminados"><i class="nf nf-fa-clock_rotate_left"></i> Historial Temporales</button>
+              <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
+            </div>
           </div>
           <div class="summary-cards" id="creditos-stats">
             <div class="summary-card"><i class="nf nf-fa-users" style="font-size:24px;color:var(--primary);margin-bottom:8px"></i><div class="summary-label">Total Personas</div><div class="summary-value" id="creditos-total-personas">0</div></div>
@@ -303,7 +305,7 @@
             </div>
           </div>
           <div class="table-container">
-            <table class="table" id="creditos-table" data-col-toggle="creditos">
+            <table class="table table-cards" id="creditos-table" data-col-toggle="creditos">
               <thead>
                 <tr>
                   <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
@@ -327,6 +329,7 @@
               <button id="historial-cierres-btn" class="btn btn-outline"><i class="nf nf-fa-history"></i> Cierres anteriores</button>
               <button id="goto-reports-btn" class="btn btn-outline"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
               <button id="movimientos-btn" class="btn btn-outline"><i class="nf nf-fa-money"></i> Movimientos</button>
+              <button id="sync-download-btn" class="btn btn-outline" title="Descargar productos, ventas y clientes"><i class="nf nf-fa-cloud_download"></i> <span class="btn-label">Sync</span></button>
             </div>
           </div>
           <div id="caja-status-bar" class="caja-status cerrada">
@@ -356,7 +359,7 @@
           </div>
           <h3>Ventas del D&iacute;a</h3>
           <div class="table-container">
-            <table class="table" id="daily-sales-table" data-col-toggle="daily-sales">
+            <table class="table table-cards" id="daily-sales-table" data-col-toggle="daily-sales">
               <thead>
                 <tr>
                   <th data-sortable="id">#<span class="sort-arrow"></span></th>
@@ -381,7 +384,7 @@
             </div>
           </div>
           <div class="table-container">
-            <table class="table" id="audit-table" data-col-toggle="audit">
+            <table class="table table-cards" id="audit-table" data-col-toggle="audit">
               <thead>
                 <tr>
                   <th data-sortable="id">ID<span class="sort-arrow"></span></th>
@@ -401,7 +404,7 @@
           <div class="view-header">
             <h2><i class="nf nf-fa-bar_chart"></i> Reportes</h2>
           </div>
-          <div class="config-card" id="dashboard-card">
+          <div class="config-card">
             <div class="config-card-header">
               <i class="nf nf-fa-bar_chart"></i> Dashboard
               <span class="config-card-desc">Resumen de ventas</span>
@@ -434,6 +437,10 @@
               <div class="form-group">
                 <label style="visibility:hidden">Exportar</label>
                 <button id="report-export-btn" class="btn btn-accent" style="width:auto" aria-label="Exportar reporte a XLSX"><i class="nf nf-fa-download"></i> Exportar XLSX</button>
+              </div>
+              <div class="form-group">
+                <label style="visibility:hidden">PDF</label>
+                <button id="report-pdf-btn" class="btn btn-accent" style="width:auto" aria-label="Exportar reporte a PDF"><i class="nf nf-fa-file_pdf"></i> Exportar PDF</button>
               </div>
             </div>
           </div>
@@ -471,7 +478,7 @@
             <div class="top-products-grid" id="top-products-grid"></div>
           </div>
           <div class="table-container">
-            <table class="table" id="report-sales-table" data-col-toggle="report-sales">
+            <table class="table table-cards" id="report-sales-table" data-col-toggle="report-sales">
               <thead>
                 <tr>
                   <th data-sortable="id">#<span class="sort-arrow"></span></th>
@@ -491,6 +498,28 @@
               <button id="report-prev-btn" class="btn btn-sm btn-outline" disabled><i class="nf nf-fa-chevron_left"></i> Anterior</button>
               <span id="report-page-info"></span>
               <button id="report-next-btn" class="btn btn-sm btn-outline">Siguiente <i class="nf nf-fa-chevron_right"></i></button>
+            </div>
+          </div>
+          <div id="vendor-sales-section" class="config-card" style="display:none;margin-top:20px">
+            <div class="config-card-header">
+              <i class="nf nf-fa-user"></i> Ventas por vendedor
+              <span class="config-card-desc">Resumen agrupado por usuario en el per&iacute;odo</span>
+            </div>
+            <div class="table-container">
+              <table class="table table-cards" id="vendor-sales-table">
+                <thead>
+                  <tr>
+                    <th>Vendedor</th>
+                    <th>Ventas</th>
+                    <th>Anuladas</th>
+                    <th>Total ($)</th>
+                    <th>Costo ($)</th>
+                    <th>Ganancia ($)</th>
+                    <th>Total (Bs.)</th>
+                  </tr>
+                </thead>
+                <tbody id="vendor-sales-body"></tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -629,6 +658,13 @@
                 </label>
               </div>
               <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-arrows"></i> Arrastrar modales</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="modal-drag-toggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row">
                 <span class="config-label"><i class="nf nf-fa-robot"></i> Asistente IA (Enar)</span>
                 <label class="toggle-switch">
                   <input type="checkbox" id="ia-toggle" checked>
@@ -684,9 +720,20 @@
                 <span class="config-label"><i class="nf nf-fa-key"></i> Clave de cifrado</span>
                 <button id="show-backup-key-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-eye"></i> Mostrar clave</button>
               </div>
+              <div class="config-row" style="margin-top:8px;flex-wrap:wrap">
+                <span class="config-label"><i class="nf nf-fa-layer_group"></i> M&aacute;ximo de respaldos</span>
+                <div class="historial-limpieza-row">
+                  <input type="number" id="backup-max-input" min="0" max="100" value="10" aria-label="Máximo de respaldos a conservar">
+                  <span class="text-sm">archivos</span>
+                  <button id="backup-max-save" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Guardar</button>
+                </div>
+              </div>
+              <div class="config-info" style="margin-top:4px">
+                <p class="text-sm">Los respaldos m&aacute;s antiguos se eliminan autom&aacute;ticamente. 0 = conservar todos.</p>
+              </div>
             </div>
           </div>
-          <div class="config-card admin-only" id="user-management-card">
+          <div class="config-card admin-only">
             <div class="config-card-header">
               <i class="nf nf-fa-users"></i> Usuarios
               <span class="config-card-desc">Crea y administra las cuentas de usuario del sistema</span>
@@ -778,7 +825,7 @@
             </div>
             <div class="config-card-body">
               <div class="config-info">
-                <p><strong>Versi&oacute;n:</strong> 1.0.0</p>
+                <p><strong>Versi&oacute;n:</strong> 1.0.5</p>
                 <p><strong>Base de datos:</strong> SQLite local</p>
                 <p><strong>Framework:</strong> Tauri v2 + Rust</p>
               </div>
@@ -872,7 +919,7 @@
                         <span class="sync-text-sm">Intervalo de descarga</span>
                       </div>
                       <div class="sync-flex-row" style="gap:6px">
-                        <input type="number" id="sync-auto-interval" min="30" max="480" value="30" class="sync-input-interval" aria-label="Intervalo de sincronización automática en minutos">
+                        <input type="number" id="sync-auto-interval" min="10" max="480" value="30" class="sync-input-interval" aria-label="Intervalo de sincronización automática en minutos">
                         <span class="sync-text-light" style="min-width:28px">min</span>
                       </div>
                     </div>
@@ -904,6 +951,13 @@
         <button id="calc-dock-btn" class="calc-dock-btn" title="Calculadora guardada"><i class="nf nf-fa-calculator"></i></button>
       </div>
 
+      <!-- Mobile cart FAB + backdrop -->
+      <div id="cart-backdrop" class="cart-backdrop"></div>
+      <button id="cart-fab" class="cart-fab no-items" title="Ver carrito" aria-label="Ver carrito">
+        <i class="nf nf-fa-shopping_cart"></i>
+        <span id="cart-fab-badge" class="cart-badge hidden">0</span>
+      </button>
+
     </div>
 
     <nav id="bottom-tabs" class="bottom-tabs" style="display:none">
@@ -929,8 +983,8 @@
           <span class="nav-text">M&aacute;s</span>
         </button>
         <div id="more-menu" class="more-menu hidden">
-          <button class="more-menu-item" data-view="reports"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
           <button class="more-menu-item" data-view="audit"><i class="nf nf-fa-history"></i> Historial</button>
+          <button class="more-menu-item" data-view="reports"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
           <button class="more-menu-item" data-view="config"><i class="nf nf-fa-cog"></i> Config.</button>
           <button class="more-menu-item admin-only" data-view="sync"><i class="nf nf-fa-cloud_upload"></i> Sync</button>
           <div class="more-menu-divider"></div>
@@ -997,6 +1051,10 @@
             <strong id="cambio-monto">$0.00</strong>
           </div>
         </div>
+        <div class="form-group">
+          <label>Nota (opcional)</label>
+          <input type="text" id="payment-nota" maxlength="200" placeholder="Observaci&oacute;n interna de la venta..." autocomplete="off">
+        </div>
       </div>
       <div class="modal-footer">
         <button id="payment-cancel-btn" class="btn btn-outline">Cancelar</button>
@@ -1018,22 +1076,32 @@
           <div class="field-error" id="product-nombre-error"></div>
         </div>
         <div class="form-group">
-          <label>Precio en USD ($)</label>
+          <label class="toggle-row">
+            <span>Pesable por kilo</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="product-es-pesable">
+              <span class="toggle-slider"></span>
+            </label>
+          </label>
+          <small class="text-muted">El stock se maneja en kilogramos con decimales. En venta se pide el peso.</small>
+        </div>
+        <div class="form-group">
+          <label id="product-precio-label">Precio en USD ($)</label>
           <input type="number" id="product-precio" step="any" min="0" placeholder="0.00">
           <div class="field-error" id="product-precio-error"></div>
         </div>
         <div class="form-group">
-          <label>Costo en USD ($)</label>
+          <label id="product-costo-label">Costo en USD ($)</label>
           <input type="number" id="product-costo" step="any" min="0" placeholder="0.00">
           <div class="field-error" id="product-costo-error"></div>
         </div>
         <div class="form-group">
-          <label>Stock</label>
+          <label id="product-stock-label">Stock</label>
           <input type="number" id="product-stock" step="1" min="0" placeholder="0">
           <div class="field-error" id="product-stock-error"></div>
         </div>
         <div class="form-group">
-          <label>Stock Mínimo</label>
+          <label id="product-stock-minimo-label">Stock Mínimo</label>
           <input type="number" id="product-stock-minimo" step="1" min="0" placeholder="0">
           <div class="field-error" id="product-stock-minimo-error"></div>
         </div>
@@ -1055,16 +1123,45 @@
       <div class="modal-body">
         <div class="detail-grid">
           <div class="detail-field"><span class="detail-label">Nombre</span><span class="detail-value" id="detail-nombre"></span></div>
-          <div class="detail-field"><span class="detail-label">Precio ($)</span><span class="detail-value" id="detail-precio"></span></div>
-          <div class="detail-field"><span class="detail-label">Costo ($)</span><span class="detail-value" id="detail-costo"></span></div>
+          <div class="detail-field"><span class="detail-label" id="detail-precio-label">Precio ($)</span><span class="detail-value" id="detail-precio"></span></div>
+          <div class="detail-field"><span class="detail-label" id="detail-costo-label">Costo ($)</span><span class="detail-value" id="detail-costo"></span></div>
           <div class="detail-field"><span class="detail-label">Margen</span><span class="detail-value" id="detail-margen"></span></div>
-          <div class="detail-field"><span class="detail-label">Stock</span><span class="detail-value" id="detail-stock"></span></div>
-          <div class="detail-field"><span class="detail-label">Stock Mínimo</span><span class="detail-value" id="detail-stock-minimo"></span></div>
+          <div class="detail-field"><span class="detail-label" id="detail-stock-label">Stock</span><span class="detail-value" id="detail-stock"></span></div>
+          <div class="detail-field"><span class="detail-label" id="detail-stock-minimo-label">Stock Min</span><span class="detail-value" id="detail-stock-minimo"></span></div>
           <div class="detail-field"><span class="detail-label">Fecha de Creaci&oacute;n</span><span class="detail-value" id="detail-created"></span></div>
         </div>
       </div>
       <div class="modal-footer">
         <button id="product-detail-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="stock-adjust-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Ajustar Stock">
+    <div class="modal-content" style="max-width:400px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-scale"></i> Ajustar Stock</h3>
+        <span class="modal-close" id="stock-adjust-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid" style="grid-template-columns:1fr 1fr">
+          <div class="detail-field"><span class="detail-label">Producto</span><span class="detail-value" id="stock-adjust-nombre"></span></div>
+          <div class="detail-field"><span class="detail-label">Stock actual</span><span class="detail-value" id="stock-adjust-actual"></span></div>
+        </div>
+        <div class="form-group" style="margin-top:10px">
+          <label>Cantidad (positivo = entrada, negativo = salida)</label>
+          <input type="number" id="stock-adjust-cantidad" step="any" min="0" placeholder="0" inputmode="decimal">
+          <div class="field-error" id="stock-adjust-cantidad-error"></div>
+        </div>
+        <div class="form-group" style="margin-top:8px">
+          <label>Motivo (obligatorio)</label>
+          <input type="text" id="stock-adjust-motivo" placeholder="Ej: conteo f&iacute;sico, merma, devoluci&oacute;n">
+          <div class="field-error" id="stock-adjust-motivo-error"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="stock-adjust-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="stock-adjust-confirm-btn" class="btn btn-primary"><i class="nf nf-fa-check"></i> Aplicar Ajuste</button>
       </div>
     </div>
   </div>
@@ -1076,11 +1173,17 @@
         <span class="modal-close" id="sale-detail-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
-        <div class="client-info-bar" id="sale-detail-bar">
+        <div class="client-info-bar">
           <span>Total: <strong id="sale-detail-total">$0.00</strong></span>
           <span>M&eacute;todo: <strong id="sale-detail-metodo"></strong></span>
           <span>Usuario: <strong id="sale-detail-usuario"></strong></span>
           <span>Fecha: <strong id="sale-detail-fecha"></strong></span>
+        </div>
+        <div id="sale-detail-nota-wrap" class="void-note" style="display:none">
+          <i class="nf nf-fa-ban"></i> <strong>Motivo de anulaci&oacute;n:</strong> <span id="sale-detail-nota"></span>
+        </div>
+        <div id="sale-detail-obs-wrap" class="void-note" style="display:none;margin-top:8px">
+          <i class="nf nf-fa-note_sticky"></i> <strong>Nota:</strong> <span id="sale-detail-obs"></span>
         </div>
         <div id="sale-detail-list"></div>
       </div>
@@ -1103,6 +1206,16 @@
           <input type="text" id="client-nombre" placeholder="Nombre completo">
           <div class="field-error" id="client-nombre-error"></div>
         </div>
+        <div class="form-group" style="margin-top:10px">
+          <label class="toggle-row">
+            <span>Cliente temporal</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="client-es-temporal">
+              <span class="toggle-slider"></span>
+            </label>
+          </label>
+          <small class="text-muted">Se elimina autom&aacute;ticamente al saldar su deuda. Ideal para quienes f&iacute;an una sola vez (ej: pago m&oacute;vil pendiente).</small>
+        </div>
       </div>
       <div class="modal-footer">
         <button id="client-cancel-btn" class="btn btn-outline">Cancelar</button>
@@ -1118,7 +1231,7 @@
         <span class="modal-close" id="debt-detail-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
-        <div class="client-info-bar" id="debt-detail-bar">
+        <div class="client-info-bar">
           <span>Saldo Deuda: <strong id="debt-detail-debt">$0.00</strong></span>
         </div>
         <div id="debt-detail-list"></div>
@@ -1260,6 +1373,35 @@
     </div>
   </div>
 
+  <div id="temp-history-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Historial de Clientes Temporales">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-clock_rotate_left"></i> Historial de Clientes Temporales</h3>
+        <span class="modal-close" id="temp-history-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom:10px;font-size:13px">Clientes temporales creados y eliminados. Al pagar su deuda quedan registrados aqu&iacute;.</p>
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Creado</th>
+                <th>Eliminado</th>
+                <th>Saldo liquidado</th>
+                <th>Motivo</th>
+              </tr>
+            </thead>
+            <tbody id="temp-history-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="temp-history-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="close-cashier-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Confirmar Cierre de Jornada">
     <div class="modal-content">
       <div class="modal-header">
@@ -1297,7 +1439,7 @@
         <h3><i class="nf nf-fa-history"></i> Historial de Cierres</h3>
         <span class="modal-close" id="historial-cierres-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
-      <div class="modal-body" id="historial-cierres-body">
+      <div class="modal-body">
         <div id="historial-cierres-list"></div>
       </div>
       <div class="modal-footer">
@@ -1310,7 +1452,7 @@
   <div id="historial-cierre-detalle-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Detalle del Cierre">
     <div class="modal-content modal-lg">
       <div class="modal-header">
-        <h3 id="historial-cierre-detalle-title"><i class="nf nf-fa-file_text"></i> Detalle del Cierre</h3>
+        <h3><i class="nf nf-fa-file_text"></i> Detalle del Cierre</h3>
         <span class="modal-close" id="historial-cierre-detalle-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body" id="historial-cierre-detalle-body"></div>
@@ -1337,6 +1479,26 @@
       </div>
       <div class="modal-footer">
         <button id="product-history-ok-btn" class="btn btn-primary">Cerrar</button>
+      </div>
+    </div>
+  </div>
+  <div id="precio-history-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Historial de Precios">
+    <div class="modal-content modal-lg" style="max-width:600px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-line_chart"></i> Historial de Precios</h3>
+        <span class="modal-close" id="precio-history-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body" style="overflow-x:auto">
+        <p id="precio-history-title" style="font-weight:600;margin-bottom:12px"></p>
+        <div class="table-container">
+          <table class="table compact-table">
+            <thead><tr><th>Fecha</th><th>Precio anterior</th><th>Precio nuevo</th><th>Cambio</th><th>Usuario</th></tr></thead>
+            <tbody id="precio-history-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="precio-history-ok-btn" class="btn btn-primary">Cerrar</button>
       </div>
     </div>
   </div>
@@ -1368,6 +1530,23 @@
       <div class="modal-footer">
         <button id="confirm-cancel-btn" class="btn btn-outline">Cancelar</button>
         <button id="confirm-ok-btn" class="btn btn-danger">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="prompt-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Ingresar nota">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="prompt-title">Ingresar nota</h3>
+        <span class="modal-close" id="prompt-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p id="prompt-message" class="text-muted" style="margin-bottom:10px"></p>
+        <textarea id="prompt-input" class="form-input" rows="4" placeholder="Escriba el motivo..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="prompt-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="prompt-ok-btn" class="btn btn-danger">Aceptar</button>
       </div>
     </div>
   </div>
@@ -1437,7 +1616,6 @@
           <button class="guide-tab" data-section="credito"><i class="nf nf-fa-credit_card"></i> Cr&eacute;dito</button>
           <button class="guide-tab" data-section="inventario"><i class="nf nf-fa-archive"></i> Inventario</button>
           <button class="guide-tab" data-section="tasa"><i class="nf nf-fa-dollar"></i> Tasa BCV</button>
-          <button class="guide-tab" data-section="reportes"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
           <button class="guide-tab" data-section="sync"><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</button>
           <button class="guide-tab" data-section="config"><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</button>
           <button class="guide-tab" data-section="ia"><i class="nf nf-fa-robot"></i> IA / Asistente</button>
@@ -1529,21 +1707,6 @@
             <div class="guide-tip">
               <i class="nf nf-fa-sync"></i>
               <span><strong>Tip:</strong> La tasa se actualiza autom&aacute;ticamente al iniciar sesi&oacute;n. El indicador de conexi&oacute;n (wifi verde/rojo) te muestra si puedes editarla o no.</span>
-            </div>
-          </div>
-          <div class="guide-page" id="guide-reportes">
-            <h4><i class="nf nf-fa-bar_chart"></i> Reportes</h4>
-            <div class="guide-section">
-              <p>Tres herramientas para analizar las ventas:</p>
-              <ul>
-                <li><strong>Dashboard:</strong> resumen visual con dos tipos de gr&aacute;fico. <strong>Barras:</strong> ventas y USD agrupados por per&iacute;odo (Hoy, 7 d&iacute;as, Mes). <strong>Pastel:</strong> distribuci&oacute;n por m&eacute;todo de pago (d&iacute;a/semana/mes). Tooltips al pasar el mouse.</li>
-                <li><strong>Historial:</strong> listado completo de ventas con filtros por fecha, usuario, producto y m&eacute;todo de pago. Exportable a Excel.</li>
-                <li><strong>Cierres:</strong> registros de cierre de caja diarios con totales consolidados, desglose por m&eacute;todo y clientes a cr&eacute;dito.</li>
-              </ul>
-            </div>
-            <div class="guide-tip">
-              <i class="nf nf-fa-download"></i>
-              <span><strong>Tip:</strong> Puedes exportar el historial de ventas a Excel (.xlsx). Los gr&aacute;ficos del dashboard se actualizan autom&aacute;ticamente al cambiar de per&iacute;odo.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-sync">
@@ -1671,45 +1834,57 @@
   <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
     <div class="modal-content changelog-content">
       <div class="modal-header">
-        <h3><i class="nf nf-fa-clipboard_list"></i> Notas de la versi&oacute;n v1.04</h3>
+        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.1</h3>
         <span class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body changelog-body">
         <div class="changelog-section">
-          <h4><i class="nf nf-fa-shield" style="color:var(--success)"></i> Seguridad</h4>
+          <h4><i class="nf nf-fa-mobile" style="color:var(--accent)"></i> UI m&oacute;vil redise&ntilde;ada</h4>
           <ul>
-            <li>XSS corregido: escapeHtml() en modales de cierre de caja, historial y recent-chip.</li>
-            <li>Path traversal sanitizado en backup/restore.</li>
-            <li>Rate limiting en 8 comandos cr&iacute;ticos (ventas, tasa, abonos, etc.).</li>
-            <li>Timing attack mitigado en legacy SHA-256.</li>
-            <li>Admin reset crea usuarios con cambio de contrase&ntilde;a obligatorio.</li>
+            <li>POS t&aacute;ctil en tel&eacute;fonos (&le;600px): grid de tarjetas de producto y carrito como panel inferior (bottom-sheet) con bot&oacute;n flotante y contador.</li>
+            <li>B&uacute;squeda de productos fija al hacer scroll.</li>
+            <li>Tablas convertidas en tarjetas en inventario, cr&eacute;ditos, ventas, auditor&iacute;a y reportes.</li>
+            <li>Modal de pago t&aacute;ctil: totales y m&eacute;todos en dos columnas, botones grandes, pie fijo.</li>
+            <li>Vibraci&oacute;n (haptics) y soporte de zonas seguras y unidades <code>dvh</code>.</li>
           </ul>
         </div>
         <div class="changelog-section">
-          <h4><i class="nf nf-fa-wrench" style="color:var(--accent)"></i> Estabilidad y deuda t&eacute;cnica</h4>
+          <h4><i class="nf nf-fa-star" style="color:var(--accent)"></i> Nuevas funciones</h4>
           <ul>
-            <li>Transacciones SQL en delete_product, create_sale, void_sale, change_password.</li>
-            <li>Race condition corregida en restore_backup.</li>
-            <li>list_sales ahora con paginaci&oacute;n (page/page_size).</li>
-            <li>SQL JOINs consolidados (SQL_SELECT_VENTAS compartido).</li>
-            <li>app.js partido en shortcuts.js + fab.js (1742 a 1585 l&iacute;neas).</li>
-            <li>Globales mutables migrados a store.js.</li>
-            <li>Funciones Rust no usadas eliminadas.</li>
+            <li>Productos favoritos (toggle con estrella en inventario).</li>
+            <li>Nota opcional en la venta, visible en el detalle.</li>
+            <li>Exportaci&oacute;n de reportes a PDF.</li>
+            <li>Historial de precios por producto.</li>
+            <li>Reporte de ventas por vendedor.</li>
+            <li>Retenci&oacute;n configurable de backups (10 por defecto).</li>
+            <li>Atajo r&aacute;pido de cantidad en el carrito.</li>
+            <li>Clientes temporales de cr&eacute;dito: se crean como "Temporal" y se eliminan al saldar la deuda, con historial.</li>
+            <li>Ajuste manual de stock con auditor&iacute;a y motivo obligatorio.</li>
+            <li>Backup diario autom&aacute;tico al cerrar caja (cifrado).</li>
           </ul>
         </div>
         <div class="changelog-section">
-          <h4><i class="nf nf-fa-cloud_upload" style="color:var(--primary)"></i> Sync</h4>
+          <h4><i class="nf nf-fa-lock" style="color:var(--success)"></i> Seguridad y rendimiento</h4>
           <ul>
-            <li>Subida/descarga de clientes con UUID y updated_at.</li>
-            <li>Tabla de conflictos con resoluci&oacute;n last-write-wins.</li>
+            <li>Rate limiting real en ventas, tasa, anulaciones, deudas y backups.</li>
+            <li>El sync de usuarios ya no sube contrase&ntilde;as (se fuerza cambio de clave).</li>
+            <li>Migraciones de base de datos a prueba de fallos.</li>
+            <li>Refactor DRY en Rust y JS, c&oacute;digo muerto eliminado, CSS sin duplicados.</li>
+            <li><code>busy_timeout</code> para evitar "database is locked" al sincronizar.</li>
           </ul>
         </div>
         <div class="changelog-section">
-          <h4><i class="nf nf-fa-arrow_right" style="color:var(--accent)"></i> v1.03 — Anterior</h4>
+          <h4><i class="nf nf-fa-warning" style="color:var(--danger)"></i> Bugs</h4>
           <ul>
-            <li>Animaci&oacute;n vuelo al carrito, modo compacto, tarjeta saludo login.</li>
-            <li>B&uacute;squeda global Ctrl+K, hover card producto, atajo Ctrl+M.</li>
-            <li>Atajos en gu&iacute;a r&aacute;pida, tema Sistema, login centrado.</li>
+            <li>El bot&oacute;n flotante del carrito ya no aparece en la interfaz de PC.</li>
+            <li>Ventas por vendedor: el filtro de fecha incluye el fin de d&iacute;a.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-history" style="color:var(--accent)"></i> v1.05 — Anterior</h4>
+          <ul>
+            <li>Producto pesable por kilo, fly animation al carrito, modal arrastrable/redimensionable.</li>
+            <li>Cart divider en PC, productos recientes en la b&uacute;squeda, tasa compacta en m&oacute;vil.</li>
           </ul>
         </div>
       </div>
@@ -1833,8 +2008,8 @@
   <script src="inventory-view.js"></script>
   <script src="clients-view.js"></script>
   <script src="cashier-view.js"></script>
-  <script src="config-view.js"></script>
   <script src="reports-view.js"></script>
+  <script src="config-view.js"></script>
   <script src="shortcuts.js"></script>
   <script src="fab.js"></script>
   <script src="app.js"></script>
