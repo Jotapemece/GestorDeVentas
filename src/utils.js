@@ -13,7 +13,7 @@ function createProductRow(p) {
   const name = escapeHtml(p.nombre);
   const inariBadge = p.es_inari ? ' <span class="badge badge-inari">Inari</span>' : '';
   const favBtn = '<button class="fav-star-btn' + (p.favorito ? ' active' : '') + '" data-action="toggle-favorito" data-codigo="' + escapeHtml(p.codigo) + '" title="' + (p.favorito ? 'Quitar de favoritos' : 'Agregar a favoritos') + '" aria-label="Favorito"><i class="nf nf-fa-star"></i></button>';
-  return '<td title="' + name + '">' + name + inariBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td>' + favBtn + '<button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + escapeHtml(p.codigo) + '">+</button></td>';
+  return '<td title="' + name + '"><div class="prod-name-cell"><span class="prod-name">' + name + inariBadge + '</span>' + favBtn + '</div></td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + escapeHtml(p.codigo) + '">+</button></td>';
 }
 function createProductCard(p) {
   const name = escapeHtml(p.nombre);
@@ -99,7 +99,8 @@ function createClientRow(c) {
       deleteBtn;
   }
   var dropdown = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + dropdownItems + '</div></div>';
-  return '<td data-label="Cliente">' + escapeHtml(c.nombre) + '</td><td data-label="Crédito">' + activoBadge + '</td><td data-label="Deuda">' + formatUSD(c.saldo_deuda_usd) + '</td><td data-label="Última compra">' + ultimaCompra + '</td><td data-label="Acciones">' + dropdown + '</td>';
+  var deudaCls = (c.saldo_deuda_usd > 0) ? ' debt-amount' : ' debt-paid';
+  return '<td data-label="Cliente">' + escapeHtml(c.nombre) + '</td><td data-label="Crédito">' + activoBadge + '</td><td data-label="Deuda" class="' + deudaCls.trim() + '">' + formatUSD(c.saldo_deuda_usd) + '</td><td data-label="Última compra">' + ultimaCompra + '</td><td data-label="Acciones">' + dropdown + '</td>';
 }
 function createAuditRow(log) {
   return '<td data-label="ID">' + log.id + '</td><td data-label="Fecha">' + escapeHtml(log.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(log.usuario) + '</td><td data-label="Acción">' + escapeHtml(log.accion) + '</td>';
@@ -531,6 +532,59 @@ function initModalResize() {
 
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
+
+/* ========== COUNT-UP ANIMATION ========== */
+function animateCountUp(el, to, formatFn, duration) {
+  if (!el) return;
+  if (document.body.classList.contains('no-animations')) { el.textContent = formatFn ? formatFn(to) : to; return; }
+  var raw = String(el.textContent).replace(/[^0-9.,-]/g, '');
+  var from = parseFloat(raw.replace(',', '.')) || 0;
+  if (from === to) { el.textContent = formatFn ? formatFn(to) : to; return; }
+  var start = performance.now();
+  var dur = duration || 450;
+  function frame(now) {
+    var t = Math.min((now - start) / dur, 1);
+    var eased = 1 - Math.pow(1 - t, 3);
+    var val = from + (to - from) * eased;
+    el.textContent = formatFn ? formatFn(val) : String(Math.round(val));
+    if (t < 1) requestAnimationFrame(frame);
+    else el.textContent = formatFn ? formatFn(to) : String(to);
+  }
+  requestAnimationFrame(frame);
+}
+
+function runCountUps(root) {
+  if (!root) return;
+  var els = root.querySelectorAll('[data-count]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    var target = parseFloat(el.dataset.count) || 0;
+    var fmt = el.dataset.fmt;
+    var fmtFn = fmt === 'usd' ? formatUSD : fmt === 'bs' ? formatBS : fmt === 'int' ? function(v) { return Math.round(v); } : null;
+    animateCountUp(el, target, fmtFn, 500);
+  }
+}
+
+/* ========== PAYMENT SUCCESS CHECKMARK ========== */
+function showPaymentSuccess(venta) {
+  if (document.body.classList.contains('no-animations')) return;
+  var overlay = document.createElement('div');
+  overlay.className = 'payment-success-overlay';
+  overlay.innerHTML =
+    '<div class="payment-success-card">' +
+      '<svg class="payment-success-check" viewBox="0 0 52 52">' +
+        '<circle cx="26" cy="26" r="24" fill="none"/>' +
+        '<path fill="none" d="M14 27l8 8 16-16"/>' +
+      '</svg>' +
+      '<div class="payment-success-text">Venta #' + venta.id + ' registrada</div>' +
+      '<div class="payment-success-sub">' + formatUSD(venta.total_usd) + '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  setTimeout(function() {
+    overlay.classList.add('fade-out');
+    setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 400);
+  }, 1200);
+}
 function parsePrecio(s) { return parseFloat(String(s).replace(',', '.')) || 0; }
 function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
 function totalBsRedondeado(totalUsd) {

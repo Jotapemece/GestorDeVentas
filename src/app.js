@@ -153,13 +153,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   // Event delegation: product search add-to-cart
-  qs(SEL.productSearchBody).addEventListener('click', e => {
+  qs(SEL.productListContainer).addEventListener('click', e => {
     const btn = e.target.closest('[data-action="add-to-cart"]');
     if (btn) addToCart(btn.dataset.codigo);
   });
 
   // Event delegation: toggle product favorite
-  qs(SEL.productSearchBody).addEventListener('click', e => {
+  qs(SEL.productListContainer).addEventListener('click', e => {
     const btn = e.target.closest('[data-action="toggle-favorito"]');
     if (btn) {
       e.stopPropagation();
@@ -1645,8 +1645,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   /* ========== HOVER CARD ========== */
   function initHoverCard() {
-    const table = qs(SEL.productSearchTable);
-    if (!table) return;
+    const container = qs(SEL.productListContainer);
+    if (!container) return;
     const card = qs(SEL.productHoverCard);
     const body = qs(SEL.productHoverCardBody);
     let showTimer = null, hideTimer = null;
@@ -1688,7 +1688,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     document.addEventListener('viewChanged', function() { card.classList.add('hidden'); clearTimeout(showTimer); });
 
-    table.addEventListener('mouseover', async function(e) {
+    container.addEventListener('mouseover', async function(e) {
       if (!(await isHoverEnabled())) return;
       const tr = e.target.closest('tr');
       if (!tr) return;
@@ -1702,7 +1702,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (!p) return;
       showTimer = setTimeout(function() { showCard(p, codigo); }, 300);
     });
-    table.addEventListener('mouseout', function(e) {
+    container.addEventListener('mouseout', function(e) {
       var related = e.relatedTarget;
       if (related && (related.closest('tr') || related.closest(SEL.productHoverCard))) return;
       clearTimeout(showTimer);

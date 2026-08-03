@@ -22,6 +22,13 @@
 - Ajuste manual de stock con auditoría: "Ajustar stock" en el dropdown de cada producto (delta +/-, motivo obligatorio), registrado en `ajustes_stock` y en el historial de auditoría
 - Backup diario automático al cerrar caja (una vez por día, cifrado AES-256-GCM), aviso en el reporte de cierre
 
+### Pulido UX
+- Favoritos y recientes en tablas separadas en el POS (estrella junto al nombre); tarjetas móviles con color en inventario, créditos y caja
+- Contadores animados (count-up) en totales del carrito y del dashboard
+- Check verde animado al registrar una venta (`showPaymentSuccess`)
+- Efecto de presión al tocar botones (scale), scrollbars finas con color del tema y números tabulares
+- En móvil: la fly animation del carrito vuela al botón flotante (FAB) y el bottom-sheet queda por encima de la barra de navegación
+
 ### Seguridad
 - Rate limiting real (helpers `rate_limit_fail`/`rate_limit_success` + guards `admin_guard`/`employee_guard`) en create_sale, set_tasa, void_sale_items, void_sale, pay_debt, add_quick_debt, restore_backup, get_backup_key, clear_audit, y gestión de usuarios/config
 - El sync de usuarios ya no sube hashes Argon2 (download fuerza `password_change_required=1`)

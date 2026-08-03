@@ -188,6 +188,40 @@
             <div class="sales-panel sales-left">
               <div class="panel-header">Productos</div>
               <div class="product-list-container">
+                <div class="product-section hidden" id="product-favorites-section">
+                  <div class="product-section-title"><i class="nf nf-fa-star"></i> Favoritos</div>
+                  <div class="product-section-scroll">
+                    <table class="table product-search-table" id="favorites-table">
+                      <thead>
+                        <tr>
+                          <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
+                          <th data-sortable="precio_usd">Precio ($)<span class="sort-arrow"></span></th>
+                          <th data-sortable="precio_bs">Precio (Bs.)<span class="sort-arrow"></span></th>
+                          <th data-sortable="stock">Stock<span class="sort-arrow"></span></th>
+                          <th>Acci&oacute;n</th>
+                        </tr>
+                      </thead>
+                      <tbody id="favorites-body"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="product-section hidden" id="product-recent-section">
+                  <div class="product-section-title"><i class="nf nf-fa-history"></i> Recientes</div>
+                  <div class="product-section-scroll">
+                    <table class="table product-search-table" id="recent-table">
+                      <thead>
+                        <tr>
+                          <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
+                          <th data-sortable="precio_usd">Precio ($)<span class="sort-arrow"></span></th>
+                          <th data-sortable="precio_bs">Precio (Bs.)<span class="sort-arrow"></span></th>
+                          <th data-sortable="stock">Stock<span class="sort-arrow"></span></th>
+                          <th>Acci&oacute;n</th>
+                        </tr>
+                      </thead>
+                      <tbody id="recent-body"></tbody>
+                    </table>
+                  </div>
+                </div>
                 <table class="table" id="product-search-table" data-col-toggle="product-search">
                   <thead>
                     <tr>
@@ -1626,16 +1660,22 @@
             <div class="guide-section">
               <p>Panel principal dividido en b&uacute;squeda, carrito y totales:</p>
               <ul>
+                <li><strong>Favoritos y recientes:</strong> al no buscar, se muestran dos tablas separadas con tus productos favoritos (estrella &#9733;) y los agregados recientemente. Marca la estrella junto al nombre para fijar un producto.</li>
                 <li><strong>Buscar producto:</strong> escribe nombre o c&oacute;digo. Filtra por categor&iacute;a con el selector junto a la b&uacute;squeda.</li>
-                <li><strong>Carrito:</strong> productos agregados con cantidades editables (clic en el n&uacute;mero). Totales en USD y Bs.</li>
+                <li><strong>Carrito:</strong> productos agregados con cantidades editables (clic en el n&uacute;mero). Totales en USD y Bs. que se actualizan con una animaci&oacute;n de conteo.</li>
                 <li><strong>Tasa:</strong> al lado de la b&uacute;squeda. Si hay internet, se bloquea y solo usa la tasa oficial. Sin internet, puedes editarla manualmente.</li>
                 <li><strong>M&eacute;todos de pago:</strong> Efectivo (Bs. o $), Pago M&oacute;vil (con referencia de 4 d&iacute;gitos), Biopago, Punto, Cr&eacute;dito (elige cliente), Mixto (combina varios m&eacute;todos).</li>
+                <li><strong>Confirmaci&oacute;n visual:</strong> al cobrar, un check verde animado confirma la venta registrada.</li>
                 <li><strong>Recibo:</strong> al cobrar se genera un recibo imprimible. En tel&eacute;fono puedes compartirlo por WhatsApp desde el detalle de la venta.</li>
               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-keyboard"></i>
               <span><strong>Atajos:</strong> <kbd>F1</kbd> Ventas · <kbd>F2</kbd> Inventario · <kbd>F3</kbd> Cr&eacute;dito · <kbd>F4</kbd> Caja · <kbd>F5</kbd> Recargar · <kbd>F8</kbd> Cobrar · <kbd>Ctrl+F</kbd> Buscar · <kbd>Ctrl+K</kbd> B&uacute;squeda global · <kbd>Ctrl+M</kbd> Silenciar · <kbd>?</kbd> Ayuda</span>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-mobile"></i>
+              <span><strong>En tel&eacute;fono:</strong> el carrito vive en un panel inferior (bottom-sheet) que abres con el bot&oacute;n flotante + contador. Los botones responden con una peque&ntilde;a "presi&oacute;n" visual al tocarlos.</span>
             </div>
           </div>
           <div class="guide-page" id="guide-caja">
@@ -1735,7 +1775,7 @@
                 <li><strong>Fuente:</strong> ajusta el tama&ntilde;o de letra general de la interfaz.</li>
                 <li><strong>Pantalla completa:</strong> alterna entre modo ventana y pantalla completa.</li>
                 <li><strong>Entrada de datos:</strong> coma autom&aacute;tica en montos, c&aacute;lculo de vuelto, redondeo.</li>
-                <li><strong>Interfaz:</strong> barra lateral auto-plegable, confirmaci&oacute;n de venta, animaciones.</li>
+                <li><strong>Interfaz:</strong> barra lateral auto-plegable, confirmaci&oacute;n de venta, animaciones (contadores, check de venta y efecto de presi&oacute;n en botones).</li>
                 <li><strong>Categor&iacute;as:</strong> crea, renombra y elimina categor&iacute;as con color personalizado (admin).</li>
                 <li><strong>Usuarios:</strong> crea y elimina usuarios, cambia contrase&ntilde;as (admin).</li>
                 <li><strong>IA:</strong> configura tu API key de OpenRouter y el modelo de IA.</li>
@@ -1861,6 +1901,16 @@
             <li>Clientes temporales de cr&eacute;dito: se crean como "Temporal" y se eliminan al saldar la deuda, con historial.</li>
             <li>Ajuste manual de stock con auditor&iacute;a y motivo obligatorio.</li>
             <li>Backup diario autom&aacute;tico al cerrar caja (cifrado).</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-bolt" style="color:var(--accent)"></i> Pulido UX</h4>
+          <ul>
+            <li>Favoritos y recientes en tablas separadas (con estrella junto al nombre) y tarjetas de color en inventario, cr&eacute;ditos y caja.</li>
+            <li>Contadores animados en los totales del carrito y del dashboard.</li>
+            <li>Check verde animado al registrar una venta.</li>
+            <li>Efecto de presi&oacute;n al tocar botones, scrollbars finas con color del tema y n&uacute;meros tabulares.</li>
+            <li>En tel&eacute;fono: la animaci&oacute;n del carrito vuela al bot&oacute;n flotante y el panel inferior queda por encima de la barra de navegaci&oacute;n.</li>
           </ul>
         </div>
         <div class="changelog-section">

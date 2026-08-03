@@ -163,79 +163,101 @@ function renderProductSearch() {
   const grid = qs(SEL.productSearchGrid);
   const tbody = qs(SEL.productSearchBody);
   const table = qs(SEL.productSearchTable);
+  const favSection = qs(SEL.productFavoritesSection);
+  const favBody = qs(SEL.productFavoritesBody);
+  const recentSection = qs(SEL.productRecentSection);
+  const recentBody = qs(SEL.productRecentBody);
   const isPhone = isPhonePos();
   grid.innerHTML = '';
   tbody.innerHTML = '';
-  if (table) table.style.display = isPhone ? 'none' : '';
+  if (favBody) favBody.innerHTML = '';
+  if (recentBody) recentBody.innerHTML = '';
   grid.style.display = isPhone ? '' : 'none';
+  if (table) table.style.display = 'none';
 
-  function renderItems(items) {
-    const container = isPhone ? grid : tbody;
+  function appendRows(tbodyEl, items) {
     const frag = document.createDocumentFragment();
-    if (isPhone) {
-      items.forEach(function(p) {
-        const el = document.createElement('div');
-        el.innerHTML = createProductCard(p);
-        frag.appendChild(el.firstElementChild);
-      });
-    } else {
-      items.forEach(function(p) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = createProductRow(p);
-        frag.appendChild(tr);
-      });
-    }
-    container.appendChild(frag);
-  }
-
-  function renderSection(title, iconClass, items) {
-    if (isPhone) {
-      const header = document.createElement('div');
-      header.className = 'product-section-header';
-      header.innerHTML = '<i class="nf ' + iconClass + '"></i> ' + title;
-      grid.appendChild(header);
-      renderItems(items);
-    } else {
+    items.forEach(function(p) {
       const tr = document.createElement('tr');
-      tr.className = 'product-section-header';
-      tr.innerHTML = '<td colspan="5"><i class="nf ' + iconClass + '"></i> ' + title + '</td>';
-      tbody.appendChild(tr);
-      renderItems(items);
-    }
+      tr.innerHTML = createProductRow(p);
+      frag.appendChild(tr);
+    });
+    tbodyEl.appendChild(frag);
   }
 
-  function renderEmpty(icon, title, desc) {
-    if (isPhone) {
-      grid.innerHTML = '<div class="product-grid-empty">' + emptyState(icon, title, desc) + '</div>';
-    } else {
-      tbody.innerHTML = '<tr><td colspan="5">' + emptyState(icon, title, desc) + '</td></tr>';
-    }
+  function appendCards(items) {
+    const frag = document.createDocumentFragment();
+    items.forEach(function(p) {
+      const el = document.createElement('div');
+      el.innerHTML = createProductCard(p);
+      frag.appendChild(el.firstElementChild);
+    });
+    grid.appendChild(frag);
+  }
+
+  function addGridSection(title, iconClass, items) {
+    if (!items.length) return;
+    const header = document.createElement('div');
+    header.className = 'product-section-header';
+    header.innerHTML = '<i class="nf ' + iconClass + '"></i> ' + title;
+    grid.appendChild(header);
+    appendCards(items);
+  }
+
+  function setSections(favorites, recent) {
+    if (favSection) favSection.classList.toggle('hidden', favorites.length === 0);
+    if (recentSection) recentSection.classList.toggle('hidden', recent.length === 0);
   }
 
   if (query) {
+    setSections([], []);
     const filtered = filterProducts(query);
     if (filtered.length === 0) {
-      renderEmpty('<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda');
+      if (isPhone) {
+        grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda') + '</div>';
+      } else {
+        table.style.display = '';
+        tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-search"></i>', 'Sin resultados', 'Pruebe con otro t\u00e9rmino de b\u00fasqueda') + '</td></tr>';
+      }
       return;
     }
-    renderItems(filtered);
+    if (isPhone) {
+      appendCards(filtered);
+    } else {
+      table.style.display = '';
+      appendRows(tbody, filtered);
+    }
     return;
   }
 
-  // No query — show favorites then recent products
+  // No query — favorites and recent products in separate tables
   var favorites = productCache.filter(function(p) { return p.favorito; });
-  if (favorites.length > 0) {
-    renderSection('Favoritos', 'nf-fa-star', favorites);
-  }
   var recent = recentProducts
     .map(function(c) { return productCache.find(function(x) { return x.codigo === c; }); })
     .filter(Boolean);
-  if (recent.length > 0) {
-    renderSection('Recientes', 'nf-fa-history', recent);
-  } else if (productCache.length > 0) {
-    renderEmpty('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Agregue productos al carrito para verlos aqu\u00ed r\u00e1pidamente');
-  } else {
-    renderEmpty('<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario');
+
+  if (isPhone) {
+    addGridSection('Favoritos', 'nf-fa-star', favorites);
+    addGridSection('Recientes', 'nf-fa-history', recent);
+    if (productCache.length === 0) {
+      grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario') + '</div>';
+    } else if (favorites.length === 0 && recent.length === 0) {
+      grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Agregue productos al carrito para verlos aqu\u00ed r\u00e1pidamente') + '</div>';
+    }
+    return;
+  }
+
+  setSections(favorites, recent);
+  appendRows(favBody, favorites);
+  appendRows(recentBody, recent);
+  if (productCache.length === 0) {
+    table.style.display = '';
+    tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario') + '</td></tr>';
+    return;
+  }
+  if (favorites.length === 0 && recent.length === 0) {
+    table.style.display = '';
+    tbody.innerHTML = '<tr><td colspan="5">' + emptyState('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Agregue productos al carrito para verlos aqu\u00ed r\u00e1pidamente') + '</td></tr>';
   }
 }
 
@@ -470,8 +492,8 @@ function renderCart() {
 
 function updateCartTotals() {
   const totalUSD = cart.reduce((sum, item) => sum + item.cantidad * item.precio_usd, 0);
-  qs(SEL.cartTotalUsd).textContent = formatUSD(totalUSD);
-  qs(SEL.cartTotalBs).textContent = formatBS(totalUSD * tasaActual);
+  animateCountUp(qs(SEL.cartTotalUsd), totalUSD, formatUSD, 350);
+  animateCountUp(qs(SEL.cartTotalBs), totalUSD * tasaActual, formatBS, 350);
 }
 
 function updateCheckoutBtn() {
@@ -876,6 +898,7 @@ async function confirmPayment() {
     saveCartSnapshot();
     await loadProductCache();
     renderCart(); updateCheckoutBtn(); closePaymentModal();
+    showPaymentSuccess(venta);
     /* Share receipt on mobile */
     shareReceipt(venta);
   } catch (e) { showToast('Error: ' + e, 'error'); playSound('error'); }
@@ -1386,26 +1409,39 @@ function initSalesDivider() {
 
 function flyToCart(codigo) {
   if (document.body.classList.contains('no-animations')) return;
-  const btn = qs(SEL.productSearchBody).querySelector('[data-action="add-to-cart"][data-codigo="' + escapeHtml(codigo) + '"]');
+  const btn = qs(SEL.productListContainer).querySelector('[data-action="add-to-cart"][data-codigo="' + escapeHtml(codigo) + '"]');
   if (!btn) return;
+  const btnRect = btn.getBoundingClientRect();
+  if (isPhonePos()) {
+    const fab = qs(SEL.cartFab);
+    if (fab) {
+      const wasHidden = fab.classList.contains('no-items');
+      if (wasHidden) fab.classList.remove('no-items');
+      const fabRect = fab.getBoundingClientRect();
+      if (wasHidden) fab.classList.add('no-items');
+      launchFly(btnRect, fabRect);
+      return;
+    }
+  }
   const cartEl = qs(SEL.cartBody);
   if (!cartEl) return;
-  const btnRect = btn.getBoundingClientRect();
-  const cartRect = cartEl.getBoundingClientRect();
+  launchFly(btnRect, cartEl.getBoundingClientRect());
+}
+
+function launchFly(btnRect, destRect) {
   var el = document.createElement('div');
   el.className = 'fly-to-cart';
   el.textContent = '+1';
   var size = 44;
   el.style.left = (btnRect.left + btnRect.width / 2 - size / 2) + 'px';
   el.style.top = (btnRect.top + btnRect.height / 2 - size / 2) + 'px';
-  el.style.setProperty('--fly-x', (cartRect.left + cartRect.width / 2 - btnRect.left - btnRect.width / 2) + 'px');
-  el.style.setProperty('--fly-y', (cartRect.top + cartRect.height / 2 - btnRect.top - btnRect.height / 2) + 'px');
+  el.style.setProperty('--fly-x', (destRect.left + destRect.width / 2 - btnRect.left - btnRect.width / 2) + 'px');
+  el.style.setProperty('--fly-y', (destRect.top + destRect.height / 2 - btnRect.top - btnRect.height / 2) + 'px');
   document.body.appendChild(el);
   el.style.animation = 'flyToCart 0.4s ease-out forwards';
   el.addEventListener('animationend', function() {
     el.remove();
-    var cr = cartEl.getBoundingClientRect();
-    cartRipple({ left: cr.left, top: cr.top, width: cr.width, height: cr.height });
+    cartRipple({ left: destRect.left, top: destRect.top, width: destRect.width, height: destRect.height });
   }, { once: true });
 }
 

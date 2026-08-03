@@ -148,14 +148,15 @@ async function loadDashboard() {
             var d = data[p.key];
             return '<div class="dashboard-period" style="border-left: 4px solid ' + p.color + '">' +
               '<div class="dashboard-period-title"><i class="nf nf-fa-' + p.icon + '"></i> ' + p.label + '</div>' +
-              '<div class="dashboard-stat"><span>Ventas</span><strong>' + d.total_ventas + '</strong></div>' +
-              '<div class="dashboard-stat"><span>Total USD</span><strong>' + formatUSD(d.total_usd) + '</strong></div>' +
-              '<div class="dashboard-stat"><span>Costo</span><strong>' + formatUSD(d.total_costo_usd || 0) + '</strong></div>' +
-              '<div class="dashboard-stat"><span>Ganancia</span><strong>' + formatUSD(d.total_ganancia_usd || 0) + '</strong></div>' +
-              '<div class="dashboard-stat"><span>Total Bs.</span><strong>' + formatBS(d.total_bs) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Ventas</span><strong data-count="' + d.total_ventas + '" data-fmt="int">' + d.total_ventas + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Total USD</span><strong data-count="' + d.total_usd + '" data-fmt="usd">' + formatUSD(d.total_usd) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Costo</span><strong data-count="' + (d.total_costo_usd || 0) + '" data-fmt="usd">' + formatUSD(d.total_costo_usd || 0) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Ganancia</span><strong data-count="' + (d.total_ganancia_usd || 0) + '" data-fmt="usd">' + formatUSD(d.total_ganancia_usd || 0) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Total Bs.</span><strong data-count="' + d.total_bs + '" data-fmt="bs">' + formatBS(d.total_bs) + '</strong></div>' +
             '</div>';
           }).join('') +
         '</div>';
+    runCountUps(body);
     var toggleBtns = body.querySelectorAll('.dashboard-chart-toggle button');
     for (var i = 0; i < toggleBtns.length; i++) {
       toggleBtns[i].addEventListener('click', function() {
