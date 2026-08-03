@@ -657,6 +657,32 @@ pub fn registrar_ajuste_stock(
         &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
         "registrar_ajuste_stock",
     )?;
+    let username = state.get_username()?;
+    let mut db = state.lock_db()?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Ajustó stock de '{}' ({:+}) — {}", codigo, cantidad, motivo.trim()),
+    )?;
+    let res = registrar_ajuste_stock_inner(&mut db, &username, &codigo, cantidad, &motivo);
+    if res.is_ok() {
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            crate::db::rate_limit_success(&mut attempts, "registrar_ajuste_stock");
+        }
+    }
+    res
+}
+
+/// Lógica del ajuste de stock sobre una conexión. Validaciones de negocio y
+/// registro en `ajustes_stock` + auditoría. Separado del comando para poder
+/// testearlo sin `State`.
+fn registrar_ajuste_stock_inner(
+    db: &mut rusqlite::Connection,
+    username: &str,
+    codigo: &str,
+    cantidad: f64,
+    motivo: &str,
+) -> Result<String, String> {
     if cantidad == 0.0 {
         return Err("La cantidad debe ser distinta de cero".to_string());
     }
@@ -664,13 +690,6 @@ pub fn registrar_ajuste_stock(
     if motivo.is_empty() {
         return Err("Debe indicar un motivo para el ajuste".to_string());
     }
-    let username = state.get_username()?;
-    let mut db = state.lock_db()?;
-    crate::auth::require_admin(
-        &state,
-        &db,
-        &format!("Ajustó stock de '{}' ({:+}) — {}", codigo, cantidad, motivo),
-    )?;
 
     let ts = crate::helpers::now_iso();
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
@@ -706,11 +725,12 @@ pub fn registrar_ajuste_stock(
     )
     .map_err(|e| format!("Error al registrar ajuste: {}", e))?;
 
-    tx.commit().map_err(|e| format!("Error al confirmar ajuste: {}", e))?;
-
-    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        crate::db::rate_limit_success(&mut attempts, "registrar_ajuste_stock");
+    let accion = format!("Ajustó stock de '{}' ({:+}) — {}", codigo, cantidad, motivo);
+    if let Err(e) = crate::audit::log_action(&tx, username, &accion) {
+        eprintln!("[audit] Error al registrar acción: {}", e);
     }
+
+    tx.commit().map_err(|e| format!("Error al confirmar ajuste: {}", e))?;
 
     Ok(format!(
         "Stock de '{}' ajustado en {:+}. Motivo: {}",
@@ -878,5 +898,78 @@ mod tests {
         let errors: Vec<String> = (0..15).map(|i| format!("Error {}", i)).collect();
         let result = format_import_result(0, &errors);
         assert!(result.contains("... y 5 más"));
+    }
+
+    fn insert_test_producto(conn: &rusqlite::Connection, codigo: &str, stock: f64) {
+        conn.execute(
+            "INSERT INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, activo) VALUES (?1, ?2, 10.0, ?3, 0, 1)",
+            params![codigo, codigo, stock],
+        )
+        .unwrap();
+    }
+
+    fn stock_of(conn: &rusqlite::Connection, codigo: &str) -> f64 {
+        conn.query_row("SELECT stock FROM productos WHERE codigo = ?1", params![codigo], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn test_registrar_ajuste_stock_incrementa_stock() {
+        let mut conn = crate::db::test_support::test_conn();
+        insert_test_producto(&conn, "P001", 10.0);
+        let res = registrar_ajuste_stock_inner(&mut conn, "admin", "P001", 5.0, "reposición");
+        assert!(res.is_ok());
+        assert!((stock_of(&conn, "P001") - 15.0).abs() < 0.001);
+        let (cantidad, usuario, motivo): (f64, String, String) = conn
+            .query_row(
+                "SELECT cantidad, usuario, motivo FROM ajustes_stock WHERE producto_codigo = ?1",
+                params!["P001"],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert!((cantidad - 5.0).abs() < 0.001);
+        assert_eq!(usuario, "admin");
+        assert_eq!(motivo, "reposición");
+        let audit: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM historial_acciones WHERE accion LIKE ?1",
+            params!["%Ajustó stock%"],
+            |r| r.get(0),
+        ).unwrap();
+        assert_eq!(audit, 1);
+    }
+
+    #[test]
+    fn test_registrar_ajuste_stock_rechaza_negativo_sin_stock() {
+        let mut conn = crate::db::test_support::test_conn();
+        insert_test_producto(&conn, "P001", 2.0);
+        let res = registrar_ajuste_stock_inner(&mut conn, "admin", "P001", -10.0, "merma");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("negativo"));
+        assert!((stock_of(&conn, "P001") - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_registrar_ajuste_stock_rechaza_cantidad_cero() {
+        let mut conn = crate::db::test_support::test_conn();
+        insert_test_producto(&conn, "P001", 5.0);
+        let res = registrar_ajuste_stock_inner(&mut conn, "admin", "P001", 0.0, "nada");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("distinta de cero"));
+    }
+
+    #[test]
+    fn test_registrar_ajuste_stock_rechaza_motivo_vacio() {
+        let mut conn = crate::db::test_support::test_conn();
+        insert_test_producto(&conn, "P001", 5.0);
+        let res = registrar_ajuste_stock_inner(&mut conn, "admin", "P001", 3.0, "   ");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("motivo"));
+    }
+
+    #[test]
+    fn test_registrar_ajuste_stock_producto_inexistente() {
+        let mut conn = crate::db::test_support::test_conn();
+        let res = registrar_ajuste_stock_inner(&mut conn, "admin", "NO_EXISTE", 3.0, "motivo");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("no encontrado"));
     }
 }

@@ -42,7 +42,7 @@ npm run tauri build                     # Genera instalador NSIS en src-tauri/ta
 
 ### Testing
 ```sh
-cd src-tauri && cargo test --lib        # 80 tests (auth, config, sales, sync, clients, cashier)
+cd src-tauri && cargo test --lib        # 90 tests (auth, config, sales, sync, clients, cashier, products)
 cd src-tauri && cargo check             # Verifica compilación Rust
 node --check src/*.js && node --check dist/*.js   # Verifica JS (src y minificado)
 ```
@@ -314,10 +314,10 @@ Optimización y limpieza: ejecutar Fases 1 y 2 del Auditoría Plan (bugs de corr
 - **Verificado**: cargo check limpio, 80/80 Rust, 66/66 vitest, minify OK
 
 ### Active
-- Nada en curso — features completadas y verificadas
+- **Tests DB de nuevas features** (2026-08-03): infraestructura de test compartida `db::test_support::test_conn()` (SQLite in-memory + esquema + migraciones). Refactor `registrar_ajuste_stock` → inner `registrar_ajuste_stock_inner(&mut Connection, ...)` testable. Tests nuevos: 5 de ajuste de stock (incremento+auditoría, negativo sin stock, cantidad 0, motivo vacío, producto inexistente) y 3 de `eliminar_cliente_temporal` (historial/auditoría, desvincula ventas, inexistente). 90 Rust + 63 vitest.
 
 ### Next Move
-- Opcional: añadir tests Rust de `eliminar_cliente_temporal`/`registrar_ajuste_stock` (requieren infraestructura de test con BD temporal); revisar que WAL no pierda datos en backups (copiar .db sin checkpoint previo).
+- Revisar que WAL no pierda datos en backups (copiar .db sin checkpoint previo) — queda pendiente de investigación opcional.
 
 ---
 

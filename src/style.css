@@ -2600,6 +2600,8 @@ body.no-animations .product-hover-card {
 /* ==========================================================================
    PHONE (≤600px) — redesigned mobile UI
    ========================================================================== */
+/* Control de colapso de tarjetas: solo para móvil. En escritorio (tabla normal) no debe verse. */
+.table-container .cell-toggle { display: none; }
 .product-grid { display: none; }
 .cart-fab, .cart-backdrop { display: none; }
 @media (max-width: 600px) {

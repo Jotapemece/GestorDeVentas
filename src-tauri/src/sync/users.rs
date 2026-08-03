@@ -68,12 +68,16 @@ pub(crate) fn upload_usuarios_inner(
         };
         let upd_at = if updated_at.is_empty() { ts.clone() } else { updated_at.clone() };
 
-        // No se sube el hash de contraseña: la anon key de Supabase es pública
-        // y expondría los hashes Argon2 a ataque offline.
+        // No se sube el hash real de contraseña (la anon key de Supabase es
+        // pública y expondría los hashes Argon2 a ataque offline). Se sube un
+        // hash aleatorio como placeholder: la columna `password` es NOT NULL,
+        // y cualquier dispositivo que descargue usará `password_change_required`.
+        let placeholder = random_password_hash();
         usuarios_json.push(json!({
             "sync_id": sid,
             "local_id": id,
             "username": username,
+            "password": placeholder,
             "rol": rol,
             "password_change_required": 1,
             "dispositivo_origen": dispositivo_id,

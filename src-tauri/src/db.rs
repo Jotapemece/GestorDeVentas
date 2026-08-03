@@ -481,3 +481,20 @@ pub fn get_backup_key(state: State<AppState>) -> Result<String, String> {
     }
     Ok(hex::encode(key))
 }
+
+#[cfg(test)]
+pub mod test_support {
+    use super::*;
+
+    /// Crea una BD SQLite en memoria con el esquema y migraciones completas,
+    /// usuario admin por defecto y config base. Reutilizable en tests de otros módulos.
+    pub fn test_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        conn.execute_batch(crate::migrations::SQL_CREATE_TABLES).unwrap();
+        crate::migrations::run_migrations(&conn);
+        insert_default_admin(&conn);
+        insert_default_config(&conn);
+        conn
+    }
+}

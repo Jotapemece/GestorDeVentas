@@ -541,4 +541,67 @@ mod tests {
         let result = validate_pay_debt_request(&req);
         assert!(result.is_ok());
     }
+
+    fn insert_cliente_temporal(conn: &rusqlite::Connection, id: i64, nombre: &str, deuda: f64) {
+        conn.execute(
+            "INSERT INTO clientes (id, nombre, sync_id, updated_at, es_temporal, saldo_deuda_usd, created_at) VALUES (?1, ?2, ?3, ?3, 1, ?4, ?3)",
+            params![id, nombre, "sync-".to_owned() + &id.to_string(), deuda],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_eliminar_cliente_temporal_registra_historial() {
+        let mut conn = crate::db::test_support::test_conn();
+        insert_cliente_temporal(&conn, 42, "Cliente Tmp", 0.0);
+        let tx = conn.transaction().unwrap();
+        eliminar_cliente_temporal(&tx, 42, "admin", "saldó deuda").unwrap();
+        tx.commit().unwrap();
+
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM clientes WHERE id = 42", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
+        let (nombre, motivo, saldo): (String, String, f64) = conn
+            .query_row(
+                "SELECT nombre, motivo, saldo_pagado_usd FROM clientes_eliminados WHERE cliente_id = 42",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(nombre, "Cliente Tmp");
+        assert_eq!(motivo, "saldó deuda");
+        assert!((saldo - 0.0).abs() < 0.001);
+        let audit: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM historial_acciones WHERE accion LIKE ?1",
+            params!["%Eliminó cliente temporal%"],
+            |r| r.get(0),
+        ).unwrap();
+        assert_eq!(audit, 1);
+    }
+
+    #[test]
+    fn test_eliminar_cliente_temporal_desvincula_ventas() {
+        let mut conn = crate::db::test_support::test_conn();
+        insert_cliente_temporal(&conn, 7, "Tmp Ventas", 12.0);
+        conn.execute(
+            "INSERT INTO ventas (cliente_id, fecha_hora, usuario_id, metodo_pago, total_usd, tasa_aplicada, total_bs, anulada) VALUES (7, datetime('now','localtime'), 1, 'efectivo_usd', 5.0, 1.0, 5.0, 0)",
+            [],
+        )
+        .unwrap();
+        let tx = conn.transaction().unwrap();
+        eliminar_cliente_temporal(&tx, 7, "admin", "liquidado").unwrap();
+        tx.commit().unwrap();
+        let nulls: i64 = conn
+            .query_row("SELECT COUNT(*) FROM ventas WHERE cliente_id IS NULL", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(nulls, 1);
+    }
+
+    #[test]
+    fn test_eliminar_cliente_temporal_inexistente() {
+        let mut conn = crate::db::test_support::test_conn();
+        let tx = conn.transaction().unwrap();
+        let res = eliminar_cliente_temporal(&tx, 999, "admin", "motivo");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("no encontrado"));
+    }
 }
