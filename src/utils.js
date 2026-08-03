@@ -65,7 +65,7 @@ function createCartRow(item) {
   return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td>' + qtyCell + '</td><td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
 }
 function createInventoryRow(p, editBtn) {
-  var stockClass = (p.stock < p.stock_minimo) ? ' class="low-stock"' : '';
+  var stockClass = (p.stock < p.stock_minimo) ? ' low-stock' : '';
   var stockBadge = (p.stock < p.stock_minimo) ? '<span class="badge badge-danger" title="Debajo del stock mínimo">!</span>' : '';
   var costo = p.costo || 0;
   var margen = calcularMargen(p.precio_usd, costo);
@@ -82,7 +82,8 @@ function createInventoryRow(p, editBtn) {
     : '';
   var stockDisplay = formatStock(p.stock);
   var stockMinDisplay = formatStock(p.stock_minimo);
-  return '<td data-label="Producto">' + escapeHtml(p.nombre) + inariBadge + pesableBadge + '</td><td data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td><td data-label="Costo">' + formatUSD(costo) + '</td><td data-label="Margen">' + margen + '</td><td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + ' data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button><button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>' + editBtn + adjustBtn + inariToggleBtn + '</div></div></td>';
+  var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron-down"></i></button></td>';
+  return '<td class="cell-key cell-name" data-label="Producto">' + escapeHtml(p.nombre) + inariBadge + pesableBadge + '</td><td class="cell-key cell-price" data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td><td data-label="Costo">' + formatUSD(costo) + '</td><td data-label="Margen">' + margen + '</td><td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td class="cell-key cell-stock' + stockClass + '" data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button><button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>' + editBtn + adjustBtn + inariToggleBtn + '</div></div></td>' + toggleCell;
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
@@ -109,7 +110,8 @@ function createClientRow(c) {
   }
   var dropdown = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + dropdownItems + '</div></div>';
   var deudaCls = (c.saldo_deuda_usd > 0) ? ' debt-amount' : ' debt-paid';
-  return '<td data-label="Cliente">' + escapeHtml(c.nombre) + '</td><td data-label="Crédito">' + activoBadge + '</td><td data-label="Deuda" class="' + deudaCls.trim() + '">' + formatUSD(c.saldo_deuda_usd) + '</td><td data-label="Última compra">' + ultimaCompra + '</td><td data-label="Acciones">' + dropdown + '</td>';
+  var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron-down"></i></button></td>';
+  return '<td class="cell-key cell-name" data-label="Cliente">' + escapeHtml(c.nombre) + '</td><td class="cell-key cell-status" data-label="Cr\u00e9dito">' + activoBadge + '</td><td class="cell-key cell-debt' + deudaCls + '" data-label="Deuda">' + formatUSD(c.saldo_deuda_usd) + '</td><td data-label="Última compra">' + ultimaCompra + '</td><td data-label="Acciones">' + dropdown + '</td>' + toggleCell;
 }
 function createAuditRow(log) {
   return '<td data-label="ID">' + log.id + '</td><td data-label="Fecha">' + escapeHtml(log.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(log.usuario) + '</td><td data-label="Acción">' + escapeHtml(log.accion) + '</td>';

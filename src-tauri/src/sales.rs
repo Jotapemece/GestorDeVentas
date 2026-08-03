@@ -551,6 +551,7 @@ pub fn export_report_xlsx(
 pub fn export_report_pdf(
     state: State<AppState>,
     filter: SalesReportFilter,
+    chart_image: Option<crate::pdf::PdfImagePayload>,
 ) -> Result<String, String> {
     let db = state.lock_db()?;
     let report = get_sales_report_inner(&db, filter.clone())?;
@@ -589,7 +590,15 @@ pub fn export_report_pdf(
         "Período: {} a {} - Ganancia ${:.2}",
         filter.start_date, filter.end_date, report.total_ganancia_usd
     );
-    let pdf = crate::pdf::build_report_pdf(&title, &subtitle, &headers, &rows);
+    let pdf = {
+        let image = chart_image.and_then(|ci| {
+            let bytes = base64::engine::general_purpose::STANDARD.decode(ci.data_b64).ok()?;
+            if bytes.len() == ci.width * ci.height * 3 {
+                Some(crate::pdf::PdfImage { width: ci.width, height: ci.height, rgb: bytes })
+            } else { None }
+        });
+        crate::pdf::build_report_pdf(&title, &subtitle, &headers, &rows, image.as_ref())
+    };
     Ok(base64::engine::general_purpose::STANDARD.encode(&pdf))
 }
 

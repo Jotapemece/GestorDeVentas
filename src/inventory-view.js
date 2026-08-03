@@ -29,6 +29,8 @@ async function loadInventory() {
   appendRows(tbody, products, function(p) {
     const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button data-action="edit-product" data-codigo="' + p.codigo + '"><i class="nf nf-fa-pencil"></i> Editar</button>' : '';
     return createInventoryRow(p, editBtn);
+  }, function(tr) {
+    tr.classList.add('card-collapsible', 'collapsed');
   });
   renderInventoryPagination(result.total || 0);
 }

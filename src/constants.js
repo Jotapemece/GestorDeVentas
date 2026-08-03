@@ -252,6 +252,7 @@ const SEL = {
   cancelSaleBtn: '#cancel-sale-btn',
   cartBody: '#cart-body',
   cartEmpty: '#cart-empty',
+  cartUndoPill: '#cart-undo-pill',
   cartTotalUsd: '#cart-total-usd',
   cartTotalBs: '#cart-total-bs',
 

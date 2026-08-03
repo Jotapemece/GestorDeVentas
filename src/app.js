@@ -241,6 +241,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
+  const cartUndoPill = qs(SEL.cartUndoPill);
+  if (cartUndoPill) cartUndoPill.addEventListener('click', function() { cartUndo(); });
+
+  document.addEventListener('keydown', function(e) {
+    const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
+    const isCtrl = e.ctrlKey || e.metaKey;
+    if (!isCtrl || typing) return;
+    if (e.key.toLowerCase() === 'z') {
+      if (e.shiftKey) { e.preventDefault(); cartRedo(); }
+      else { e.preventDefault(); cartUndo(); }
+    } else if (e.key.toLowerCase() === 'y') {
+      e.preventDefault(); cartRedo();
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    const toggleBtn = e.target.closest('[data-action="toggle-card-collapse"]');
+    if (toggleBtn) {
+      e.stopPropagation();
+      const tr = toggleBtn.closest('tr.card-collapsible');
+      if (tr) tr.classList.toggle('collapsed');
+    }
+  });
+
   /* Cart inline price editor */
   function cartEditPrice(codigo) {
     var item = cart.find(function(i) { return i.codigo === codigo; });
@@ -256,11 +280,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     input.select();
     function commitPrice() {
       var val = parseFloat(input.value);
-      if (!isNaN(val) && val >= 0) {
+      if (!isNaN(val) && val >= 0 && val !== item.precio_usd) {
+        cartHistoryPush();
         item.precio_usd = val;
         renderCart();
         updateCheckoutBtn();
         saveCartSnapshot();
+      } else if (!isNaN(val) && val >= 0) {
+        renderCart();
       } else {
         renderCart();
       }

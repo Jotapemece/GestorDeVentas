@@ -117,6 +117,17 @@ let dashboardChartType = 'bar';
 async function loadDashboard() {
   const body = qs(SEL.dashboardBody);
   if (!body) return;
+  body.innerHTML =
+    '<div class="dashboard-chart-toggle">' +
+      '<span class="btn btn-sm btn-outline" style="pointer-events:none;opacity:.6"><i class="nf nf-fa-bar_chart"></i></span>' +
+      '<span class="btn btn-sm btn-outline" style="pointer-events:none;opacity:.6"><i class="nf nf-fa-chart_pie"></i></span>' +
+    '</div>' +
+    '<div class="dashboard-chart-container dashboard-skeleton"><div class="skeleton-cell"></div></div>' +
+    '<div class="dashboard-grid">' +
+      [0, 1, 2].map(function() {
+        return '<div class="dashboard-period dashboard-skeleton"><div class="skeleton-cell"></div><div class="skeleton-cell" style="width:70%"></div></div>';
+      }).join('') +
+    '</div>';
   try {
     const data = await invoke('get_dashboard_summary');
     var paymentMethods = null;
@@ -130,16 +141,17 @@ async function loadDashboard() {
       { label: 'Este mes', icon: 'calendar', key: 'month', color: periodColors[2] }
     ];
       body.innerHTML =
-        '<div class="dashboard-chart-toggle">' +
-          '<button class="btn btn-sm ' + (dashboardChartType === 'bar' ? 'btn-primary' : 'btn-outline') + '" data-chart="bar"><i class="nf nf-fa-bar_chart"></i> Barras</button>' +
-          '<button class="btn btn-sm ' + (dashboardChartType === 'pie' ? 'btn-primary' : 'btn-outline') + '" data-chart="pie"><i class="nf nf-fa-chart_pie"></i> Pastel</button>' +
-          '<button class="btn btn-sm ' + (dashboardChartType === 'line' ? 'btn-primary' : 'btn-outline') + '" data-chart="line"><i class="nf nf-fa-line_chart"></i> Ganancias</button>' +
-        '</div>' +
+      '<div class="dashboard-chart-toggle">' +
+        '<button class="btn btn-sm ' + (dashboardChartType === 'bar' ? 'btn-primary' : 'btn-outline') + '" data-chart="bar"><i class="nf nf-fa-bar_chart"></i> Barras</button>' +
+        '<button class="btn btn-sm ' + (dashboardChartType === 'pie' ? 'btn-primary' : 'btn-outline') + '" data-chart="pie"><i class="nf nf-fa-chart_pie"></i> Pastel</button>' +
+        '<button class="btn btn-sm ' + (dashboardChartType === 'line' ? 'btn-primary' : 'btn-outline') + '" data-chart="line"><i class="nf nf-fa-line_chart"></i> Ganancias</button>' +
+        '<button class="btn btn-sm btn-outline" id="dash-export-btn" title="Exportar gr\u00e1fico PNG"><i class="nf nf-fa-image"></i></button>' +
+      '</div>' +
         '<div class="dashboard-chart-container"><canvas id="dashboard-canvas" width="' + CHART.CANVAS_MAX_WIDTH + '" height="' + CHART.BAR_HEIGHT + '"></canvas></div>' +
         '<div class="dashboard-grid">' +
           periods.map(function(p) {
             var d = data[p.key];
-            return '<div class="dashboard-period" style="border-left: 4px solid ' + p.color + '">' +
+            return '<div class="dashboard-period" data-period="' + p.key + '" title="Ver detalle en Reportes" style="border-left: 4px solid ' + p.color + '">' +
               '<div class="dashboard-period-title"><i class="nf nf-fa-' + p.icon + '"></i> ' + p.label + '</div>' +
               '<div class="dashboard-stat"><span>Ventas</span><strong data-count="' + d.total_ventas + '" data-fmt="int">' + d.total_ventas + '</strong></div>' +
               '<div class="dashboard-stat"><span>Total USD</span><strong data-count="' + d.total_usd + '" data-fmt="usd">' + formatUSD(d.total_usd) + '</strong></div>' +
@@ -150,13 +162,33 @@ async function loadDashboard() {
           }).join('') +
         '</div>';
     runCountUps(body);
-    var toggleBtns = body.querySelectorAll('.dashboard-chart-toggle button');
+    var dashPeriodCards = body.querySelectorAll('.dashboard-period[data-period]');
+    for (var j = 0; j < dashPeriodCards.length; j++) {
+      dashPeriodCards[j].addEventListener('click', function() {
+        drillDownDashboard(this.dataset.period);
+      });
+    }
+    var toggleBtns = body.querySelectorAll('.dashboard-chart-toggle button[data-chart]');
     for (var i = 0; i < toggleBtns.length; i++) {
       toggleBtns[i].addEventListener('click', function() {
         dashboardChartType = this.dataset.chart;
         if (dashboardChartType === 'pie') piePeriod = 'day';
         loadDashboard();
       });
+    }
+    var exportBtn = body.querySelector('#dash-export-btn');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', function() {
+        var c = qs(SEL.dashboardCanvas);
+        if (!c || !c.width) { showToast('Genera el gr\u00e1fico para exportarlo', 'info'); return; }
+        exportChartPng(c, 'dashboard-' + new Date().toISOString().slice(0, 10) + '.png');
+      });
+    }
+    var hasVentas = ['today', 'week', 'month'].some(function(k) { return (data[k] && data[k].total_ventas > 0); });
+    if (!hasVentas) {
+      var chartBox = body.querySelector('.dashboard-chart-container');
+      if (chartBox) chartBox.innerHTML = emptyState('<i class="nf nf-fa-chart_line"></i>', 'Sin ventas en el per\u00edodo', 'Las estad\u00edsticas aparecer\u00e1n al registrar ventas');
+      return;
     }
     if (dashboardChartType === 'pie') {
       requestAnimationFrame(function() { drawDashboardPieChart(body, paymentMethods); });
@@ -168,7 +200,67 @@ async function loadDashboard() {
   } catch (e) { body.innerHTML = '<p class="text-muted">Error al cargar dashboard</p>'; }
 }
 
+function drillDownDashboard(periodKey) {
+  const now = new Date();
+  function toISO(d) { return d.toISOString().slice(0, 10); }
+  var start, end;
+  if (periodKey === 'today') {
+    start = toISO(now); end = toISO(now);
+  } else if (periodKey === 'week') {
+    start = toISO(new Date(now.getTime() - 6 * 86400000)); end = toISO(now);
+  } else {
+    start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10); end = toISO(now);
+  }
+  const sd = qs(SEL.reportStartDate), ed = qs(SEL.reportEndDate);
+  if (sd) sd.value = start;
+  if (ed) ed.value = end;
+  showView('reports');
+  loadReportsAndTopProducts(true);
+}
+
 var piePeriod = 'day';
+
+function exportChartPng(canvas, filename) {
+  try {
+    const scale = 2;
+    const out = document.createElement('canvas');
+    out.width = canvas.width * scale;
+    out.height = canvas.height * scale;
+    const octx = out.getContext('2d');
+    octx.scale(scale, scale);
+    octx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+    const a = document.createElement('a');
+    a.download = filename || 'chart.png';
+    a.href = out.toDataURL('image/png');
+    a.click();
+  } catch (e) { showToast('No se pudo exportar el gr\u00e1fico', 'error'); }
+}
+
+function chartToRgbB64(canvas) {
+  try {
+    if (!canvas || !canvas.width) return null;
+    const dpr = window.devicePixelRatio || 1;
+    const srcW = canvas.width / dpr, srcH = canvas.height / dpr;
+    const tw = 440, th = Math.max(60, Math.round(srcH * (tw / srcW)));
+    const off = document.createElement('canvas');
+    off.width = tw; off.height = th;
+    const octx = off.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, tw, th);
+    octx.drawImage(canvas, 0, 0, tw, th);
+    const d = octx.getImageData(0, 0, tw, th).data;
+    const rgb = new Uint8Array(tw * th * 3);
+    for (let i = 0, j = 0; i < d.length; i += 4, j += 3) {
+      rgb[j] = d[i]; rgb[j + 1] = d[i + 1]; rgb[j + 2] = d[i + 2];
+    }
+    let bin = '';
+    const CHUNK = 0x8000;
+    for (let k = 0; k < rgb.length; k += CHUNK) {
+      bin += String.fromCharCode.apply(null, rgb.subarray(k, k + CHUNK));
+    }
+    return { width: tw, height: th, dataB64: btoa(bin) };
+  } catch (e) { return null; }
+}
 
 function showChartTooltip(clientX, clientY, text) {
   var el = qs(SEL.chartTooltip);
@@ -299,6 +391,10 @@ function drawDashboardBarChart(body, data, periods) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(metrics[mi].label, gx + groupW / 2, pad.top + chartH + 8);
+      const groupMax = Math.max.apply(null, metrics[mi].values);
+      ctx.fillStyle = textLight;
+      ctx.font = (isMobile ? '8px' : '10px') + ' sans-serif';
+      ctx.fillText(mi === 0 ? 'm\u00e1x ' + Number(groupMax) : 'm\u00e1x $' + Number(groupMax).toFixed(1), gx + groupW / 2, pad.top + chartH + (isMobile ? 24 : 28));
     }
 
     drawBarLegend(ctx, w, isMobile, textColor, barColors, periodLabels);
@@ -472,9 +568,23 @@ function attachChartHover(canvas, bars, dpr) {
     const t = e.touches[0];
     onMove({ clientX: t.clientX, clientY: t.clientY });
   }
+  const PERIOD_KEY = { 'Hoy': 'today', '7 d\u00edas': 'week', 'Mes': 'month' };
+  function onTap(e) {
+    const cr = canvas.getBoundingClientRect();
+    const mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr;
+    const my = (e.clientY - cr.top) * (canvas.height / cr.height) / dpr;
+    for (let i = 0; i < bars.length; i++) {
+      if (mx >= bars[i].x && mx <= bars[i].x + bars[i].w && my >= bars[i].y && my <= bars[i].y + bars[i].h) {
+        const key = PERIOD_KEY[bars[i].period];
+        if (key) drillDownDashboard(key);
+        return;
+      }
+    }
+  }
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseout', onOut);
   canvas.addEventListener('touchstart', onTouch);
+  canvas.addEventListener('click', onTap);
 }
 
 function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
@@ -734,8 +844,9 @@ async function handleExportReportPdf() {
   const startDate = qs(SEL.reportStartDate).value;
   const endDate = qs(SEL.reportEndDate).value;
   if (!startDate || !endDate) { showToast('Seleccione fecha de inicio y fin', 'error'); return; }
+  const chartImage = chartToRgbB64(qs(SEL.dashboardCanvas));
   try {
-    const b64 = await invoke('export_report_pdf', { filter: buildReportFilter(false) });
+    const b64 = await invoke('export_report_pdf', { filter: buildReportFilter(false), chartImage });
     var url = 'data:application/pdf;base64,' + b64;
     var a = document.createElement('a');
     a.href = url;
@@ -743,7 +854,7 @@ async function handleExportReportPdf() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    showToast('Reporte PDF exportado');
+    showToast(chartImage ? 'Reporte PDF exportado con gr\u00e1fico' : 'Reporte PDF exportado');
   } catch (e) { showToast('Error al exportar PDF: ' + e, 'error'); }
 }
 

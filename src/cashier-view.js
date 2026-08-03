@@ -115,6 +115,69 @@ function saveCartSnapshot() {
   } catch (e) {}
 }
 
+/* ========== UNDO / REDO (carrito, multi-nivel) ========== */
+const CART_HISTORY_LIMIT = 20;
+let cartUndoTimer = null;
+
+function cartHistoryPush() {
+  cartUndoStack.push(JSON.parse(JSON.stringify(cart)));
+  if (cartUndoStack.length > CART_HISTORY_LIMIT) cartUndoStack.shift();
+  cartRedoStack = [];
+  showCartUndoPill();
+}
+
+function replaceCartItems(next) {
+  cart.splice(0, cart.length);
+  next.forEach(function(i) { cart.push(i); });
+}
+
+function cartUndo() {
+  if (cartUndoStack.length === 0) return;
+  cartRedoStack.push(JSON.parse(JSON.stringify(cart)));
+  replaceCartItems(cartUndoStack.pop());
+  afterCartMutation();
+  showToast('Cambio deshecho', 'info');
+}
+
+function cartRedo() {
+  if (cartRedoStack.length === 0) return;
+  cartUndoStack.push(JSON.parse(JSON.stringify(cart)));
+  replaceCartItems(cartRedoStack.pop());
+  afterCartMutation();
+  showToast('Cambio rehecho', 'info');
+}
+
+function afterCartMutation() {
+  renderCart();
+  updateCheckoutBtn();
+  saveCartSnapshot();
+  showCartUndoPill();
+}
+
+function showCartUndoPill() {
+  const pill = qs(SEL.cartUndoPill);
+  if (!pill) return;
+  if (cartUndoStack.length === 0) {
+    clearTimeout(cartUndoTimer);
+    pill.classList.add('hidden');
+    return;
+  }
+  pill.classList.remove('hidden', 'fade-out');
+  clearTimeout(cartUndoTimer);
+  cartUndoTimer = setTimeout(function() {
+    pill.classList.add('fade-out');
+    setTimeout(function() { pill.classList.add('hidden'); }, 250);
+  }, 5000);
+}
+
+function resetCartHistory() {
+  cartUndoStack = [];
+  cartRedoStack = [];
+  clearTimeout(cartUndoTimer);
+  const pill = qs(SEL.cartUndoPill);
+  if (pill) pill.classList.add('hidden');
+}
+
 function restoreCartSnapshot() {
   try {
     var saved = localStorage.getItem('cart_snapshot');
@@ -275,10 +338,12 @@ function addToCart(codigo) {
       showToast('Stock m\u00e1ximo alcanzado (' + existing.stock + ')', 'error');
       return;
     }
+    cartHistoryPush();
     existing.cantidad = esPesable ? (existing.cantidad || 0) : existing.cantidad + (qtyOverride || 1);
     renderCart();
     updateCheckoutBtn();
   } else {
+    cartHistoryPush();
     cart.push({ codigo, cantidad: esPesable ? 0 : (qtyOverride || 1), nombre: '', precio_usd: 0, stock: 0, es_inari: esInari, es_pesable: !!esPesable });
     loadProductName(codigo);
   }
@@ -298,6 +363,7 @@ async function loadProductName(codigo) {
   if (p) {
     const item = cart.find(x => x.codigo === codigo);
     if (item) {
+      cartHistoryPush();
       item.nombre = p.nombre; item.precio_usd = p.precio_usd; item.stock = p.stock; item.es_inari = p.es_inari; item.es_pesable = !!p.es_pesable;
       if (!p.es_inari && !p.es_pesable && p.stock === 0) {
         var idx = cart.findIndex(function(x) { return x.codigo === codigo; });
@@ -314,6 +380,7 @@ function handleCartQtyInput(codigo, value) {
   const item = cart.find(x => x.codigo === codigo);
   if (!item) return;
   let newQty = item.es_pesable ? parseFloat(value) : parseInt(value);
+  cartHistoryPush();
   if (isNaN(newQty) || newQty <= 0) {
     var idx = cart.findIndex(function(x) { return x.codigo === codigo; });
     if (idx !== -1) cart.splice(idx, 1);
@@ -328,7 +395,9 @@ function handleCartQtyInput(codigo, value) {
 
 function removeFromCart(codigo) {
   var idx = cart.findIndex(function(x) { return x.codigo === codigo; });
-  if (idx !== -1) cart.splice(idx, 1);
+  if (idx === -1) return;
+  cartHistoryPush();
+  cart.splice(idx, 1);
   playSound('remove');
   renderCart();
   updateCheckoutBtn();
@@ -337,6 +406,7 @@ function removeFromCart(codigo) {
 
 function clearCart() {
   if (cart.length === 0) return;
+  cartHistoryPush();
   pendingCartQty = 0;
   qs(SEL.productSearch).placeholder = 'Buscar por nombre o c\u00f3digo...';
   closeCartSheet();
@@ -882,6 +952,7 @@ async function confirmPayment() {
       cart.splice(0, cart.length);
     }
     saveCartSnapshot();
+    resetCartHistory();
     await loadProductCache();
     renderCart(); updateCheckoutBtn(); closePaymentModal();
     productos.forEach(function(i) {

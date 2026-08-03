@@ -14,6 +14,7 @@ async function loadCreditos() {
   const rows = [];
   appendRows(tbody, clientes, createClientRow, function(tr, c) {
     tr.dataset.nombre = c.nombre.toLowerCase();
+    tr.classList.add('card-collapsible', 'collapsed');
     rows.push(tr);
   });
   creditoRows = rows;

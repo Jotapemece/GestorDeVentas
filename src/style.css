@@ -27,6 +27,35 @@ body { background: var(--bg); }
   --overlay: rgba(0, 0, 0, 0.5);
   --radius: 10px;
   --sidebar-width: 220px;
+
+  /* ===== Tokens semánticos ===== */
+  --surface-1: var(--card);
+  --surface-2: var(--card-alt);
+  --surface-3: var(--bg);
+  --text-primary: var(--text);
+  --text-secondary: var(--text-light);
+  --text-muted: var(--text-light);
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --shadow-sm: 0 1px 4px rgba(74, 68, 88, 0.06);
+  --shadow-md: 0 2px 12px rgba(74, 68, 88, 0.08);
+  --shadow-lg: 0 8px 24px rgba(74, 68, 88, 0.14);
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 14px;
+  --font-lg: 16px;
+  --font-xl: 20px;
+  --control-height: 36px;
+  --transition: 0.2s ease;
 }
 
 /* Utility classes */
@@ -1112,6 +1141,24 @@ th .col-toggle-btn { float: none; display: inline; }
   border-radius: 10px; background: var(--primary); color: #fff;
   font-size: 11px; font-weight: 700; line-height: 1;
   margin-left: auto;
+}
+
+.cart-undo-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: 8px; padding: 5px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  color: #fff; border: none; cursor: pointer;
+  font-size: var(--font-xs); font-weight: 600; line-height: 1;
+  box-shadow: var(--shadow-sm);
+  transition: opacity var(--transition), transform var(--transition);
+  white-space: nowrap;
+}
+.cart-undo-pill:hover { filter: brightness(1.06); }
+.cart-undo-pill.fade-out { opacity: 0; transform: translateY(-2px); }
+@media (max-width: 600px) {
+  .cart-undo-pill { margin-left: 6px; padding: 4px 9px; font-size: 10px; }
+  .cart-undo-pill i { font-size: 11px; }
 }
 
 .historial-limpieza-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
@@ -2248,6 +2295,13 @@ th[data-sortable].sort-asc .sort-arrow, th[data-sortable].sort-desc .sort-arrow 
   height: 16px; border-radius: 4px; background: var(--border, #ddd);
   margin: 8px 0; max-width: 80%;
 }
+.dashboard-skeleton { animation: skeletonPulse 1.2s ease-in-out infinite; }
+.dashboard-skeleton .skeleton-cell {
+  height: 100px; max-width: 100%; margin: 0;
+}
+.dashboard-chart-container.dashboard-skeleton .skeleton-cell { height: 220px; }
+.dashboard-period[data-period] { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.dashboard-period[data-period]:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.12); }
 
 /* ========== SENTINEL (infinite scroll) ========== */
 .scroll-sentinel { height: 1px; }
@@ -2587,7 +2641,7 @@ body.no-animations .product-hover-card {
   /* --- Cart bottom-sheet --- */
   .sales-center {
     position: fixed; left: 0; right: 0; bottom: 0; top: auto;
-    width: 100%; height: 72vh; height: 72dvh; max-height: 88dvh;
+    width: 100%; height: 56vh; height: 56dvh; max-height: 88dvh;
     z-index: 995; flex: none;
     border-radius: 16px 16px 0 0; background: var(--card);
     box-shadow: 0 -8px 32px rgba(0,0,0,.28);
@@ -2597,16 +2651,30 @@ body.no-animations .product-hover-card {
   }
   body.cart-open .sales-center { transform: translateY(0); }
   .sales-divider { display: none !important; }
-  .sales-center .panel-header { flex-shrink: 0; padding: 12px 16px 10px; border-radius: 0; }
+  .sales-center .panel-header { flex-shrink: 0; padding: 10px 12px 8px; border-radius: 0; }
   .sales-center .cart-container { flex: 1; min-height: 0; overflow-y: auto; border: none; }
   .sales-center .cart-footer {
     flex-shrink: 0; position: sticky; bottom: 0;
     border-top: 1px solid var(--border); background: var(--card);
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   }
   .sales-center .cart-actions { display: flex; gap: 8px; }
   .sales-center .cart-actions .btn { flex: 1; }
   .sales-center .cart-actions .btn-cancel { flex: 0 0 44px; }
+
+/* --- Compact cart rows (less scrolling) --- */
+  .cart-table thead th { padding: 5px 8px; font-size: 10px; }
+  .cart-table tbody td { padding: 4px 8px; }
+  .cart-product-name { font-size: 12px; max-width: 120px; }
+  .cart-product-code { display: none; }
+  .cart-qty-btn { width: 23px; height: 23px; min-height: 0; font-size: 12px; }
+  .cart-qty-input { height: 23px; min-height: 0; width: 32px; font-size: 12px; }
+  .cart-remove-btn { width: 27px; height: 27px; min-height: 0; font-size: 14px; }
+  .cart-item-total { font-size: 13px; }
+  .cart-edit-price-btn { font-size: 11px; min-height: 0; width: 28px; height: 28px; }
+  .cart-totals { padding: 7px 10px; margin-bottom: 8px; }
+  .cart-total { font-size: 13px; padding: 3px 0; }
+  .cart-total:last-child { font-size: 15px; padding-top: 4px; }
 
   /* Cart FAB + backdrop */
   .cart-fab {
@@ -2655,6 +2723,51 @@ body.no-animations .product-hover-card {
   .table-cards .debt-amount { color: var(--danger); font-weight: 700; }
   .table-cards .debt-paid { color: var(--success); font-weight: 700; }
   .table-cards td[data-label="Total ($)"], .table-cards td[data-label="Total (Bs.)"] { color: var(--primary); font-weight: 700; }
+
+  /* --- Collapsible cards (inventory + creditos) --- */
+  .table-cards tr.card-collapsible td.cell-toggle {
+    display: flex; align-items: center; justify-content: center;
+    padding: 4px 0; border: none;
+  }
+  .table-cards tr.card-collapsible .card-collapse-btn {
+    border: none; background: transparent; color: var(--text-light);
+    width: 28px; height: 28px; min-height: 0; padding: 0; border-radius: 50%;
+    font-size: 13px; cursor: pointer;
+    transition: transform var(--transition);
+  }
+  .table-cards tr.card-collapsible .card-collapse-btn:hover { background: var(--hover); }
+  .table-cards tr.card-collapsible:not(.collapsed) .card-collapse-btn i { transform: rotate(180deg); }
+  /* Expanded (default block layout from .table-cards tr) on mobile only */
+  .table-cards tr.card-collapsible:not(.collapsed) { display: block; }
+
+  /* Collapsed state (default) */
+  .table-cards tr.card-collapsible.collapsed {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 10px;
+    padding: 10px 12px;
+  }
+  .table-cards tr.card-collapsible.collapsed td { border: none; padding: 0; flex: 0 0 auto; }
+  .table-cards tr.card-collapsible.collapsed td:not(.cell-key):not(.cell-toggle) { display: none; }
+  .table-cards tr.card-collapsible.collapsed td.cell-key::before { content: none; }
+  .table-cards tr.card-collapsible.collapsed td.cell-name {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 13px; font-weight: 700; color: var(--text);
+  }
+  .table-cards tr.card-collapsible.collapsed td.cell-price,
+  .table-cards tr.card-collapsible.collapsed td.cell-debt {
+    font-weight: 700; color: var(--primary); font-size: 13px;
+  }
+  .table-cards tr.card-collapsible.collapsed td.cell-debt.debt-paid { color: var(--success); }
+  .table-cards tr.card-collapsible.collapsed td.cell-stock {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--success); font-weight: 700; font-size: 12px;
+  }
+  .table-cards tr.card-collapsible.collapsed td.cell-stock.low-stock { color: var(--danger); }
+  .table-cards tr.card-collapsible.collapsed td.cell-stock::before {
+    content: "\f1b2"; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 12px;
+  }
+  .table-cards tr.card-collapsible.collapsed td.cell-status { font-size: 11px; }
+  .table-cards tr.card-collapsible.collapsed td.cell-toggle { margin-left: auto; }
 
   /* Reports: hide low-priority cost/margin columns on phone */
   #report-sales-table td:nth-child(7),

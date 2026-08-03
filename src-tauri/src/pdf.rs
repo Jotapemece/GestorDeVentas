@@ -60,13 +60,27 @@ struct Page {
     y: f64,
 }
 
+pub struct PdfImage {
+    pub width: usize,
+    pub height: usize,
+    pub rgb: Vec<u8>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct PdfImagePayload {
+    pub width: usize,
+    pub height: usize,
+    pub data_b64: String,
+}
+
 struct PdfDoc {
     pages: Vec<Page>,
+    image: Option<PdfImage>,
 }
 
 impl PdfDoc {
     fn new() -> Self {
-        PdfDoc { pages: vec![Page { content: String::new(), y: PAGE_H - MARGIN_T }] }
+        PdfDoc { pages: vec![Page { content: String::new(), y: PAGE_H - MARGIN_T }], image: None }
     }
 
     fn ensure_page(&mut self, needed: f64) {
@@ -156,15 +170,25 @@ impl PdfDoc {
         }
     }
 
+    fn image_page(&mut self, img: &PdfImage) {
+        let scale = (PAGE_W - MARGIN_L * 2.0) / img.width as f64;
+        let draw_w = img.width as f64 * scale;
+        let draw_h = img.height as f64 * scale;
+        let draw_y = (PAGE_H - draw_h) / 2.0;
+        let content = format!("q\n{} 0 0 {} {} {} cm\n/Im0 Do\nQ\n", draw_w, draw_h, MARGIN_L, draw_y);
+        self.pages.insert(0, Page { content, y: PAGE_H - MARGIN_T });
+        self.image = Some(PdfImage { width: img.width, height: img.height, rgb: img.rgb.clone() });
+    }
+
     fn render(self) -> Vec<u8> {
         let n = self.pages.len();
         let mut out = Vec::new();
         out.extend_from_slice(b"%PDF-1.4\n");
 
         // Object numbers: 1 = catalog, 2 = pages, 3 = font regular, 4 = font bold
-        // 5..5+n-1 = page objects, 5+n = page content stream? Use one content object per page.
-        // Layout: 5 + i = page i, then 5+n + i = content stream i.
+        // 5..5+n-1 = page objects, 5+n + i = content stream i.
         let content_start = 5 + n;
+        let img_obj = if self.image.is_some() { Some(content_start + n) } else { None };
         let mut offsets: Vec<usize> = Vec::new();
 
         let mut push = |out: &mut Vec<u8>, obj_body: String| -> usize {
@@ -182,15 +206,31 @@ impl PdfDoc {
         push(&mut out, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>".to_string());
 
         for i in 0..n {
+            let img_res = if i == 0 {
+                if let Some(num) = img_obj {
+                    format!(" /XObject << /Im0 {} 0 R >>", num)
+                } else { String::new() }
+            } else { String::new() };
             push(&mut out, format!(
-                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {} 0 R >>",
-                PAGE_W, PAGE_H, content_start + i
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>{} >> /Contents {} 0 R >>",
+                PAGE_W, PAGE_H, img_res, content_start + i
             ));
         }
 
         for page in &self.pages {
             let stream = page.content.clone();
             push(&mut out, format!("<< /Length {} >>\nstream\n{}\nendstream", stream.len(), stream));
+        }
+
+        if let Some(img) = &self.image {
+            let body = format!(
+                "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length {} >>\nstream\n",
+                img.width, img.height, img.rgb.len()
+            );
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n{}\n", img_obj.unwrap(), body).as_bytes());
+            out.extend_from_slice(&img.rgb);
+            out.extend_from_slice(b"\nendstream\nendobj\n");
         }
 
         let xref_start = out.len();
@@ -204,9 +244,13 @@ impl PdfDoc {
     }
 }
 
-/// Construye un PDF con título, subtítulo y tabla. `rows` son celdas en orden de fila.
-pub fn build_report_pdf(title: &str, subtitle: &str, headers: &[&str], rows: &[Vec<String>]) -> Vec<u8> {
+/// Construye un PDF con título, subtítulo y tabla. Si `image` es Some, se inserta
+/// una página inicial con el gráfico. `rows` son celdas en orden de fila.
+pub fn build_report_pdf(title: &str, subtitle: &str, headers: &[&str], rows: &[Vec<String>], image: Option<&PdfImage>) -> Vec<u8> {
     let mut doc = PdfDoc::new();
+    if let Some(img) = image {
+        doc.image_page(img);
+    }
     doc.title(title);
     doc.subtitle(subtitle);
     doc.spacer(0.8);
@@ -216,4 +260,35 @@ pub fn build_report_pdf(title: &str, subtitle: &str, headers: &[&str], rows: &[V
     let col_widths: Vec<f64> = headers.iter().map(|_h| equal).collect();
     doc.table(headers, rows, &col_widths);
     doc.render()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pdf_embeds_image_object() {
+        let img = PdfImage {
+            width: 2,
+            height: 1,
+            rgb: vec![255, 0, 0, 0, 255, 0],
+        };
+        let rows: Vec<Vec<String>> = vec![vec!["a".into(), "b".into()]];
+        let out = build_report_pdf("T", "S", &["A", "B"], &rows, Some(&img));
+        let s = String::from_utf8_lossy(&out);
+        assert!(s.starts_with("%PDF-1.4"));
+        assert!(s.contains("/Subtype /Image"));
+        assert!(s.contains("/Im0"));
+        assert!(s.contains("/ColorSpace /DeviceRGB"));
+        assert!(s.contains("endstream"));
+        assert!(s.trim_end().ends_with("%%EOF"));
+    }
+
+    #[test]
+    fn pdf_without_image_has_no_image_object() {
+        let rows: Vec<Vec<String>> = vec![vec!["x".into()]];
+        let out = build_report_pdf("T", "S", &["A"], &rows, None);
+        let s = String::from_utf8_lossy(&out);
+        assert!(!s.contains("/Subtype /Image"));
+    }
 }
