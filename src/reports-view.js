@@ -229,10 +229,13 @@ function exportChartPng(canvas, filename) {
     const octx = out.getContext('2d');
     octx.scale(scale, scale);
     octx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-    const a = document.createElement('a');
-    a.download = filename || 'chart.png';
-    a.href = out.toDataURL('image/png');
-    a.click();
+    const b64 = out.toDataURL('image/png').split(',')[1];
+    saveExportedFile(filename || 'chart.png', b64)
+      .then(function(res) {
+        if (res.canceled) return;
+        showToast(IS_ANDROID ? 'Guardado en Descargas' : 'Gr\u00e1fico exportado');
+      })
+      .catch(function() { showToast('No se pudo exportar el gr\u00e1fico', 'error'); });
   } catch (e) { showToast('No se pudo exportar el gr\u00e1fico', 'error'); }
 }
 
@@ -829,14 +832,9 @@ async function handleExportReport() {
   if (!startDate || !endDate) { showToast('Seleccione fecha de inicio y fin', 'error'); return; }
   try {
     const b64 = await invoke('export_report_xlsx', { filter: buildReportFilter(false) });
-    var url = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + b64;
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'reporte_ventas_' + startDate + '_' + endDate + '.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast('Reporte exportado');
+    const res = await saveExportedFile('reporte_ventas_' + startDate + '_' + endDate + '.xlsx', b64);
+    if (res.canceled) return;
+    showToast(IS_ANDROID ? 'Guardado en Descargas' : 'Reporte exportado');
   } catch (e) { showToast('Error al exportar: ' + e, 'error'); }
 }
 
@@ -847,14 +845,9 @@ async function handleExportReportPdf() {
   const chartImage = chartToRgbB64(qs(SEL.dashboardCanvas));
   try {
     const b64 = await invoke('export_report_pdf', { filter: buildReportFilter(false), chartImage });
-    var url = 'data:application/pdf;base64,' + b64;
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'reporte_ventas_' + startDate + '_' + endDate + '.pdf';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast(chartImage ? 'Reporte PDF exportado con gr\u00e1fico' : 'Reporte PDF exportado');
+    const res = await saveExportedFile('reporte_ventas_' + startDate + '_' + endDate + '.pdf', b64);
+    if (res.canceled) return;
+    showToast(IS_ANDROID ? 'Guardado en Descargas' : (chartImage ? 'Reporte PDF exportado con gr\u00e1fico' : 'Reporte PDF exportado'));
   } catch (e) { showToast('Error al exportar PDF: ' + e, 'error'); }
 }
 

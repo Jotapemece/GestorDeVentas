@@ -41,7 +41,7 @@ const SQL_CIERRE_BY_ID: &str = "
     FROM cierres_caja WHERE id = ?1";
 const SQL_DETALLE_JSON: &str =
     "SELECT detalle_json FROM cierres_detalle WHERE cierre_id = ?1";
-const SQL_LIST_DIARIAS: &str = "WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 ORDER BY v.id DESC";
+const SQL_LIST_DIARIAS: &str = "WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.anulada = 0 ORDER BY v.id DESC";
 
 fn sumar_ventas_rango(
     db: &rusqlite::Connection,
@@ -566,7 +566,9 @@ pub fn get_saldo_caja(state: State<AppState>) -> Result<SaldoCaja, String> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let tomorrow = crate::helpers::siguiente_dia(&today);
     let (ventas_usd, ventas_bs): (f64, f64) = db
-        .query_row("SELECT COALESCE(SUM(total_usd),0), COALESCE(SUM(total_bs),0) FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0",
+        .query_row("SELECT COALESCE(SUM(total_usd),0), \
+                           COALESCE(SUM(CASE WHEN total_bs > 0 THEN total_bs ELSE total_usd * tasa_aplicada END),0) \
+                    FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0",
             params![today, tomorrow], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(|e| format!("Error al obtener ventas: {}", e))?;
     let (ingresos_usd, egresos_usd): (f64, f64) = db

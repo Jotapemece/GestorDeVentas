@@ -96,6 +96,15 @@
 }
 .nf-fa-sign_in::before { content: "\f090"; }
 .nf-fa-clock::before { content: "\f017"; }
+.nf-fa-gamepad::before { content: "\f11b"; }
+.nf-fa-play::before { content: "\f04b"; }
+.nf-fa-pause::before { content: "\f04c"; }
+.nf-fa-rotate_right::before { content: "\f2f9"; }
+.nf-fa-arrow_up::before { content: "\f062"; }
+.nf-fa-arrow_down::before { content: "\f063"; }
+.nf-fa-arrow_left::before { content: "\f060"; }
+.nf-fa-arrow_right::before { content: "\f061"; }
+.nf-fa-apple::before { content: "\f179"; }
 .nf-fa-compress::before { content: "\f066"; }
 .nf-fa-expand::before { content: "\f065"; }
 .nf-fa-copy::before { content: "\f0c5"; }

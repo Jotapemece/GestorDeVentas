@@ -90,19 +90,54 @@ fn validate_sale_request(request: &CreateSaleRequest) -> Result<(), String> {
     Ok(())
 }
 
-fn execute_sale_transaction(
-    tx: rusqlite::Transaction,
-    request: &CreateSaleRequest,
-    current_username: &str,
-    venta_sync_id: &str,
-    dispositivo_origen: &str,
-    now: &str,
-    now_iso: &str,
-) -> Result<(i64, String, f64, f64), String> {
-    let mut total_usd = 0.0;
-    let mut producto_cache: HashMap<String, (f64, f64)> = HashMap::new();
+/// Una línea de venta ya resuelta: puede ser un producto normal o un combo (`COMBO-N`).
+/// Para combos, `componentes` lista (codigo, cantidad por unidad del combo, es_inari)
+/// de los productos que lo componen, y el stock se descuenta de esos componentes.
+#[derive(Debug)]
+struct LineaVenta {
+    codigo: String,
+    precio: f64,
+    componentes: Vec<(String, f64, bool)>,
+}
 
-    for pv in &request.productos {
+fn resolver_linea_venta(
+    tx: &rusqlite::Transaction,
+    pv: &ProductoVenta,
+) -> Result<LineaVenta, String> {
+    if let Some(combo_id_str) = pv.codigo.strip_prefix("COMBO-") {
+        let combo_id: i64 = combo_id_str
+            .parse()
+            .map_err(|_| format!("Código de combo inválido: {}", pv.codigo))?;
+        let precio: f64 = tx
+            .query_row(
+                "SELECT precio_usd FROM combos WHERE id = ?1",
+                params![combo_id],
+                |row| row.get(0),
+            )
+            .map_err(|_| format!("Combo '{}' no encontrado", pv.codigo))?;
+        let mut stmt = tx
+            .prepare(
+                "SELECT cp.producto_codigo, cp.cantidad, COALESCE(p.es_inari, 0) \
+                 FROM combo_productos cp \
+                 LEFT JOIN productos p ON cp.producto_codigo = p.codigo \
+                 WHERE cp.combo_id = ?1",
+            )
+            .map_err(|e| format!("Error al resolver combo '{}': {}", pv.codigo, e))?;
+        let componentes: Vec<(String, f64, bool)> = stmt
+            .query_map(params![combo_id], |row| {
+                let cantidad: i64 = row.get(1)?;
+                let es_inari: i64 = row.get(2)?;
+                Ok((row.get(0)?, cantidad as f64, es_inari != 0))
+            })
+            .map_err(|e| format!("Error al resolver combo '{}': {}", pv.codigo, e))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(LineaVenta {
+            codigo: pv.codigo.clone(),
+            precio,
+            componentes,
+        })
+    } else {
         let (precio, stock): (f64, f64) = tx
             .query_row(SQL_PRODUCTO_PRECIO_STOCK, params![pv.codigo], |row| {
                 Ok((row.get(0)?, row.get(1)?))
@@ -114,8 +149,52 @@ fn execute_sale_transaction(
                 pv.codigo, stock, pv.cantidad
             ));
         }
-        total_usd += precio * pv.cantidad;
-        producto_cache.insert(pv.codigo.clone(), (precio, stock));
+        Ok(LineaVenta {
+            codigo: pv.codigo.clone(),
+            precio,
+            componentes: Vec::new(),
+        })
+    }
+}
+
+fn execute_sale_transaction(
+    tx: rusqlite::Transaction,
+    request: &CreateSaleRequest,
+    current_username: &str,
+    venta_sync_id: &str,
+    dispositivo_origen: &str,
+    now: &str,
+    now_iso: &str,
+) -> Result<(i64, String, f64, f64), String> {
+    let mut total_usd = 0.0;
+    let mut lineas: Vec<LineaVenta> = Vec::new();
+
+    for pv in &request.productos {
+        let linea = resolver_linea_venta(&tx, pv)?;
+        if !linea.componentes.is_empty() {
+            // Combo: validar stock de sus componentes no-inari.
+            for (codigo, cant_uni, es_inari) in &linea.componentes {
+                if *es_inari {
+                    continue;
+                }
+                let stock: f64 = tx
+                    .query_row(
+                        "SELECT stock FROM productos WHERE codigo = ?1",
+                        params![codigo],
+                        |row| row.get(0),
+                    )
+                    .map_err(|_| format!("Producto '{}' del combo no encontrado", codigo))?;
+                let requerido = cant_uni * pv.cantidad;
+                if stock < requerido {
+                    return Err(format!(
+                        "Stock insuficiente en '{}' (componente del combo). Disponible: {}, solicitado: {}",
+                        codigo, stock, requerido
+                    ));
+                }
+            }
+        }
+        total_usd += linea.precio * pv.cantidad;
+        lineas.push(linea);
     }
 
     let pago_json = if request.metodo_pago == constants::METODO_MIXTO {
@@ -131,6 +210,16 @@ fn execute_sale_transaction(
     if let Some(bs) = request.total_bs_ingresado {
         if !bs.is_finite() || bs < 0.0 {
             return Err("El total en Bs. ingresado no es válido".to_string());
+        }
+        // Evita subreportar el total en Bs. (p.ej. fijar Bs. 0.01 en una venta de $100).
+        // Se permite pagar de más (el cliente recibe vuelto), pero nunca de menos del valor.
+        let esperado = total_usd * request.tasa;
+        let tolerancia = (esperado * 0.01).max(1.0);
+        if bs < esperado - tolerancia {
+            return Err(format!(
+                "El total en Bs. ingresado (Bs. {:.2}) es menor al total de la venta (Bs. {:.2})",
+                bs, esperado
+            ));
         }
     }
     let total_bs = request
@@ -150,17 +239,33 @@ fn execute_sale_transaction(
 
     let venta_id = tx.last_insert_rowid();
 
-    for pv in &request.productos {
-        let (precio, _) = producto_cache.get(&pv.codigo)
-            .ok_or_else(|| format!("Producto '{}' no encontrado en caché", pv.codigo))?;
+    for (linea, pv) in lineas.iter().zip(&request.productos) {
         let detalle_sync_id = Uuid::new_v4().to_string();
-        tx.execute(SQL_INSERT_DETALLE, params![venta_id, pv.codigo, pv.cantidad, precio, detalle_sync_id])
-            .map_err(|e| format!("Error al insertar detalle: {}", e))?;
-        if !pv.es_inari {
-            let affected = crate::db::sub_stock(&tx, &pv.codigo, pv.cantidad)
-                .map_err(|e| format!("Error al actualizar stock: {}", e))?;
-            if affected == 0 {
-                return Err(format!("Stock insuficiente para '{}'", pv.codigo));
+        tx.execute(
+            SQL_INSERT_DETALLE,
+            params![venta_id, linea.codigo, pv.cantidad, linea.precio, detalle_sync_id],
+        )
+        .map_err(|e| format!("Error al insertar detalle: {}", e))?;
+        if linea.componentes.is_empty() {
+            // Producto normal: descontar stock (salvo inari).
+            if !pv.es_inari {
+                let affected = crate::db::sub_stock(&tx, &linea.codigo, pv.cantidad)
+                    .map_err(|e| format!("Error al actualizar stock: {}", e))?;
+                if affected == 0 {
+                    return Err(format!("Stock insuficiente para '{}'", linea.codigo));
+                }
+            }
+        } else {
+            // Combo: descontar stock de sus componentes no-inari.
+            for (codigo, cant_uni, es_inari) in &linea.componentes {
+                if *es_inari {
+                    continue;
+                }
+                let affected = crate::db::sub_stock(&tx, codigo, cant_uni * pv.cantidad)
+                    .map_err(|e| format!("Error al actualizar stock: {}", e))?;
+                if affected == 0 {
+                    return Err(format!("Stock insuficiente en '{}' (componente del combo)", codigo));
+                }
             }
         }
     }
@@ -390,19 +495,55 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
         )
         .map_err(|_| "Venta no encontrada o ya anulada".to_string())?;
 
-    // Restore stock
+    // Restore stock only for active, non-inari items (avoid double restore / inari which
+    // never decremented stock).
     let mut stmt = tx
-        .prepare("SELECT producto_codigo, cantidad FROM detalles_ventas WHERE venta_id = ?1")
+        .prepare(
+            "SELECT dv.producto_codigo, dv.cantidad \
+             FROM detalles_ventas dv \
+             LEFT JOIN productos p ON dv.producto_codigo = p.codigo \
+             WHERE dv.venta_id = ?1 AND (dv.anulado IS NULL OR dv.anulado = 0) \
+               AND COALESCE(p.es_inari, 0) = 0",
+        )
         .map_err(|e| e.to_string())?;
     let mapped = stmt
         .query_map(params![venta_id], |row| {
             Ok((row.get(0)?, row.get(1)?))
         })
         .map_err(|e| e.to_string())?;
-    let rows: Vec<(String, i64)> = mapped.filter_map(|r| r.ok()).collect();
+    let rows: Vec<(String, f64)> = mapped.filter_map(|r| r.ok()).collect();
     drop(stmt);
     for (codigo, cantidad) in &rows {
-        crate::db::add_stock(&tx, codigo, *cantidad as f64)?;
+        if let Some(combo_id_str) = codigo.strip_prefix("COMBO-") {
+            // Combo: restaurar stock de sus componentes (los que se descontaron al vender).
+            if let Ok(combo_id) = combo_id_str.parse::<i64>() {
+                let mut cstmt = tx
+                    .prepare(
+                        "SELECT cp.producto_codigo, cp.cantidad, COALESCE(p.es_inari, 0) \
+                         FROM combo_productos cp \
+                         LEFT JOIN productos p ON cp.producto_codigo = p.codigo \
+                         WHERE cp.combo_id = ?1",
+                    )
+                    .map_err(|e| e.to_string())?;
+                let comps = cstmt
+                    .query_map(params![combo_id], |row| {
+                        let cant: i64 = row.get(1)?;
+                        let inari: i64 = row.get(2)?;
+                        Ok((row.get::<_, String>(0)?, cant as f64, inari != 0))
+                    })
+                    .map_err(|e| e.to_string())?
+                    .filter_map(|r| r.ok())
+                    .collect::<Vec<(String, f64, bool)>>();
+                drop(cstmt);
+                for (cc, cant_uni, es_inari) in &comps {
+                    if !es_inari {
+                        crate::db::add_stock(&tx, cc, cant_uni * cantidad)?;
+                    }
+                }
+            }
+        } else {
+            crate::db::add_stock(&tx, codigo, *cantidad)?;
+        }
     }
 
     // Revert credit debt if applicable
@@ -742,7 +883,8 @@ pub fn get_sales_by_vendor(
 
     let mut stmt = db
         .prepare(
-            "SELECT COALESCE(u.username, 'Desconocido'), COUNT(v.id), \
+            "SELECT COALESCE(u.username, 'Desconocido'), \
+                    COUNT(CASE WHEN v.anulada = 0 THEN 1 END), \
                     COALESCE(SUM(CASE WHEN v.anulada = 0 THEN v.total_usd ELSE 0 END), 0), \
                     COALESCE(SUM(CASE WHEN v.anulada = 0 THEN v.total_bs ELSE 0 END), 0), \
                     SUM(CASE WHEN v.anulada = 1 THEN 1 ELSE 0 END) \
@@ -827,15 +969,48 @@ pub fn void_sale_items(
     let tx = db.transaction().map_err(|e| e.to_string())?;
 
     for det_id in &request.detalle_ids {
-        let (codigo, cantidad): (String, i64) = tx
+        let (codigo, cantidad): (String, f64) = tx
             .query_row(
-                "SELECT producto_codigo, cantidad FROM detalles_ventas WHERE id = ?1 AND (anulado IS NULL OR anulado = 0)",
+                "SELECT dv.producto_codigo, dv.cantidad \
+                 FROM detalles_ventas dv \
+                 LEFT JOIN productos p ON dv.producto_codigo = p.codigo \
+                 WHERE dv.id = ?1 AND (dv.anulado IS NULL OR dv.anulado = 0) \
+                   AND COALESCE(p.es_inari, 0) = 0",
                 params![det_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .map_err(|_| format!("Detalle #{} no encontrado o ya anulado", det_id))?;
+            .map_err(|_| format!("Detalle #{} no encontrado, ya anulado o inari", det_id))?;
 
-        crate::db::add_stock(&tx, &codigo, cantidad as f64)?;
+        if let Some(combo_id_str) = codigo.strip_prefix("COMBO-") {
+            // Combo: restaurar stock de sus componentes no-inari.
+            if let Ok(combo_id) = combo_id_str.parse::<i64>() {
+                let mut cstmt = tx
+                    .prepare(
+                        "SELECT cp.producto_codigo, cp.cantidad, COALESCE(p.es_inari, 0) \
+                         FROM combo_productos cp \
+                         LEFT JOIN productos p ON cp.producto_codigo = p.codigo \
+                         WHERE cp.combo_id = ?1",
+                    )
+                    .map_err(|e| e.to_string())?;
+                let comps = cstmt
+                    .query_map(params![combo_id], |row| {
+                        let cant: i64 = row.get(1)?;
+                        let inari: i64 = row.get(2)?;
+                        Ok((row.get::<_, String>(0)?, cant as f64, inari != 0))
+                    })
+                    .map_err(|e| e.to_string())?
+                    .filter_map(|r| r.ok())
+                    .collect::<Vec<(String, f64, bool)>>();
+                drop(cstmt);
+                for (cc, cant_uni, es_inari) in &comps {
+                    if !es_inari {
+                        crate::db::add_stock(&tx, cc, cant_uni * cantidad)?;
+                    }
+                }
+            }
+        } else {
+            crate::db::add_stock(&tx, &codigo, cantidad)?;
+        }
 
         tx.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = ?1", params![det_id])
             .map_err(|e| format!("Error al anular detalle: {}", e))?;
@@ -859,6 +1034,9 @@ pub fn void_sale_items(
 }
 
 fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64, nota: &str) -> Result<(), String> {
+    let old_total_usd: f64 = tx
+        .query_row("SELECT total_usd FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
+        .map_err(|e| format!("Error al obtener total de venta: {}", e))?;
     let new_total_usd: f64 = tx
         .query_row(
             "SELECT COALESCE(SUM(CAST(anulado IS NULL OR anulado = 0 AS INTEGER) * cantidad * precio_usd_unitario), 0) \
@@ -888,6 +1066,23 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64, nota: 
         tx.execute("UPDATE ventas SET anulada = 1, nota_anulacion = ?1, updated_at = ?2 WHERE id = ?3",
             params![nota, void_ts, venta_id])
             .map_err(|e| format!("Error al anular venta: {}", e))?;
+        // Si toda la venta quedó anulada y era a crédito, revertir la deuda del cliente.
+        let (metodo, cliente_id): (String, Option<i64>) = tx
+            .query_row(
+                "SELECT metodo_pago, cliente_id FROM ventas WHERE id = ?1",
+                params![venta_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|e| format!("Error al obtener venta: {}", e))?;
+        if metodo == constants::METODO_CREDITO {
+            if let Some(cliente_id) = cliente_id {
+                tx.execute(
+                    "UPDATE clientes SET saldo_deuda_usd = MAX(0, saldo_deuda_usd - ?1) WHERE id = ?2",
+                    params![old_total_usd, cliente_id],
+                )
+                .map_err(|e| format!("Error al revertir deuda: {}", e))?;
+            }
+        }
     } else {
         tx.execute("UPDATE ventas SET nota_anulacion = ?1, updated_at = ?2 WHERE id = ?3",
             params![nota, void_ts, venta_id])
@@ -1188,5 +1383,194 @@ mod tests {
         };
         let result = validate_sale_request(&req);
         assert!(result.is_ok());
+    }
+
+    fn setup_bd() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::migrations::SQL_CREATE_TABLES).unwrap();
+        crate::migrations::run_migrations(&conn);
+        conn.execute(
+            "INSERT INTO usuarios (id, username, password, rol) VALUES (1,'tester','x','admin')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO productos (codigo, nombre, precio_usd, stock, es_inari) \
+             VALUES ('P1','Producto 1',10,5,0), ('P2','Inari',3,0,1), ('P3','Comp',4,2,0)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO combos (id, nombre, precio_usd, subcategoria, created_at) \
+             VALUES (1,'Combo 1',15,'combos','2026-07-18')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO combo_productos (combo_id, producto_codigo, cantidad) \
+             VALUES (1,'P1',2), (1,'P2',1)",
+            [],
+        ).unwrap();
+        conn
+    }
+
+    fn req_basico(productos: Vec<ProductoVenta>) -> CreateSaleRequest {
+        CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "efectivo_usd".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos,
+            tasa: 10.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+            nota: String::new(),
+        }
+    }
+
+    #[test]
+    fn test_resolver_linea_venta_producto() {
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 2.0, es_inari: false }).unwrap();
+        assert_eq!(linea.codigo, "P1");
+        assert_eq!(linea.precio, 10.0);
+        assert!(linea.componentes.is_empty());
+    }
+
+    #[test]
+    fn test_resolver_linea_venta_combo() {
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true }).unwrap();
+        assert_eq!(linea.precio, 15.0);
+        assert_eq!(linea.componentes.len(), 2);
+        assert_eq!(linea.componentes[0], ("P1".to_string(), 2.0, false));
+        assert_eq!(linea.componentes[1], ("P2".to_string(), 1.0, true));
+    }
+
+    #[test]
+    fn test_resolver_linea_venta_combo_inexistente() {
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-99".into(), cantidad: 1.0, es_inari: true }).unwrap_err();
+        assert!(err.contains("no encontrado"));
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_vende_combo_y_resta_componentes() {
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let request = req_basico(vec![
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false },
+            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true },
+        ]);
+        let (venta_id, _, total_bs, total_usd) = execute_sale_transaction(
+            tx, &request, "tester", "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert!((total_usd - 25.0).abs() < 0.001); // 10 (P1) + 15 (combo)
+        assert!((total_bs - 250.0).abs() < 0.001);
+        // Stock: P1 5 -> 1 (línea) - 2 (componente combo) = 2 ; P2 inari intacto; P3 intacto
+        let stock: f64 = conn.query_row("SELECT stock FROM productos WHERE codigo='P1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(stock, 2.0);
+        let stock_p2: f64 = conn.query_row("SELECT stock FROM productos WHERE codigo='P2'", [], |r| r.get(0)).unwrap();
+        assert_eq!(stock_p2, 0.0);
+        // Dos detalles insertados
+        let (n, total): (i64, f64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(cantidad*precio_usd_unitario),0) FROM detalles_ventas WHERE venta_id=?1",
+            params![venta_id], |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap();
+        assert_eq!(n, 2);
+        assert!((total - 25.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_combo_stock_insuficiente() {
+        let mut conn = setup_bd();
+        // Combo 1 requiere P1 x2; solo quedan 1 tras la línea P1 x4 -> error
+        let tx = conn.transaction().unwrap();
+        let request = req_basico(vec![
+            ProductoVenta { codigo: "P1".into(), cantidad: 4.0, es_inari: false },
+            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true },
+        ]);
+        let err = execute_sale_transaction(
+            tx, &request, "tester", "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap_err();
+        assert!(err.contains("Stock insuficiente en 'P1'"));
+    }
+
+    #[test]
+    fn test_total_bs_ingresado_menor_rechazado() {
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false }]);
+        request.total_bs_ingresado = Some(0.01); // $10 * tasa 10 = Bs 100, reporta Bs 0.01
+        let err = execute_sale_transaction(
+            tx, &request, "tester", "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap_err();
+        assert!(err.contains("menor al total"));
+    }
+
+    #[test]
+    fn test_total_bs_ingresado_pago_de_mas_aceptado() {
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false }]);
+        request.total_bs_ingresado = Some(150.0); // paga de más, recibe vuelto
+        let (_, _, total_bs, _) = execute_sale_transaction(
+            tx, &request, "tester", "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert!((total_bs - 150.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_void_items_todos_revierte_deuda_credito() {
+        let mut conn = setup_bd();
+        conn.execute(
+            "INSERT INTO clientes (id, nombre, saldo_deuda_usd) VALUES (1, 'Cliente', 30)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (id, fecha_hora, usuario_id, metodo_pago, cliente_id, total_usd, tasa_aplicada, total_bs) \
+             VALUES (1, '2026-07-18 10:00:00', 1, 'credito', 1, 30, 10, 300)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+             VALUES (1, 1, 'P1', 3, 10)",
+            [],
+        ).unwrap();
+        conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
+        let tx = conn.transaction().unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
+        let saldo: f64 = tx.query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(saldo, 0.0);
+        let anulada: i64 = tx.query_row("SELECT anulada FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(anulada, 1);
+    }
+
+    #[test]
+    fn test_void_items_parcial_no_revierte_deuda() {
+        let mut conn = setup_bd();
+        conn.execute(
+            "INSERT INTO clientes (id, nombre, saldo_deuda_usd) VALUES (1, 'Cliente', 30)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (id, fecha_hora, usuario_id, metodo_pago, cliente_id, total_usd, tasa_aplicada, total_bs) \
+             VALUES (1, '2026-07-18 10:00:00', 1, 'credito', 1, 30, 10, 300)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+             VALUES (1, 1, 'P1', 1, 10), (2, 1, 'P3', 5, 4)",
+            [],
+        ).unwrap();
+        conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
+        let tx = conn.transaction().unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación parcial").unwrap();
+        let saldo: f64 = tx.query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert!((saldo - 30.0).abs() < 0.001);
+        let anulada: i64 = tx.query_row("SELECT anulada FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(anulada, 0);
+        let total: f64 = tx.query_row("SELECT total_usd FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert!((total - 20.0).abs() < 0.001); // quedó el detalle de P3 (5*4)
     }
 }

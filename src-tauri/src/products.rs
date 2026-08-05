@@ -45,7 +45,7 @@ const SQL_SET_INARI: &str =
 
 const SQL_HAS_SALES: &str = "SELECT COUNT(*) > 0 FROM detalles_ventas WHERE producto_codigo = ?1";
 
-const SQL_SOFT_DELETE: &str = "UPDATE productos SET activo = 0, stock = 0 WHERE codigo = ?1";
+const SQL_SOFT_DELETE: &str = "UPDATE productos SET activo = 0, stock = 0, updated_at = ?2 WHERE codigo = ?1";
 
 const SQL_DELETE_PRODUCTO: &str = "DELETE FROM productos WHERE codigo = ?1";
 
@@ -310,7 +310,8 @@ pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, 
         .map_err(|e| format!("Error al verificar ventas del producto: {}", e))?;
 
     if has_sales {
-        tx.execute(SQL_SOFT_DELETE, params![codigo])
+        let now = crate::helpers::now_iso();
+        tx.execute(SQL_SOFT_DELETE, params![codigo, now])
             .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())?;
         return Ok("Producto desactivado (tiene historial de ventas). Stock puesto a 0.".to_string());
@@ -480,7 +481,7 @@ pub fn replace_all_products(
 
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
-    tx.execute("UPDATE productos SET activo = 0 WHERE activo = 1", [])
+    tx.execute("UPDATE productos SET activo = 0, updated_at = ?1 WHERE activo = 1", params![crate::helpers::now_iso()])
         .map_err(|e| format!("Error al limpiar productos: {}", e))?;
 
     let mut count = 0;

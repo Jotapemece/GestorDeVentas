@@ -3,6 +3,11 @@ let inventoryPage = 1;
 let showInari = false;
 let inariSubcat = '';
 const INARI_DIAS = [4, 5, 6, 0]; // jueves, viernes, sábado, domingo
+let inariManualActivo = false; // se activa desde Config → toggle Inari
+
+function inariVisibleEnVentas() {
+  return INARI_DIAS.includes(new Date().getDay()) || inariManualActivo;
+}
 
 function updateInariBtn() {
   const el = qs(SEL.inventoryInariBtn);
@@ -440,17 +445,11 @@ async function deleteProduct() {
 async function exportProducts() {
   const b64 = await invokeOrError(invoke('export_products_xlsx', { tasa: tasaActual }));
   if (b64 === undefined) return;
-  const byteChars = atob(b64);
-  const byteNums = new Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
-  const blob = new Blob([new Uint8Array(byteNums)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'productos_export.xlsx';
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Exportado exitosamente');
+  try {
+    const res = await saveExportedFile('productos_export.xlsx', b64);
+    if (res.canceled) return;
+    showToast(IS_ANDROID ? 'Guardado en Descargas' : 'Exportado exitosamente');
+  } catch (e) { showToast('Error al exportar: ' + e, 'error'); }
 }
 
 function openImportModal() {

@@ -42,14 +42,18 @@ pub(crate) fn upload_products_inner(
         )?;
     }
 
+    let last_upload = super::get_config(db, constants::CFG_ULTIMO_UPLOAD)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+
     let mut stmt = db
         .prepare(
              "SELECT codigo, nombre, precio_usd, COALESCE(costo,0), stock, COALESCE(stock_minimo,0), \
-             COALESCE(categoria_id,0), COALESCE(es_inari,0), COALESCE(subcategoria,'') FROM productos WHERE activo = 1",
+             COALESCE(categoria_id,0), COALESCE(es_inari,0), COALESCE(subcategoria,''), COALESCE(activo,1) \
+             FROM productos WHERE updated_at IS NULL OR updated_at = '' OR updated_at > ?1",
         )
         .map_err(|e| e.to_string())?;
     let products: Vec<serde_json::Value> = stmt
-        .query_map([], |row| {
+        .query_map(params![last_upload], |row| {
             let cat_id: i64 = row.get(6)?;
             Ok(json!({
                 "codigo": row.get::<_, String>(0)?,
@@ -58,7 +62,7 @@ pub(crate) fn upload_products_inner(
                 "costo": row.get::<_, f64>(3)?,
                 "stock": row.get::<_, i64>(4)?,
                 "stock_minimo": row.get::<_, i64>(5)?,
-                "activo": 1i64,
+                "activo": row.get::<_, i64>(9)?,
                 "categoria_id": if cat_id == 0 { serde_json::Value::Null } else { json!(cat_id) },
                 "es_inari": row.get::<_, i64>(7)?,
                 "subcategoria": row.get::<_, String>(8)?,
@@ -71,7 +75,7 @@ pub(crate) fn upload_products_inner(
     drop(stmt);
 
     if products.is_empty() {
-        return Ok("No hay productos activos para subir".to_string());
+        return Ok("No hay productos para subir".to_string());
     }
 
     let body = serde_json::to_string(&products).map_err(|e| e.to_string())?;

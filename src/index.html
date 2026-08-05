@@ -1666,6 +1666,7 @@
           <button class="guide-tab" data-section="sync"><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</button>
           <button class="guide-tab" data-section="config"><i class="nf nf-fa-cog"></i> Configuraci&oacute;n</button>
           <button class="guide-tab" data-section="ia"><i class="nf nf-fa-robot"></i> IA / Asistente</button>
+          <button class="guide-tab guide-juego-tab" data-section="juego"><i class="nf nf-fa-gamepad"></i> Juego</button>
         </aside>
         <div class="guide-pages">
           <div class="guide-page active" id="guide-ventas">
@@ -1836,6 +1837,26 @@
               <span><strong>Tip:</strong> Si el asistente no responde, verifica que la API key sea correcta en Configuraci&oacute;n. Los modelos gratuitos tienen l&iacute;mites de 20-60 requests/minuto.</span>
             </div>
           </div>
+          <div class="guide-page" id="guide-juego">
+            <h4><i class="nf nf-fa-gamepad"></i> Snake (Entretenimiento)</h4>
+            <div class="guide-section">
+              <p><strong>Snake</strong> es un peque&ntilde;o juego de entretenimiento incluido, disponible solo en PC. Juega a hacer crecer a la serpiente sin chocar con la pared ni contigo mismo.</p>
+              <h5>C&oacute;mo jugar</h5>
+              <ul class="guide-list">
+                <li><i class="nf nf-fa-arrows"></i> Mueve con las <strong>flechas</strong> del teclado o <strong>WASD</strong>.</li>
+                <li><i class="nf nf-fa-apple"></i> Come la <strong>$</strong> para crecer y sumar puntos.</li>
+                <li><i class="nf nf-fa-pause"></i> <strong>P</strong> / <strong>Espacio</strong> pausa. <i class="nf nf-fa-rotate_right"></i> <strong>R</strong> reinicia.</li>
+                <li><i class="nf nf-fa-ban"></i> No puedes girar 180&deg; de golpe (volver sobre ti).</li>
+                <li><i class="nf nf-fa-expand"></i> Elige tama&ntilde;o <strong>Peque&ntilde;a</strong>, <strong>Mediana</strong> o <strong>Grande</strong>.</li>
+                <li><i class="nf nf-fa-users"></i> <strong>2 jugadores</strong>: sin paredes (los bordes envuelven), <strong>P1</strong> con WASD y <strong>P2</strong> con flechas. Chocar con el rival = pierdes, gana el otro.</li>
+              </ul>
+              <button id="snake-btn" class="btn btn-primary btn-full"><i class="nf nf-fa-gamepad"></i> Jugar Snake</button>
+            </div>
+            <div class="guide-tip">
+              <i class="nf nf-fa-gamepad"></i>
+              <span><strong>Tip:</strong> El juego est&aacute; pensado solo para computadora (con teclado). En tel&eacute;fono no se muestra.</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1879,6 +1900,61 @@
           <button class="calc-btn calc-num" data-calc="dot">.</button>
           <button class="calc-btn calc-op" data-calc="negate">&plusmn;</button>
           <button id="calc-equals" class="calc-btn calc-equals">=</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="snake-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Juego Snake">
+    <div class="modal-content snake-content">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-gamepad"></i> Snake</h3>
+        <span class="modal-close" id="snake-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body snake-body">
+        <div class="snake-hud">
+          <span class="snake-score-label"><strong>P1</strong>: <strong id="snake-score">0</strong></span>
+          <span class="snake-score-label snake-2p-score"><strong>P2</strong>: <strong id="snake-score-p2">0</strong></span>
+          <div class="snake-controls">
+            <button id="snake-pause-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-pause"></i> Pausa</button>
+            <button id="snake-restart-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-rotate_right"></i> Reiniciar</button>
+          </div>
+        </div>
+        <div class="snake-opts-row">
+          <div class="snake-opt">
+            <span class="snake-opt-label">Tama&ntilde;o</span>
+            <div class="snake-size-btns">
+              <button class="snake-size-btn" data-size="small" title="Peque&ntilde;a">S</button>
+              <button class="snake-size-btn" data-size="medium" title="Mediana">M</button>
+              <button class="snake-size-btn" data-size="large" title="Grande">L</button>
+            </div>
+          </div>
+          <label class="snake-opt snake-2p-opt">
+            <span class="snake-opt-label">2 jugadores</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="snake-2p-toggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </label>
+        </div>
+        <div id="snake-status" class="snake-status ok">Jugando</div>
+        <pre id="snake-board" aria-label="Tablero de Snake"></pre>
+        <div class="snake-help">
+          <span><i class="nf nf-fa-arrows"></i> <kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>WASD</kbd></span>
+          <span><i class="nf nf-fa-pause"></i> <kbd>P</kbd> / <kbd>Espacio</kbd></span>
+          <span><i class="nf nf-fa-rotate_right"></i> <kbd>R</kbd></span>
+        </div>
+        <div class="snake-help snake-2p-help hidden">
+          <span><i class="nf nf-fa-user"></i> <strong>@</strong><i class="nf nf-fa-arrows"></i>P1 con <kbd>WASD</kbd></span>
+          <span><i class="nf nf-fa-users"></i> <strong>%</strong><i class="nf nf-fa-arrows"></i>P2 con <kbd>Flechas</kbd></span>
+        </div>
+        <div class="snake-palette-row">
+          <span class="snake-palette-label">Colores:</span>
+          <div class="snake-palette-btns">
+            <button class="snake-palette-btn" data-palette="gbGray" title="Gris Game Boy"><i class="nf nf-fa-circle"></i></button>
+            <button class="snake-palette-btn" data-palette="gbGreen" title="Verde Game Boy"><i class="nf nf-fa-circle"></i></button>
+            <button class="snake-palette-btn" data-palette="vboy" title="Virtual Boy"><i class="nf nf-fa-circle"></i></button>
+          </div>
         </div>
       </div>
     </div>
@@ -2089,6 +2165,7 @@
   <script src="config-view.js"></script>
   <script src="shortcuts.js"></script>
   <script src="fab.js"></script>
+  <script src="snake.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

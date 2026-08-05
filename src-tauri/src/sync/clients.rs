@@ -16,16 +16,21 @@ pub(crate) fn upload_clientes_inner(
 ) -> Result<String, String> {
     let ts = now_iso();
 
+    let last_upload = super::get_config(db, constants::CFG_ULTIMO_UPLOAD_CLIENTES)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+
     let mut stmt = db
         .prepare(
             "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at \
-             FROM clientes WHERE COALESCE(es_temporal, 0) = 0 ORDER BY id ASC",
+             FROM clientes WHERE COALESCE(es_temporal, 0) = 0 AND ( \
+               updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR updated_at > ?1 \
+             ) ORDER BY id ASC",
         )
         .map_err(|e| e.to_string())?;
 
     #[allow(clippy::type_complexity)]
     let rows: Vec<(i64, String, i64, f64, Option<String>, Option<String>)> = stmt
-        .query_map([], |row| {
+        .query_map(params![last_upload], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
@@ -191,13 +196,21 @@ pub(crate) fn download_clientes_inner(
                 conflicts += 1;
                 continue;
             }
-            let rows = db.execute(
-                "UPDATE clientes SET nombre = ?1, credito_activo = ?2, \
-                 saldo_deuda_usd = ?3, updated_at = ?4 WHERE sync_id = ?5",
-                params![nombre, credito_activo, saldo, remote_ts.unwrap_or(&ts), sync_id],
-            ).unwrap_or(0);
-            if rows > 0 {
-                updated += 1;
+            // LWW por fecha: solo sobrescribir si la versión remota es más reciente,
+            // así los debos/cobros en paralelo no se pisan a ciegas.
+            let remote_newer = match (local_ts_opt, remote_ts) {
+                (Some(l), Some(r)) => r > l,
+                _ => true,
+            };
+            if remote_newer {
+                let rows = db.execute(
+                    "UPDATE clientes SET nombre = ?1, credito_activo = ?2, \
+                     saldo_deuda_usd = ?3, updated_at = ?4 WHERE sync_id = ?5",
+                    params![nombre, credito_activo, saldo, remote_ts.unwrap_or(&ts), sync_id],
+                ).map_err(|e| format!("Error actualizando cliente remoto: {}", e))?;
+                if rows > 0 {
+                    updated += 1;
+                }
             }
         } else {
             let result = db.execute(

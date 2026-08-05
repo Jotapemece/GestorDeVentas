@@ -9,7 +9,7 @@ pub const SQL_CREATE_TABLES: &str = "
         stock_minimo INTEGER NOT NULL DEFAULT 0,
         activo INTEGER NOT NULL DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now','localtime')),
-        updated_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
         favorito INTEGER NOT NULL DEFAULT 0
     );
 
@@ -31,7 +31,7 @@ pub const SQL_CREATE_TABLES: &str = "
         credito_activo INTEGER NOT NULL DEFAULT 1 CHECK(credito_activo IN (0, 1)),
         saldo_deuda_usd REAL NOT NULL DEFAULT 0.0,
         sync_id TEXT,
-        updated_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
         es_temporal INTEGER NOT NULL DEFAULT 0,
         created_at TEXT DEFAULT ''
     );
@@ -49,7 +49,7 @@ pub const SQL_CREATE_TABLES: &str = "
         total_bs REAL NOT NULL DEFAULT 0,
         sync_id TEXT,
         dispositivo_origen TEXT DEFAULT '',
-        updated_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
         nota TEXT NOT NULL DEFAULT '',
         FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
         FOREIGN KEY(cliente_id) REFERENCES clientes(id)
@@ -123,6 +123,8 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("028_add_nota_anulacion_ventas", add_nota_anulacion_ventas),
     ("029_add_clientes_temporales", add_clientes_temporales),
     ("030_add_qol_fields", add_qol_fields),
+    ("031_fix_timestamps_utc", fix_timestamps_utc),
+    ("032_drop_detalles_producto_fk", drop_detalles_producto_fk),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -455,7 +457,7 @@ fn add_inari_bebidas(_conn: &Connection) -> Result<(), String> {
 fn add_usuarios_sync_fields(conn: &Connection) -> Result<(), String> {
     for (col, def) in [
         ("sync_id", "TEXT"),
-        ("updated_at", "TEXT DEFAULT (datetime('now','localtime'))"),
+        ("updated_at", "TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))"),
         ("dispositivo_origen", "TEXT DEFAULT ''"),
     ] {
         if !column_exists(conn, "usuarios", col) {
@@ -583,4 +585,148 @@ fn add_qol_fields(conn: &Connection) -> Result<(), String> {
         "CREATE INDEX IF NOT EXISTS idx_historial_precios_codigo ON historial_precios(producto_codigo)",
         [],
     ).map(|_| ()).map_err(|e| format!("030 index historial_precios: {}", e))
+}
+
+/// Recrea `detalles_ventas` sin la FK a `productos(codigo)` — necesaria para permitir
+/// líneas de venta de combos (código `COMBO-N`, que no existe en `productos`). De paso
+/// convierte `cantidad` a REAL para soportar cantidades fraccionarias (pesables).
+/// Idempotente: si la tabla ya no tiene la FK, no hace nada.
+fn drop_detalles_producto_fk(conn: &Connection) -> Result<(), String> {
+    let det_sql: String = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='detalles_ventas'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+    if !det_sql.contains("FOREIGN KEY(producto_codigo)") {
+        return Ok(());
+    }
+    conn.execute_batch(
+        "PRAGMA foreign_keys=OFF;
+         ALTER TABLE detalles_ventas RENAME TO detalles_ventas_032_old;
+         CREATE TABLE detalles_ventas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            venta_id INTEGER NOT NULL,
+            producto_codigo TEXT NOT NULL,
+            cantidad REAL NOT NULL DEFAULT 0,
+            precio_usd_unitario REAL NOT NULL,
+            sync_id TEXT,
+            anulado INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(venta_id) REFERENCES ventas(id)
+         );
+         INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id, anulado)
+             SELECT id, venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id, COALESCE(anulado, 0)
+             FROM detalles_ventas_032_old;
+         DROP TABLE detalles_ventas_032_old;
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_detalles_ventas_sync_id ON detalles_ventas(sync_id);
+         PRAGMA foreign_keys=ON;",
+    )
+    .map_err(|e| format!("032 drop FK detalles_ventas: {}", e))
+}
+
+/// Convierte `updated_at` en formato naive local (SQLite `datetime('now','localtime')`,
+/// "YYYY-MM-DD HH:MM:SS") a UTC ISO ("YYYY-MM-DDTHH:MM:SS.000Z"), para que las comparaciones
+/// de sync (`updated_at > ultimo_*`) sean correctas entre dispositivos. Idempotente: solo toca
+/// filas cuyo valor NO contiene 'T' ni 'Z' (i.e. aún naive).
+fn fix_timestamps_utc(conn: &Connection) -> Result<(), String> {
+    for table in ["productos", "ventas", "clientes", "usuarios"] {
+        if !column_exists(conn, table, "updated_at") {
+            continue;
+        }
+        let sql = format!(
+            "UPDATE {table} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', datetime(updated_at, 'utc')) \
+             WHERE updated_at IS NOT NULL AND updated_at != '' \
+             AND instr(updated_at, 'T') = 0 AND instr(updated_at, 'Z') = 0"
+        );
+        conn.execute_batch(&sql)
+            .map_err(|e| format!("031 fix {table}.updated_at a UTC: {}", e))?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn setup() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SQL_CREATE_TABLES).unwrap();
+        run_migrations(&conn);
+        conn
+    }
+
+    #[test]
+    fn test_fix_timestamps_utc_convierte_y_es_idempotente() {
+        let conn = setup();
+        conn.execute(
+            "INSERT INTO productos (codigo, nombre, precio_usd, stock, activo, created_at, updated_at) \
+             VALUES ('P1','Test',1,0,1,'2026-07-18 10:00:00','2026-07-18 10:00:00')",
+            [],
+        ).unwrap();
+        fix_timestamps_utc(&conn).unwrap();
+        let v: String = conn
+            .query_row("SELECT updated_at FROM productos WHERE codigo = 'P1'", [], |r| r.get(0))
+            .unwrap();
+        assert!(v.contains('T'));
+        assert!(v.ends_with('Z'));
+        // Idempotente: correr de nuevo no altera el valor ya convertido.
+        fix_timestamps_utc(&conn).unwrap();
+        let v2: String = conn
+            .query_row("SELECT updated_at FROM productos WHERE codigo = 'P1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, v2);
+    }
+
+    #[test]
+    fn test_fix_timestamps_utc_ignora_iso() {
+        let conn = setup();
+        conn.execute(
+            "INSERT INTO productos (codigo, nombre, precio_usd, updated_at) \
+             VALUES ('P2', 'Y', 1, '2026-07-18T10:00:00.000Z')",
+            [],
+        ).unwrap();
+        fix_timestamps_utc(&conn).unwrap();
+        let v: String = conn
+            .query_row("SELECT updated_at FROM productos WHERE codigo = 'P2'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, "2026-07-18T10:00:00.000Z");
+    }
+
+    #[test]
+    fn test_drop_detalles_producto_fk_recrea_tabla() {
+        let conn = setup();
+        let sql: String = conn
+            .query_row("SELECT sql FROM sqlite_master WHERE type='table' AND name='detalles_ventas'", [], |r| r.get(0))
+            .unwrap();
+        assert!(!sql.contains("FOREIGN KEY(producto_codigo)"));
+        assert!(sql.contains("cantidad REAL"));
+        // Debe permitir insertar líneas de combos (código COMBO-N no existe en productos).
+        conn.execute(
+            "INSERT INTO usuarios (username, password, rol) VALUES ('tester', 'x', 'admin')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (fecha_hora, usuario_id, metodo_pago, total_usd, tasa_aplicada) \
+             VALUES ('2026-07-18 10:00:00', 1, 'efectivo_usd', 15, 10)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+             VALUES (1, 'COMBO-1', 1, 15)",
+            [],
+        ).unwrap();
+        // Datos previos preservados: la tabla se recrea copiando filas.
+        conn.execute(
+            "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario, anulado) \
+             VALUES (1, 'P1', 2, 5, 0)",
+            [],
+        ).unwrap();
+        let (count, max_id): (i64, i64) = conn
+            .query_row("SELECT COUNT(*), MAX(id) FROM detalles_ventas", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(max_id, 2);
+    }
 }

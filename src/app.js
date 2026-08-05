@@ -655,8 +655,24 @@ document.addEventListener('DOMContentLoaded', async function() {
       try {
         backupBtn.disabled = true;
         backupBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Guardando...';
-        const msg = await invoke('backup_database', { destPath: '' });
-        showToast(msg);
+        if (IS_ANDROID) {
+          const r = await invoke('backup_database_b64');
+          await invoke('plugin:gestor-downloads|save_to_downloads', {
+            payload: { file_name: r.file_name, content: r.base64 },
+          });
+          showToast('Respaldo guardado en Descargas');
+        } else {
+          const path = await invoke('plugin:dialog|save', {
+            options: {
+              defaultPath: 'gestor_ventas_backup.enc',
+              filters: [{ name: 'Enc', extensions: ['enc'] }],
+            },
+          });
+          if (path) {
+            const msg = await invoke('backup_database', { destPath: path });
+            showToast(msg);
+          }
+        }
       } catch (e) {
         showToast('Error: ' + e, 'error');
       } finally {
@@ -670,8 +686,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.restoreBackupBtn).addEventListener('click', async function() {
     try {
       var result = await invoke('plugin:dialog|open', {
-        filters: [{ name: 'Backup cifrado', extensions: ['enc'] }],
-        multiple: false,
+        options: {
+          filters: [{ name: 'Backup cifrado', extensions: ['enc'] }],
+          multiple: false,
+        },
       });
       if (!result) return;
       this.disabled = true;
@@ -984,9 +1002,18 @@ statusEl.style.color = cssVar('--text-secondary');
   });
 
   // Modal backdrop click
+  const PROTECTED_MODALS = ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'quick-debt-modal', 'stock-adjust-modal'];
   qsa('.modal').forEach(m => {
     if (m.id === 'calculator-modal') return; // handled by closeCalculator
-    m.addEventListener('click', e => { if (e.target === m) closeModal(m); });
+    m.addEventListener('click', e => {
+      if (e.target !== m) return;
+      if (PROTECTED_MODALS.indexOf(m.id) !== -1) {
+        confirmModal('\u00bfSeguro que quieres cerrar? Se perder\u00e1n los datos ingresados.', 'Cerrar ventana', 'S\u00ed, cerrar')
+          .then(ok => { if (ok) closeModal(m); else showModal(m); });
+        return;
+      }
+      closeModal(m);
+    });
   });
 
   // Sound config
@@ -1223,6 +1250,7 @@ statusEl.style.color = cssVar('--text-secondary');
   // Inari config toggle
   const inariToggle = qs(SEL.inariConfigToggle);
   function applyInariConfig(active) {
+    inariManualActivo = active;
     var dayOk = active && INARI_DIAS.includes(new Date().getDay());
     showInari = dayOk;
     updateInariBtn();

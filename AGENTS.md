@@ -274,11 +274,43 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 
 ## Work State
 
+### Guías de ejercicios (2026-08-05) — documentos .docx en la raíz (tarea lateral, no toca la app)
+- **Archivos**: `Guia_Ejercicios_Primer_Semestre.docx` y `Guia_Ejercicios_Resueltos.docx` (originales, intactos; sus Nivel 4-5 ya fueron reemplazados por versiones simples tipo N3 en sesión anterior). Nuevos: `Guia_Ejercicios_2.docx` (copia del primero, retitulado, con ejercicios NUEVOS) y `Guia_Ejercicios_2_Resueltos.docx` (estructura del Resueltos —portada con índice en línea, temas en hoja nueva con título centrado, solo ejercicios resueltos sin "Herramientas/Fórmulas clave" ni "Ejemplos resueltos"— pero con los 15 ejercicios del doc2; portada "Guía de Ejercicios (simplificado)", 284 párrafos, 4 saltos de página conservados).
+- **Plan aprobado para Guia_Ejercicios_2.docx** (estructura idéntica: portada, Contenido, intros, Herramientas/Fórmulas clave, ejemplos resueltos, 5 ejercicios por tema; dificultad corrida un escalón arriba). **2026-08-05**: aprobadas 6 sustituciones para diferenciarlo del doc1 (verificadas en el docx regenerado, 366 párrafos):
+  - **Lineales**: N1 `5−(2x−3)=4x+2`→1 (menos delante del paréntesis) · N2 `(x+3)/2−(x−1)/4=3`→5 · N3 `√2(x−1)=4`→`1+2√2` (único con raíz, se queda aquí) · N4 `x/2−x/5=3+x/10`→15 (x fraccionario en ambos miembros) · N5 `(x−1)/4+(x+2)/3=x/2+1`→7 (x en ambos miembros y en fracciones)
+  - **Cuadráticas** (solo factorización y fórmula general): N1 `x²−7x+12=0`→3,4 · N2 `3x²−10x−8=0`→factor. por agrupación (a≠1)→`−2/3`,4 · N3 `x(x−3)=10`→agrupar→5,−2 · N4 `x²+2x+5=0`→Δ=−16<0 **sin soluciones reales** · N5 `2x²−6x+1=0`→fórmula general **explícita** `x=(−b±√Δ)/2a`, Δ=28→`(3±√7)/2`
+  - **Sistemas**: N1 `{x+2y=8;3x−y=10}` sust.→(4,2) · N2 `{4x+3y=5;2x−3y=−11}` reduc.→(−1,3) · N3 `{2x+y=1;x−y=5}` igual.→(2,−3) · N4 `{x+y=7;x−y=7}` (curioso: se restan, y=0)→(7,0) · N5 `{3x+2y=19;2x−3y=4}` reduc. doblando→(5,2)
+  - **Ejemplos resueltos nuevos**: cuadráticas: discriminante `x²−6x+8=0` (Δ=4), factorización `x²+9x+20=0`; métodos: sustitución→(5,1), igualación→(6,2), reducción→(2,1)
+- **Herramientas**: venv `/tmp/opencode/docxvenv` (python-docx), builders OMML en `/tmp/opencode/exercise_lib.py` (`r/frac/paren/sup/rad/om/system`, `p_*`, `parse_frag`), driver `/tmp/opencode/make_doc_2_final.py` (doc2; bloques `t1/t2/t3` importables, ejecución bajo `if __name__ == '__main__'`), driver `/tmp/opencode/make_doc_resueltos_2.py` (doc2 resueltos: copia Resueltos como base, reemplaza cuerpos de los 15 ejercicios con bloques del doc2 + párrafo vacío al final, retitula portada; `next_boundary` se detiene en saltos de página para no borrarlos). Patrón quirúrgico: copiar base → insertar bloques nuevos antes del anchor (orden inverso) → remover cuerpo viejo (por referencias, no índices).
+
 ### Objective
-Optimización y limpieza: ejecutar Fases 1 y 2 del Auditoría Plan (bugs de correctitud + DRY Rust).
+Implementar exportaciones por plataforma (Android → Descargas automático, escritorio → diálogo "Guardar como") y protección de modales críticos con confirmación al cerrar.
 
 ### Completed (this session)
-- **Plan de optimización anotado** en AGENTS.md (6 fases, 20 ítems)
+- **Fase C — Corrección del sync** (2026-08-05): arreglado "cosas que no sincronizan" y "deudas que se sobrescriben".
+  - **C1 — Timestamps UTC ISO**: migración `031_fix_timestamps_utc` (migrations.rs) convierte `updated_at` naive local (`datetime('now','localtime')`) de `productos`/`ventas`/`clientes`/`usuarios` a UTC ISO (`strftime('%Y-%m-%dT%H:%M:%fZ', datetime(col,'utc'))`), solo filas sin `T`/`Z` (idempotente). Actualizados los defaults `updated_at` de DDL nuevas a UTC strftime. Writers `updated_at` ya usaban `now_iso()` (solo los backfills 014/015/016/024 eran naive → ahora convertidos). Causa raíz: comparaciones `updated_at > watermark` rotas para filas naive (espacio < 'T').
+  - **C2 — propagación de anulaciones** (sync/sales.rs): upload ahora sube el `anulado` REAL por detalle (antes hardcodeado a `0`). `download_sales_inner` reescrito para procesar TAMBIÉN ventas ya existentes (antes `INSERT OR IGNORE` + `continue` perdía anulaciones y avanzaba el watermark sin aplicarlas). Reconciliación por **transición idempotente** (helper puro `anulado_delta`): stock se restaura/sustrae solo cuando el estado local difiere (activo→anulado restaura, anulado→activo sustrae), venta anulada implica sus ítems anulados; sincroniza `total_usd/total_bs/nota_anulacion/anulada` y avanza `ULTIMO_DOWNLOAD_VENTAS` solo tras aplicar.
+  - **C3 — upload productos incremental + tombstones** (sync/products.rs): ya NO sube todos los activos con `updated_at=ahora`; filtra `updated_at > ultimo_upload` incluyendo `activo=0` (borrados lógicos viajan). `SQL_SOFT_DELETE` y `replace_all_products` ahora bumpean `updated_at` (UTC) para que la desactivación se propague.
+  - **C4 — deudas LWW por fecha + upload clientes incremental** (sync/clients.rs): upload ya no sube todos los clientes cada vez (solo `updated_at > ultimo_upload_clientes` + los sin sync_id); download solo sobrescribe si `remote.updated_at > local.updated_at` (LWW por timestamp). Conflictos siguen en ventana de 5 min.
+  - **C5 — parse_ts** con hora local para naive (conflicts.rs): `NaiveDateTime` se interpreta como `Local` (no UTC) hasta que 031 los elimine.
+  - **Tests**: +8 Rust (5 `anulado_delta` en sync/sales.rs, 2 migración 031, 1 parse_ts roundtrip local) → **98/98** `cargo test --lib`, `cargo check` OK.
+- **Fase B — Correctitud dinero/stock** (2026-08-05): los hallazgos CRÍTICOS de dinero/stock de la auditoría 2026-08-04 quedan corregidos.
+  - **B1 — Combos vendibles**: `resolver_linea_venta` (sales.rs) detecta códigos `COMBO-N` y resuelve contra `combos`/`combo_productos` (precio del combo, componentes con su es_inari). Al vender un combo se descuenta stock de sus componentes no-inari (`cantidad_componente × cantidad_combo`). Migración **032_drop_detalles_producto_fk** (migrations.rs) recrea `detalles_ventas` SIN `FOREIGN KEY(producto_codigo)` (permite líneas `COMBO-N` que no existen en `productos`) y con `cantidad REAL` (idempotente: verifica `sqlite_master`). El error de FK al insertar detalle de combo desaparece.
+  - **B2 — void_sale sin restauración doble/inari**: restaura solo ítems `(anulado IS NULL OR anulado = 0)` y `COALESCE(p.es_inari,0) = 0`; para líneas `COMBO-N` restaura stock de los componentes no-inari. Antes restauraba TODOS los ítems (doble restauración) y los inari que nunca decrementaron.
+  - **B3 — void_sale_items revierte deuda**: `recalculate_sale_after_void` lee `old_total_usd` ANTES de recalcular; si `remaining == 0` y la venta era `credito`, revierte `saldo_deuda_usd` del cliente (`MAX(0, saldo - old_total)`). Antes anular todos los ítems dejaba la deuda intacta.
+  - **B4 — cantidades fraccionarias**: void_sale y void_sale_items leen `cantidad` como `f64` (antes i64, truncaba pesables); sync/sales.rs sube `cantidad` como f64 y descarga con `as_f64` (antes `as_i64`); contadores `items_restored`/`items_consumed` ahora f64. La columna `detalles_ventas.cantidad` es REAL desde 032.
+  - **B5 — validación total_bs_ingresado**: no se puede subreportar el total en Bs. (`bs < total_usd*tasa - tolerancia` → error; tolerancia = `max(1.0, esperado*0.01)`). Se permite pagar de más (recibir vuelto). Antes un cliente podía fijar Bs. 0.01 en una venta de $100.
+  - **B6 — reportes excluyen anuladas + saldo**: `get_sales_by_vendor` cuenta solo `anulada = 0` (`COUNT(CASE WHEN anulada=0 THEN 1 END)`); `SQL_LIST_DIARIAS` (get_daily_summary) agrega `AND v.anulada = 0` (antes listaba anuladas junto a totales que las excluyen); `get_saldo_caja` calcula `ventas_bs` con fallback por fila (`CASE WHEN total_bs > 0 THEN total_bs ELSE total_usd*tasa_aplicada END`). `get_sales_report_inner` ya filtraba `anulada = 0`.
+  - **B7 — WAL checkpoint**: `do_backup` (db.rs) ejecuta `PRAGMA wal_checkpoint(TRUNCATE)` antes de copiar la BD (antes `std::fs::copy` podía perder transacciones del `-wal`).
+  - **Tests**: +10 Rust (1 migración 032, 9 en sales.rs: resolver producto/combo/combo inexistente, venta de combo resta componentes, combo stock insuficiente, total_bs menor rechazado, pago de más aceptado, void total revierte deuda, void parcial no la revierte) → **108/108** `cargo test --lib`, `cargo check` OK.
+  - **Plugin Tauri nuevo**: `src-tauri/plugins/gestor-downloads/` (package `com.gestorventas.downloads`). Comandos `save_to_downloads` (Descargas) y `save_to_path` (ruta arbitraria). Desktop: decode base64 + `sanitize_name` a `download_dir()`/ruta. Android: MediaStore.Downloads (API ≥29 con `IS_PENDING`+`VOLUME_EXTERNAL_PRIMARY`, sin permisos) y escritura directa a `DIRECTORY_DOWNLOADS` en API <29. Kotlin `ExamplePlugin.kt`; CLI corregido (package antes malformado).
+  - **App conectada al plugin**: `.plugin(tauri_plugin_gestor_downloads::init())` en lib.rs, dependencia en Cargo.toml, `gestor-downloads:default` en `capabilities/default.json`, módulo Gradle en `gen/android/tauri.settings.gradle` + `app/tauri.build.gradle.kts`.
+  - **Nuevo comando Rust** `backup_database_b64` (db.rs): backup cifrado en temp → `{file_name, base64}` para Android (registrado en lib.rs).
+  - **Frontend**: helper `saveExportedFile(fileName, data)` (utils.js): base64 o Blob; Android `plugin:gestor-downloads|save_to_downloads` → Descargas; escritorio `plugin:dialog|save` (nombre editable) → `save_to_path`. Aplicado a productos XLSX (inventory-view), reporte XLSX, PDF, chart PNG (reports-view) y botón Respaldar BD (app.js: `backup_database_b64` en Android, `save` dialog + `backup_database` en escritorio). Toasts según plataforma.
+  - **Modales**: `PROTECTED_MODALS` (payment, product, client, abono, combo, quick-debt, stock-adjust) en handler de backdrop (app.js): click fuera → `confirmModal` "¿Seguro que quieres cerrar?"; si no se confirma, `showModal(m)` restaura el modal. El resto cierra directo.
+- **Verificado**: `cargo check` desktop y `--target aarch64-linux-android` (con NDK CC/AR env), Kotlin del plugin compila (`gradlew :tauri-plugin-gestor-downloads:compileDebugKotlin`), 90/90 Rust, 63 vitest, `node --check` + minify OK.
+- **Inari en ventas por días**: helper `inariVisibleEnVentas()` (inventory-view.js) = día ∈ jueves-domingo `INARI_DIAS` O toggle manual `inari_activo` (flag `inariManualActivo`, se setea en `applyInariConfig` de app.js). El módulo de ventas (cashier-view.js) filtra productos `es_inari` y combos en búsqueda/favoritos/recientes cuando `inariVisibleEnVentas()` es false.
+- **Snake ASCII (solo PC)**: `src/snake.js` (nuevo): juego "Snake" con gráficos ASCII renderizados en `<pre>`. Lógica pura (`snakeCreate/snakePlaceFood/snakeStep/snakeRender`) separada de la integración DOM. Grid 20×12 con paredes, velocidad base 140ms que baja con la longitud. Acceso desde la Guía rápida (nuevo tab "Juego" `data-section="juego"` + `#guide-juego` con botón `#snake-btn`, se oculta en Android vía `IS_ANDROID`). Modal `#snake-modal`, teclado capture+stopImmediatePropagation (Flechas/WASD, P/Espacio pausa, R/Enter reiniciar), guard en `snakeDoTick` si el modal se cierra por otra vía. SEL de snake en constants.js, estilos `.snake-*` en style.css, `initSnake()` llamada en views.js. Tests: 75 vitest (12 nuevos de lógica pura).
 - **Fase 1 completa**:
   - Rate limit real: helpers `rate_limit_fail`/`rate_limit_success` (db.rs) + guards `admin_guard`/`employee_guard` (auth.rs: rate-limit check + lock_db + require_admin/require_employee + audit). Aplicado a create_sale, set_tasa, void_sale_items, void_sale, pay_debt, add_quick_debt, restore_backup, get_backup_key, clear_audit; comandos refactorizados (create_usuario, delete_usuario, reset_usuarios, admin_change_password, change_password, set_config_value)
   - Contadores reales en sync/products.rs (`updated`/`inserted` = filas afectadas)
@@ -313,15 +345,80 @@ Optimización y limpieza: ejecutar Fases 1 y 2 del Auditoría Plan (bugs de corr
 - **Clientes temporales de crédito**: migración 029 (`clientes.es_temporal`, `clientes.created_at`, `clientes_eliminados`, `ajustes_stock.usuario`). `create_cliente(es_temporal)`, `pay_debt` elimina el temporal al saldar deuda (audit + historial `clientes_eliminados`), `delete_cliente` registra temporales eliminados manualmente, comando `list_clientes_eliminados`. Frontend: badge "Temporal", checkbox en modal de cliente, botón "Historial Temporales" en Crédito. Sync: los temporales NO se suben a Supabase
 - **Verificado**: cargo check limpio, 80/80 Rust, 66/66 vitest, minify OK
 
+### Auditoría profunda 2026-08-04 — hallazgos registrados, fixes NO aplicados
+- **Alcance**: ~21.000 líneas auditadas (6.800 Rust + 14.000 JS/HTML/CSS) + plugin gestor-downloads. Hallazgos de agentes explore (núcleo/dominio Rust) + auditoría manual bash; cada claim verificado (cruces de comandos Tauri, XSS, selectores, iconos, sync).
+- **Bien (no re-auditar)**: cero inyección SQL (`params!`); 99 comandos registrados en lib.rs (1 desajuste); migraciones idempotentes + no marcan versión en fallo; AES-256-GCM backups; guards `admin_guard`/`employee_guard`; sync users NO sube hashes Argon2; 90 Rust + 84 vitest OK.
+- **CRÍTICOS (dinero/seguridad)**:
+  1. **Combos no vendibles**: frontend envía `codigo='COMBO-N'` y el backend busca en `productos` → "Producto no encontrado" (sales.rs:106-110, cashier-view.js:215).
+  2. **`es_inari` del cliente salta stock**: `create_sale` lee `es_inari` del request y omite control/descenso de inventario (sales.rs:111,159-165 + models.rs:157) → inventario gratis con cliente manipulado.
+  3. **`register_movimiento` sin auth ni rol**, con `usuario_id`/`username` falsificables y montos negativos (cashier.rs:532).
+  4. **`set_tasa` sin auth** (solo rate-limit) (sales.rs:326).
+  5. **`get_config_value` sin auth** expone `supabase_key`, `openrouter_api_key` y `backup_encryption_key` (config.rs:5).
+  6. **Sync (19 comandos) sin auth**: `upload_all`, `download_all`, `resolve_conflicto` (muta BD) funcionan sin login (sync/*).
+  7. **`create_sale` atribuye la venta al `usuario_id` del request** (autoría forjable) (sales.rs:143,222).
+  8. **Anulaciones remotas no se propagan**: download usa `INSERT OR IGNORE` sin UPDATE → `anulada=1` nunca se aplica a filas existentes (sync/sales.rs:279-305).
+  9. **`void_sale` restaura stock doble** (items ya anulados) y de items inari que nunca lo decrementaron (sales.rs:394-406).
+  10. **Anular todos los items no revierte la deuda a crédito** (sales.rs:844-897).
+  11. **Cantidades fraccionarias truncadas a `i64`** al anular/sync → pérdida de stock en pesables (sales.rs:402,830 + sync/*).
+  12. **Upload productos sobrescribe a ciegas** (updated_at=ahora para todo, sin chequeo de versión) y **no sube borrados** (solo `activo=1`) (sync/products.rs:45-84).
+  13. **`change_password` exige rol admin** → vendedor no puede cambiar su propia clave (auth.rs:372).
+  14. **`admin_change_password` sin validar `PASSWORD_MIN_LENGTH`** (auth.rs:429).
+  15. **`pay_debt`/`add_quick_debt` sin guard de rol** (solo rate-limit) (clients.rs:252,381).
+  16. **Backup WAL sin checkpoint** → riesgo de perder transacciones del `-wal` (db.rs:385).
+  17. **`get_sales_by_vendor` cuenta ventas anuladas** (sales.rs:745).
+  18. **`total_bs_ingresado` arbitrario del cliente** (puede fijar Bs=0.01 en venta de $100) (sales.rs:131-138).
+  19. **`get_saldo_caja` mezcla total_bs crudo sin `fallback_total_bs`** (cashier.rs:568-578).
+  20. **`save_to_path` escribe ruta arbitraria** sin sanitizar (gestor-downloads desktop.rs:66-77).
+  21. **`get_backup_key` entrega la clave maestra de descifrado** al frontend (db.rs:496-508).
+- **MEDIOS**:
+  - **XSS**: `clients-view.js:120` inyecta `p.producto_nombre` sin `escapeHtml` en el detalle de deuda; `escapeHtml` (utils.js:2) no escapa `'`.
+  - **Comando roto**: `shortcuts.js:117` invoca `list_clients_simple` NO registrado en lib.rs → búsqueda global de clientes falla silenciosa siempre.
+  - **3 iconos sin glifo** en fa-local.css: `nf-fa-image` (reports-view.js:148), `nf-fa-chart_line` (reports-view.js:190), `nf-fa-rotate_left` (index.html:243).
+  - `historial_tasas` con `INSERT OR REPLACE` por fecha **pierde tasas intra-día**.
+  - `get_daily_summary` lista ventas anuladas junto a totales que las excluyen.
+  - `migrations.rs:216-239`: DROP+rebuild puede dejar `PRAGMA foreign_keys=OFF` a mitad; migraciones no-op 022/023 registradas como aplicadas.
+  - Login retiene el mutex de DB durante Argon2 (DoS latencia); lockout con usernames inexistentes (DoS); deadlock teórico por orden de locks (`products.rs:150` vs `auth.rs:434`).
+  - `conflicts.rs:7-15`: `parse_ts` trata timestamps locales sin TZ como UTC → ventana de conflicto desviada.
+  - Sync clientes sobrescribe `saldo_deuda_usd` (LWW) sin tratarlo como conflicto (riesgo financiero).
+  - PDF: acentos en mojibake (pdf.rs WinAnsi vs UTF-8).
+- **BAJOS/deuda técnica**: query de costos duplicada 4×; lógica de períodos duplicada 2×; `format_metodo_label` trivial; `temp_dir` fijos en `import_products_from_db`; `.ok()` en paths críticos; `reset_usuarios` deja sesión fantasma; `ensure_daily_backup` no atómico.
+- **Plan de remediación (pendiente, NO aplicado)**:
+  - **Fase A — Seguridad**: guard auth en `get_config_value` (bloquear claves sensibles); `register_movimiento` con `admin_guard` + derivar usuario de sesión; `set_tasa`/`pay_debt`/`add_quick_debt` con guards; sync mutaciones con `admin_guard`; `change_password` sin exigir admin + `admin_change_password` validando longitud; `create_sale` ignora `usuario_id` del request y lee `es_inari`/`es_pesable` de la DB; sanitizar `save_to_path`; restringir `get_backup_key`; XSS `clients-view.js:120`.
+  - **Fase B — Correctitud dinero/stock**: combos resueltos contra `combos`/`combo_productos` (restar stock de componentes); `void_sale` filtra `anulado=0` y no restaura inari; `void_sale_items` revierte deuda al anular todo; cantidades como REAL/f64; validar `total_bs_ingresado` (tolerancia vs `total_usd*tasa`); filtrar anuladas en reportes; `wal_checkpoint(TRUNCATE)` en backup. **✅ APLICADO (2026-08-05)** — ver "Fase B — Correctitud dinero/stock" en Completed.
+  - **Fase C — Sync**: UPDATE en anulaciones remotas; upload solo lo modificado + tombstones; `parse_ts` con zona horaria; `saldo_deuda_usd` como candidato a conflicto. **✅ APLICADO (2026-08-05)** — ver "Fase C — Corrección del sync" en Completed.
+  - **Fase D — Frontend menor**: registrar `list_clientes` para búsqueda global; añadir 3 glifos FA.
+- **Estado**: registrado 2026-08-04; Fases B y C aplicadas 2026-08-05; pendientes A, D.
+
 ### Active
-- **Tests DB de nuevas features** (2026-08-03): infraestructura de test compartida `db::test_support::test_conn()` (SQLite in-memory + esquema + migraciones). Refactor `registrar_ajuste_stock` → inner `registrar_ajuste_stock_inner(&mut Connection, ...)` testable. Tests nuevos: 5 de ajuste de stock (incremento+auditoría, negativo sin stock, cantidad 0, motivo vacío, producto inexistente) y 3 de `eliminar_cliente_temporal` (historial/auditoría, desvincula ventas, inexistente). 90 Rust + 63 vitest.
+- **Fase B del sync aplicada** (2026-08-05): 108/108 `cargo test --lib`, `cargo check` desktop OK. Cambios Rust → reiniciar `npm run tauri dev` (F5 solo recarga frontend).
+- **Pendiente por probar en vivo (Fase B)**: 
+  1. Vender un combo → se registra la venta y baja el stock de sus componentes (antes "Producto no encontrado").
+  2. Anular una venta con combo → se restaura el stock de los componentes una sola vez.
+  3. Anular todos los ítems de una venta a crédito → la deuda del cliente se revierte.
+  4. Vender producto pesable con cantidad fraccionaria (ej. 0.5 kg) → anularlo restaura 0.5 (antes truncaba).
+  5. En efectivo Bs. intentar cobrar menos del total → rechazado; pagar de más (vuelto) → aceptado.
+  6. Verificar que el backup (Config → Respaldar BD) sigue funcionando con el checkpoint WAL.
+- **Pendiente por probar en vivo (Fase C)**: con 2 dispositivos y botones de Configuración → Sincronización —
+  1. Venta nueva en un dispositivo → aparece en el otro (antes filas `updated_at` naive nunca pasaban el filtro).
+  2. Anular venta/ítem → se marca anulada y el **stock se restaura** en el otro dispositivo (antes `INSERT OR IGNORE`+`continue` la perdía y avanzaba el watermark).
+  3. Desactivar producto → queda inactivo en el otro (tombstone `activo=0`).
+  4. Editar deuda en paralelo → gana la de timestamp más reciente (LWW); si editan en <5 min → aparece en "Ver conflictos".
+  5. Verificar que la migración 031 convirtió `updated_at` a UTC (filas con `T`/`Z`).
+- **Auditoría profunda 2026-08-04 registrada en AGENTS.md** (ver sección arriba); pendientes Fase A, D.
+- **Snake ASCII (solo PC)** (2026-08-04): juego en modal con gráficos ASCII, acceso desde la Guía rápida (tab "Juego"), oculto en Android. Verificado node --check + minify + 75 vitest.
 
 ### Next Move
-- Revisar que WAL no pierda datos en backups (copiar .db sin checkpoint previo) — queda pendiente de investigación opcional.
+- Probar sync en vivo (F5 + botones de Configuración → Sincronización) según lista "Pendiente por probar (Fase C)".
+- Probar la Fase B en vivo (combos, anulaciones con deuda, pesables, total_bs) según lista "Pendiente por probar en vivo (Fase B)".
+- Aplicar Fase A (seguridad) y D (frontend menor) de la auditoría 2026-08-04.
+- Build Android completo (`npm run tauri android build`) para confirmar integración Gradle del plugin de punta a punta.
+- Probar el Snake manualmente en PC (F5 recarga frontend).
 
 ---
 
 ## Auditoría Plan
+
+> ⚠️ **SUPERSEDED** por la "Auditoría profunda 2026-08-04" (Work State, arriba). Las Fases 1-5 de este plan histórico ya están completadas ✅; los fixes pendientes se priorizan ahora según el nuevo reporte.
 
 ### Fase 1 — Bugs de correctitud
 1. Rate limiting inoperante: `check_action_rate_limit` (db.rs:20-36) solo lee, nunca incrementa. 9 comandos sin bloqueo real (create_sale, set_tasa, void_sale_items, void_sale, pay_debt, add_quick_debt, restore_backup, get_backup_key, clear_audit). Solo auth.rs/config.rs incrementan manualmente.

@@ -25,6 +25,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_gestor_downloads::init())
         .setup(|app| {
             let (conn, db_path) = match db::init_db(app.handle()) {
                 Ok(t) => t,
@@ -114,6 +115,7 @@ pub fn run() {
             tasa_bcv::get_tasa_historica,
             // DB
             db::backup_database,
+            db::backup_database_b64,
             db::restore_backup,
             db::get_backup_key,
             // Auth

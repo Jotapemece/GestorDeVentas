@@ -110,8 +110,8 @@ pub(crate) fn upload_sales_inner(
     let mut d_stmt = db
         .prepare(
             &format!(
-                "SELECT dv.venta_id, dv.producto_codigo, dv.cantidad, \
-                 dv.precio_usd_unitario, dv.sync_id, dv.id \
+"SELECT dv.venta_id, dv.producto_codigo, dv.cantidad, \
+                 dv.precio_usd_unitario, dv.sync_id, dv.id, COALESCE(dv.anulado,0) \
                  FROM detalles_ventas dv WHERE dv.venta_id IN ({})",
                 placeholder_str,
             ),
@@ -123,15 +123,16 @@ pub(crate) fn upload_sales_inner(
         .map(|id| id as &dyn rusqlite::types::ToSql)
         .collect();
 
-    let dets: Vec<(i64, String, i64, f64, Option<String>, i64)> = d_stmt
+    let dets: Vec<(i64, String, f64, f64, Option<String>, i64, i64)> = d_stmt
         .query_map(param_refs.as_slice(), |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)?,
+                row.get::<_, f64>(2)?,
                 row.get::<_, f64>(3)?,
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
             ))
         })
         .map_err(|e| e.to_string())?
@@ -146,7 +147,7 @@ pub(crate) fn upload_sales_inner(
 
     let mut updated_sync_ids: Vec<(i64, String)> = Vec::new();
 
-    for (venta_id, codigo, cantidad, precio, det_sync_id, local_det_id) in &dets {
+    for (venta_id, codigo, cantidad, precio, det_sync_id, local_det_id, anulado) in &dets {
         if let Some(venta_sync_id) = sale_sync_map.get(venta_id) {
             let det_id = match det_sync_id {
                 Some(sid) if !sid.is_empty() => sid.clone(),
@@ -163,7 +164,7 @@ pub(crate) fn upload_sales_inner(
                 "producto_codigo": codigo,
                 "cantidad": cantidad,
                 "precio_usd_unitario": precio,
-                "anulado": 0,
+                "anulado": if *anulado != 0 { 1i64 } else { 0i64 },
                 "updated_at": &ts,
             }));
         }
@@ -205,6 +206,21 @@ pub fn upload_sales(state: State<AppState>) -> Result<String, String> {
     run_upload(&state, |db, supabase_url, supabase_key, dispositivo_id| {
         upload_sales_inner(db, supabase_url, supabase_key, dispositivo_id)
     })
+}
+
+/// Calcula la transición de anulado de un detalle al descargar una venta remota.
+/// Una venta anulada implica todos sus ítems anulados. Devuelve:
+/// - el estado objetivo (`should_be_anulado`)
+/// - delta de stock: +1 => restaurar stock (activo → anulado), -1 => consumir (anulado → activo), 0 => sin cambio
+/// Mantener el delta en 0 cuando ya se alcanzó el estado objetivo hace el sync idempotente.
+pub(crate) fn anulado_delta(local_anulado: bool, remote_anulado: bool, venta_anulada: bool) -> (bool, i8) {
+    let should_be_anulado = venta_anulada || remote_anulado;
+    let delta = match (local_anulado, should_be_anulado) {
+        (false, true) => 1,
+        (true, false) => -1,
+        _ => 0,
+    };
+    (should_be_anulado, delta)
 }
 
 pub(crate) fn download_sales_inner(
@@ -257,13 +273,40 @@ pub(crate) fn download_sales_inner(
         return Ok("No hay ventas nuevas para descargar".to_string());
     }
 
-    // First pass: insert ventas and collect sync_ids of newly inserted ones
+    // Estado local para reconciliar por transición (idempotente): el stock se ajusta
+    // SOLO cuando el estado local difiere del remoto, así repetir el sync no duplica.
+    let mut local_ventas: std::collections::HashMap<String, (i64, bool)> = std::collections::HashMap::new();
+    {
+        let mut s = db
+            .prepare("SELECT sync_id, id, COALESCE(anulada,0) FROM ventas WHERE sync_id IS NOT NULL AND sync_id != ''")
+            .map_err(|e| e.to_string())?;
+        let rows = s
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?)))
+            .map_err(|e| e.to_string())?;
+        for r in rows.filter_map(|r| r.ok()) {
+            local_ventas.insert(r.0, (r.1, r.2 != 0));
+        }
+    }
+
+    let mut local_dets: std::collections::HashMap<String, (i64, bool)> = std::collections::HashMap::new();
+    {
+        let mut d = db
+            .prepare("SELECT sync_id, venta_id, COALESCE(anulado,0) FROM detalles_ventas WHERE sync_id IS NOT NULL AND sync_id != ''")
+            .map_err(|e| e.to_string())?;
+        let rows = d
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?)))
+            .map_err(|e| e.to_string())?;
+        for r in rows.filter_map(|r| r.ok()) {
+            local_dets.insert(r.0, (r.1, r.2 != 0));
+        }
+    }
+
     let mut inserted_ventas = 0;
-    let mut inserted_sync_ids: Vec<String> = Vec::new();
-    // Track venta_id local for each inserted sync_id
-    let mut sync_to_local_id: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
-    // Track anulada status
-    let mut anulada_map: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
+    let mut updated_ventas = 0;
+    let mut items_restored = 0.0f64;
+    let mut items_consumed = 0.0f64;
+    let mut venta_remote_anulada: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
+    let mut to_fetch: Vec<String> = Vec::new();
 
     for venta_json in &cloud_ventas {
         let sale_id = venta_json["id"].as_str().unwrap_or("");
@@ -275,53 +318,74 @@ pub(crate) fn download_sales_inner(
         let cli_sync_id = venta_json["cliente_sync_id"].as_str();
         let local_uid = user_rev.get(usr_sync_id).copied().unwrap_or(0);
         let local_cid = cli_sync_id.and_then(|sid| client_rev.get(sid).copied());
+        let remote_anulada = venta_json["anulada"].as_i64().unwrap_or(0) != 0;
+        let remote_ts = venta_json["updated_at"].as_str().unwrap_or(&ts).to_string();
+        venta_remote_anulada.insert(sale_id.to_string(), remote_anulada);
 
-        let result = db.execute(
-            "INSERT OR IGNORE INTO ventas \
-             (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
-              cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at, \
-              usuario_sync_id, cliente_sync_id) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-            params![
-                &normalize_fecha(venta_json["fecha_hora"].as_str().unwrap_or("")),
-                local_uid,
-                venta_json["metodo_pago"].as_str().unwrap_or(""),
-                venta_json["referencia_pago_movil"].as_str(),
-                venta_json["pago_detalle"].as_str().unwrap_or(""),
-                local_cid,
-                venta_json["total_usd"].as_f64().unwrap_or(0.0),
-                venta_json["tasa_aplicada"].as_f64().unwrap_or(0.0),
-                venta_json["total_bs"].as_f64().unwrap_or(0.0),
-                sale_id,
-                venta_json["dispositivo_origen"].as_str().unwrap_or(""),
-                venta_json["updated_at"].as_str().unwrap_or(""),
-                usr_sync_id,
-                cli_sync_id.unwrap_or(""),
-            ],
-        ).map_err(|e| format!("Error insertando venta remota: {}", e))?;
+        if let Some((lvid, local_anulada)) = local_ventas.get(sale_id).copied() {
+            // Venta ya existente: aplicar totales/anulación remota (la remota es más nueva).
+            db.execute(
+                "UPDATE ventas SET total_usd = ?1, total_bs = ?2, anulada = ?3, \
+                 nota_anulacion = ?4, updated_at = ?5 WHERE id = ?6",
+                params![
+                    venta_json["total_usd"].as_f64().unwrap_or(0.0),
+                    venta_json["total_bs"].as_f64().unwrap_or(0.0),
+                    if remote_anulada { 1i64 } else { 0i64 },
+                    venta_json["nota_anulacion"].as_str(),
+                    &remote_ts,
+                    lvid,
+                ],
+            ).map_err(|e| format!("Error actualizando venta remota: {}", e))?;
+            if remote_anulada != local_anulada {
+                local_ventas.insert(sale_id.to_string(), (lvid, remote_anulada));
+            }
+            updated_ventas += 1;
+        } else {
+            let result = db.execute(
+                "INSERT INTO ventas \
+                 (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
+                  cliente_id, total_usd, tasa_aplicada, total_bs, anulada, sync_id, dispositivo_origen, updated_at, \
+                  usuario_sync_id, cliente_sync_id) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    &normalize_fecha(venta_json["fecha_hora"].as_str().unwrap_or("")),
+                    local_uid,
+                    venta_json["metodo_pago"].as_str().unwrap_or(""),
+                    venta_json["referencia_pago_movil"].as_str(),
+                    venta_json["pago_detalle"].as_str().unwrap_or(""),
+                    local_cid,
+                    venta_json["total_usd"].as_f64().unwrap_or(0.0),
+                    venta_json["tasa_aplicada"].as_f64().unwrap_or(0.0),
+                    venta_json["total_bs"].as_f64().unwrap_or(0.0),
+                    if remote_anulada { 1i64 } else { 0i64 },
+                    sale_id,
+                    venta_json["dispositivo_origen"].as_str().unwrap_or(""),
+                    &remote_ts,
+                    usr_sync_id,
+                    cli_sync_id.unwrap_or(""),
+                ],
+            ).map_err(|e| format!("Error insertando venta remota: {}", e))?;
 
-        if result == 0 {
-            continue;
+            let local_id = if result > 0 {
+                db.last_insert_rowid()
+            } else {
+                db.query_row("SELECT id FROM ventas WHERE sync_id = ?1", params![sale_id], |row| row.get(0))
+                    .map_err(|_| "Error leyendo venta recién insertada".to_string())?
+            };
+            local_ventas.insert(sale_id.to_string(), (local_id, remote_anulada));
+            inserted_ventas += 1;
         }
 
-        let local_id = db.last_insert_rowid();
-        inserted_ventas += 1;
-        inserted_sync_ids.push(sale_id.to_string());
-        sync_to_local_id.insert(sale_id.to_string(), local_id);
-        let anulada = venta_json["anulada"].as_i64().unwrap_or(0) != 0;
-        if anulada {
-            anulada_map.insert(sale_id.to_string(), true);
-        }
+        to_fetch.push(sale_id.to_string());
     }
 
-    if inserted_sync_ids.is_empty() {
+    if to_fetch.is_empty() {
         upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
         return Ok("No hay ventas nuevas para descargar".to_string());
     }
 
-    // Batch fetch all detalles for inserted ventas in one request
-    let sync_ids_param: Vec<String> = inserted_sync_ids.iter().map(|id| urlencoding(id)).collect();
-    let in_clause = sync_ids_param.join(",");
+    // Fetch detalles de TODAS las ventas remotas (nuevas y ya existentes) en un request.
+    let in_clause = to_fetch.iter().map(|id| urlencoding(id)).collect::<Vec<_>>().join(",");
     let det_url = api_url(
         supabase_url,
         &format!("/detalles_ventas?venta_id=in.({})&select=*", in_clause),
@@ -331,7 +395,6 @@ pub(crate) fn download_sales_inner(
         supabase_get(&det_url, supabase_key)
             .map_err(|e| format!("Error al descargar detalles: {}", e))?;
 
-    // Group detalles by venta sync_id
     let mut detalles_by_venta: std::collections::HashMap<String, Vec<&serde_json::Value>> =
         std::collections::HashMap::new();
     for det in &cloud_detalles {
@@ -341,50 +404,85 @@ pub(crate) fn download_sales_inner(
         }
     }
 
-    let mut adjusted_stock_items = 0i64;
+    for (v_sync, dets) in &detalles_by_venta {
+        let Some(&(lvid, _)) = local_ventas.get(v_sync) else { continue };
+        let venta_anulada = venta_remote_anulada.get(v_sync).copied().unwrap_or(false);
 
-    // Second pass: process detalles and handle anuladas
-    for sync_id in &inserted_sync_ids {
-        let venta_id = sync_to_local_id[sync_id];
-        let is_anulada = anulada_map.contains_key(sync_id);
+        for det in dets {
+            let det_sync = det["id"].as_str().unwrap_or("");
+            if det_sync.is_empty() {
+                continue;
+            }
+            let prod_codigo = det["producto_codigo"].as_str().unwrap_or("").to_string();
+            let cantidad = det["cantidad"].as_f64().unwrap_or(0.0);
+            let precio = det["precio_usd_unitario"].as_f64().unwrap_or(0.0);
+            let remote_anulado = det["anulado"].as_i64().unwrap_or(0) != 0;
+            // Una venta anulada implica todos sus ítems anulados.
+            let should_be_anulado = venta_anulada || remote_anulado;
 
-        if let Some(dets) = detalles_by_venta.get(sync_id) {
-            for det in dets {
-                let det_id = det["id"].as_str().unwrap_or("");
-                if det_id.is_empty() {
-                    continue;
+            match local_dets.get(det_sync).copied() {
+                Some((local_det_id, local_anulado)) => {
+                    let (should_be_anulado, delta) = anulado_delta(local_anulado, remote_anulado, venta_anulada);
+                    if delta == 1 {
+                        // Transición activo -> anulado: restaurar stock una sola vez.
+                        crate::db::add_stock(db, &prod_codigo, cantidad)
+                            .map_err(|e| format!("Error restaurando stock: {}", e))?;
+                        items_restored += cantidad;
+                    } else if delta == -1 {
+                        // Transición anulado -> activo (re-activación remota): consumir stock.
+                        crate::db::sub_stock(db, &prod_codigo, cantidad)
+                            .map_err(|e| format!("Error ajustando stock: {}", e))?;
+                        items_consumed += cantidad;
+                    }
+                    if local_anulado != should_be_anulado {
+                        db.execute(
+                            "UPDATE detalles_ventas SET anulado = ?1 WHERE id = ?2",
+                            params![if should_be_anulado { 1i64 } else { 0i64 }, local_det_id],
+                        ).map_err(|e| format!("Error actualizando detalle remoto: {}", e))?;
+                        local_dets.insert(det_sync.to_string(), (local_det_id, should_be_anulado));
+                    }
                 }
-
-                let prod_codigo = det["producto_codigo"].as_str().unwrap_or("").to_string();
-                let cantidad = det["cantidad"].as_i64().unwrap_or(0);
-                let precio = det["precio_usd_unitario"].as_f64().unwrap_or(0.0);
-
-                db.execute(
-                    "INSERT OR IGNORE INTO detalles_ventas \
-                     (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
-                     VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![venta_id, prod_codigo, cantidad, precio, det_id],
-                ).map_err(|e| format!("Error insertando detalle remoto: {}", e))?;
-
-                if !is_anulada {
-                    crate::db::sub_stock(db, &prod_codigo, cantidad as f64)
-                        .map_err(|e| format!("Error ajustando stock: {}", e))?;
-                    adjusted_stock_items += cantidad;
+                None => {
+                    db.execute(
+                        "INSERT OR IGNORE INTO detalles_ventas \
+                         (venta_id, producto_codigo, cantidad, precio_usd_unitario, anulado, sync_id) \
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        params![
+                            lvid, prod_codigo, cantidad, precio,
+                            if should_be_anulado { 1i64 } else { 0i64 },
+                            det_sync,
+                        ],
+                    ).map_err(|e| format!("Error insertando detalle remoto: {}", e))?;
+                    if !should_be_anulado {
+                        crate::db::sub_stock(db, &prod_codigo, cantidad)
+                            .map_err(|e| format!("Error ajustando stock: {}", e))?;
+                        items_consumed += cantidad;
+                    }
+                    local_dets.insert(det_sync.to_string(), (lvid, should_be_anulado));
                 }
             }
-        }
-
-        if is_anulada {
-            db.execute("UPDATE ventas SET anulada = 1 WHERE id = ?1", params![venta_id])
-                .map_err(|e| format!("Error marcando venta como anulada: {}", e))?;
         }
     }
 
     upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
 
+    let mut parts: Vec<String> = Vec::new();
+    if inserted_ventas > 0 {
+        parts.push(format!("{} venta(s) nuevas", inserted_ventas));
+    }
+    if updated_ventas > 0 {
+        parts.push(format!("{} actualizada(s)", updated_ventas));
+    }
+    if items_consumed > 0.0 {
+        parts.push(format!("{:.2} unidad(es) restadas de stock", items_consumed));
+    }
+    if items_restored > 0.0 {
+        parts.push(format!("{:.2} unidad(es) restauradas a stock", items_restored));
+    }
+
     Ok(format!(
-        "Descarga completada: {} venta(s) nuevas, {} unidad(es) ajustadas en stock",
-        inserted_ventas, adjusted_stock_items
+        "Descarga completada: {}.",
+        if parts.is_empty() { "sin cambios".to_string() } else { parts.join(", ") }
     ))
 }
 
@@ -393,4 +491,47 @@ pub fn download_sales(state: State<AppState>) -> Result<String, String> {
     run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {
         download_sales_inner(tx, supabase_url, supabase_key, dispositivo_id)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::anulado_delta;
+
+    #[test]
+    fn test_anulado_delta_activo_a_anulado_restaura() {
+        let (state, delta) = anulado_delta(false, true, false);
+        assert_eq!(state, true);
+        assert_eq!(delta, 1);
+    }
+
+    #[test]
+    fn test_anulado_delta_venta_anulada_implica_items() {
+        // Venta anulada remota fuerza el ítem a anulado aunque el detalle diga 0.
+        let (state, delta) = anulado_delta(false, false, true);
+        assert_eq!(state, true);
+        assert_eq!(delta, 1);
+    }
+
+    #[test]
+    fn test_anulado_delta_idempotente_ya_anulado() {
+        // Ya anulado: no vuelve a restaurar.
+        let (state, delta) = anulado_delta(true, true, false);
+        assert_eq!(state, true);
+        assert_eq!(delta, 0);
+    }
+
+    #[test]
+    fn test_anulado_delta_idempotente_activo() {
+        let (state, delta) = anulado_delta(false, false, false);
+        assert_eq!(state, false);
+        assert_eq!(delta, 0);
+    }
+
+    #[test]
+    fn test_anulado_delta_reactivacion_consume() {
+        // Anulado -> activo: consume stock de nuevo.
+        let (state, delta) = anulado_delta(true, false, false);
+        assert_eq!(state, false);
+        assert_eq!(delta, -1);
+    }
 }

@@ -38,6 +38,7 @@ android {
             "lib/x86/*.so",
             "lib/x86_64/*.so"
         )
+        jniLibs.useLegacyPackaging = false
     }
     buildTypes {
         getByName("debug") {

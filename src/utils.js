@@ -82,7 +82,7 @@ function createInventoryRow(p, editBtn) {
     : '';
   var stockDisplay = formatStock(p.stock);
   var stockMinDisplay = formatStock(p.stock_minimo);
-  var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron-down"></i></button></td>';
+  var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron_down"></i></button></td>';
   return '<td class="cell-key cell-name" data-label="Producto">' + escapeHtml(p.nombre) + inariBadge + pesableBadge + '</td><td class="cell-key cell-price" data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td><td data-label="Costo">' + formatUSD(costo) + '</td><td data-label="Margen">' + margen + '</td><td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td class="cell-key cell-stock' + stockClass + '" data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button><button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>' + editBtn + adjustBtn + inariToggleBtn + '</div></div></td>' + toggleCell;
 }
 function createClientRow(c) {
@@ -110,7 +110,7 @@ function createClientRow(c) {
   }
   var dropdown = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + dropdownItems + '</div></div>';
   var deudaCls = (c.saldo_deuda_usd > 0) ? ' debt-amount' : ' debt-paid';
-  var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron-down"></i></button></td>';
+  var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron_down"></i></button></td>';
   return '<td class="cell-key cell-name" data-label="Cliente">' + escapeHtml(c.nombre) + '</td><td class="cell-key cell-status" data-label="Cr\u00e9dito">' + activoBadge + '</td><td class="cell-key cell-debt' + deudaCls + '" data-label="Deuda">' + formatUSD(c.saldo_deuda_usd) + '</td><td data-label="Última compra">' + ultimaCompra + '</td><td data-label="Acciones">' + dropdown + '</td>' + toggleCell;
 }
 function createAuditRow(log) {
@@ -333,6 +333,43 @@ function showToast(msg, type = 'success', action) {
 
 function qs(sel) { return document.querySelector(sel); }
 function qsa(sel) { return document.querySelectorAll(sel); }
+
+/* ========== GUARDAR ARCHIVOS ==========
+   Android: envía base64 al plugin → carpeta Descargas (MediaStore).
+   Escritorio: abre diálogo "Guardar como" con nombre editable y escribe el archivo. */
+async function saveExportedFile(fileName, data) {
+  let b64;
+  if (typeof data === 'string') {
+    b64 = data;
+  } else if (data instanceof Blob) {
+    b64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(data);
+    });
+  } else {
+    throw new Error('Datos no v\u00e1lidos para exportar');
+  }
+  if (IS_ANDROID) {
+    await invoke('plugin:gestor-downloads|save_to_downloads', {
+      payload: { file_name: fileName, content: b64 },
+    });
+    return { saved: true, path: 'Descargas' };
+  }
+  const ext = (fileName.split('.').pop() || '').toLowerCase();
+  const path = await invoke('plugin:dialog|save', {
+    options: {
+      defaultPath: fileName,
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+    },
+  });
+  if (!path) return { saved: false, canceled: true };
+  await invoke('plugin:gestor-downloads|save_to_path', {
+    payload: { path, content: b64 },
+  });
+  return { saved: true, path };
+}
 
 /* ========== CONFIRM MODAL ========== */
 function confirmModal(msg, title, okText) {

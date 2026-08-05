@@ -739,5 +739,21 @@ const SEL = {
   productHoverCardBody: '#product-hover-card-body',
   hoverCardToggle: '#hover-card-toggle',
   flyEl: '.fly-to-cart',
+
+  // --- Snake ---
+  guideJuegoTab: '.guide-juego-tab',
+  snakeModal: '#snake-modal',
+  snakeClose: '#snake-close',
+  snakeBoard: '#snake-board',
+  snakeScore: '#snake-score',
+  snakeStatus: '#snake-status',
+  snakePauseBtn: '#snake-pause-btn',
+  snakeRestartBtn: '#snake-restart-btn',
+  snakeBtn: '#snake-btn',
+  snakePaletteBtns: '.snake-palette-btn',
+  snakeSizeBtns: '.snake-size-btn',
+  snake2pToggle: '#snake-2p-toggle',
+  snake2pHelp: '.snake-2p-help',
+  snakeScoreP2: '#snake-score-p2',
 };
 

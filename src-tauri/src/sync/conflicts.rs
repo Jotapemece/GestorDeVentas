@@ -1,6 +1,6 @@
 use super::now_iso;
 use crate::db::AppState;
-use chrono::NaiveDateTime;
+use chrono::{Local, NaiveDateTime, TimeZone};
 use rusqlite::{params, Connection};
 use tauri::State;
 
@@ -9,9 +9,12 @@ pub fn parse_ts(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
         .ok()
         .map(|d| d.with_timezone(&chrono::Utc))
         .or_else(|| {
+            // Timestamps naive ("YYYY-MM-DD HH:MM:SS") fueron escritos en hora local
+            // por SQLite datetime('now','localtime'); interpretarlos como local.
             NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
                 .ok()
-                .map(|d| d.and_utc())
+                .and_then(|d| Local.from_local_datetime(&d).single())
+                .map(|dt| dt.with_timezone(&chrono::Utc))
         })
 }
 
@@ -166,6 +169,16 @@ mod tests {
     fn test_parse_ts_sqlite_local() {
         let dt = parse_ts("2026-07-17 18:13:20");
         assert!(dt.is_some());
+    }
+    #[test]
+    fn test_parse_ts_naive_is_local_roundtrip() {
+        // El naive se interpreta como hora local y debe coincidir al volver a hora local
+        // (independiente de la zona horaria del entorno).
+        let dt = parse_ts("2026-07-17 12:00:00").expect("parse");
+        assert_eq!(
+            dt.with_timezone(&chrono::Local).naive_local().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-07-17 12:00:00"
+        );
     }
     #[test]
     fn test_parse_ts_invalid() {

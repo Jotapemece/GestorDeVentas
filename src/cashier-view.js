@@ -190,7 +190,7 @@ function restoreCartSnapshot() {
       carts = [{ id: 1, items: parsed, folded: false }];
     }
     var active = carts.find(function(c) { return !c.folded; }) || carts[0];
-    if (active) { active.folded = false; cart = active.items; }
+    if (active) activateCart(active);
     cartIdCounter = carts.reduce(function(m, c) { return Math.max(m, c.id + 1); }, 1);
     renderCart();
     updateCheckoutBtn();
@@ -206,13 +206,16 @@ function handleProductSearch() {
 
 function filterProducts(query) {
   if (!query) return [];
-  let results = productCache.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query));
+  const inariVisible = inariVisibleEnVentas();
+  let results = productCache.filter(p => (!p.es_inari || inariVisible) && (p.nombre.toLowerCase().includes(query) || p.codigo.toLowerCase().includes(query)));
   // Include combos in search results
-  comboCache.forEach(c => {
-    if (c.nombre.toLowerCase().includes(query)) {
-      results.push({ codigo: 'COMBO-' + c.id, nombre: c.nombre + ' (Combo)', precio_usd: c.precio_usd, costo: 0, stock: 999, es_inari: true, subcategoria: 'combos' });
-    }
-  });
+  if (inariVisible) {
+    comboCache.forEach(c => {
+      if (c.nombre.toLowerCase().includes(query)) {
+        results.push({ codigo: 'COMBO-' + c.id, nombre: c.nombre + ' (Combo)', precio_usd: c.precio_usd, costo: 0, stock: 999, es_inari: true, subcategoria: 'combos' });
+      }
+    });
+  }
   return results;
 }
 
@@ -238,9 +241,10 @@ function renderProductFavorites(grid, table, tbody, favSection, favBody, recentS
     appendCards(items);
   }
 
-  const favorites = productCache.filter(function(p) { return p.favorito; });
+  const inariVisible = inariVisibleEnVentas();
+  const favorites = productCache.filter(function(p) { return p.favorito && (!p.es_inari || inariVisible); });
   const recent = recentProducts
-    .map(function(c) { return productCache.find(function(x) { return x.codigo === c; }); })
+    .map(function(c) { return productCache.find(function(x) { return x.codigo === c && (!x.es_inari || inariVisible); }); })
     .filter(Boolean);
 
   if (favSection) favSection.classList.toggle('hidden', favorites.length === 0);
@@ -412,14 +416,15 @@ function clearCart() {
   closeCartSheet();
   cart.splice(0, cart.length);
   playSound('cancel');
+  renderCart();
+  updateCheckoutBtn();
   /* Switch to next held cart if available */
   var held = carts.find(function(c) { return c.folded && c.items.length > 0; });
   if (held) {
-    held.folded = false;
-    cart = held.items;
+    activateCart(held);
+    renderCart();
+    updateCheckoutBtn();
   }
-  renderCart();
-  updateCheckoutBtn();
   showToast('Venta cancelada', 'info');
   saveCartSnapshot();
 }
@@ -456,9 +461,17 @@ function toggleCartSheet() {
 }
 
 /* Multi-cart hold/unhold */
+function activateCart(cartObj) {
+  if (!cartObj) return;
+  carts.forEach(function(c) { c.folded = (c !== cartObj); });
+  cartObj.folded = false;
+  cart = cartObj.items;
+  resetCartHistory();
+}
+
 function ensureActiveCart() {
   var active = carts.find(function(c) { return !c.folded; });
-  if (active) return active;
+  if (active) { cart = active.items; return active; }
   if (carts.length < 3) {
     cartIdCounter++;
     var newCart = { id: cartIdCounter, items: [], folded: false };
@@ -482,9 +495,10 @@ function holdCart() {
     carts.push(newCart);
     cart = newCart.items;
   } else {
-    var first = carts[0];
+    var first = carts.find(function(c) { return c !== active; });
     if (first) { first.folded = false; cart = first.items; }
   }
+  resetCartHistory();
   renderCart();
   updateCheckoutBtn();
   saveCartSnapshot();
@@ -494,11 +508,10 @@ function holdCart() {
 function unholdCart(cartId) {
   var target = carts.find(function(c) { return c.id === cartId; });
   if (!target) return;
-  carts.forEach(function(c) { if (c.id !== cartId) c.folded = true; });
-  target.folded = false;
-  cart = target.items;
+  activateCart(target);
   renderCart();
   updateCheckoutBtn();
+  saveCartSnapshot();
 }
 
 function renderCartTabs() {
@@ -944,10 +957,8 @@ async function confirmPayment() {
     /* Switch to next held cart if available */
     var held = carts.find(function(c) { return c.folded && c.items.length > 0; });
     if (held) {
-      var active = carts.find(function(c) { return !c.folded; });
-      if (active) active.items = [];
-      held.folded = false;
-      cart = held.items;
+      cart.splice(0, cart.length);
+      activateCart(held);
     } else {
       cart.splice(0, cart.length);
     }

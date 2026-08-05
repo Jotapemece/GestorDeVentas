@@ -335,6 +335,31 @@ pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<Stri
     do_backup(&db, &db_path, if dest_path.is_empty() { None } else { Some(&dest_path) })
 }
 
+/// Genera un backup cifrado en el directorio temporal y devuelve su contenido en
+/// base64 con el nombre de archivo sugerido. Pensado para Android, donde el
+/// frontend entrega el resultado a la carpeta Descargas vía plugin.
+#[tauri::command]
+pub fn backup_database_b64(state: State<AppState>) -> Result<serde_json::Value, String> {
+    use base64::Engine;
+    let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
+    let db = state.lock_db()?;
+    let _admin = crate::auth::require_admin(&state, &db, "Respaldó la base de datos")?;
+
+    let dest = std::env::temp_dir().join("gestor_ventas_backup_download.enc");
+    let _msg = do_backup(&db, &db_path, Some(dest.to_str().unwrap_or_default()))?;
+
+    let bytes = std::fs::read(&dest).map_err(|e| format!("Error al leer backup: {}", e))?;
+    let _ = std::fs::remove_file(&dest);
+    let file_name = format!(
+        "gestor_ventas_backup_{}.enc",
+        chrono::Local::now().format("%Y%m%d_%H%M%S")
+    );
+    Ok(serde_json::json!({
+        "file_name": file_name,
+        "base64": base64::engine::general_purpose::STANDARD.encode(&bytes)
+    }))
+}
+
 /// Copia y cifra la BD en una ruta de backup. `dest_path` opcional; si es None se
 /// genera un nombre con timestamp. NO comprueba permisos de admin (usado también
 /// desde cierre de caja). Requiere conexión `&Connection` viva para poder leer la
@@ -345,6 +370,11 @@ pub fn do_backup(
     dest_path: Option<&str>,
 ) -> Result<String, String> {
     let key = ensure_backup_key(db)?;
+
+    // Forzar checkpoint WAL para que el archivo copiado incluya todas las transacciones
+    // pendientes en el -wal (de lo contrario un backup con WAL activo perdería datos).
+    db.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
+        .map_err(|e| format!("Error al checkpointear WAL antes del backup: {}", e))?;
 
     let backup_path = if let Some(dest) = dest_path.filter(|d| !d.is_empty()) {
         let p = std::path::PathBuf::from(dest);

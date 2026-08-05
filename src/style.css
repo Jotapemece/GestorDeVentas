@@ -1228,6 +1228,9 @@ th .col-toggle-btn { float: none; display: inline; }
 .guide-section p { margin: 0 0 12px; line-height: 1.6; color: var(--text); }
 .guide-section ul { margin: 0 0 16px; padding-left: 20px; }
 .guide-section ul li { margin-bottom: 6px; line-height: 1.5; color: var(--text); }
+.guide-list { list-style: none !important; padding-left: 4px !important; }
+.guide-list li { display: flex; align-items: flex-start; gap: 8px; }
+.guide-list li i { flex-shrink: 0; margin-top: 3px; color: var(--accent); }
 .guide-tip { display: flex; gap: 10px; padding: 12px 14px; background: var(--accent); border-radius: 10px; color: #fff; font-size: 13px; line-height: 1.5; margin-top: 12px; }
 .guide-tip i { font-size: 16px; margin-top: 1px; flex-shrink: 0; }
 .guide-tip kbd { display: inline-block; padding: 1px 6px; font-size: 12px; font-family: inherit; background: rgba(255,255,255,0.2); border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); }
@@ -2738,9 +2741,19 @@ body.no-animations .product-hover-card {
     transition: transform var(--transition);
   }
   .table-cards tr.card-collapsible .card-collapse-btn:hover { background: var(--hover); }
+  .table-cards tr.card-collapsible .card-collapse-btn i { font-size: 15px; }
   .table-cards tr.card-collapsible:not(.collapsed) .card-collapse-btn i { transform: rotate(180deg); }
   /* Expanded (default block layout from .table-cards tr) on mobile only */
-  .table-cards tr.card-collapsible:not(.collapsed) { display: block; }
+  .table-cards tr.card-collapsible:not(.collapsed) { display: block; animation: card-expand .3s ease-out; }
+  .table-cards tr.card-collapsible:not(.collapsed) td { animation: card-row-in .3s ease-out both; }
+  @keyframes card-expand {
+    from { opacity: .4; }
+    to { opacity: 1; }
+  }
+  @keyframes card-row-in {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: none; }
+  }
 
   /* Collapsed state (default) */
   .table-cards tr.card-collapsible.collapsed {
@@ -2791,3 +2804,68 @@ body.no-animations .product-hover-card {
 
 
 
+
+/* ========== SNAKE ========== */
+.snake-content { width: 440px; max-width: 94vw; }
+.snake-body { padding: 12px 16px 16px; user-select: none; }
+.snake-hud { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 10px; }
+.snake-score-label { font-size: 14px; color: var(--text); }
+.snake-score-label strong { font-size: 16px; }
+.snake-controls { display: flex; gap: 6px; }
+.snake-status {
+  text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+  padding: 3px 10px; border-radius: 8px; margin-bottom: 8px; color: #fff;
+}
+.snake-status.ok { background: var(--accent); }
+.snake-status.paused { background: #C4903A; }
+.snake-status.over { background: var(--danger); }
+#snake-board {
+  margin: 0; padding: 10px; background: rgba(0,0,0,0.55); border-radius: 10px;
+  border: 1px solid var(--border); text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 15px; line-height: 1.15; letter-spacing: 2px;
+  color: var(--text); white-space: pre; overflow: hidden;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.snake-help {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center;
+  margin-top: 10px; font-size: 11px; color: var(--text-light);
+}
+.snake-help i { font-size: 12px; color: var(--accent); margin-right: 4px; }
+.snake-help kbd { padding: 1px 5px; font-size: 10px; font-family: inherit; background: var(--hover); border-radius: 4px; border: 1px solid var(--border); }
+.snake-2p-score { visibility: hidden; }
+.snake-opts-row {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 10px; margin-bottom: 8px;
+}
+.snake-opt { display: inline-flex; align-items: center; gap: 8px; }
+.snake-opt-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); }
+.snake-size-btns { display: flex; gap: 4px; }
+.snake-size-btn {
+  min-width: 30px; height: 28px; padding: 0 8px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--hover); color: var(--text);
+  font-size: 12px; font-weight: 700; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.snake-size-btn:hover { transform: scale(1.06); }
+.snake-size-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.snake-2p-opt { cursor: pointer; }
+.snake-2p-help { border-top: 1px dashed var(--border); }
+.snake-2p-help i { margin-right: 0; }
+.snake-2p-help strong { font-size: 13px; margin: 0 2px; }
+.snake-2p-help kbd { margin: 0 2px; }
+.snake-palette-row {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border);
+}
+.snake-palette-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); }
+.snake-palette-btns { display: flex; gap: 8px; }
+.snake-palette-btn {
+  width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; padding: 0; transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.snake-palette-btn:hover { transform: scale(1.12); }
+.snake-palette-btn.active {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px rgba(255,255,255,0.15);
+}
+@media (max-width: 480px) { .snake-content { width: 94vw; } }

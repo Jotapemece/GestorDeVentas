@@ -500,6 +500,7 @@ async function handleLogin() {
       initSidebarAutoHide();
       initCalculator();
       initGuide();
+      initSnake();
       initColumnToggle();
       loadSidebarAutoHideConfig();
       applyRoleUI();

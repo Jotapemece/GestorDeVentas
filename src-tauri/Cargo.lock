@@ -1339,6 +1339,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-gestor-downloads",
  "tauri-plugin-opener",
  "ureq",
  "uuid",
@@ -3786,6 +3787,17 @@ dependencies = [
  "thiserror 2.0.18",
  "toml 1.1.2+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-gestor-downloads"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
