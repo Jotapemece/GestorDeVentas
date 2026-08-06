@@ -411,6 +411,7 @@ const SEL = {
   syncKey: '#sync-key',
   conflictCount: '#conflict-count',
   syncNavConflicts: '#sync-nav-conflicts',
+  syncNavPending: '#sync-nav-pending',
   conflictList: '#conflict-list',
   conflictModal: '#conflict-modal',
   statProducts: '#stat-products',

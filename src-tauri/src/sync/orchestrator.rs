@@ -231,7 +231,8 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
 
 #[tauri::command]
 pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
+    // Empleado (admin o vendedor): el auto-sync en segundo plano corre para ambos.
+    crate::auth::check_employee_role(&state)?;
     let mut db = state.secondary_conn()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
@@ -274,6 +275,10 @@ pub struct SyncStats {
     ultimo_upload_usuarios: String,
     ultimo_download_usuarios: String,
     dispositivo_id: String,
+    pending_products: i64,
+    pending_clientes: i64,
+    pending_ventas: i64,
+    pending_total: i64,
 }
 
 #[tauri::command]
@@ -296,6 +301,36 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
             .unwrap_or_default()
     };
 
+    // Pendientes de subir: filas locales modificadas después del último upload.
+    let count_pending = |sql: &str, watermark_key: &str| -> i64 {
+        let wm = crate::db::get_config_value(&db, watermark_key)
+            .ok()
+            .flatten()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_string());
+        db.prepare_cached(sql)
+            .ok()
+            .and_then(|mut s| {
+                s.query_row(rusqlite::params![wm], |r| r.get(0))
+                    .ok()
+            })
+            .unwrap_or(0)
+    };
+
+    let pending_products = count_pending(
+        "SELECT COUNT(*) FROM productos WHERE updated_at IS NULL OR updated_at = '' OR updated_at > ?1",
+        constants::CFG_ULTIMO_UPLOAD,
+    );
+    let pending_clientes = count_pending(
+        "SELECT COUNT(*) FROM clientes WHERE COALESCE(es_temporal,0) = 0 AND (updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR updated_at > ?1)",
+        constants::CFG_ULTIMO_UPLOAD_CLIENTES,
+    );
+    let pending_ventas = count_pending(
+        "SELECT COUNT(*) FROM ventas WHERE sync_id IS NOT NULL AND sync_id != '' AND updated_at > ?1",
+        constants::CFG_ULTIMO_UPLOAD_VENTAS,
+    );
+    let pending_total = pending_products + pending_clientes + pending_ventas;
+
     Ok(SyncStats {
         active_products,
         total_clientes,
@@ -309,6 +344,10 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
         ultimo_upload_usuarios: gc(constants::CFG_ULTIMO_UPLOAD_USUARIOS),
         ultimo_download_usuarios: gc(constants::CFG_ULTIMO_DOWNLOAD_USUARIOS),
         dispositivo_id: gc(constants::CFG_DISPOSITIVO_ID),
+        pending_products,
+        pending_clientes,
+        pending_ventas,
+        pending_total,
     })
 }
 

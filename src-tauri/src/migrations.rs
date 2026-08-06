@@ -125,6 +125,8 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("030_add_qol_fields", add_qol_fields),
     ("031_fix_timestamps_utc", fix_timestamps_utc),
     ("032_drop_detalles_producto_fk", drop_detalles_producto_fk),
+    ("033_add_activo_clientes", add_activo_clientes),
+    ("034_add_categorias_updated_at", add_categorias_updated_at),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -645,6 +647,32 @@ fn fix_timestamps_utc(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Soft-delete para clientes: `activo=0` oculta el cliente y viaja como tombstone
+/// en la sincronización. Idempotente.
+fn add_activo_clientes(conn: &Connection) -> Result<(), String> {
+    if !column_exists(conn, "clientes", "activo") {
+        conn.execute_batch(
+            "ALTER TABLE clientes ADD COLUMN activo INTEGER NOT NULL DEFAULT 1;"
+        ).map_err(|e| format!("033 add activo a clientes: {}", e))?;
+    }
+    Ok(())
+}
+
+/// Timestamp para subir categorías de forma incremental (fix 10). Se backfillea a
+/// `now` para que la primera subida post-migración lleve todas las categorías.
+/// Idempotente.
+fn add_categorias_updated_at(conn: &Connection) -> Result<(), String> {
+    if !column_exists(conn, "categorias", "updated_at") {
+        conn.execute_batch(
+            "ALTER TABLE categorias ADD COLUMN updated_at TEXT;"
+        ).map_err(|e| format!("034 add updated_at a categorias: {}", e))?;
+    }
+    conn.execute_batch(
+        "UPDATE categorias SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE updated_at IS NULL OR updated_at = '';"
+    ).map_err(|e| format!("034 backfill updated_at categorias: {}", e))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -728,5 +756,55 @@ mod tests {
             .unwrap();
         assert_eq!(count, 2);
         assert_eq!(max_id, 2);
+    }
+
+    #[test]
+    fn test_add_activo_clientes() {
+        let conn = setup();
+        let has: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('clientes') WHERE name = 'activo'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has, 1);
+        // Idempotente: correr de nuevo no falla ni duplica.
+        add_activo_clientes(&conn).unwrap();
+        let has2: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('clientes') WHERE name = 'activo'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has2, 1);
+        // Default activo = 1 para filas existentes.
+        conn.execute("INSERT INTO clientes (nombre) VALUES ('X')", []).unwrap();
+        let activo: i64 = conn
+            .query_row("SELECT activo FROM clientes WHERE nombre = 'X'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(activo, 1);
+    }
+
+    #[test]
+    fn test_add_categorias_updated_at() {
+        let conn = setup();
+        conn.execute("INSERT INTO categorias (nombre, color) VALUES ('Bebidas', '#FFF')", []).unwrap();
+        add_categorias_updated_at(&conn).unwrap();
+        let ts: String = conn
+            .query_row("SELECT updated_at FROM categorias WHERE nombre = 'Bebidas'", [], |r| r.get(0))
+            .unwrap();
+        assert!(ts.contains('T') && ts.ends_with('Z'), "backfill debe ser UTC ISO, fue: {}", ts);
+        // Idempotente.
+        add_categorias_updated_at(&conn).unwrap();
+        let has: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('categorias') WHERE name = 'updated_at'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has, 1);
     }
 }

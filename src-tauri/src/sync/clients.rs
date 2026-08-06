@@ -12,7 +12,7 @@ pub(crate) fn upload_clientes_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
-    _dispositivo_id: &str,
+    dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -21,7 +21,7 @@ pub(crate) fn upload_clientes_inner(
 
     let mut stmt = db
         .prepare(
-            "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at \
+            "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at, COALESCE(activo,1) \
              FROM clientes WHERE COALESCE(es_temporal, 0) = 0 AND ( \
                updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR updated_at > ?1 \
              ) ORDER BY id ASC",
@@ -29,7 +29,7 @@ pub(crate) fn upload_clientes_inner(
         .map_err(|e| e.to_string())?;
 
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(i64, String, i64, f64, Option<String>, Option<String>)> = stmt
+    let rows: Vec<(i64, String, i64, f64, Option<String>, Option<String>, i64)> = stmt
         .query_map(params![last_upload], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
@@ -38,6 +38,7 @@ pub(crate) fn upload_clientes_inner(
                 row.get::<_, f64>(3)?,
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, Option<String>>(5)?,
+                row.get::<_, i64>(6)?,
             ))
         })
         .map_err(|e| e.to_string())?
@@ -50,14 +51,14 @@ pub(crate) fn upload_clientes_inner(
     }
 
     let mut clientes_json: Vec<serde_json::Value> = Vec::with_capacity(rows.len());
-    for (id, nombre, credito_activo, saldo, sync_id_opt, updated_opt) in &rows {
+    for (id, nombre, credito_activo, saldo, sync_id_opt, updated_opt, activo) in &rows {
         let sync_id = if let Some(sid) = sync_id_opt {
             if sid.is_empty() {
                 let new_id = Uuid::new_v4().to_string();
                 db.execute(
                     "UPDATE clientes SET sync_id = ?1, updated_at = ?2 WHERE id = ?3",
                     params![new_id, ts, id],
-                ).ok();
+                ).map_err(|e| format!("Error generando sync_id de cliente: {}", e))?;
                 new_id
             } else {
                 sid.clone()
@@ -67,7 +68,7 @@ pub(crate) fn upload_clientes_inner(
             db.execute(
                 "UPDATE clientes SET sync_id = ?1, updated_at = ?2 WHERE id = ?3",
                 params![new_id, ts, id],
-            ).ok();
+            ).map_err(|e| format!("Error generando sync_id de cliente: {}", e))?;
             new_id
         };
 
@@ -78,6 +79,8 @@ pub(crate) fn upload_clientes_inner(
             "nombre": nombre,
             "credito_activo": credito_activo,
             "saldo_deuda_usd": saldo,
+            "activo": activo,
+            "dispositivo_origen": dispositivo_id,
             "updated_at": updated_at,
         }));
     }
@@ -107,7 +110,7 @@ pub(crate) fn download_clientes_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
-    _dispositivo_id: &str,
+    dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -115,9 +118,14 @@ pub(crate) fn download_clientes_inner(
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
 
     let since = urlencoding(&last_sync);
+    // No re-descargar clientes que subió ESTE dispositivo (fix 3), incluyendo legacy NULL.
     let get_url = api_url(
         supabase_url,
-        &format!("/clientes?updated_at=gt.{}&select=*", since),
+        &format!(
+            "/clientes?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*",
+            since,
+            urlencoding(dispositivo_id),
+        ),
     );
 
     let cloud_clientes: Vec<serde_json::Value> =
@@ -128,10 +136,10 @@ pub(crate) fn download_clientes_inner(
         return Ok("No hay cambios nuevos para descargar".to_string());
     }
 
-    let local_map: HashMap<String, (String, String, i64, f64)> = {
+    let local_map: HashMap<String, (String, String, i64, f64, bool)> = {
         let mut stmt = db
             .prepare(
-                "SELECT sync_id, updated_at, nombre, credito_activo, saldo_deuda_usd \
+                "SELECT sync_id, updated_at, nombre, credito_activo, saldo_deuda_usd, COALESCE(activo,1) \
                  FROM clientes WHERE sync_id IS NOT NULL AND sync_id != ''",
             )
             .map_err(|e| e.to_string())?;
@@ -143,13 +151,14 @@ pub(crate) fn download_clientes_inner(
                     row.get::<_, String>(2)?,
                     row.get::<_, i64>(3)?,
                     row.get::<_, f64>(4)?,
+                    row.get::<_, i64>(5)?,
                 ))
             })
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok());
         let mut map = HashMap::new();
-        for (sync_id, updated_at, nombre, credito, saldo) in rows {
-            map.insert(sync_id, (updated_at.unwrap_or_default(), nombre, credito, saldo));
+        for (sync_id, updated_at, nombre, credito, saldo, activo) in rows {
+            map.insert(sync_id, (updated_at.unwrap_or_default(), nombre, credito, saldo, activo != 0));
         }
         map
     };
@@ -167,6 +176,7 @@ pub(crate) fn download_clientes_inner(
         let nombre = cli["nombre"].as_str().unwrap_or("").to_string();
         let credito_activo = cli["credito_activo"].as_i64().unwrap_or(1);
         let saldo = cli["saldo_deuda_usd"].as_f64().unwrap_or(0.0);
+        let activo = cli["activo"].as_i64().unwrap_or(1);
         let remote_ts = cli["updated_at"].as_str();
 
         let remote_json = json!({
@@ -174,11 +184,12 @@ pub(crate) fn download_clientes_inner(
             "nombre": &nombre,
             "credito_activo": credito_activo,
             "saldo_deuda_usd": saldo,
+            "activo": activo,
             "local_updated_at": remote_ts,
             "remote_updated_at": remote_ts,
         });
 
-        if let Some((local_ts, local_nombre, local_credito, local_saldo)) = local_map.get(sync_id) {
+        if let Some((local_ts, local_nombre, local_credito, local_saldo, local_activo)) = local_map.get(sync_id) {
             let local_ts_opt = if local_ts.is_empty() { None } else { Some(local_ts.as_str()) };
             if is_conflict(local_ts_opt, remote_ts, &last_sync) {
                 let local_json = json!({
@@ -186,6 +197,7 @@ pub(crate) fn download_clientes_inner(
                     "nombre": local_nombre,
                     "credito_activo": local_credito,
                     "saldo_deuda_usd": local_saldo,
+                    "activo": local_activo,
                     "local_updated_at": local_ts_opt,
                     "remote_updated_at": remote_ts,
                 });
@@ -206,8 +218,8 @@ pub(crate) fn download_clientes_inner(
             if remote_newer {
                 let rows = db.execute(
                     "UPDATE clientes SET nombre = ?1, credito_activo = ?2, \
-                     saldo_deuda_usd = ?3, updated_at = ?4 WHERE sync_id = ?5",
-                    params![nombre, credito_activo, saldo, remote_ts.unwrap_or(&ts), sync_id],
+                     saldo_deuda_usd = ?3, activo = ?4, updated_at = ?5 WHERE sync_id = ?6",
+                    params![nombre, credito_activo, saldo, activo, remote_ts.unwrap_or(&ts), sync_id],
                 ).map_err(|e| format!("Error actualizando cliente remoto: {}", e))?;
                 if rows > 0 {
                     updated += 1;
@@ -215,9 +227,9 @@ pub(crate) fn download_clientes_inner(
             }
         } else {
             let result = db.execute(
-                "INSERT OR IGNORE INTO clientes (nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at, created_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-                params![nombre, credito_activo, saldo, sync_id, remote_ts.unwrap_or(&ts)],
+                "INSERT OR IGNORE INTO clientes (nombre, credito_activo, saldo_deuda_usd, sync_id, activo, updated_at, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+                params![nombre, credito_activo, saldo, sync_id, activo, remote_ts.unwrap_or(&ts)],
             ).map_err(|e| format!("Error insertando cliente remoto: {}", e))?;
             if result > 0 {
                 inserted += 1;

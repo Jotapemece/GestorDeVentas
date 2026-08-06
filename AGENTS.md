@@ -84,6 +84,7 @@ node --check src/*.js && node --check dist/*.js   # Verifica JS (src y minificad
 - Archivo: `gestor_ventas.db` (SQLite, se crea automáticamente)
 - Backup: botón en Config → `backup_database` copia a `gestor_ventas_backup_YYYYMMDD_HHMMSS.db`
 - Migraciones en `migrations.rs` (019 actual: `password_change_required` en `usuarios`, `sync_id`/`updated_at` en `clientes`, `updated_at` en `productos`, tabla `conflictos`, `ajustes_stock`)
+- Migraciones recientes: 031 (`updated_at` UTC ISO en productos/ventas/clientes/usuarios), 032 (detalles_ventas sin FK a productos, `cantidad REAL`), 033 (`clientes.activo` soft-delete), 034 (`categorias.updated_at`)
 - Backups cifrados con AES-256-GCM, clave almacenada en config (`backup_key`)
 
 ## Supabase Sync
@@ -91,9 +92,6 @@ node --check src/*.js && node --check dist/*.js   # Verifica JS (src y minificad
 - Tablas: `dispositivos`, `categorias`, `productos`, `clientes`, `ventas`, `detalles_ventas`
 - Anon key: `sb_publishable_3XXhx5ktfhrUvngJDYAQAA_xPCRMFzh`
 - **Dispositivo registrado**: PC Jotapemece (`d093e594-8745-4dca-b97a-f7851c62cb65`)
-- **Upload productos**: sube categorías + productos activos locales a la nube (upsert por `codigo`)
-- **Upload ventas**: sube ventas con `sync_id` y `updated_at > ultimo_upload_ventas` + sus detalles (upsert por `sync_id`)
-- **Download productos**: descarga productos con `updated_at > ultimo_download`; **NO sobrescribe `stock`** en productos existentes (stock se deriva de ventas/eventos, no de snapshots absolutos)
 - **Download ventas**: descarga ventas de OTROS dispositivos (`dispositivo_origen ≠ local_id`), INSERT OR IGNORE por `sync_id`, y decrementa stock local por cada unidad vendida remotamente
 - El download de ventas NO filtra por fecha — descarga **todas** las ventas remotas desde `ultimo_download_ventas`. Es correcto porque stock se deriva de TODAS las ventas de todos los dispositivos, sin importar la fecha
 - Los `sync_id` se usan como PK en Supabase (`ventas.id = sync_id`) para que `detalles_ventas.venta_id` referencie correctamente
@@ -103,6 +101,11 @@ node --check src/*.js && node --check dist/*.js   # Verifica JS (src y minificad
 - `void_sale` y `void_sale_items` actualizan `updated_at` para propagar anulaciones
 - Config URL/Key almacenadas en config local (`supabase_url`, `supabase_key`)
 - Registro de dispositivo vía `register_device` → guarda `dispositivo_id` en config local
+- **Upload productos**: sube categorías (solo las que cambiaron, `updated_at > ultimo_upload`, col 034) + productos con `updated_at` real > `ultimo_upload`, incluye `dispositivo_origen`, sube borrados lógicos (`activo=0`)
+- **Upload ventas**: sube ventas con `sync_id` y `updated_at` REAL > `ultimo_upload_ventas` + sus detalles (upsert por `sync_id`); errores al persistir `sync_id` abortan (no avanza watermark)
+- **Upload clientes**: sube clientes no-temporales con `updated_at > ultimo_upload_clientes` o sin `sync_id`, incluye `activo` (tombstone de soft-delete) y `dispositivo_origen`
+- **Download productos/clientes**: filtran `or=(dispositivo_origen.is.null,dispositivo_origen.neq.{id})` para NO re-descargar lo que subió este dispositivo (requiere columnas `dispositivo_origen` en Supabase); errores SQL en el batch abortan (rollback tx → el watermark NO avanza, fix 2)
+- **Clientes soft-delete**: `delete_cliente` marca `activo=0` + `updated_at` (no DELETE), las listas filtran `activo=1`, el borrado viaja como tombstone
 
 ## Paginación
 - Inventario: `list_products(search, page, page_size)` → `PaginatedResult<Producto>`
@@ -284,9 +287,19 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 - **Herramientas**: venv `/tmp/opencode/docxvenv` (python-docx), builders OMML en `/tmp/opencode/exercise_lib.py` (`r/frac/paren/sup/rad/om/system`, `p_*`, `parse_frag`), driver `/tmp/opencode/make_doc_2_final.py` (doc2; bloques `t1/t2/t3` importables, ejecución bajo `if __name__ == '__main__'`), driver `/tmp/opencode/make_doc_resueltos_2.py` (doc2 resueltos: copia Resueltos como base, reemplaza cuerpos de los 15 ejercicios con bloques del doc2 + párrafo vacío al final, retitula portada; `next_boundary` se detiene en saltos de página para no borrarlos). Patrón quirúrgico: copiar base → insertar bloques nuevos antes del anchor (orden inverso) → remover cuerpo viejo (por referencias, no índices).
 
 ### Objective
-Implementar exportaciones por plataforma (Android → Descargas automático, escritorio → diálogo "Guardar como") y protección de modales críticos con confirmación al cerrar.
+Mejorar el sistema de sync de Supabase: subir `updated_at` reales, no avanzar watermark si falla un UPDATE, no re-descargar lo que sube este dispositivo, propagar borrados de clientes (soft-delete `activo`), auto-sync para vendedores con default 10 min, badge de pendientes, y categorías subidas de forma incremental.
 
 ### Completed (this session)
+- **Sync fixes (2026-08-06)**: **111/111** Rust + **85/85** vitest + `cargo check` OK + minify OK.
+  - **1 — `updated_at` real al subir**: `upload_products_inner` (sync/products.rs) y `upload_sales_inner` (sync/sales.rs) leen `COALESCE(updated_at,'')` de la fila local y la suben tal cual (fallback a `now` solo si vacío), en vez de sobrescribir con `now`. El watermark avanza igual con el `ts` actual.
+  - **2 — Watermark no avanza si falla un UPDATE**: `download_products_inner` propaga errores SQL con `?` en `upd.execute`/`ins.execute` (antes `.map(...).unwrap_or_default()` tragaba el fallo) → `run_download` revierte la tx y el `upsert_config` del watermark se deshace. Igual en `upload_sales_inner:196` y `upload_clientes_inner` al persistir `sync_id` (antes `.ok()`): si falla, aborta y no avanza el watermark.
+  - **3 — No re-descargar lo propio**: `download_products_inner` y `download_clientes_inner` filtran `or=(dispositivo_origen.is.null,dispositivo_origen.neq.{id})` (antes solo ventas lo hacía). Los uploads de productos/clientes ahora incluyen `dispositivo_origen` (antes se ignoraba el `_dispositivo_id`). **Requiere columnas `dispositivo_origen` en Supabase** (ver "Supabase ALTER" en Next Move).
+  - **4 — Tombstones de clientes**: migración **033** `clientes.activo` (soft-delete). `delete_cliente` para no-temporales marca `activo=0` + `updated_at` (conserva fila y ventas; antes DELETE + desvincular). `SQL_LIST_CLIENTES`/`SQL_CLIENTE_BY_ID` filtran `activo=1`. `upload_clientes_inner` sube `activo`; `download_clientes_inner` aplica `activo` remoto en UPDATE/INSERT.
+  - **7 — Auto-sync para vendedores**: `sync_all` pasa de `check_admin_role` a `check_employee_role` (orchestrator.rs). `upload_all`/`download_all` siguen admin-only. `sync_all` sube usuarios pero solo `sync_id` (sin hashes).
+  - **6 — Auto-sync global**: ya arrancaba en `handleLogin` (views.js); default de intervalo `30` → `SYNC.AUTO_MIN` (10) en `loadSyncAutoConfig` e input de index.html. Se arregla listener leak (`syncAutoListenerAttached` evita re-registrar `change` en cada `loadSyncConfig`). `handleLogout` limpia `syncAutoIntervalId` (antes seguía corriendo tras logout).
+  - **8 — Badge de pendientes**: `get_sync_stats` (orchestrator.rs) añade `pending_products/clientes/ventas/total` (filas con `updated_at > watermark`). Frontend: `#sync-nav-pending` (`.nav-badge-accent`) en el sidebar + título descriptivo, actualizado en `loadSyncStats` y al hacer login.
+  - **10 — Categorías incrementales**: migración **034** `categorias.updated_at` (backfill UTC ISO idempotente). `upload_products_inner` sube solo categorías `updated_at > ultimo_upload` o `NULL` (antes subía todas con `updated_at=now` cada vez).
+  - **Supabase ALTER necesario (manual)**: `ALTER TABLE productos ADD COLUMN dispositivo_origen TEXT DEFAULT ''; ALTER TABLE clientes ADD COLUMN dispositivo_origen TEXT DEFAULT '';`
 - **Fase D — Frontend menor** (2026-08-06): cierre de los hallazgos MENORES de la auditoría 2026-08-04. `cargo check` OK, 85/85 vitest, minify OK.
   - **D1 — búsqueda global de clientes**: `shortcuts.js:117` invocaba `list_clients_simple` NO registrado en lib.rs (fallaba silenciosa siempre). Ahora usa `list_clientes` (ya registrado, devuelve `nombre` + `saldo_deuda_usd`).
   - **D2 — 3 glifos FA faltantes** en `fa-local.css`: añadidos `nf-fa-image` (`\f03e`, reports-view.js exportar PNG), `nf-fa-chart_line` (`\f201`, empty state de gráfico), `nf-fa-rotate_left` (`\f2ea`, botón "Deshacer" en index.html). Codepoints Font Awesome 6 Free.
@@ -404,7 +417,19 @@ Implementar exportaciones por plataforma (Android → Descargas automático, esc
 - **Estado**: registrado 2026-08-04; Fases A, B, C y D aplicadas.
 
 ### Active
-- **Fase A — Seguridad aplicada** (2026-08-06): **109/109** `cargo test --lib`, `cargo check` OK, 85/85 vitest, minify OK. Cambios Rust → reiniciar `npm run tauri dev` (F5 solo recarga frontend). Pendiente por probar en vivo: login + `get_config_value` (Config IA/Sync siguen legibles), registrar movimiento de caja (autoría desde sesión), crear venta (stock se valida con `es_inari` de la BD), anular venta (usuario descendiente de sesión), sync tras login (mutaciones exigen admin; el flujo de registro de dispositivo sigue público).
+- **Sync fixes aplicado** (2026-08-06): **111/111** `cargo test --lib`, `cargo check` OK, 85/85 vitest, minify OK. Cambios Rust → reiniciar `npm run tauri dev` (F5 solo recarga frontend).
+- **Pendiente SUPABASE ALTER (manual, requisito de los fixes 3 y 4)**: ejecutar una vez en el SQL Editor de Supabase:
+  ```sql
+  ALTER TABLE productos ADD COLUMN dispositivo_origen TEXT DEFAULT '';
+  ALTER TABLE clientes ADD COLUMN dispositivo_origen TEXT DEFAULT '';
+  ```
+  Sin estas columnas, `download_products`/`download_clientes` siguen llegando (el `or=(...is.null...)` los cubre a ambos lados), pero los uploads enviarán `dispositivo_origen` y fallarán si la columna no existe.
+- **Pendiente de probar en vivo (sync fixes)**:
+  1. Subir productos/clientes/ventas → verificar que el badge `#sync-nav-pending` muestra pendientes y baja tras `sync_all`.
+  2. Con 2 dispositivos: vender/editar producto en A → en B el badge sube y `sync_all` trae el cambio (no se re-descarga lo propio en A).
+  3. Borrar un cliente normal en A → en B.`list_clientes` no lo muestra (tombstone `activo=0`), y sus ventas se conservan.
+  4. Vendedor: `sync_all` (auto-sync) funciona; `upload_all`/`download_all` siguen admin-only.
+  5. Categorías: solo viajan las cambiadas (tras la primera subida post-migración 034 no se re-suben todas).
 - **Pendiente por probar en vivo (Fase B)**: 
   1. Vender un combo → se registra la venta y baja el stock de sus componentes (antes "Producto no encontrado").
   2. Anular una venta con combo → se restaura el stock de los componentes una sola vez.
@@ -422,9 +447,10 @@ Implementar exportaciones por plataforma (Android → Descargas automático, esc
 - **Snake ASCII (solo PC)** (2026-08-04): juego en modal con gráficos ASCII, acceso desde la Guía rápida (tab "Juego"), oculto en Android. Verificado node --check + minify + 75 vitest.
 
 ### Next Move
+- **Ejecutar el ALTER en Supabase** (ver Active): `dispositivo_origen` en `productos` y `clientes`.
+- Commitear/pushear los Sync fixes a `origin/duo`.
 - Añadir también el badge de cliente temporal y verificar en vivo la búsqueda global F5 + Fase D.
-- Commitear/pushear Fases A y D a `origin/duo`.
-- Probar sync en vivo (F5 + botones de Configuración → Sincronización) según lista "Pendiente por probar (Fase C)".
+- Probar sync en vivo (F5 + botones de Configuración → Sincronización) según listas "Pendiente por probar (Fase C)" y "Pendiente de probar en vivo (sync fixes)".
 - Probar la Fase B en vivo (combos, anulaciones con deuda, pesables, total_bs) según lista "Pendiente por probar en vivo (Fase B)".
 - Build Android completo (`npm run tauri android build`) para confirmar integración Gradle del plugin de punta a punta.
 - Probar el Snake manualmente en PC (F5 recarga frontend).

@@ -20,7 +20,7 @@ pub(crate) fn upload_sales_inner(
         .prepare(
             "SELECT v.id, v.sync_id, v.fecha_hora, v.usuario_id, v.metodo_pago, \
              v.referencia_pago_movil, v.pago_detalle, v.cliente_id, v.total_usd, \
-             v.tasa_aplicada, v.total_bs, v.anulada, v.dispositivo_origen \
+             v.tasa_aplicada, v.total_bs, v.anulada, v.dispositivo_origen, COALESCE(v.updated_at,'') \
              FROM ventas v \
              WHERE v.sync_id IS NOT NULL AND v.sync_id != '' AND v.updated_at > ?1 \
              ORDER BY v.id ASC",
@@ -29,7 +29,7 @@ pub(crate) fn upload_sales_inner(
 
     #[allow(clippy::type_complexity)]
     let rows: Vec<(i64, String, String, i64, String, Option<String>, String, Option<i64>,
-                   f64, f64, f64, bool, String)> = stmt
+                   f64, f64, f64, bool, String, String)> = stmt
         .query_map(params![last_upload], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
@@ -45,6 +45,7 @@ pub(crate) fn upload_sales_inner(
                 row.get::<_, f64>(10)?,
                 { let a: i64 = row.get::<_, i64>(11)?; a != 0 },
                 row.get::<_, String>(12)?,
+                row.get::<_, String>(13)?,
             ))
         })
         .map_err(|e| e.to_string())?
@@ -81,10 +82,11 @@ pub(crate) fn upload_sales_inner(
         m
     };
 
-    for (id, sync_id, fecha, uid, metodo, refe, pago_det, cliente_id, total_usd, tasa, total_bs, anulada, disp_origen) in &rows {
+    for (id, sync_id, fecha, uid, metodo, refe, pago_det, cliente_id, total_usd, tasa, total_bs, anulada, disp_origen, updated_at) in &rows {
         let fecha_iso = fecha.replace(' ', "T");
         let usr_sync_id = user_map.get(uid).cloned().unwrap_or_default();
         let cli_sync_id = cliente_id.and_then(|cid| client_map.get(&cid).cloned());
+        let updated_at = if updated_at.is_empty() { now_iso() } else { updated_at.clone() };
         all_ventas.push(json!({
             "id": sync_id,
             "local_id": id,
@@ -100,7 +102,7 @@ pub(crate) fn upload_sales_inner(
             "tasa_aplicada": tasa,
             "total_bs": total_bs,
             "anulada": if *anulada { 1i64 } else { 0i64 },
-            "updated_at": &ts,
+            "updated_at": updated_at,
         }));
     }
 
@@ -193,7 +195,7 @@ pub(crate) fn upload_sales_inner(
         db.execute(
             "UPDATE detalles_ventas SET sync_id = ?1 WHERE id = ?2 AND (sync_id IS NULL OR sync_id = '')",
             params![new_sync_id, local_id],
-        ).ok();
+        ).map_err(|e| format!("Error persistiendo sync_id de detalle: {}", e))?;
     }
 
     upsert_config(db, constants::CFG_ULTIMO_UPLOAD_VENTAS, &ts);

@@ -157,6 +157,7 @@
             <span class="nav-icon"><i class="nf nf-fa-cloud_upload"></i></span>
             <span class="nav-text">Sync</span>
             <span id="sync-nav-conflicts" class="nav-badge hidden" title="Conflictos pendientes">0</span>
+            <span id="sync-nav-pending" class="nav-badge nav-badge-accent hidden" title="Elementos pendientes de subir">0</span>
           </button>
         </nav>
         <div class="sidebar-footer">
@@ -966,7 +967,7 @@
                         <span class="sync-text-sm">Intervalo de descarga</span>
                       </div>
                       <div class="sync-flex-row" style="gap:6px">
-                        <input type="number" id="sync-auto-interval" min="10" max="480" value="30" class="sync-input-interval" aria-label="Intervalo de sincronización automática en minutos">
+                        <input type="number" id="sync-auto-interval" min="10" max="480" value="10" class="sync-input-interval" aria-label="Intervalo de sincronización automática en minutos">
                         <span class="sync-text-light" style="min-width:28px">min</span>
                       </div>
                     </div>

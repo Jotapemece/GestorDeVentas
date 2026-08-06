@@ -505,6 +505,7 @@ async function handleLogin() {
       loadSidebarAutoHideConfig();
       applyRoleUI();
       loadSyncAutoConfig();
+      loadSyncStats();
       await loadTasa();
       updateConnectionState();
       await loadProductCache();
@@ -530,6 +531,12 @@ async function handleLogout() {
   qs(SEL.confirmModal).classList.remove('transparent-bg');
   if (!ok) return;
   await tryCatch(() => invoke('logout'), 'Error al cerrar sesi\u00f3n');
+  // Detener auto-sync al cerrar sesión (evita invocaciones sin autenticación).
+  if (typeof syncAutoIntervalId !== 'undefined' && syncAutoIntervalId) {
+    clearInterval(syncAutoIntervalId);
+    syncAutoIntervalId = null;
+    currentAutoMinutes = 0;
+  }
   currentUser = null; carts = [{ id: 1, items: [], folded: false }]; cart = carts[0].items; cartIdCounter = 1; recentProducts = []; lastCloseReportData = null;
   qs(SEL.loginPassword).value = '';
   qs(SEL.loginError).textContent = '';

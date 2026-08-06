@@ -24,12 +24,12 @@ const SQL_LIST_CLIENTES: &str =
     "SELECT c.id, c.nombre, c.credito_activo, c.saldo_deuda_usd, c.sync_id, c.updated_at, \
      (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id) as ultima_compra, \
      COALESCE(c.es_temporal, 0) \
-     FROM clientes c ORDER BY c.nombre ASC";
+     FROM clientes c WHERE COALESCE(c.activo, 1) = 1 ORDER BY c.nombre ASC";
 const SQL_CLIENTE_BY_ID: &str =
     "SELECT c.id, c.nombre, c.credito_activo, c.saldo_deuda_usd, c.sync_id, c.updated_at, \
      (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id) as ultima_compra, \
      COALESCE(c.es_temporal, 0) \
-     FROM clientes c WHERE c.id = ?1";
+     FROM clientes c WHERE c.id = ?1 AND COALESCE(c.activo, 1) = 1";
 const SQL_INSERT_CLIENTE: &str =
     "INSERT INTO clientes (nombre, sync_id, updated_at, es_temporal, created_at) VALUES (?1, ?2, ?3, ?4, ?3)";
 const SQL_TOGGLE_CREDITO: &str = "UPDATE clientes SET credito_activo = ?1 WHERE id = ?2";
@@ -446,10 +446,13 @@ pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String,
         return Ok("Cliente temporal eliminado exitosamente".to_string());
     }
 
-    tx.execute("UPDATE ventas SET cliente_id = NULL WHERE cliente_id = ?1", params![cliente_id])
-        .map_err(|e| format!("Error al desvincular ventas: {}", e))?;
-    let affected = tx.execute(SQL_DELETE_CLIENTE, params![cliente_id])
-        .map_err(|e| e.to_string())?;
+    // Soft-delete: se oculta en listas (activo=0) pero se conserva la fila y sus ventas,
+    // y el borrado viaja como tombstone en la sincronización.
+    let affected = tx.execute(
+        "UPDATE clientes SET activo = 0, updated_at = ?2 WHERE id = ?1",
+        params![cliente_id, crate::helpers::now_iso()],
+    )
+    .map_err(|e| e.to_string())?;
     if affected == 0 {
         return Err("Cliente no encontrado".to_string());
     }

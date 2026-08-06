@@ -11,20 +11,31 @@ pub(crate) fn upload_products_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
-    _dispositivo_id: &str,
+    dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
+    // Categorías: subir solo las que cambiaron desde el último upload (fix 10).
+    // Como `categorias` no tiene comando CRUD en la app, tras la primera subida
+    // post-migración 034 no vuelven a viajar a menos que cambie su `updated_at`.
+    let last_upload = super::get_config(db, constants::CFG_ULTIMO_UPLOAD)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+
     let mut stmt = db
-        .prepare("SELECT id, nombre, COALESCE(color,'#CCCCCC') FROM categorias")
+        .prepare(
+            "SELECT id, nombre, COALESCE(color,'#CCCCCC'), COALESCE(updated_at,'') \
+             FROM categorias WHERE updated_at IS NULL OR updated_at = '' OR updated_at > ?1",
+        )
         .map_err(|e| e.to_string())?;
     let cats: Vec<serde_json::Value> = stmt
-        .query_map([], |row| {
+        .query_map(params![last_upload], |row| {
+            let cat_ts: String = row.get(3)?;
+            let cat_ts = if cat_ts.is_empty() { now_iso() } else { cat_ts };
             Ok(json!({
                 "id": row.get::<_, i64>(0)?,
                 "nombre": row.get::<_, String>(1)?,
                 "color": row.get::<_, String>(2)?,
-                "updated_at": &*ts,
+                "updated_at": cat_ts,
                 "deleted": 0i64,
             }))
         })
@@ -42,19 +53,19 @@ pub(crate) fn upload_products_inner(
         )?;
     }
 
-    let last_upload = super::get_config(db, constants::CFG_ULTIMO_UPLOAD)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
-
     let mut stmt = db
         .prepare(
-             "SELECT codigo, nombre, precio_usd, COALESCE(costo,0), stock, COALESCE(stock_minimo,0), \
-             COALESCE(categoria_id,0), COALESCE(es_inari,0), COALESCE(subcategoria,''), COALESCE(activo,1) \
+            "SELECT codigo, nombre, precio_usd, COALESCE(costo,0), stock, COALESCE(stock_minimo,0), \
+             COALESCE(categoria_id,0), COALESCE(es_inari,0), COALESCE(subcategoria,''), COALESCE(activo,1), \
+             COALESCE(updated_at,'') \
              FROM productos WHERE updated_at IS NULL OR updated_at = '' OR updated_at > ?1",
         )
         .map_err(|e| e.to_string())?;
     let products: Vec<serde_json::Value> = stmt
         .query_map(params![last_upload], |row| {
             let cat_id: i64 = row.get(6)?;
+            let prod_ts: String = row.get(10)?;
+            let prod_ts = if prod_ts.is_empty() { now_iso() } else { prod_ts };
             Ok(json!({
                 "codigo": row.get::<_, String>(0)?,
                 "nombre": row.get::<_, String>(1)?,
@@ -66,7 +77,8 @@ pub(crate) fn upload_products_inner(
                 "categoria_id": if cat_id == 0 { serde_json::Value::Null } else { json!(cat_id) },
                 "es_inari": row.get::<_, i64>(7)?,
                 "subcategoria": row.get::<_, String>(8)?,
-                "updated_at": &*ts,
+                "dispositivo_origen": dispositivo_id,
+                "updated_at": prod_ts,
             }))
         })
         .map_err(|e| e.to_string())?
@@ -106,7 +118,7 @@ pub(crate) fn download_products_inner(
     db: &Connection,
     supabase_url: &str,
     supabase_key: &str,
-    _dispositivo_id: &str,
+    dispositivo_id: &str,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -114,11 +126,14 @@ pub(crate) fn download_products_inner(
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
 
     let since = urlencoding(&last_sync);
+    // No re-descargar productos que subió ESTE dispositivo (fix 3). Se incluye
+    // `dispositivo_origen.is.null` para que filas legacy (sin la columna) sigan llegando.
     let get_url = api_url(
         supabase_url,
         &format!(
-            "/productos?updated_at=gt.{}&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,es_inari,subcategoria,updated_at",
+            "/productos?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,es_inari,subcategoria,updated_at,dispositivo_origen",
             since,
+            urlencoding(dispositivo_id),
         ),
     );
 
@@ -235,12 +250,12 @@ pub(crate) fn download_products_inner(
             upd.execute(params![
                 nombre, precio_usd, costo, stock_minimo, activo, cat_id, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts), codigo,
-            ]).map(|affected| updated += affected as i64).unwrap_or_default();
+            ]).map(|affected| updated += affected as i64).map_err(|e| format!("Error actualizando producto remoto: {}", e))?;
         } else {
             ins.execute(params![
                 codigo, nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts),
-            ]).map(|affected| inserted += affected as i64).unwrap_or_default();
+            ]).map(|affected| inserted += affected as i64).map_err(|e| format!("Error insertando producto remoto: {}", e))?;
         }
     }
     drop(upd);

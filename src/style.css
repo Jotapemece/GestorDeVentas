@@ -383,6 +383,7 @@ button:focus-visible,
 .nav-btn.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(var(--sidebar-text-rgb), 0.12); font-weight: 600; transform: none; }
 .nav-icon { font-size: 18px; width: 24px; text-align: center; }
 .nav-badge { margin-left: auto; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; line-height: 1; transition: transform 0.2s; }
+.nav-badge-accent { background: var(--accent); }
 .nav-badge.hidden { display: none; }
 .nav-badge.pulse { animation: badgePulse 0.4s ease forwards; }
 @keyframes badgePulse { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }

@@ -36,6 +36,14 @@ async function loadSyncStats() {
     qs(SEL.syncDownloadClientesTime).textContent = fmt(stats.ultimo_download_clientes);
     qs(SEL.syncUploadUsuariosTime).textContent = fmt(stats.ultimo_upload_usuarios);
     qs(SEL.syncDownloadUsuariosTime).textContent = fmt(stats.ultimo_download_usuarios);
+    // Badge de pendientes de sync en el sidebar (fix 8)
+    const badge = qs(SEL.syncNavPending);
+    if (badge) {
+      const n = stats.pending_total || 0;
+      badge.textContent = n;
+      badge.classList.toggle('hidden', n === 0);
+      badge.title = n === 1 ? '1 elemento pendiente de subir' : (n + ' elementos pendientes de subir');
+    }
     // Update sync indicator in sidebar with most recent sync time
     var timestamps = [stats.ultimo_upload, stats.ultimo_download, stats.ultimo_upload_ventas, stats.ultimo_download_ventas].filter(Boolean);
     var latest = timestamps.length ? timestamps.sort().pop() : null;
@@ -52,22 +60,26 @@ async function loadSyncStats() {
 let syncAutoIntervalId = null;
 let currentAutoMinutes = 0;
 let isSyncing = false;
+let syncAutoListenerAttached = false;
 
 function loadSyncAutoConfig() {
   const input = qs(SEL.syncAutoInterval);
   if (!input) return;
   invoke('get_config_value', { key: CFG_SYNC_AUTO_INTERVAL }).then(val => {
-    const minutes = parseInt(val) || 30;
+    const minutes = parseInt(val) || SYNC.AUTO_MIN;
     input.value = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
     startSyncAutoInterval(minutes);
   }).catch(() => {});
-  input.addEventListener('change', () => {
-    let minutes = parseInt(input.value) || 30;
-    minutes = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
-    input.value = minutes;
-    invoke('set_config_value', { key: CFG_SYNC_AUTO_INTERVAL, value: String(minutes) }).catch(() => {});
-    startSyncAutoInterval(minutes);
-  });
+  if (!syncAutoListenerAttached) {
+    syncAutoListenerAttached = true;
+    input.addEventListener('change', () => {
+      let minutes = parseInt(input.value) || SYNC.AUTO_MIN;
+      minutes = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
+      input.value = minutes;
+      invoke('set_config_value', { key: CFG_SYNC_AUTO_INTERVAL, value: String(minutes) }).catch(() => {});
+      startSyncAutoInterval(minutes);
+    });
+  }
 }
 
 function startSyncAutoInterval(minutes) {
