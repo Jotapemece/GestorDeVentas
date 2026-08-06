@@ -1,5 +1,5 @@
 /* ========== HELPERS ========== */
-function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
 
 function haptic(pattern) {
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}

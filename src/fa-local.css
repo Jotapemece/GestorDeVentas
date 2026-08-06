@@ -39,6 +39,7 @@
 .nf-fa-moon::before { content: "\f186"; }
 .nf-fa-sun::before { content: "\f185"; }
 .nf-fa-info_circle::before { content: "\f05a"; }
+.nf-fa-image::before { content: "\f03e"; }
 .nf-fa-bar_chart::before { content: "\f080"; }
 .nf-fa-display::before { content: "\f108"; }
 .nf-fa-music::before { content: "\f001"; }
@@ -59,6 +60,7 @@
 .nf-fa-ban::before { content: "\f05e"; }
 .nf-fa-arrows::before { content: "\f0b2"; }
 .nf-fa-chart_pie::before { content: "\f200"; }
+.nf-fa-chart_line::before { content: "\f201"; }
 .nf-fa-calendar::before { content: "\f133"; }
 .nf-fa-save::before { content: "\f0c7"; }
 .nf-fa-keyboard::before { content: "\f11c"; }
@@ -100,6 +102,7 @@
 .nf-fa-play::before { content: "\f04b"; }
 .nf-fa-pause::before { content: "\f04c"; }
 .nf-fa-rotate_right::before { content: "\f2f9"; }
+.nf-fa-rotate_left::before { content: "\f2ea"; }
 .nf-fa-arrow_up::before { content: "\f062"; }
 .nf-fa-arrow_down::before { content: "\f063"; }
 .nf-fa-arrow_left::before { content: "\f060"; }

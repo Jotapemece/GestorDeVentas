@@ -118,7 +118,7 @@ async function openDebtDetail(id) {
       card.className = 'debt-sale-card';
       let prodHtml = '';
       v.productos.forEach(p => {
-        prodHtml += '<div class="debt-prod"><span>' + p.producto_nombre + '</span><span>x' + p.cantidad + ' <strong>' + formatUSD(p.subtotal_usd) + '</strong></span></div>';
+        prodHtml += '<div class="debt-prod"><span>' + escapeHtml(p.producto_nombre) + '</span><span>x' + escapeHtml(p.cantidad) + ' <strong>' + formatUSD(p.subtotal_usd) + '</strong></span></div>';
       });
       card.innerHTML = createDebtSaleCard(v, prodHtml);
       container.appendChild(card);

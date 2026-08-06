@@ -100,6 +100,7 @@ pub(crate) fn upload_usuarios_inner(
 
 #[tauri::command]
 pub fn upload_usuarios(state: State<AppState>) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     run_upload(&state, |db, supabase_url, supabase_key, dispositivo_id| {
         upload_usuarios_inner(db, supabase_url, supabase_key, dispositivo_id)
     })

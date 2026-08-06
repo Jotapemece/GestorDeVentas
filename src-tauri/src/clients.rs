@@ -254,6 +254,7 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
         &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
         "pay_debt",
     )?;
+    crate::auth::check_employee_role(&state)?;
     validate_pay_debt_request(&request)?;
 
     let username = state.get_username()?;
@@ -387,6 +388,7 @@ pub fn add_quick_debt(
         &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
         "add_quick_debt",
     )?;
+    crate::auth::check_employee_role(&state)?;
     if monto_usd <= 0.0 {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
             crate::db::rate_limit_fail(&mut attempts, "add_quick_debt");

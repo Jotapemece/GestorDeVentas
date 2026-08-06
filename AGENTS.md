@@ -287,6 +287,20 @@ ANDROID_KEYSTORE_PASSWORD="pass" ANDROID_KEY_PASSWORD="pass" npm run tauri andro
 Implementar exportaciones por plataforma (Android → Descargas automático, escritorio → diálogo "Guardar como") y protección de modales críticos con confirmación al cerrar.
 
 ### Completed (this session)
+- **Fase D — Frontend menor** (2026-08-06): cierre de los hallazgos MENORES de la auditoría 2026-08-04. `cargo check` OK, 85/85 vitest, minify OK.
+  - **D1 — búsqueda global de clientes**: `shortcuts.js:117` invocaba `list_clients_simple` NO registrado en lib.rs (fallaba silenciosa siempre). Ahora usa `list_clientes` (ya registrado, devuelve `nombre` + `saldo_deuda_usd`).
+  - **D2 — 3 glifos FA faltantes** en `fa-local.css`: añadidos `nf-fa-image` (`\f03e`, reports-view.js exportar PNG), `nf-fa-chart_line` (`\f201`, empty state de gráfico), `nf-fa-rotate_left` (`\f2ea`, botón "Deshacer" en index.html). Codepoints Font Awesome 6 Free.
+- **Fase A — Seguridad** (2026-08-06): cierre de los hallazgos CRÍTICOS de la auditoría 2026-08-04. **109/109** Rust + **85/85** vitest + `cargo check` OK + minify OK.
+  - **A1 — `get_config_value`** (config.rs): exige sesión (`state.get_username()`) y bloquea `CFG_BACKUP_KEY` (clave maestra de cifrado nunca se entrega por este comando; `get_backup_key` sigue siendo el único y es admin-only). Supabase/OpenRouter siguen legibles por usuarios autenticados (la UI de Config los necesita).
+  - **A2 — `register_movimiento`** (cashier.rs): usa `state.get_employee()` (sesión) en vez de `usuario_id`/`username` del request; valida `tipo ∈ {ingreso, egreso}`, montos >0 y no negativos, concepto no vacío. Frontend (cashier-view.js:1360) ya no envía `usuarioId`/`username`.
+  - **A3 — guards de rol**: `check_employee_role` en `set_tasa` (sales.rs), `pay_debt` y `add_quick_debt` (clients.rs).
+  - **A4 — sync mutaciones con `check_admin_role`**: `upload_sales`/`download_sales` (sync/sales.rs), `upload_products` (sync/products.rs), `upload_clientes` (sync/clients.rs), `upload_usuarios` (sync/users.rs), `upload_all`/`download_all`/`sync_all` (orchestrator.rs), `resolve_conflicto` (conflicts.rs). **`register_device` y `download_products/clientes/usuarios` quedan públicos** porque el flujo de registro de dispositivo (primer uso) los llama ANTES del login (decisión confirmada).
+  - **A5 — `change_password`** (auth.rs) sin `check_admin_role` (cualquier empleado cambia su propia clave; ya verificaba old_password + rate limit); `admin_change_password` valida `PASSWORD_MIN_LENGTH`.
+  - **A6 — `create_sale`** (sales.rs): `LineaVenta` añade `es_inari: bool` leído SIEMPRE de la BD (`SELECT ... COALESCE(es_inari,0) FROM productos`), nunca del request → un cliente no salta el control de stock. `execute_sale_transaction` recibe `vendedor_id` desde la sesión (`state.get_employee()`), ignorando `request.usuario_id` (autoría no forjable). Eliminada constante muerta `SQL_PRODUCTO_PRECIO_STOCK`.
+  - **A7 — `save_to_path`** (gestor-downloads desktop.rs): rechaza rutas relativas y sanitiza solo el nombre de archivo (`sanitize_name`), conservando el directorio del diálogo del usuario.
+  - **A9 — XSS**: `escapeHtml` (utils.js) ahora escapa `'` (`&#39;`); `clients-view.js:121` escapa `p.producto_nombre` y `p.cantidad`. Stubs de test sincronizados.
+  - **Tests**: +1 Rust `test_resolver_linea_venta_ignora_es_inari_del_request` (verifica que un request con `es_inari=true` sobre producto NO-inari falla por stock; y que inari real en BD sigue sin control) → 109; +1 vitest `escapa comilla simple` → 85.
+  - **Nota**: `get_backup_key` (A8) ya tenía rate limit + `check_admin_role`; no requirió cambio. `register_movimiento` no recibe `admin_guard` completo porque vendedores también gestionan caja (deriva de sesión).
 - **Fase C — Corrección del sync** (2026-08-05): arreglado "cosas que no sincronizan" y "deudas que se sobrescriben".
   - **C1 — Timestamps UTC ISO**: migración `031_fix_timestamps_utc` (migrations.rs) convierte `updated_at` naive local (`datetime('now','localtime')`) de `productos`/`ventas`/`clientes`/`usuarios` a UTC ISO (`strftime('%Y-%m-%dT%H:%M:%fZ', datetime(col,'utc'))`), solo filas sin `T`/`Z` (idempotente). Actualizados los defaults `updated_at` de DDL nuevas a UTC strftime. Writers `updated_at` ya usaban `now_iso()` (solo los backfills 014/015/016/024 eran naive → ahora convertidos). Causa raíz: comparaciones `updated_at > watermark` rotas para filas naive (espacio < 'T').
   - **C2 — propagación de anulaciones** (sync/sales.rs): upload ahora sube el `anulado` REAL por detalle (antes hardcodeado a `0`). `download_sales_inner` reescrito para procesar TAMBIÉN ventas ya existentes (antes `INSERT OR IGNORE` + `continue` perdía anulaciones y avanzaba el watermark sin aplicarlas). Reconciliación por **transición idempotente** (helper puro `anulado_delta`): stock se restaura/sustrae solo cuando el estado local difiere (activo→anulado restaura, anulado→activo sustrae), venta anulada implica sus ítems anulados; sincroniza `total_usd/total_bs/nota_anulacion/anulada` y avanza `ULTIMO_DOWNLOAD_VENTAS` solo tras aplicar.
@@ -383,14 +397,14 @@ Implementar exportaciones por plataforma (Android → Descargas automático, esc
   - PDF: acentos en mojibake (pdf.rs WinAnsi vs UTF-8).
 - **BAJOS/deuda técnica**: query de costos duplicada 4×; lógica de períodos duplicada 2×; `format_metodo_label` trivial; `temp_dir` fijos en `import_products_from_db`; `.ok()` en paths críticos; `reset_usuarios` deja sesión fantasma; `ensure_daily_backup` no atómico.
 - **Plan de remediación (pendiente, NO aplicado)**:
-  - **Fase A — Seguridad**: guard auth en `get_config_value` (bloquear claves sensibles); `register_movimiento` con `admin_guard` + derivar usuario de sesión; `set_tasa`/`pay_debt`/`add_quick_debt` con guards; sync mutaciones con `admin_guard`; `change_password` sin exigir admin + `admin_change_password` validando longitud; `create_sale` ignora `usuario_id` del request y lee `es_inari`/`es_pesable` de la DB; sanitizar `save_to_path`; restringir `get_backup_key`; XSS `clients-view.js:120`.
+  - **Fase A — Seguridad**: guard auth en `get_config_value` (bloquear claves sensibles); `register_movimiento` con `admin_guard` + derivar usuario de sesión; `set_tasa`/`pay_debt`/`add_quick_debt` con guards; sync mutaciones con `admin_guard`; `change_password` sin exigir admin + `admin_change_password` validando longitud; `create_sale` ignora `usuario_id` del request y lee `es_inari`/`es_pesable` de la DB; sanitizar `save_to_path`; restringir `get_backup_key`; XSS `clients-view.js:120`. **✅ APLICADO (2026-08-06)** — ver "Fase A — Seguridad" en Completed.
   - **Fase B — Correctitud dinero/stock**: combos resueltos contra `combos`/`combo_productos` (restar stock de componentes); `void_sale` filtra `anulado=0` y no restaura inari; `void_sale_items` revierte deuda al anular todo; cantidades como REAL/f64; validar `total_bs_ingresado` (tolerancia vs `total_usd*tasa`); filtrar anuladas en reportes; `wal_checkpoint(TRUNCATE)` en backup. **✅ APLICADO (2026-08-05)** — ver "Fase B — Correctitud dinero/stock" en Completed.
   - **Fase C — Sync**: UPDATE en anulaciones remotas; upload solo lo modificado + tombstones; `parse_ts` con zona horaria; `saldo_deuda_usd` como candidato a conflicto. **✅ APLICADO (2026-08-05)** — ver "Fase C — Corrección del sync" en Completed.
-  - **Fase D — Frontend menor**: registrar `list_clientes` para búsqueda global; añadir 3 glifos FA.
-- **Estado**: registrado 2026-08-04; Fases B y C aplicadas 2026-08-05; pendientes A, D.
+  - **Fase D — Frontend menor**: registrar `list_clientes` para búsqueda global; añadir 3 glifos FA. **✅ APLICADO (2026-08-06)** — ver "Fase D — Frontend menor" en Completed.
+- **Estado**: registrado 2026-08-04; Fases A, B, C y D aplicadas.
 
 ### Active
-- **Fase B del sync aplicada** (2026-08-05): 108/108 `cargo test --lib`, `cargo check` desktop OK. Cambios Rust → reiniciar `npm run tauri dev` (F5 solo recarga frontend).
+- **Fase A — Seguridad aplicada** (2026-08-06): **109/109** `cargo test --lib`, `cargo check` OK, 85/85 vitest, minify OK. Cambios Rust → reiniciar `npm run tauri dev` (F5 solo recarga frontend). Pendiente por probar en vivo: login + `get_config_value` (Config IA/Sync siguen legibles), registrar movimiento de caja (autoría desde sesión), crear venta (stock se valida con `es_inari` de la BD), anular venta (usuario descendiente de sesión), sync tras login (mutaciones exigen admin; el flujo de registro de dispositivo sigue público).
 - **Pendiente por probar en vivo (Fase B)**: 
   1. Vender un combo → se registra la venta y baja el stock de sus componentes (antes "Producto no encontrado").
   2. Anular una venta con combo → se restaura el stock de los componentes una sola vez.
@@ -404,13 +418,14 @@ Implementar exportaciones por plataforma (Android → Descargas automático, esc
   3. Desactivar producto → queda inactivo en el otro (tombstone `activo=0`).
   4. Editar deuda en paralelo → gana la de timestamp más reciente (LWW); si editan en <5 min → aparece en "Ver conflictos".
   5. Verificar que la migración 031 convirtió `updated_at` a UTC (filas con `T`/`Z`).
-- **Auditoría profunda 2026-08-04 registrada en AGENTS.md** (ver sección arriba); pendientes Fase A, D.
+- **Auditoría profunda 2026-08-04 registrada en AGENTS.md** (ver sección arriba); Fases A-D aplicadas.
 - **Snake ASCII (solo PC)** (2026-08-04): juego en modal con gráficos ASCII, acceso desde la Guía rápida (tab "Juego"), oculto en Android. Verificado node --check + minify + 75 vitest.
 
 ### Next Move
+- Añadir también el badge de cliente temporal y verificar en vivo la búsqueda global F5 + Fase D.
+- Commitear/pushear Fases A y D a `origin/duo`.
 - Probar sync en vivo (F5 + botones de Configuración → Sincronización) según lista "Pendiente por probar (Fase C)".
 - Probar la Fase B en vivo (combos, anulaciones con deuda, pesables, total_bs) según lista "Pendiente por probar en vivo (Fase B)".
-- Aplicar Fase A (seguridad) y D (frontend menor) de la auditoría 2026-08-04.
 - Build Android completo (`npm run tauri android build`) para confirmar integración Gradle del plugin de punta a punta.
 - Probar el Snake manualmente en PC (F5 recarga frontend).
 

@@ -20,7 +20,7 @@ globalThis.showToast = vi.fn();
 globalThis.showLoading = vi.fn();
 globalThis.hideLoading = vi.fn();
 globalThis.setUserConfig = vi.fn();
-globalThis.escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+globalThis.escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
 
 globalThis.tasaActual = 40;
 globalThis.tasaInventario = 0;

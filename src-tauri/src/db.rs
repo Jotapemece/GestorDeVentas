@@ -76,6 +76,22 @@ impl AppState {
             .map(|u| u.username)
             .ok_or_else(|| "No autenticado".to_string())
     }
+
+    /// Devuelve el usuario de la sesión actual si es admin o vendedor (empleado).
+    /// Rechaza llamadas sin sesión o con rol inválido. Usado por comandos que derivan
+    /// la autoría desde la sesión en vez de confiar en IDs enviados por el frontend.
+    pub fn get_employee(&self) -> Result<crate::models::Usuario, String> {
+        let user = self
+            .current_user
+            .lock()
+            .map_err(|e| format!("Error interno: {}", e))?
+            .clone()
+            .ok_or_else(|| "No autenticado".to_string())?;
+        if user.rol != crate::constants::ROL_ADMIN && user.rol != crate::constants::ROL_VENDEDOR {
+            return Err("No tienes permisos para realizar esta acción".to_string());
+        }
+        Ok(user)
+    }
 }
 
 fn get_db_path(_app_handle: &AppHandle) -> PathBuf {

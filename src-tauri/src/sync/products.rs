@@ -96,6 +96,7 @@ pub(crate) fn upload_products_inner(
 
 #[tauri::command]
 pub fn upload_products(state: State<AppState>) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     run_upload(&state, |db, supabase_url, supabase_key, dispositivo_id| {
         upload_products_inner(db, supabase_url, supabase_key, dispositivo_id)
     })

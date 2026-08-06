@@ -7,7 +7,6 @@ use rusqlite::params;
 use tauri::State;
 use uuid::Uuid;
 
-const SQL_PRODUCTO_PRECIO_STOCK: &str = "SELECT precio_usd, stock FROM productos WHERE codigo = ?1";
 const SQL_INSERT_VENTA: &str =
     "INSERT INTO ventas (fecha_hora, usuario_id, metodo_pago, referencia_pago_movil, pago_detalle, \
      cliente_id, total_usd, tasa_aplicada, total_bs, sync_id, dispositivo_origen, updated_at, nota) \
@@ -93,10 +92,13 @@ fn validate_sale_request(request: &CreateSaleRequest) -> Result<(), String> {
 /// Una línea de venta ya resuelta: puede ser un producto normal o un combo (`COMBO-N`).
 /// Para combos, `componentes` lista (codigo, cantidad por unidad del combo, es_inari)
 /// de los productos que lo componen, y el stock se descuenta de esos componentes.
+/// `es_inari` proviene SIEMPRE de la BD (nunca del request) para que un cliente no
+/// pueda saltarse el control de stock marcando un producto como inari.
 #[derive(Debug)]
 struct LineaVenta {
     codigo: String,
     precio: f64,
+    es_inari: bool,
     componentes: Vec<(String, f64, bool)>,
 }
 
@@ -135,15 +137,19 @@ fn resolver_linea_venta(
         Ok(LineaVenta {
             codigo: pv.codigo.clone(),
             precio,
+            es_inari: true,
             componentes,
         })
     } else {
-        let (precio, stock): (f64, f64) = tx
-            .query_row(SQL_PRODUCTO_PRECIO_STOCK, params![pv.codigo], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
+        let (precio, stock, es_inari_db): (f64, f64, i64) = tx
+            .query_row(
+                "SELECT precio_usd, stock, COALESCE(es_inari, 0) FROM productos WHERE codigo = ?1",
+                params![pv.codigo],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
             .map_err(|_| format!("Producto '{}' no encontrado", pv.codigo))?;
-        if !pv.es_inari && stock < pv.cantidad {
+        let es_inari = es_inari_db != 0;
+        if !es_inari && stock < pv.cantidad {
             return Err(format!(
                 "Stock insuficiente para '{}'. Disponible: {}, solicitado: {}",
                 pv.codigo, stock, pv.cantidad
@@ -152,6 +158,7 @@ fn resolver_linea_venta(
         Ok(LineaVenta {
             codigo: pv.codigo.clone(),
             precio,
+            es_inari,
             componentes: Vec::new(),
         })
     }
@@ -161,6 +168,7 @@ fn execute_sale_transaction(
     tx: rusqlite::Transaction,
     request: &CreateSaleRequest,
     current_username: &str,
+    vendedor_id: i64,
     venta_sync_id: &str,
     dispositivo_origen: &str,
     now: &str,
@@ -229,7 +237,7 @@ fn execute_sale_transaction(
     tx.execute(
         SQL_INSERT_VENTA,
         params![
-            now, request.usuario_id, request.metodo_pago,
+            now, vendedor_id, request.metodo_pago,
             request.referencia_pago_movil, pago_json, request.cliente_id,
             total_usd, request.tasa, total_bs, venta_sync_id, dispositivo_origen, now_iso,
             request.nota.clone(),
@@ -247,8 +255,8 @@ fn execute_sale_transaction(
         )
         .map_err(|e| format!("Error al insertar detalle: {}", e))?;
         if linea.componentes.is_empty() {
-            // Producto normal: descontar stock (salvo inari).
-            if !pv.es_inari {
+            // Producto normal: descontar stock (salvo inari). es_inari viene de la BD.
+            if !linea.es_inari {
                 let affected = crate::db::sub_stock(&tx, &linea.codigo, pv.cantidad)
                     .map_err(|e| format!("Error al actualizar stock: {}", e))?;
                 if affected == 0 {
@@ -305,7 +313,8 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
     })?;
 
     let now = crate::helpers::fecha_hora_local();
-    let current_username = state.get_username()?;
+    let vendedor = state.get_employee()?;
+    let current_username = vendedor.username.clone();
     let venta_sync_id = Uuid::new_v4().to_string();
     let now_iso = crate::helpers::now_iso();
 
@@ -321,11 +330,11 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         }
     };
     let (venta_id, pago_json, total_bs, total_usd) = execute_sale_transaction(
-        tx, &request, &current_username, &venta_sync_id, &dispositivo_origen, &now, &now_iso,
+        tx, &request, &current_username, vendedor.id, &venta_sync_id, &dispositivo_origen, &now, &now_iso,
     )?;
 
     let username: String = db
-        .query_row(crate::constants::SQL_USERNAME_BY_ID, params![request.usuario_id], |row| row.get(0))
+        .query_row(crate::constants::SQL_USERNAME_BY_ID, params![vendedor.id], |row| row.get(0))
         .unwrap_or_default();
 
     let pago_detalle_opt = if pago_json.is_empty() { None } else { Some(pago_json) };
@@ -335,7 +344,7 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
     }
 
     Ok(Venta {
-        id: venta_id, fecha_hora: now, usuario_id: request.usuario_id,
+        id: venta_id, fecha_hora: now, usuario_id: vendedor.id,
         username, metodo_pago: request.metodo_pago,
         referencia_pago_movil: request.referencia_pago_movil,
         pago_detalle: pago_detalle_opt, cliente_id: request.cliente_id,
@@ -434,6 +443,8 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
         &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
         "set_tasa",
     )?;
+    // Requiere empleado autenticado (admin o vendedor).
+    crate::auth::check_employee_role(&state)?;
     if tasa <= 0.0 {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
             crate::db::rate_limit_fail(&mut attempts, "set_tasa");
@@ -1436,6 +1447,20 @@ mod tests {
     }
 
     #[test]
+    fn test_resolver_linea_venta_ignora_es_inari_del_request() {
+        // El producto P1 NO es inari en la BD. Aunque el request mande es_inari=true,
+        // el stock debe validarse (es_inari se lee de la BD, no del cliente).
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        // P1 tiene stock 5; pedir 7 con es_inari=true en el request → debe fallar.
+        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 7.0, es_inari: true }).unwrap_err();
+        assert!(err.contains("Stock insuficiente"));
+        // Un producto sí inari en la BD ignora el control de stock.
+        let ok = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P2".into(), cantidad: 7.0, es_inari: false }).unwrap();
+        assert!(ok.es_inari);
+    }
+
+    #[test]
     fn test_resolver_linea_venta_combo() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
@@ -1463,7 +1488,7 @@ mod tests {
             ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true },
         ]);
         let (venta_id, _, total_bs, total_usd) = execute_sale_transaction(
-            tx, &request, "tester", "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
         ).unwrap();
         assert!((total_usd - 25.0).abs() < 0.001); // 10 (P1) + 15 (combo)
         assert!((total_bs - 250.0).abs() < 0.001);
@@ -1491,7 +1516,7 @@ mod tests {
             ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true },
         ]);
         let err = execute_sale_transaction(
-            tx, &request, "tester", "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
         ).unwrap_err();
         assert!(err.contains("Stock insuficiente en 'P1'"));
     }
@@ -1503,7 +1528,7 @@ mod tests {
         let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false }]);
         request.total_bs_ingresado = Some(0.01); // $10 * tasa 10 = Bs 100, reporta Bs 0.01
         let err = execute_sale_transaction(
-            tx, &request, "tester", "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
         ).unwrap_err();
         assert!(err.contains("menor al total"));
     }
@@ -1515,7 +1540,7 @@ mod tests {
         let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false }]);
         request.total_bs_ingresado = Some(150.0); // paga de más, recibe vuelto
         let (_, _, total_bs, _) = execute_sale_transaction(
-            tx, &request, "tester", "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
         ).unwrap();
         assert!((total_bs - 150.0).abs() < 0.001);
     }

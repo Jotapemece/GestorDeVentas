@@ -65,7 +65,20 @@ impl<R: Runtime> GestorDownloads<R> {
 
   pub fn save_to_path(&self, payload: SavePathRequest) -> crate::Result<SavePathResponse> {
     let bytes = decode_base64(&payload.content)?;
-    let path: PathBuf = PathBuf::from(&payload.path);
+    let raw = PathBuf::from(&payload.path);
+    if !raw.is_absolute() {
+      return Err(crate::Error::Io(std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        "Ruta no válida",
+      )));
+    }
+    // Sanitiza solo el nombre de archivo, conservando el directorio elegido por el usuario.
+    let dir = raw.parent().unwrap_or(std::path::Path::new(""));
+    let file_name = raw
+      .file_name()
+      .map(|n| n.to_string_lossy().to_string())
+      .unwrap_or_default();
+    let path = dir.join(sanitize_name(&file_name));
     if let Some(parent) = path.parent() {
       fs::create_dir_all(parent)?;
     }

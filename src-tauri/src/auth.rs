@@ -369,7 +369,6 @@ pub fn change_password(
     state: State<AppState>,
     request: ChangePasswordRequest,
 ) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
     if request.new_password.len() < constants::PASSWORD_MIN_LENGTH {
         return Err(format!(
             "La contrasena debe tener al menos {} caracteres",
@@ -441,6 +440,13 @@ pub fn admin_change_password(
             .map(|u| u.username.clone())
             .ok_or("Solo administradores pueden realizar esta acción")?
     };
+
+    if new_password.len() < constants::PASSWORD_MIN_LENGTH {
+        return Err(format!(
+            "La contrasena debe tener al menos {} caracteres",
+            constants::PASSWORD_MIN_LENGTH
+        ));
+    }
 
     crate::db::check_action_rate_limit(
         &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,

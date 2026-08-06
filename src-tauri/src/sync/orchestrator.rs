@@ -185,6 +185,7 @@ pub fn get_ultimo_download(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     let mut db = state.secondary_conn()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
@@ -207,6 +208,7 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
 
 #[tauri::command]
 pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     let mut db = state.secondary_conn()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
@@ -229,6 +231,7 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
 
 #[tauri::command]
 pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     let mut db = state.secondary_conn()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 

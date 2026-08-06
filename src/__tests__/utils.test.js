@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 /* ========== PURE FUNCTIONS (redefined inline for test isolation) ========== */
-function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
 function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
@@ -31,6 +31,11 @@ function createUserRow(u) {
 describe('escapeHtml', () => {
   it('escapa & < > "', () => {
     expect(escapeHtml('&<>"')).toBe('&amp;&lt;&gt;&quot;');
+  });
+
+  it('escapa comilla simple', () => {
+    expect(escapeHtml("'")).toBe('&#39;');
+    expect(escapeHtml("onclick='alert(1)'")).toBe('onclick=&#39;alert(1)&#39;');
   });
 
   it('no modifica texto seguro', () => {

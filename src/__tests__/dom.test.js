@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
 
@@ -163,7 +163,7 @@ describe('createClientRow (DOM)', () => {
   let currentUser = { rol: 'admin' };
   const ROL_ADMIN = 'admin';
 
-  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
   function formatUSD(v) { return '$' + v.toFixed(2); }
 
   function createClientRow(c) {
@@ -238,7 +238,7 @@ describe('createReportRow', () => {
   function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
   const METODO_LABELS = { efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago', punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto' };
   function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
-  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
 
   function createReportRow(v) {
     const metodoLabel = formatMetodoLabel(v.venta.metodo_pago);
@@ -312,7 +312,7 @@ describe('createDebtSaleCard', () => {
 });
 
 describe('createDailySaleRow', () => {
-  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
   function formatUSD(v) { return '$' + v.toFixed(2); }
   function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
 

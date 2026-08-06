@@ -1357,7 +1357,7 @@ async function saveMovimiento() {
       var tasa = await getTasaConFallback();
       if (montoBs > 0 && montoUsd <= 0) montoUsd = bsToUsd(montoBs, tasa);
       if (montoUsd > 0 && montoBs <= 0) montoBs = montoUsd * tasa;
-      if (await invokeOrError(invoke('register_movimiento', { tipo: tipo, montoBs: montoBs, montoUsd: montoUsd, concepto: concepto, usuarioId: currentUser.id, username: currentUser.username })) === undefined) return;
+      if (await invokeOrError(invoke('register_movimiento', { tipo: tipo, montoBs: montoBs, montoUsd: montoUsd, concepto: concepto })) === undefined) return;
       showToast('Movimiento registrado', 'success');
       playSound('add');
       qs(SEL.movimientosMontoBs).value = '';

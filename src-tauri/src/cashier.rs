@@ -529,12 +529,29 @@ const SQL_TOTAL_MOVIMIENTOS: &str =
      FROM movimientos_caja WHERE date(created_at) = date('now','localtime')";
 
 #[tauri::command]
-pub fn register_movimiento(state: State<AppState>, tipo: String, monto_bs: f64, monto_usd: f64, concepto: String, usuario_id: i64, username: String) -> Result<MovimientoCaja, String> {
+pub fn register_movimiento(state: State<AppState>, tipo: String, monto_bs: f64, monto_usd: f64, concepto: String) -> Result<MovimientoCaja, String> {
+    // Autoría desde la sesión (no acepta usuario_id/username del frontend).
+    let usuario = state.get_employee()?;
+    if tipo != "ingreso" && tipo != "egreso" {
+        return Err("Tipo de movimiento inválido".to_string());
+    }
+    if monto_bs <= 0.0 && monto_usd <= 0.0 {
+        return Err("El monto debe ser mayor a cero".to_string());
+    }
+    if monto_bs < 0.0 || monto_usd < 0.0 {
+        return Err("Los montos no pueden ser negativos".to_string());
+    }
+    if concepto.trim().is_empty() {
+        return Err("Debe escribir un concepto".to_string());
+    }
     let db = state.lock_db()?;
-    db.execute(SQL_INSERT_MOVIMIENTO, params![tipo, monto_bs, monto_usd, concepto, usuario_id, username])
-        .map_err(|e| format!("Error al registrar movimiento: {}", e))?;
+    db.execute(
+        SQL_INSERT_MOVIMIENTO,
+        params![tipo, monto_bs, monto_usd, concepto.trim(), usuario.id, usuario.username],
+    )
+    .map_err(|e| format!("Error al registrar movimiento: {}", e))?;
     let id = db.last_insert_rowid();
-    Ok(MovimientoCaja { id, tipo, monto_bs, monto_usd, concepto, usuario_id, username, created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string() })
+    Ok(MovimientoCaja { id, tipo, monto_bs, monto_usd, concepto, usuario_id: usuario.id, username: usuario.username, created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string() })
 }
 
 #[tauri::command]

@@ -3,6 +3,12 @@ use tauri::State;
 
 #[tauri::command]
 pub fn get_config_value(state: State<AppState>, key: String) -> Result<String, String> {
+    // Requiere sesión iniciada (bloquea exfiltración sin autenticación).
+    state.get_username()?;
+    // La clave maestra de cifrado de backups nunca se entrega por este comando.
+    if key == crate::constants::CFG_BACKUP_KEY {
+        return Err("Configuración protegida".to_string());
+    }
     let db = state.lock_db()?;
     Ok(crate::db::get_config_value(&db, &key)?.unwrap_or_default())
 }

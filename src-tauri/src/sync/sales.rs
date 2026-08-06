@@ -203,6 +203,7 @@ pub(crate) fn upload_sales_inner(
 
 #[tauri::command]
 pub fn upload_sales(state: State<AppState>) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     run_upload(&state, |db, supabase_url, supabase_key, dispositivo_id| {
         upload_sales_inner(db, supabase_url, supabase_key, dispositivo_id)
     })
@@ -488,6 +489,7 @@ pub(crate) fn download_sales_inner(
 
 #[tauri::command]
 pub fn download_sales(state: State<AppState>) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {
         download_sales_inner(tx, supabase_url, supabase_key, dispositivo_id)
     })
