@@ -875,6 +875,11 @@ body.no-animations *::after {
   background: rgba(var(--danger-rgb), 0.15);
   color: var(--danger-dark);
 }
+.cart-efectivo-qty {
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 13px; color: var(--text); font-weight: 600;
+}
+.cart-efectivo-cobrar { font-weight: 500; }
 
 /* TABLE (global) */
 .table-container { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; position: relative; }
@@ -1065,6 +1070,15 @@ th .col-toggle-btn { float: none; display: inline; }
 }
 .payment-method-btn:hover:not(.active) { border-color: var(--primary); background: rgba(var(--primary-rgb), 0.06); }
 .payment-method-btn.active { border-color: var(--primary); background: var(--primary); color: #fff; box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.25); }
+.payment-method-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.payment-method-btn:disabled:hover:not(.active) { border-color: var(--border); background: var(--card); }
+#efectivo-add-group { margin-top: 8px; }
+.efectivo-saldo {
+  padding: 10px 14px; border-radius: 10px; margin-bottom: 12px;
+  background: var(--hover); color: var(--text); font-size: 14px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.efectivo-saldo strong { color: var(--accent-dark); font-size: 16px; }
 #referencia-group input { padding: 10px 14px; font-size: 16px; letter-spacing: 4px; text-align: center; }
 #cliente-group { margin-top: 4px; }
 #mixto-group { margin-top: 4px; }

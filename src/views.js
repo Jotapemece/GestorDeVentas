@@ -943,15 +943,34 @@ function positionChatPanel() {
   var fab = qs(SEL.chatFab);
   var panel = qs(SEL.chatPanel);
   var fabRect = fab.getBoundingClientRect();
+  var margin = 8;
+  var navH = (IS_ANDROID || window.innerWidth <= 768) ? ((qs(SEL.bottomTabs) || {}).offsetHeight || 60) : 0;
+  var usableBottom = window.innerHeight - navH;
   var panelW = panel.offsetWidth || (window.innerWidth < 480 ? window.innerWidth - 16 : Math.min(360, window.innerWidth - 40));
+  var prefH = panel.classList.contains('expanded') ? Math.min(600, window.innerHeight - 24) : Math.min(460, window.innerHeight - 24);
+
+  var spaceAbove = fabRect.top - margin;
+  var spaceBelow = usableBottom - fabRect.bottom - margin;
+  var openAbove = spaceAbove >= spaceBelow || spaceAbove >= prefH - 40;
+  if (spaceAbove < 220 && spaceBelow >= 220) openAbove = false;
+  if (spaceBelow < 220 && spaceAbove >= 220) openAbove = true;
+
   var panelLeft = fabRect.right - panelW;
-  if (panelLeft < 8) panelLeft = 8;
-  if (panelLeft + panelW > window.innerWidth - 8) panelLeft = window.innerWidth - panelW - 8;
-  if (panelLeft < 8) panelLeft = 8;
+  if (panelLeft < margin) panelLeft = margin;
+  if (panelLeft + panelW > window.innerWidth - margin) panelLeft = window.innerWidth - panelW - margin;
+  if (panelLeft < margin) panelLeft = margin;
   panel.style.left = panelLeft + 'px';
-  panel.style.bottom = (window.innerHeight - fabRect.top + 8) + 'px';
-  var maxH = Math.max(200, fabRect.top - 16);
-  if (panel.classList.contains('expanded')) maxH = Math.max(320, window.innerHeight - 24);
-  panel.style.maxHeight = maxH + 'px';
+
+  if (openAbove) {
+    panel.style.top = 'auto';
+    panel.style.bottom = (usableBottom - fabRect.top + margin) + 'px';
+    var maxH = Math.max(200, Math.min(prefH, spaceAbove));
+    panel.style.maxHeight = maxH + 'px';
+  } else {
+    panel.style.top = (fabRect.bottom + margin) + 'px';
+    panel.style.bottom = 'auto';
+    var maxHB = Math.max(200, Math.min(prefH, spaceBelow));
+    panel.style.maxHeight = maxHB + 'px';
+  }
 }
 

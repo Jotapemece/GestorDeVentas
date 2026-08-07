@@ -6,6 +6,7 @@ mod combos;
 mod config;
 mod constants;
 mod db;
+mod efectivo;
 mod helpers;
 mod migrations;
 mod models;
@@ -110,6 +111,9 @@ pub fn run() {
             config::get_user_config_value,
             config::set_user_config_value,
             config::list_theme_names,
+            // Efectivo (pseudo-producto)
+            efectivo::get_efectivo_saldo,
+            efectivo::ajustar_efectivo_bs,
             // Tasa BCV
             tasa_bcv::fetch_tasa_bcv,
             tasa_bcv::check_tasa_update,

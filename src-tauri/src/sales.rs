@@ -74,6 +74,26 @@ pub(crate) fn validar_pago_detalle(detalle: &[PagoItem], total_usd: f64) -> Resu
     serde_json::to_string(detalle).map_err(|e| format!("Error al serializar pago: {}", e))
 }
 
+/// Efectivo físico (Bs.) que recibió la caja por una venta, según su método de
+/// pago: todo el valor en Bs. si es `efectivo_bs` (neto tras vuelto), o los
+/// tramos `efectivo_bs` de un pago mixto. Usado al vender (suma al "stock" de
+/// EFECTIVO) y al anular (resta).
+fn efectivo_recibido_bs(metodo: &str, pago_detalle: &str, total_usd: f64, tasa: f64) -> f64 {
+    if metodo == constants::METODO_EFECTIVO_BS {
+        return (total_usd * tasa * constants::ROUNDING_FACTOR).round() / constants::ROUNDING_FACTOR;
+    }
+    if metodo == constants::METODO_MIXTO {
+        if let Ok(items) = serde_json::from_str::<Vec<PagoItem>>(pago_detalle) {
+            return items
+                .iter()
+                .filter(|p| p.metodo == constants::METODO_EFECTIVO_BS)
+                .map(|p| (p.monto_usd * tasa * 100.0).round() / 100.0)
+                .sum::<f64>();
+        }
+    }
+    0.0
+}
+
 fn validate_sale_request(request: &CreateSaleRequest) -> Result<(), String> {
     if request.productos.is_empty() {
         return Err("Debe haber al menos un producto en la venta".to_string());
@@ -115,7 +135,40 @@ struct LineaVenta {
 fn resolver_linea_venta(
     tx: &rusqlite::Transaction,
     pv: &ProductoVenta,
+    tasa: f64,
 ) -> Result<LineaVenta, String> {
+    // Pseudo-producto "Efectivo": representa billetes físicos en Bs. `cantidad`
+    // es el monto a entregar (descuenta el "stock" de efectivo disponible) y el
+    // monto a cobrar (≥ entregado, la diferencia es comisión) define el total.
+    if pv.codigo == constants::CODIGO_EFECTIVO {
+        let monto_cobrar = pv
+            .monto_cobrar_bs
+            .ok_or("El producto Efectivo requiere un monto a cobrar".to_string())?;
+        if !monto_cobrar.is_finite() || monto_cobrar <= 0.0 {
+            return Err("El monto a cobrar del Efectivo no es válido".to_string());
+        }
+        if monto_cobrar + 0.005 < pv.cantidad {
+            return Err(format!(
+                "El monto a cobrar (Bs. {:.2}) no puede ser menor al entregado (Bs. {:.2})",
+                monto_cobrar, pv.cantidad
+            ));
+        }
+        let disponible = crate::efectivo::efectivo_disponible(tx)?;
+        if disponible + 0.005 < pv.cantidad {
+            return Err(format!(
+                "Efectivo disponible insuficiente. Disponible: Bs. {:.2}, solicitado: Bs. {:.2}",
+                disponible, pv.cantidad
+            ));
+        }
+        // Precio por Bs. tal que `cantidad * precio = monto_cobrar / tasa` (total USD).
+        let precio = monto_cobrar / tasa / pv.cantidad;
+        return Ok(LineaVenta {
+            codigo: constants::CODIGO_EFECTIVO.to_string(),
+            precio,
+            es_inari: true, // evita el descuento de stock de `productos`
+            componentes: Vec::new(),
+        });
+    }
     if let Some(combo_id_str) = pv.codigo.strip_prefix("COMBO-") {
         let combo_id: i64 = combo_id_str
             .parse()
@@ -188,7 +241,7 @@ fn execute_sale_transaction(
     let mut lineas: Vec<LineaVenta> = Vec::new();
 
     for pv in &request.productos {
-        let linea = resolver_linea_venta(&tx, pv)?;
+        let linea = resolver_linea_venta(&tx, pv, request.tasa)?;
         if !linea.componentes.is_empty() {
             // Combo: validar stock de sus componentes no-inari.
             for (codigo, cant_uni, es_inari) in &linea.componentes {
@@ -213,6 +266,15 @@ fn execute_sale_transaction(
         }
         total_usd += linea.precio * pv.cantidad;
         lineas.push(linea);
+    }
+
+    let tiene_linea_efectivo = lineas
+        .iter()
+        .any(|l| l.codigo == constants::CODIGO_EFECTIVO);
+
+    // El efectivo físico no puede pagarse con efectivo físico (sin sentido).
+    if tiene_linea_efectivo && request.metodo_pago == constants::METODO_EFECTIVO_BS {
+        return Err("No se puede pagar el Efectivo con efectivo (efectivo_bs)".to_string());
     }
 
     let pago_json = if request.metodo_pago == constants::METODO_MIXTO {
@@ -244,6 +306,31 @@ fn execute_sale_transaction(
         .total_bs_ingresado
         .unwrap_or_else(|| (total_usd * request.tasa * constants::ROUNDING_FACTOR).round() / constants::ROUNDING_FACTOR);
 
+    // Efectivo físico recibido por esta venta (sube el "stock" de EFECTIVO):
+    // ventas en efectivo_bs (neto tras vuelto) o tramo efectivo_bs de un mixto.
+    let cash_recibido_bs = if request.metodo_pago == constants::METODO_EFECTIVO_BS {
+        (total_usd * request.tasa * constants::ROUNDING_FACTOR).round() / constants::ROUNDING_FACTOR
+    } else if request.metodo_pago == constants::METODO_MIXTO {
+        if let Some(ref detalle) = request.pago_detalle {
+            if tiene_linea_efectivo {
+                if detalle.iter().any(|p| p.metodo == constants::METODO_EFECTIVO_BS) {
+                    return Err("No se puede pagar el Efectivo con efectivo (efectivo_bs)".to_string());
+                }
+                0.0
+            } else {
+                detalle
+                    .iter()
+                    .filter(|p| p.metodo == constants::METODO_EFECTIVO_BS)
+                    .map(|p| (p.monto_usd * request.tasa * 100.0).round() / 100.0)
+                    .sum::<f64>()
+            }
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
     tx.execute(
         SQL_INSERT_VENTA,
         params![
@@ -264,6 +351,18 @@ fn execute_sale_transaction(
             params![venta_id, linea.codigo, pv.cantidad, linea.precio, detalle_sync_id],
         )
         .map_err(|e| format!("Error al insertar detalle: {}", e))?;
+        if linea.codigo == constants::CODIGO_EFECTIVO {
+            // Entregar efectivo: descuenta el "stock" de billetes disponibles.
+            let disp = crate::efectivo::efectivo_disponible(&tx)?;
+            if disp + 0.005 < pv.cantidad {
+                return Err(format!(
+                    "Efectivo disponible insuficiente. Disponible: Bs. {:.2}, solicitado: Bs. {:.2}",
+                    disp, pv.cantidad
+                ));
+            }
+            crate::efectivo::set_efectivo(&tx, disp - pv.cantidad)?;
+            continue;
+        }
         if linea.componentes.is_empty() {
             // Producto normal: descontar stock (salvo inari). es_inari viene de la BD.
             if !linea.es_inari {
@@ -286,6 +385,12 @@ fn execute_sale_transaction(
                 }
             }
         }
+    }
+
+    // Efectivo físico recibido entra al "stock" de EFECTIVO.
+    if cash_recibido_bs > 0.0 {
+        let disp = crate::efectivo::efectivo_disponible(&tx)?;
+        crate::efectivo::set_efectivo(&tx, disp + cash_recibido_bs)?;
     }
 
     let accion = format!(
@@ -508,11 +613,12 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
 
     let tx = db.transaction().map_err(|e| e.to_string())?;
 
-    let (metodo, cliente_id): (String, Option<i64>) = tx
+    let (metodo, cliente_id, total_usd, tasa, pago_detalle): (String, Option<i64>, f64, f64, String) = tx
         .query_row(
-            "SELECT metodo_pago, cliente_id FROM ventas WHERE id = ?1 AND anulada = 0",
+            "SELECT metodo_pago, cliente_id, total_usd, tasa_aplicada, COALESCE(pago_detalle, '') \
+             FROM ventas WHERE id = ?1 AND anulada = 0",
             params![venta_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         )
         .map_err(|_| "Venta no encontrada o ya anulada".to_string())?;
 
@@ -535,6 +641,12 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
     let rows: Vec<(String, f64)> = mapped.filter_map(|r| r.ok()).collect();
     drop(stmt);
     for (codigo, cantidad) in &rows {
+        if codigo == constants::CODIGO_EFECTIVO {
+            // El efectivo entregado vuelve al "stock" de EFECTIVO.
+            let disp = crate::efectivo::efectivo_disponible(&tx)?;
+            crate::efectivo::set_efectivo(&tx, disp + cantidad)?;
+            continue;
+        }
         if let Some(combo_id_str) = codigo.strip_prefix("COMBO-") {
             // Combo: restaurar stock de sus componentes (los que se descontaron al vender).
             if let Ok(combo_id) = combo_id_str.parse::<i64>() {
@@ -570,17 +682,22 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
     // Revert credit debt if applicable
     if metodo == constants::METODO_CREDITO {
         if let Some(cliente_id) = cliente_id {
-            let total: f64 = tx
-                .query_row("SELECT total_usd FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
-                .map_err(|e| format!("Error al obtener total de venta: {}", e))?;
             // Sin MAX(0,...): si el cliente ya abonó parte de la venta, el abono
             // vuelve como crédito a favor (saldo negativo) en vez de perderse.
             tx.execute(
                 "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd - ?1, updated_at = ?3 WHERE id = ?2",
-                params![total, cliente_id, crate::helpers::now_iso()],
+                params![total_usd, cliente_id, crate::helpers::now_iso()],
             )
             .map_err(|e| format!("Error al revertir deuda: {}", e))?;
         }
+    }
+
+    // Devolver el efectivo físico que recibió la caja por esta venta (al anular,
+    // ese billete ya no quedó en la caja como parte del "stock" de EFECTIVO).
+    let cash_recibido = efectivo_recibido_bs(&metodo, &pago_detalle, total_usd, tasa);
+    if cash_recibido > 0.0 {
+        let disp = crate::efectivo::efectivo_disponible(&tx)?;
+        crate::efectivo::set_efectivo(&tx, disp - cash_recibido)?;
     }
 
     let void_ts = crate::helpers::now_iso();
@@ -1004,7 +1121,11 @@ pub fn void_sale_items(
             )
             .map_err(|_| format!("Detalle #{} no encontrado, ya anulado o inari", det_id))?;
 
-        if let Some(combo_id_str) = codigo.strip_prefix("COMBO-") {
+        if codigo == constants::CODIGO_EFECTIVO {
+            // El efectivo entregado por esta línea vuelve al "stock" de EFECTIVO.
+            let disp = crate::efectivo::efectivo_disponible(&tx)?;
+            crate::efectivo::set_efectivo(&tx, disp + cantidad)?;
+        } else if let Some(combo_id_str) = codigo.strip_prefix("COMBO-") {
             // Combo: restaurar stock de sus componentes no-inari.
             if let Ok(combo_id) = combo_id_str.parse::<i64>() {
                 let mut cstmt = tx
@@ -1072,10 +1193,30 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64, nota: 
         .query_row("SELECT tasa_aplicada FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
         .map_err(|e| format!("Error al obtener tasa: {}", e))?;
     let new_total_bs = (new_total_usd * tasa * 100.0).round() / 100.0;
+    let (metodo, cliente_id, pago_detalle): (String, Option<i64>, String) = tx
+        .query_row(
+            "SELECT metodo_pago, cliente_id, COALESCE(pago_detalle, '') FROM ventas WHERE id = ?1",
+            params![venta_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|e| format!("Error al obtener venta: {}", e))?;
 
     tx.execute("UPDATE ventas SET total_usd = ?1, total_bs = ?2 WHERE id = ?3",
         params![new_total_usd, new_total_bs, venta_id])
         .map_err(|e| format!("Error al actualizar totales: {}", e))?;
+
+    // Efectivo físico recibido por esta venta que la caja ya no retiene: se devuelve
+    // proporcional al monto anulado. Funciona para anulación total (anulado=total →
+    // se devuelve todo) y parcial (se devuelve la parte proporcional).
+    if old_total_usd > 0.0 {
+        let cash_recibido = efectivo_recibido_bs(&metodo, &pago_detalle, old_total_usd, tasa);
+        let anulado_usd = old_total_usd - new_total_usd;
+        if cash_recibido > 0.0 && anulado_usd > 0.0 {
+            let devolver_bs = cash_recibido * (anulado_usd / old_total_usd);
+            let disp = crate::efectivo::efectivo_disponible(tx)?;
+            crate::efectivo::set_efectivo(tx, disp - devolver_bs)?;
+        }
+    }
 
     let void_ts = crate::helpers::now_iso();
     let remaining: i64 = tx
@@ -1090,13 +1231,6 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64, nota: 
             params![nota, void_ts, venta_id])
             .map_err(|e| format!("Error al anular venta: {}", e))?;
         // Si toda la venta quedó anulada y era a crédito, revertir la deuda del cliente.
-        let (metodo, cliente_id): (String, Option<i64>) = tx
-            .query_row(
-                "SELECT metodo_pago, cliente_id FROM ventas WHERE id = ?1",
-                params![venta_id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .map_err(|e| format!("Error al obtener venta: {}", e))?;
         if metodo == constants::METODO_CREDITO {
             if let Some(cliente_id) = cliente_id {
                 // Sin MAX(0,...): si el cliente ya abonó parte de la venta, el
@@ -1278,7 +1412,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
             tasa: 0.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1296,7 +1430,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
             tasa: -1.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1314,7 +1448,7 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1331,7 +1465,7 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: Some("AB".into()),
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1348,7 +1482,7 @@ mod tests {
             metodo_pago: "credito".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1366,7 +1500,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2.0, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1383,7 +1517,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: -5.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: -5.0, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1399,7 +1533,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 0.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 0.0, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1415,7 +1549,7 @@ mod tests {
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: f64::NAN, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: f64::NAN, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1431,7 +1565,7 @@ mod tests {
             metodo_pago: "credito".into(),
             referencia_pago_movil: None,
             cliente_id: Some(5),
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1448,7 +1582,7 @@ mod tests {
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: Some("ABCD".into()),
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1502,7 +1636,7 @@ mod tests {
     fn test_resolver_linea_venta_producto() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 2.0, es_inari: false }).unwrap();
+        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 2.0, es_inari: false, ..Default::default() }, 10.0).unwrap();
         assert_eq!(linea.codigo, "P1");
         assert_eq!(linea.precio, 10.0);
         assert!(linea.componentes.is_empty());
@@ -1515,10 +1649,10 @@ mod tests {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
         // P1 tiene stock 5; pedir 7 con es_inari=true en el request → debe fallar.
-        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 7.0, es_inari: true }).unwrap_err();
+        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 7.0, es_inari: true, ..Default::default() }, 10.0).unwrap_err();
         assert!(err.contains("Stock insuficiente"));
         // Un producto sí inari en la BD ignora el control de stock.
-        let ok = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P2".into(), cantidad: 7.0, es_inari: false }).unwrap();
+        let ok = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P2".into(), cantidad: 7.0, es_inari: false, ..Default::default() }, 10.0).unwrap();
         assert!(ok.es_inari);
     }
 
@@ -1526,7 +1660,7 @@ mod tests {
     fn test_resolver_linea_venta_combo() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true }).unwrap();
+        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true, ..Default::default() }, 10.0).unwrap();
         assert_eq!(linea.precio, 15.0);
         assert_eq!(linea.componentes.len(), 2);
         assert_eq!(linea.componentes[0], ("P1".to_string(), 2.0, false));
@@ -1537,7 +1671,7 @@ mod tests {
     fn test_resolver_linea_venta_combo_inexistente() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-99".into(), cantidad: 1.0, es_inari: true }).unwrap_err();
+        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-99".into(), cantidad: 1.0, es_inari: true, ..Default::default() }, 10.0).unwrap_err();
         assert!(err.contains("no encontrado"));
     }
 
@@ -1546,8 +1680,8 @@ mod tests {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
         let request = req_basico(vec![
-            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false },
-            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true },
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() },
+            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true, ..Default::default() },
         ]);
         let (venta_id, _, total_bs, total_usd) = execute_sale_transaction(
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
@@ -1574,8 +1708,8 @@ mod tests {
         // Combo 1 requiere P1 x2; solo quedan 1 tras la línea P1 x4 -> error
         let tx = conn.transaction().unwrap();
         let request = req_basico(vec![
-            ProductoVenta { codigo: "P1".into(), cantidad: 4.0, es_inari: false },
-            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true },
+            ProductoVenta { codigo: "P1".into(), cantidad: 4.0, es_inari: false, ..Default::default() },
+            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true, ..Default::default() },
         ]);
         let err = execute_sale_transaction(
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
@@ -1587,7 +1721,7 @@ mod tests {
     fn test_total_bs_ingresado_menor_rechazado() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false }]);
+        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() }]);
         request.total_bs_ingresado = Some(0.01); // $10 * tasa 10 = Bs 100, reporta Bs 0.01
         let err = execute_sale_transaction(
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
@@ -1599,7 +1733,7 @@ mod tests {
     fn test_total_bs_ingresado_pago_de_mas_aceptado() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false }]);
+        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() }]);
         request.total_bs_ingresado = Some(150.0); // paga de más, recibe vuelto
         let (_, _, total_bs, _) = execute_sale_transaction(
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
@@ -1685,5 +1819,276 @@ mod tests {
         assert_eq!(anulada, 0);
         let total: f64 = tx.query_row("SELECT total_usd FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert!((total - 20.0).abs() < 0.001); // quedó el detalle de P3 (5*4)
+    }
+
+    /* ========== EFECTIVO (pseudo-producto) ========== */
+
+    #[test]
+    fn test_resolver_linea_venta_efectivo_precio_derivado() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 600.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        // Entregar 600 Bs, cobrar 610 Bs (comisión 10). tasa 10 → total USD 61.
+        let linea = resolver_linea_venta(
+            &tx,
+            &ProductoVenta { codigo: constants::CODIGO_EFECTIVO.into(), cantidad: 600.0, monto_cobrar_bs: Some(610.0), ..Default::default() },
+            10.0,
+        ).unwrap();
+        assert!((linea.precio - (610.0 / 10.0 / 600.0)).abs() < 0.0000001);
+        assert_eq!(linea.codigo, constants::CODIGO_EFECTIVO);
+        assert!(linea.es_inari);
+    }
+
+    #[test]
+    fn test_resolver_linea_venta_efectivo_requiere_monto_cobrar() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 600.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        let err = resolver_linea_venta(
+            &tx,
+            &ProductoVenta { codigo: constants::CODIGO_EFECTIVO.into(), cantidad: 600.0, ..Default::default() },
+            10.0,
+        ).unwrap_err();
+        assert!(err.contains("monto a cobrar"));
+    }
+
+    #[test]
+    fn test_resolver_linea_venta_efectivo_no_se_puede_cobrar_menos() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 600.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        let err = resolver_linea_venta(
+            &tx,
+            &ProductoVenta { codigo: constants::CODIGO_EFECTIVO.into(), cantidad: 600.0, monto_cobrar_bs: Some(500.0), ..Default::default() },
+            10.0,
+        ).unwrap_err();
+        assert!(err.contains("no puede ser menor al entregado"));
+    }
+
+    #[test]
+    fn test_resolver_linea_venta_efectivo_sin_disponible() {
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let err = resolver_linea_venta(
+            &tx,
+            &ProductoVenta { codigo: constants::CODIGO_EFECTIVO.into(), cantidad: 600.0, monto_cobrar_bs: Some(610.0), ..Default::default() },
+            10.0,
+        ).unwrap_err();
+        assert!(err.contains("Efectivo disponible insuficiente"));
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_efectivo_entrega_y_descarta_stock() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 600.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut request = req_basico(vec![
+            ProductoVenta { codigo: constants::CODIGO_EFECTIVO.into(), cantidad: 600.0, monto_cobrar_bs: Some(610.0), ..Default::default() },
+        ]);
+        request.metodo_pago = "biopago".into();
+        let (venta_id, _, total_bs, total_usd) = execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert!((total_usd - 61.0).abs() < 0.001); // 610 / tasa 10
+        assert!((total_bs - 610.0).abs() < 0.001);
+        // El detalle se guarda con el precio derivado y la cantidad entregada.
+        let (n, subtotal): (i64, f64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(cantidad*precio_usd_unitario),0) FROM detalles_ventas WHERE venta_id=?1",
+            params![venta_id], |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap();
+        assert_eq!(n, 1);
+        assert!((subtotal - 61.0).abs() < 0.001);
+        // El saldo de efectivo bajó de 600 a 0.
+        assert!(crate::efectivo::efectivo_disponible(&conn).unwrap() < 0.001);
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_efectivo_no_puede_pagarse_con_efectivo() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 600.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut request = req_basico(vec![
+            ProductoVenta { codigo: constants::CODIGO_EFECTIVO.into(), cantidad: 600.0, monto_cobrar_bs: Some(610.0), ..Default::default() },
+        ]);
+        request.metodo_pago = constants::METODO_EFECTIVO_BS.into();
+        let err = execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap_err();
+        assert!(err.contains("No se puede pagar el Efectivo con efectivo"));
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_efectivo_mixto_con_efectivo_rechazado() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 600.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut request = req_basico(vec![
+            ProductoVenta { codigo: constants::CODIGO_EFECTIVO.into(), cantidad: 600.0, monto_cobrar_bs: Some(610.0), ..Default::default() },
+        ]);
+        request.metodo_pago = constants::METODO_MIXTO.into();
+        request.pago_detalle = Some(vec![
+            PagoItem { metodo: "biopago".into(), monto_usd: 30.0, referencia: None },
+            PagoItem { metodo: "efectivo_bs".into(), monto_usd: 31.0, referencia: None },
+        ]);
+        let err = execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap_err();
+        assert!(err.contains("No se puede pagar el Efectivo con efectivo"));
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_efectivo_insuficiente() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 100.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut request = req_basico(vec![
+            ProductoVenta { codigo: constants::CODIGO_EFECTIVO.into(), cantidad: 600.0, monto_cobrar_bs: Some(610.0), ..Default::default() },
+        ]);
+        request.metodo_pago = "biopago".into();
+        let err = execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap_err();
+        assert!(err.contains("Efectivo disponible insuficiente"));
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_efectivo_bs_sube_el_saldo() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 0.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        // Venta normal ($10 = Bs 100) pagada en efectivo_bs → entra el billete.
+        let mut request = req_basico(vec![
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() },
+        ]);
+        request.metodo_pago = constants::METODO_EFECTIVO_BS.into();
+        execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert!((crate::efectivo::efectivo_disponible(&conn).unwrap() - 100.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_efectivo_bs_con_vuelto_suma_neto() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 0.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        // Venta de $10 = Bs 100; el cliente paga Bs 150 y recibe 50 de vuelto.
+        // Neto de billetes retenidos = 100.
+        let mut request = req_basico(vec![
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() },
+        ]);
+        request.metodo_pago = constants::METODO_EFECTIVO_BS.into();
+        request.total_bs_ingresado = Some(150.0);
+        execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert!((crate::efectivo::efectivo_disponible(&conn).unwrap() - 100.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_execute_sale_transaction_mixto_tramo_efectivo_sube_saldo() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 0.0).unwrap();
+        let tx = conn.transaction().unwrap();
+        // Venta $10 con mixto: $4 biopago + $6 efectivo_bs (= Bs 60 a tasa 10).
+        let mut request = req_basico(vec![
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() },
+        ]);
+        request.metodo_pago = constants::METODO_MIXTO.into();
+        request.pago_detalle = Some(vec![
+            PagoItem { metodo: "biopago".into(), monto_usd: 4.0, referencia: None },
+            PagoItem { metodo: "efectivo_bs".into(), monto_usd: 6.0, referencia: None },
+        ]);
+        execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert!((crate::efectivo::efectivo_disponible(&conn).unwrap() - 60.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_efectivo_recibido_bs_puro_y_mixto() {
+        // efectivo_bs: todo el valor (neto, no el ingresado).
+        let v = efectivo_recibido_bs(constants::METODO_EFECTIVO_BS, "", 100.0, 10.0);
+        assert!((v - 1000.0).abs() < 0.001);
+        // mixto: solo tramos efectivo_bs.
+        let json = serde_json::to_string(&vec![
+            PagoItem { metodo: "biopago".into(), monto_usd: 40.0, referencia: None },
+            PagoItem { metodo: "efectivo_bs".into(), monto_usd: 60.0, referencia: None },
+        ]).unwrap();
+        let v2 = efectivo_recibido_bs(constants::METODO_MIXTO, &json, 100.0, 10.0);
+        assert!((v2 - 600.0).abs() < 0.001);
+        // biopago puro: 0.
+        assert_eq!(efectivo_recibido_bs("biopago", "", 100.0, 10.0), 0.0);
+    }
+
+    #[test]
+    fn test_void_items_todos_efectivo_bs_revierte_efectivo_recibido() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 1000.0).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (id, fecha_hora, usuario_id, metodo_pago, total_usd, tasa_aplicada, total_bs) \
+             VALUES (1, '2026-07-18 10:00:00', 1, 'efectivo_bs', 30, 10, 300)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+             VALUES (1, 1, 'P1', 3, 10)",
+            [],
+        ).unwrap();
+        conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
+        let tx = conn.transaction().unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
+        // El billete de Bs 300 recibido se devolvió: 1000 - 300 = 700.
+        assert!((crate::efectivo::efectivo_disponible(&tx).unwrap() - 700.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_void_items_todos_biopago_no_toca_efectivo() {
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 1000.0).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (id, fecha_hora, usuario_id, metodo_pago, total_usd, tasa_aplicada, total_bs, pago_detalle) \
+             VALUES (1, '2026-07-18 10:00:00', 1, 'biopago', 30, 10, 300, '[]')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+             VALUES (1, 1, 'P1', 3, 10)",
+            [],
+        ).unwrap();
+        conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
+        let tx = conn.transaction().unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
+        assert!((crate::efectivo::efectivo_disponible(&tx).unwrap() - 1000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_void_items_parcial_efectivo_bs_devuelve_proporcional() {
+        // Venta de $30 en efectivo_bs (tasa 10 → recibió Bs 300). Se anula 1 de 3 ítems
+        // ($10 de $30 = 1/3) → la caja devuelve proporcionalmente Bs 100.
+        let mut conn = setup_bd();
+        crate::efectivo::set_efectivo(&conn, 1000.0).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (id, fecha_hora, usuario_id, metodo_pago, total_usd, tasa_aplicada, total_bs) \
+             VALUES (1, '2026-07-18 10:00:00', 1, 'efectivo_bs', 30, 10, 300)",
+            [],
+        ).unwrap();
+        for (id, cantidad) in [(1, 1.0), (2, 2.0)] {
+            conn.execute(
+                "INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+                 VALUES (?1, 1, 'P1', ?2, 10)",
+                params![id, cantidad],
+            ).unwrap();
+        }
+        conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
+        let tx = conn.transaction().unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación parcial").unwrap();
+        assert!((crate::efectivo::efectivo_disponible(&tx).unwrap() - 900.0).abs() < 0.001);
+        // Nuevo total $20, resto del efectivo intacto si no se anula el resto.
+        let (total, anulada): (f64, i64) = tx
+            .query_row("SELECT total_usd, anulada FROM ventas WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert!((total - 20.0).abs() < 0.001);
+        assert_eq!(anulada, 0);
     }
 }

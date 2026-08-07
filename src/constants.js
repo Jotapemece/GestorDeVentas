@@ -96,6 +96,11 @@ const METODO_CREDITO = 'credito';
 const METODO_MIXTO = 'mixto';
 const ROL_ADMIN = 'admin';
 
+// Pseudo-producto "Efectivo": el efectivo físico disponible en Bs. Su "stock"
+// es `efectivo_disponible_bs` y solo cambia al venderlo o al recibir efectivo.
+const CODIGO_EFECTIVO = 'EFECTIVO';
+const CFG_EFECTIVO_DISPONIBLE = 'efectivo_disponible_bs';
+
 // Config keys (db::configuracion.clave) — back-end sync
 const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
@@ -295,6 +300,17 @@ const SEL = {
   clienteGroup: '#cliente-group',
   mixtoGroup: '#mixto-group',
   paymentNota: '#payment-nota',
+
+  // --- Efectivo (intercambio) ---
+  efectivoModal: '#efectivo-modal',
+  efectivoDisponible: '#efectivo-modal-disponible',
+  efectivoEntregar: '#efectivo-entregar',
+  efectivoCobrar: '#efectivo-cobrar',
+  efectivoError: '#efectivo-modal-error',
+  efectivoConfirmBtn: '#efectivo-confirm-btn',
+  efectivoCancelBtn: '#efectivo-cancel-btn',
+  efectivoModalClose: '#efectivo-modal-close',
+  efectivoOpenFromCart: '#efectivo-open-from-cart',
 
   // --- Inventory ---
   inventorySearch: '#inventory-search',

@@ -19,12 +19,31 @@ function createVendorSalesRow(v) {
 }
 
 function createProductRow(p) {
+  if (p.es_efectivo) {
+    const disp = Number(p.efectivo_disponible_bs) || 0;
+    return '<td title="Efectivo"><div class="prod-name-cell"><span class="prod-name">Efectivo</span></div></td><td>&mdash;</td><td><span class="bs-price-cell">Disponible: <strong>' + formatBS(disp) + '</strong></span></td><td>&mdash;</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + escapeHtml(p.codigo) + '">+</button></td>';
+  }
   const name = escapeHtml(p.nombre);
   const inariBadge = p.es_inari ? ' <span class="badge badge-inari">Inari</span>' : '';
   const favBtn = '<button class="fav-star-btn' + (p.favorito ? ' active' : '') + '" data-action="toggle-favorito" data-codigo="' + escapeHtml(p.codigo) + '" title="' + (p.favorito ? 'Quitar de favoritos' : 'Agregar a favoritos') + '" aria-label="Favorito"><i class="nf nf-fa-star"></i></button>';
   return '<td title="' + name + '"><div class="prod-name-cell"><span class="prod-name">' + name + inariBadge + '</span>' + favBtn + '</div></td><td>' + formatUSD(p.precio_usd) + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasaActual) + '</span></td><td>' + p.stock + '</td><td><button class="btn btn-primary btn-sm" data-action="add-to-cart" data-codigo="' + escapeHtml(p.codigo) + '">+</button></td>';
 }
 function createProductCard(p) {
+  if (p.es_efectivo) {
+    const disp = Number(p.efectivo_disponible_bs) || 0;
+    return '<div class="product-card" data-codigo="' + escapeHtml(p.codigo) + '">' +
+      '<div class="product-card-top">' +
+        '<span class="product-card-name">Efectivo</span>' +
+      '</div>' +
+      '<div class="product-card-prices">' +
+        '<span class="product-card-price-bs bs-price-cell">Disponible: <strong>' + formatBS(disp) + '</strong></span>' +
+      '</div>' +
+      '<div class="product-card-foot">' +
+        '<span class="product-card-stock"></span>' +
+        '<button class="btn btn-primary product-card-add" data-action="add-to-cart" data-codigo="' + escapeHtml(p.codigo) + '">+</button>' +
+      '</div>' +
+    '</div>';
+  }
   const name = escapeHtml(p.nombre);
   const inariBadge = p.es_inari ? ' <span class="badge badge-inari">Inari</span>' : '';
   const lowStock = (p.stock < p.stock_minimo) ? ' low-stock' : '';
@@ -45,12 +64,27 @@ function createProductCard(p) {
 }
 
 function createCartRow(item) {
+  const showBs = cartShowBs;
+  if (item.es_efectivo) {
+    // Línea del pseudo-producto Efectivo: muestra entregar/cobrar en Bs.
+    const name = escapeHtml(item.nombre || 'Efectivo');
+    const code = escapeHtml(item.codigo);
+    const entregar = item.monto_entregar_bs || item.cantidad;
+    const cobrar = item.monto_cobrar_bs || (item.cantidad * item.precio_usd * tasaActual);
+    const totalUsd = item.cantidad * item.precio_usd;
+    const totalText = showBs ? formatBS(totalUsd * tasaActual) : formatUSD(totalUsd);
+    const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
+    const editBtn = '<button class="cart-edit-price-btn" data-action="edit-efectivo" data-codigo="' + code + '" title="Cambiar montos"><i class="nf nf-fa-pencil"></i></button>';
+    return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td>' +
+      '<td><div class="cart-qty-wrap"><span class="cart-efectivo-qty">Entregar <strong>' + formatBS(entregar) + '</strong></span><span class="cart-efectivo-cobrar text-muted text-sm">Cobrar ' + formatBS(cobrar) + '</span></div></td>' +
+      '<td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td>' +
+      '<td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
+  }
   const displayName = item.nombre || item.codigo;
   const name = escapeHtml(displayName);
   const code = escapeHtml(item.codigo);
   const totalUsd = item.cantidad * item.precio_usd;
   const totalBs = totalUsd * tasaActual;
-  const showBs = cartShowBs;
   const totalText = showBs ? formatBS(totalBs) : formatUSD(totalUsd);
   const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
   const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button class="cart-edit-price-btn" data-action="edit-price" data-codigo="' + code + '" title="Editar precio unitario"><i class="nf nf-fa-pencil"></i></button>' : '';
@@ -533,6 +567,12 @@ function closeModal(el) {
 }
 
 function isBsMethod(m) { return m === METODO_EFECTIVO_BS || m === METODO_BIOPAGO || m === METODO_PUNTO || m === METODO_PAGO_MOVIL; }
+
+/* Precio unitario del pseudo-producto Efectivo tal que `cantidad * precio` = cobrar/tasa. */
+function efectivoPrecioUsd(entregar, cobrar, tasa) {
+  if (!(entregar > 0) || !(cobrar > 0) || !(tasa > 0)) return 0;
+  return cobrar / tasa / entregar;
+}
 
 function esRefPagoMovilValida(ref) { return !!ref && ref.length === PAGO_MOVIL_REF_LEN; }
 function bsToUsd(bs, tasa) { return bs / tasa; }

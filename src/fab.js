@@ -3,6 +3,19 @@
   var fab = qs(SEL.chatFab);
   if (!fab) return;
   var FAB_POS_KEY = 'enar_fab_pos';
+
+  function bottomLimit() {
+    var tabs = qs(SEL.bottomTabs);
+    var navH = (tabs && tabs.offsetHeight) || 0;
+    if (IS_ANDROID || window.innerWidth <= 768) {
+      return navH + 12;
+    }
+    return 12;
+  }
+
+  function clampLeft() { return Math.max(4, Math.min(window.innerWidth - 56, fab.offsetLeft)); }
+  function clampTop() { return Math.max(4, Math.min(window.innerHeight - fab.offsetHeight - bottomLimit(), fab.offsetTop)); }
+
   var saved = null;
   try { saved = JSON.parse(localStorage.getItem(FAB_POS_KEY)); } catch (e) {}
   if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
@@ -12,6 +25,12 @@
     fab.style.left = (window.innerWidth - 72) + 'px';
     fab.style.top = (window.innerHeight - 152) + 'px';
   }
+  fab.style.left = clampLeft() + 'px';
+  fab.style.top = clampTop() + 'px';
+  window.addEventListener('resize', function() {
+    fab.style.left = clampLeft() + 'px';
+    fab.style.top = clampTop() + 'px';
+  });
 
   var fabDragActive = false, fabTouchDrag = false;
   var fabStartX, fabStartY, fabOrigLeft, fabOrigTop, fabDragTimer;
@@ -43,9 +62,8 @@
       clearTimeout(fabDragTimer);
     }
     e.preventDefault();
-    var bottomMargin = 100;
-    fab.style.left = Math.max(4, Math.min(window.innerWidth - 56, fabOrigLeft + dx)) + 'px';
-    fab.style.top = Math.max(4, Math.min(window.innerHeight - 52 - bottomMargin, fabOrigTop + dy)) + 'px';
+    fab.style.left = Math.max(4, Math.min(window.innerWidth - fab.offsetWidth - 4, fabOrigLeft + dx)) + 'px';
+    fab.style.top = Math.max(4, Math.min(window.innerHeight - fab.offsetHeight - bottomLimit(), fabOrigTop + dy)) + 'px';
   }
 
   function fabEnd(isTouch) {

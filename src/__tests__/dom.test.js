@@ -48,12 +48,26 @@ describe('createCartRow (DOM)', () => {
   let cartShowBs = false;
 
   function createCartRow(item) {
+    const showBs = cartShowBs;
+    if (item.es_efectivo) {
+      const name = escapeHtml(item.nombre || 'Efectivo');
+      const code = escapeHtml(item.codigo);
+      const entregar = item.monto_entregar_bs || item.cantidad;
+      const cobrar = item.monto_cobrar_bs || (item.cantidad * item.precio_usd * tasaActual);
+      const totalUsd = item.cantidad * item.precio_usd;
+      const totalText = showBs ? formatBS(totalUsd * tasaActual) : formatUSD(totalUsd);
+      const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
+      const editBtn = '<button class="cart-edit-price-btn" data-action="edit-efectivo" data-codigo="' + code + '" title="Cambiar montos"><i class="nf nf-fa-pencil"></i></button>';
+      return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td>' +
+        '<td><div class="cart-qty-wrap"><span class="cart-efectivo-qty">Entregar <strong>' + formatBS(entregar) + '</strong></span><span class="cart-efectivo-cobrar text-muted text-sm">Cobrar ' + formatBS(cobrar) + '</span></div></td>' +
+        '<td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td>' +
+        '<td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
+    }
     const displayName = item.nombre || item.codigo;
     const name = escapeHtml(displayName);
     const code = escapeHtml(item.codigo);
     const totalUsd = item.cantidad * item.precio_usd;
     const totalBs = totalUsd * tasaActual;
-    const showBs = cartShowBs;
     const totalText = showBs ? formatBS(totalBs) : formatUSD(totalUsd);
     const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
     return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td><div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div></td><td class="' + cls + '">' + totalText + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
@@ -97,6 +111,28 @@ describe('createCartRow (DOM)', () => {
     const html = createCartRow(item);
     expect(html).toContain('max="7"');
     expect(html).toContain('min="1"');
+  });
+
+  it('línea Efectivo muestra entregar/cobrar en Bs. y botón editar', () => {
+    cartShowBs = false;
+    const item = { codigo: 'EFECTIVO', nombre: 'Efectivo', es_efectivo: true, cantidad: 600, precio_usd: 610 / 40 / 600, monto_entregar_bs: 600, monto_cobrar_bs: 610 };
+    const html = createCartRow(item);
+    expect(html).toContain('Entregar <strong>Bs. 600,00</strong>');
+    expect(html).toContain('Cobrar Bs. 610,00');
+    expect(html).toContain('data-action="edit-efectivo"');
+    expect(html).toContain('data-action="remove-from-cart"');
+    expect(html).not.toContain('qty-inc');
+  });
+
+  it('línea Efectivo muestra total según cobrar (USD y Bs.)', () => {
+    cartShowBs = false;
+    const item = { codigo: 'EFECTIVO', es_efectivo: true, cantidad: 600, precio_usd: 610 / 40 / 600, monto_entregar_bs: 600, monto_cobrar_bs: 610 };
+    const htmlUsd = createCartRow(item);
+    expect(htmlUsd).toContain('$15.25');
+    cartShowBs = true;
+    const htmlBs = createCartRow(item);
+    expect(htmlBs).toContain('Bs. 610,00');
+    expect(htmlBs).toContain('bs-mode');
   });
 });
 

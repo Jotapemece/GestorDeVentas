@@ -81,6 +81,36 @@ function refreshAllBsPrices() {
   });
 }
 
+/* Saldo de efectivo físico disponible en Bs. (pseudo-producto Efectivo). */
+let efectivoDisponibleBs = 0;
+
+function efectivoPseudoProduct() {
+  return {
+    codigo: CODIGO_EFECTIVO,
+    nombre: 'Efectivo',
+    precio_usd: 0,
+    costo: 0,
+    stock: 0,
+    stock_minimo: 0,
+    es_inari: false,
+    es_pesable: false,
+    es_efectivo: true,
+    efectivo_disponible_bs: efectivoDisponibleBs,
+  };
+}
+
+function cartHasEfectivo() {
+  return cart.some(function(i) { return i.es_efectivo; });
+}
+
+async function refreshEfectivoSaldo() {
+  try {
+    efectivoDisponibleBs = await invoke('get_efectivo_saldo') || 0;
+  } catch (e) {
+    efectivoDisponibleBs = 0;
+  }
+}
+
 async function loadProductCache() {
   try {
     const result = await invoke('list_products', { search: null, page: 1, pageSize: PRODUCT_CACHE_PAGE_SIZE });
@@ -89,6 +119,7 @@ async function loadProductCache() {
   try {
     comboCache = await invoke('list_combos_simple');
   } catch (e) { comboCache = []; }
+  await refreshEfectivoSaldo();
 }
 
 /* ========== SALES ========== */
@@ -216,6 +247,10 @@ function filterProducts(query) {
       }
     });
   }
+  // Efectivo disponible: aparecer al buscar "efectivo"/"cambio"/"divisa"/"billete"/"bs".
+  if (efectivoDisponibleBs > 0 && /efectivo|cambio|divisa|billete|^bs/i.test(query)) {
+    results.unshift(efectivoPseudoProduct());
+  }
   return results;
 }
 
@@ -246,29 +281,31 @@ function renderProductFavorites(grid, table, tbody, favSection, favBody, recentS
   const recent = recentProducts
     .map(function(c) { return productCache.find(function(x) { return x.codigo === c && (!x.es_inari || inariVisible); }); })
     .filter(Boolean);
+  const efectivo = efectivoDisponibleBs > 0 ? [efectivoPseudoProduct()] : [];
 
-  if (favSection) favSection.classList.toggle('hidden', favorites.length === 0);
+  if (favSection) favSection.classList.toggle('hidden', favorites.length === 0 && efectivo.length === 0);
   if (recentSection) recentSection.classList.toggle('hidden', recent.length === 0);
 
   if (isPhone) {
+    addGridSection('Efectivo disponible', 'nf-fa-money', efectivo);
     addGridSection('Favoritos', 'nf-fa-star', favorites);
     addGridSection('Recientes', 'nf-fa-history', recent);
-    if (productCache.length === 0) {
+    if (productCache.length === 0 && efectivo.length === 0) {
       grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario') + '</div>';
-    } else if (favorites.length === 0 && recent.length === 0) {
+    } else if (favorites.length === 0 && recent.length === 0 && efectivo.length === 0) {
       grid.innerHTML = '<div class="product-grid-empty">' + emptyState('<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Los productos que vendas aparecer\u00e1n aqu\u00ed r\u00e1pidamente') + '</div>';
     }
     return;
   }
 
-  appendRows(favBody, favorites, createProductRow);
+  appendRows(favBody, efectivo.concat(favorites), createProductRow);
   appendRows(recentBody, recent, createProductRow);
-  if (productCache.length === 0) {
+  if (productCache.length === 0 && efectivo.length === 0) {
     table.style.display = '';
     tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-archive"></i>', 'No hay productos disponibles', 'Agregue productos desde Inventario');
     return;
   }
-  if (favorites.length === 0 && recent.length === 0) {
+  if (favorites.length === 0 && recent.length === 0 && efectivo.length === 0) {
     table.style.display = '';
     tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-clock"></i>', 'No hay productos recientes', 'Los productos que vendas aparecer\u00e1n aqu\u00ed r\u00e1pidamente');
   }
@@ -323,6 +360,10 @@ function renderProductSearch() {
 }
 
 function addToCart(codigo) {
+  if (codigo === CODIGO_EFECTIVO) {
+    openEfectivoModal();
+    return;
+  }
   var active = ensureActiveCart();
   if (!active) { showToast('M\u00e1ximo 3 carritos alcanzado', 'error'); return; }
   playSound('add');
@@ -614,6 +655,14 @@ function openPaymentModal() {
   qs(SEL.mixtoItems).innerHTML = '';
   qs(SEL.mixtoError).style.display = 'none';
   qsa('.payment-method-btn').forEach(b => b.classList.remove('active'));
+  // Entregar efectivo solo si hay saldo; y con Efectivo en el carrito no se
+  // puede pagar con efectivo (efectivo_bs), por coherencia con el backend.
+  const addGroup = qs(SEL.efectivoOpenFromCart)?.closest('.form-group');
+  if (addGroup) addGroup.style.display = efectivoDisponibleBs > 0 ? '' : 'none';
+  const disallowCash = cartHasEfectivo();
+  qsa('.payment-method-btn').forEach(b => {
+    b.disabled = b.dataset.method === METODO_EFECTIVO_BS && disallowCash;
+  });
   qs(SEL.referenciaGroup).style.display = 'none';
   qs(SEL.clienteGroup).style.display = 'none';
   qs(SEL.mixtoGroup).style.display = 'none';
@@ -626,7 +675,94 @@ function closePaymentModal() {
   closeModal(qs(SEL.paymentModal));
 }
 
+/* ========== EFECTIVO (pseudo-producto: entregar billetes de la caja) ========== */
+function openEfectivoModal() {
+  if (efectivoDisponibleBs <= 0) { showToast('No hay efectivo disponible', 'error'); return; }
+  qs(SEL.efectivoDisponible).textContent = formatBS(efectivoDisponibleBs);
+  const existing = cart.find(i => i.es_efectivo);
+  qs(SEL.efectivoEntregar).value = existing ? existing.monto_entregar_bs : '';
+  qs(SEL.efectivoCobrar).value = existing ? existing.monto_cobrar_bs : '';
+  qs(SEL.efectivoError).style.display = 'none';
+  qs(SEL.efectivoError).textContent = '';
+  // Si el modal de pago está abierto, no lo ocultamos (se apila encima).
+  const paymentModal = qs(SEL.paymentModal);
+  const fromPayment = paymentModal && !paymentModal.classList.contains('hidden');
+  if (!fromPayment) {
+    qsa('.modal').forEach(m => { if (m !== qs(SEL.efectivoModal)) m.classList.add('hidden'); });
+  }
+  qs(SEL.efectivoModal).classList.remove('hidden');
+  const content = qs(SEL.efectivoModal).querySelector('.modal-content');
+  if (content && !content.classList.contains('dragging')) content.style.transform = '';
+  qs(SEL.efectivoEntregar).focus();
+}
+
+function refreshPaymentTotals() {
+  const total = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
+  qs(SEL.paymentTotalUsd).textContent = formatUSD(total);
+  qs(SEL.paymentTotalBs).textContent = formatBS(totalBsRedondeado(total));
+}
+
+function confirmEfectivo() {
+  const entregar = parseInput(qs(SEL.efectivoEntregar).value);
+  const cobrar = parseInput(qs(SEL.efectivoCobrar).value);
+  const errEl = qs(SEL.efectivoError);
+  function fail(msg) { errEl.textContent = msg; errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+  if (!(entregar > 0)) return fail('Ingrese un monto a entregar mayor a cero');
+  if (!(cobrar > 0)) return fail('Ingrese un monto a cobrar mayor a cero');
+  if (cobrar + 0.005 < entregar) return fail('El monto a cobrar no puede ser menor al entregado');
+  if (entregar + 0.005 > efectivoDisponibleBs) return fail('Efectivo disponible insuficiente (Bs. ' + formatBS(efectivoDisponibleBs) + ')');
+  const precio = efectivoPrecioUsd(entregar, cobrar, tasaActual);
+  if (!(precio > 0)) return fail('La tasa debe ser mayor a cero');
+  cartHistoryPush();
+  const existing = cart.find(i => i.es_efectivo);
+  const nuevoItem = {
+    codigo: CODIGO_EFECTIVO,
+    cantidad: entregar,
+    precio_usd: precio,
+    nombre: 'Efectivo',
+    stock: efectivoDisponibleBs,
+    es_inari: false,
+    es_pesable: false,
+    es_efectivo: true,
+    monto_entregar_bs: entregar,
+    monto_cobrar_bs: cobrar,
+  };
+  if (existing) {
+    Object.assign(existing, nuevoItem);
+  } else {
+    cart.push(nuevoItem);
+  }
+  playSound('add');
+  renderCart();
+  updateCheckoutBtn();
+  saveCartSnapshot();
+  closeModal(qs(SEL.efectivoModal));
+  // Si venía del modal de pago, refrescar el total (ya no está oculto).
+  if (!qs(SEL.paymentModal).classList.contains('hidden')) {
+    refreshPaymentTotals();
+    // Con Efectivo en el carrito, efectivo_bs ya no es válido como pago.
+    const disallowCash = cartHasEfectivo();
+    const active = qs(SEL.paymentMethodActive);
+    qsa('.payment-method-btn').forEach(b => {
+      b.disabled = b.dataset.method === METODO_EFECTIVO_BS && disallowCash;
+    });
+    if (active && disallowCash && active.dataset.method === METODO_EFECTIVO_BS) {
+      active.classList.remove('active');
+      qs(SEL.referenciaGroup).style.display = 'none';
+      qs(SEL.clienteGroup).style.display = 'none';
+      qs(SEL.mixtoGroup).style.display = 'none';
+      const cambioGroup = qs(SEL.cambioGroup);
+      if (cambioGroup) { cambioGroup.style.display = 'none'; qs(SEL.cambioRecibido).value = ''; }
+    }
+  }
+}
+
 function selectPaymentMethod(method) {
+  if (method === METODO_EFECTIVO_BS && cartHasEfectivo()) {
+    showToast('No se puede pagar el Efectivo con efectivo (efectivo_bs)', 'error');
+    return;
+  }
   qsa('.payment-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === method));
   qs(SEL.referenciaGroup).style.display = method === METODO_PAGO_MOVIL ? 'block' : 'none';
   qs(SEL.clienteGroup).style.display = method === METODO_CREDITO ? 'block' : 'none';
@@ -650,7 +786,7 @@ function addMixtoRow(containerId) {
   row.innerHTML =
     '<select>' +
       '<option value="efectivo_usd">Efectivo USD</option>' +
-      '<option value="efectivo_bs">Efectivo Bs.</option>' +
+      (cartHasEfectivo() ? '' : '<option value="efectivo_bs">Efectivo Bs.</option>') +
       '<option value="biopago">Biopago</option>' +
       '<option value="punto">Punto</option>' +
       '<option value="pago_movil">Pago M\u00f3vil</option>' +
@@ -927,7 +1063,12 @@ async function confirmPayment() {
       return;
     }
   }
-  const productos = cart.map(i => ({ codigo: i.codigo, cantidad: i.cantidad, es_inari: !!i.es_inari, es_pesable: !!i.es_pesable }));
+  const productos = cart.map(i => {
+    if (i.es_efectivo) {
+      return { codigo: i.codigo, cantidad: i.monto_entregar_bs || i.cantidad, monto_cobrar_bs: i.monto_cobrar_bs, es_inari: false };
+    }
+    return { codigo: i.codigo, cantidad: i.cantidad, es_inari: !!i.es_inari, es_pesable: !!i.es_pesable };
+  });
   const notaInput = qs(SEL.paymentNota);
   const nota = notaInput ? notaInput.value.trim() : '';
   let total_bs_ingresado = null;
@@ -1057,6 +1198,7 @@ async function loadDailySummary() {
       openBtn.style.display = 'inline-flex';
       closeBtn.style.display = 'none';
     }
+    refreshEfectivoSaldo();
 }
 
 async function handleOpenCashier() {

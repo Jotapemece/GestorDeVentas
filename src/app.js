@@ -268,6 +268,11 @@ document.addEventListener('DOMContentLoaded', async function() {
       cartEditPrice(editBtn.dataset.codigo);
       return;
     }
+    const editEf = e.target.closest('[data-action="edit-efectivo"]');
+    if (editEf) {
+      openEfectivoModal();
+      return;
+    }
   });
 
   const cartUndoPill = qs(SEL.cartUndoPill);
@@ -332,6 +337,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.paymentModalClose).addEventListener('click', closePaymentModal);
   qs(SEL.paymentCancelBtn).addEventListener('click', closePaymentModal);
   qs(SEL.mixtoAddRow).addEventListener('click', function() { addMixtoRow('mixto-items'); });
+  // Efectivo (entregar billetes de la caja)
+  qs(SEL.efectivoConfirmBtn).addEventListener('click', confirmEfectivo);
+  qs(SEL.efectivoCancelBtn).addEventListener('click', function() { closeModal(qs(SEL.efectivoModal)); });
+  qs(SEL.efectivoModalClose).addEventListener('click', function() { closeModal(qs(SEL.efectivoModal)); });
+  qs(SEL.efectivoOpenFromCart).addEventListener('click', openEfectivoModal);
   qs(SEL.cambioRecibido)?.addEventListener('input', function() {
     const recibido = parseInput(this.value);
     const methodBtn = qs(SEL.paymentMethodActive);

@@ -1082,7 +1082,10 @@
             <span id="payment-total-bs">Bs. 0,00</span>
           </div>
         </div>
-          <div class="form-group">
+          <div class="form-group" id="efectivo-add-group">
+          <button type="button" class="btn btn-sm btn-outline" id="efectivo-open-from-cart"><i class="nf nf-fa-money"></i> Entregar efectivo (cambio)</button>
+        </div>
+        <div class="form-group">
           <label>M&eacute;todo de Pago</label>
           <div class="payment-methods">
             <button class="payment-method-btn" data-method="efectivo_bs">Efectivo Bs.</button>
@@ -1138,6 +1141,33 @@
       <div class="modal-footer">
         <button id="payment-cancel-btn" class="btn btn-outline">Cancelar</button>
         <button id="payment-confirm-btn" class="btn btn-primary">Confirmar Pago</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="efectivo-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Entregar Efectivo">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Entregar Efectivo</h3>
+        <span class="modal-close" id="efectivo-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="efectivo-saldo">Disponible en caja: <strong id="efectivo-modal-disponible">Bs. 0,00</strong></div>
+        <div class="form-group">
+          <label>Monto a entregar (Bs.)</label>
+          <input type="number" id="efectivo-entregar" step="any" min="0" placeholder="0.00" inputmode="decimal">
+          <small class="text-muted">El monto sale de la caja y descuenta el saldo de efectivo disponible.</small>
+        </div>
+        <div class="form-group">
+          <label>Monto a cobrar (Bs.)</label>
+          <input type="number" id="efectivo-cobrar" step="any" min="0" placeholder="0.00" inputmode="decimal">
+          <small class="text-muted">Normalmente igual al entregado. Si cobra m&aacute;s, la diferencia se registra como comisi&oacute;n.</small>
+        </div>
+        <div class="field-error hidden" id="efectivo-modal-error"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="efectivo-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="efectivo-confirm-btn" class="btn btn-primary">Agregar al carrito</button>
       </div>
     </div>
   </div>

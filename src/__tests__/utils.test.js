@@ -26,6 +26,11 @@ function createUserRow(u) {
   return '<td>' + escapeHtml(u.username) + '</td><td>' + escapeHtml(u.rol) + '</td><td>' + pwdBtn + '<button class="btn btn-sm btn-danger delete-user-btn" data-id="' + u.id + '" ' + (isAdmin ? 'disabled title="No se puede eliminar"' : '') + '><i class="nf nf-fa-trash"></i></button></td>';
 }
 
+function efectivoPrecioUsd(entregar, cobrar, tasa) {
+  if (!(entregar > 0) || !(cobrar > 0) || !(tasa > 0)) return 0;
+  return cobrar / tasa / entregar;
+}
+
 /* ========== TESTS ========== */
 
 describe('escapeHtml', () => {
@@ -179,5 +184,18 @@ describe('createUserRow', () => {
     const html = createUserRow(u);
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;script&gt;');
+  });
+});
+
+describe('efectivoPrecioUsd', () => {
+  it('precio tal que cantidad*precio = cobrar/tasa', () => {
+    expect(efectivoPrecioUsd(600, 610, 10)).toBeCloseTo(610 / 10 / 600, 10);
+    expect(efectivoPrecioUsd(500, 500, 40)).toBeCloseTo(500 / 40 / 500, 10);
+  });
+
+  it('retorna 0 si algún dato no es válido', () => {
+    expect(efectivoPrecioUsd(0, 100, 10)).toBe(0);
+    expect(efectivoPrecioUsd(100, 0, 10)).toBe(0);
+    expect(efectivoPrecioUsd(100, 100, 0)).toBe(0);
   });
 });

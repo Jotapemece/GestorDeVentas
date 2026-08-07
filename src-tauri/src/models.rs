@@ -153,12 +153,17 @@ pub struct CloseReport {
     pub backup_msg: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProductoVenta {
     pub codigo: String,
     pub cantidad: f64,
     #[serde(default)]
     pub es_inari: bool,
+    /// Solo para el pseudo-producto `EFECTIVO`: monto a cobrar en Bs. (distinto
+    /// del entregado permite cobrar comisión). El precio de la línea se deriva
+    /// de `monto_cobrar_bs / tasa / cantidad` en el backend.
+    #[serde(default)]
+    pub monto_cobrar_bs: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

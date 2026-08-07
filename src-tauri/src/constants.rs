@@ -7,9 +7,14 @@ pub const MONTO_TOLERANCIA: f64 = 0.01;
 pub const FECHA_MAXIMA: &str = "9999-12-31";
 
 pub const METODO_PAGO_MOVIL: &str = "pago_movil";
+pub const METODO_EFECTIVO_BS: &str = "efectivo_bs";
 pub const METODO_CREDITO: &str = "credito";
 pub const METODO_MIXTO: &str = "mixto";
 pub const METODO_MOVIMIENTOS_CAJA: &str = "movimientos_caja";
+
+/// Pseudo-producto que representa el efectivo físico disponible en Bs. (el "stock"
+/// es `efectivo_disponible_bs`). Venderlo = entregar billetes a cambio de otro método.
+pub const CODIGO_EFECTIVO: &str = "EFECTIVO";
 
 pub const AUDIT_LOG_DEFAULT_LIMIT: i64 = 50;
 
@@ -49,6 +54,7 @@ pub const CFG_OPENROUTER_API_KEY: &str = "openrouter_api_key";
 pub const CFG_ULTIMO_BACKUP_DIARIO: &str = "ultimo_backup_diario";
 pub const CFG_MAX_BACKUPS: &str = "max_backups";
 pub const DEFAULT_MAX_BACKUPS: usize = 10;
+pub const CFG_EFECTIVO_DISPONIBLE: &str = "efectivo_disponible_bs";
 
 // Roles
 pub const ROL_ADMIN: &str = "admin";
