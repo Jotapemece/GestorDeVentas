@@ -5,7 +5,21 @@ const invoke = ((...args) => {
   return fn(...args);
 });
 
-const IS_ANDROID = navigator.userAgent.includes('Android');
+// La plataforma se determina con el plugin OS oficial (Tauri.platform) con
+// fallback al userAgent del WebView de Android para el arranque temprano.
+const __platformSniff = (() => {
+  try {
+    if (window.__TAURI_CORE_PLUGIN_OS__?.platform) {
+      return window.__TAURI_CORE_PLUGIN_OS__.platform();
+    }
+  } catch (_) {}
+  try {
+    if (window.__TAURI__?.os?.platform) return window.__TAURI__.os.platform();
+  } catch (_) {}
+  return null;
+})();
+const PLATFORM = __platformSniff || navigator.userAgent.toLowerCase();
+const IS_ANDROID = PLATFORM === 'android' || /android/.test(PLATFORM);
 
 /* ========== CONSTANTS ========== */
 const AUDIO = {
@@ -86,6 +100,8 @@ const ROL_ADMIN = 'admin';
 const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
 const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
+const CFG_SYNC_AUTO_ENABLED = 'sync_auto_enabled';
+const SYNC_AUTO_DEFAULT_ENABLED = true;
 const CFG_MAX_BACKUPS = 'max_backups';
 const DEFAULT_MAX_BACKUPS = 10;
 
@@ -265,6 +281,11 @@ const SEL = {
   clienteSelect: '#client-select-dropdown',
   clienteSelectBtn: '#client-select-btn',
   clienteSelectMenu: '#client-select-menu',
+  clientQuickCreateBtn: '#client-quick-create-btn',
+  clientQuickCreate: '#client-quick-create',
+  clientQuickNombre: '#client-quick-nombre',
+  clientQuickSaveBtn: '#client-quick-save-btn',
+  clientQuickError: '#client-quick-error',
   mixtoItems: '#mixto-items',
   mixtoError: '#mixto-error',
   mixtoWarning: '#mixto-warning',
@@ -320,6 +341,8 @@ const SEL = {
   productStockMinimo: '#product-stock-minimo',
   productStockMinimoLabel: '#product-stock-minimo-label',
   productCosto: '#product-costo',
+  productCategoria: '#product-categoria',
+  productSubcategoria: '#product-subcategoria',
   productDetailModal: '#product-detail-modal',
   detailNombre: '#detail-nombre',
   detailPrecio: '#detail-precio',
@@ -335,6 +358,7 @@ const SEL = {
 
   // --- Creditos / Clientes ---
   creditosBody: '#creditos-body',
+  creditosHeader: '#view-creditos .view-header',
   creditoAddBtn: '#credito-add-btn',
   quickDebtModal: '#quick-debt-modal',
   quickDebtClienteNombre: '#quick-debt-cliente-nombre',
@@ -452,6 +476,7 @@ const SEL = {
   reportTotalBs: '#report-total-bs',
   reportSalesBody: '#report-sales-body',
   reportExportBtn: '#report-export-btn',
+  reportsFilters: '.reports-filters',
   reportPdfBtn: '#report-pdf-btn',
   vendorSalesSection: '#vendor-sales-section',
   vendorSalesBody: '#vendor-sales-body',
@@ -569,6 +594,7 @@ const SEL = {
   stockAdjustMotivoError: '#stock-adjust-motivo-error',
   stockAdjustConfirmBtn: '#stock-adjust-confirm-btn',
   stockAdjustCancelBtn: '#stock-adjust-cancel-btn',
+  stockAdjustPreview: '#stock-adjust-preview',
   clientModalClose: '#client-modal-close',
   clientCancelBtn: '#client-cancel-btn',
   clientSaveBtn: '#client-save-btn',
@@ -651,6 +677,7 @@ const SEL = {
   chatSendBtn: '#chat-send-btn',
   chatThinking: '#chat-thinking',
   chatExpandBtn: '#chat-expand-btn',
+  chatNewBtn: '#chat-new-btn',
 
   // --- Mobile ---
   moreBtn: '#more-btn',
@@ -682,6 +709,8 @@ const SEL = {
   // --- Misc missing ---
   sidebar: '#sidebar',
   syncAutoInterval: '#sync-auto-interval',
+  syncAutoEnabled: '#sync-auto-enabled',
+  syncAutoBadge: '#sync-auto-badge',
   viewCashier: '#view-cashier',
   cartCurrencyToggle: '#cart-currency-toggle',
   restoreBackupBtn: '#restore-backup-btn',
@@ -709,6 +738,7 @@ const SEL = {
   viewActive: '.view.active',
   salesDivider: '#sales-divider',
   cashierNavBadge: '#cashier-nav-badge',
+  cashierActions: '.cashier-actions',
   movimientosBtn: '#movimientos-btn',
   movimientosModal: '#movimientos-modal',
   movimientosClose: '#movimientos-modal-close',
@@ -756,5 +786,20 @@ const SEL = {
   snake2pToggle: '#snake-2p-toggle',
   snake2pHelp: '.snake-2p-help',
   snakeScoreP2: '#snake-score-p2',
+
+  // --- Modal descarga selectiva ---
+  downloadPreviewModal: '#download-preview-modal',
+  downloadPreviewClose: '#download-preview-close',
+  downloadPreviewLoading: '#download-preview-loading',
+  downloadPreviewEmpty: '#download-preview-empty',
+  downloadPreviewList: '#download-preview-list',
+  downloadPreviewLegend: '#download-preview-legend',
+  downloadPreviewSections: '#download-preview-sections',
+  downloadPreviewNone: '#download-preview-none',
+  downloadPreviewSelectInfo: '#download-preview-select-info',
+  downloadPreviewCheckAll: '#download-preview-list-check',
+  downloadPreviewCancel: '#download-preview-cancel',
+  downloadPreviewApply: '#download-preview-apply',
+  downloadPreviewForce: '#download-preview-force',
 };
 

@@ -41,6 +41,18 @@ fn escape_pdf_text(s: &str) -> String {
     out
 }
 
+/// Convierte el texto (que tras `sanitize_latin1` solo contiene chars <= 0xFF) a
+/// bytes Latin-1 (1 byte por carácter). WinAnsi == Latin-1 en el rango 0xA0-0xFF,
+/// por lo que los acentos se codifican correctamente si NO se escriben en UTF-8.
+fn to_latin1_bytes(s: &str) -> Vec<u8> {
+    s.chars()
+        .map(|c| {
+            let cp = c as u32;
+            if cp <= 0xFF { cp as u8 } else { b'?' }
+        })
+        .collect()
+}
+
 fn truncate(s: &str, max_chars: usize) -> String {
     let mut count = 0;
     let mut out = String::new();
@@ -217,9 +229,22 @@ impl PdfDoc {
             ));
         }
 
-        for page in &self.pages {
+        for (ci, page) in self.pages.iter().enumerate() {
             let stream = page.content.clone();
-            push(&mut out, format!("<< /Length {} >>\nstream\n{}\nendstream", stream.len(), stream));
+            // El content stream debe escribirse en bytes Latin-1 (WinAnsi), no UTF-8,
+            // para que los acentos se codifiquen como un solo byte y no queden en
+            // mojibake (antes se usaba `.as_bytes()` = UTF-8).
+            let obj_num = content_start + ci;
+            let body = format!(
+                "{} 0 obj\n<< /Length {} >>\nstream\n",
+                obj_num,
+                to_latin1_bytes(&stream).len()
+            );
+            offsets.push(out.len());
+            out.extend_from_slice(body.as_bytes());
+            out.extend_from_slice(&to_latin1_bytes(&stream));
+            out.push(b'\n');
+            out.extend_from_slice(b"endstream\nendobj\n");
         }
 
         if let Some(img) = &self.image {

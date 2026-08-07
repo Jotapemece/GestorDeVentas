@@ -64,11 +64,18 @@ let syncAutoListenerAttached = false;
 
 function loadSyncAutoConfig() {
   const input = qs(SEL.syncAutoInterval);
+  const toggle = qs(SEL.syncAutoEnabled);
+  const badge = qs(SEL.syncAutoBadge);
   if (!input) return;
   invoke('get_config_value', { key: CFG_SYNC_AUTO_INTERVAL }).then(val => {
     const minutes = parseInt(val) || SYNC.AUTO_MIN;
     input.value = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
-    startSyncAutoInterval(minutes);
+    applySyncAutoConfig();
+  }).catch(() => {});
+  invoke('get_config_value', { key: CFG_SYNC_AUTO_ENABLED }).then(val => {
+    const enabled = val === undefined || val === null || val === '' || val === 'true' || val === '1';
+    if (toggle) toggle.checked = enabled;
+    applySyncAutoConfig();
   }).catch(() => {});
   if (!syncAutoListenerAttached) {
     syncAutoListenerAttached = true;
@@ -77,9 +84,25 @@ function loadSyncAutoConfig() {
       minutes = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
       input.value = minutes;
       invoke('set_config_value', { key: CFG_SYNC_AUTO_INTERVAL, value: String(minutes) }).catch(() => {});
-      startSyncAutoInterval(minutes);
+      applySyncAutoConfig();
+    });
+    if (toggle) toggle.addEventListener('change', () => {
+      invoke('set_config_value', { key: CFG_SYNC_AUTO_ENABLED, value: String(toggle.checked) }).catch(() => {});
+      applySyncAutoConfig();
     });
   }
+}
+
+function applySyncAutoConfig() {
+  const enabled = qs(SEL.syncAutoEnabled);
+  const badge = qs(SEL.syncAutoBadge);
+  const on = !enabled || enabled.checked;
+  if (badge) {
+    badge.textContent = on ? 'Activo' : 'Desactivado';
+    badge.classList.toggle('sync-auto-off', !on);
+  }
+  const minutes = parseInt(qs(SEL.syncAutoInterval)?.value) || SYNC.AUTO_MIN;
+  startSyncAutoInterval(on ? minutes : 0);
 }
 
 function startSyncAutoInterval(minutes) {
@@ -99,6 +122,7 @@ function startSyncAutoInterval(minutes) {
 
 function showView(name) {
   lastViewName = name;
+  if (typeof androidTrackView === 'function') androidTrackView(name);
   try { localStorage.setItem('last_view', name); } catch (e) {}
   qsa('.view').forEach(v => v.classList.remove('active'));
   getViewEl(name).classList.add('active');

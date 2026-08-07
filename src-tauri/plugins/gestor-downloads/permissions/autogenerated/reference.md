@@ -5,7 +5,6 @@ Default permissions for the plugin
 #### This default permission set includes the following:
 
 - `allow-save-to-downloads`
-- `allow-save-to-path`
 
 ## Permission Table
 

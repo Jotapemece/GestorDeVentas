@@ -56,13 +56,14 @@ function createCartRow(item) {
   const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button class="cart-edit-price-btn" data-action="edit-price" data-codigo="' + code + '" title="Editar precio unitario"><i class="nf nf-fa-pencil"></i></button>' : '';
   var qtyCell;
   if (item.es_pesable) {
-    qtyCell = '<div class="cart-qty-wrap"><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="0" step="0.001" data-codigo="' + code + '" placeholder="0.000"> <span class="text-muted text-sm">kg</span></div>';
+    qtyCell = '<div class="cart-qty-wrap"><input type="number" inputmode="decimal" class="cart-qty-input" value="' + item.cantidad + '" min="0" step="0.001" data-codigo="' + code + '" placeholder="0.000"> <span class="text-muted text-sm">kg</span></div>';
   } else if (item.es_inari) {
-    qtyCell = '<div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="9999" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div>';
+    qtyCell = '<div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" inputmode="numeric" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="9999" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div>';
   } else {
-    qtyCell = '<div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div>';
+    qtyCell = '<div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" inputmode="numeric" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div>';
   }
-  return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td>' + qtyCell + '</td><td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
+  var qtyWarn = (item.es_pesable && !(item.cantidad > 0)) ? '<div class="cart-qty-warn">Ingresa el peso</div>' : '';
+  return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td>' + qtyCell + qtyWarn + '</td><td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
 }
 function createInventoryRow(p, editBtn) {
   var stockClass = (p.stock < p.stock_minimo) ? ' low-stock' : '';
@@ -118,13 +119,18 @@ function createAuditRow(log) {
 }
 function createDailySaleRow(v, metodoLabel) {
   const nota = v.nota_anulacion ? escapeHtml(v.nota_anulacion) : '';
-  const anuladaLabel = v.anulada
+  const anuladaBadge = v.anulada
     ? (nota
         ? '<span class="badge badge-danger" title="' + nota + '"><i class="nf nf-fa-ban"></i> Anulada</span>'
         : '<span class="badge badge-danger"><i class="nf nf-fa-ban"></i> Anulada</span>')
-    : '<button class="btn btn-sm btn-danger void-sale-btn" data-id="' + v.id + '" title="Anular venta"><i class="nf nf-fa-ban"></i></button>';
-  const detailBtn = '<button class="btn btn-sm btn-outline sale-detail-btn" data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i></button>';
-  return '<td data-label="#">' + v.id + '</td><td data-label="Hora">' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td data-label="Usuario">' + escapeHtml(v.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td data-label="Total (Bs.)">' + formatBS(v.total_bs) + '</td><td data-label="Acción">' + detailBtn + ' ' + anuladaLabel + '</td>';
+    : '';
+  const detailAttrs = 'data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '"';
+  const detailItem = '<button class="sale-detail-btn" ' + detailAttrs + '><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
+  const voidItem = v.anulada
+    ? ''
+    : '<button class="void-sale-btn" data-id="' + v.id + '" title="Anular venta"><i class="nf nf-fa-ban"></i> Anular</button>';
+  const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailItem + voidItem + '</div></div>';
+  return '<td data-label="#">' + v.id + '</td><td data-label="Hora">' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td data-label="Usuario">' + escapeHtml(v.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td data-label="Total (Bs.)">' + formatBS(v.total_bs) + '</td><td data-label="Acción">' + (v.anulada ? anuladaBadge : menu) + '</td>';
 }
 function createDebtSaleCard(v, prodHtml) {
   return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
@@ -132,8 +138,13 @@ function createDebtSaleCard(v, prodHtml) {
 
 function createUserRow(u) {
   const isAdmin = u.username === 'admin';
-  const pwdBtn = isAdmin ? '' : '<button class="btn btn-sm btn-outline admin-pwd-btn" data-id="' + u.id + '" data-username="' + escapeHtml(u.username) + '" title="Cambiar contrase\u00f1a" style="margin-right:4px"><i class="nf nf-fa-lock"></i></button>';
-  return '<td data-label="Usuario">' + escapeHtml(u.username) + '</td><td data-label="Rol">' + escapeHtml(u.rol) + '</td><td data-label="Acción">' + pwdBtn + '<button class="btn btn-sm btn-danger delete-user-btn" data-id="' + u.id + '" ' + (isAdmin ? 'disabled title="No se puede eliminar"' : '') + '><i class="nf nf-fa-trash"></i></button></td>';
+  const menuItems = isAdmin
+    ? ''
+    : '<button class="admin-pwd-btn" data-id="' + u.id + '" data-username="' + escapeHtml(u.username) + '" title="Cambiar contrase\u00f1a"><i class="nf nf-fa-lock"></i> Cambiar contrase\u00f1a</button>'
+      + '<button class="delete-user-btn" data-id="' + u.id + '" title="Eliminar usuario"><i class="nf nf-fa-trash"></i> Eliminar</button>';
+  return '<td data-label="Usuario">' + escapeHtml(u.username) + '</td><td data-label="Rol">' + escapeHtml(u.rol) + '</td><td data-label="Acción">' + (isAdmin
+    ? '<button class="btn btn-sm btn-outline" disabled title="No se puede eliminar"><i class="nf nf-fa-shield"></i> Admin</button>'
+    : '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + menuItems + '</div></div>') + '</td>';
 }
 
 function createReportRow(v) {
@@ -152,8 +163,9 @@ function createReportRow(v) {
   var ganancia = v.venta.total_usd - costoTotal;
   const vv = v.venta;
   const obs = vv.nota ? escapeHtml(vv.nota) : '';
-  const detailBtn = '<button class="btn btn-sm btn-outline sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i></button>';
-  return '<td data-label="#">' + vv.id + '</td><td data-label="Fecha">' + escapeHtml(vv.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(vv.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(vv.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(vv.total_bs) + badge + '</td><td data-label="Acción">' + detailBtn + '</td>';
+  const detailBtn = '<button class="sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
+  const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailBtn + '</div></div>';
+  return '<td data-label="#">' + vv.id + '</td><td data-label="Fecha">' + escapeHtml(vv.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(vv.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(vv.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(vv.total_bs) + badge + '</td><td data-label="Acción">' + menu + '</td>';
 }
 
 const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
@@ -365,8 +377,9 @@ async function saveExportedFile(fileName, data) {
     },
   });
   if (!path) return { saved: false, canceled: true };
-  await invoke('plugin:gestor-downloads|save_to_path', {
-    payload: { path, content: b64 },
+  await invoke('save_exported_file', {
+    path,
+    content: b64,
   });
   return { saved: true, path };
 }
@@ -386,6 +399,8 @@ function confirmModal(msg, title, okText) {
       if (e.target === modal) { closeModal(modal); resolve(false); modal.removeEventListener('click', handler); }
     });
     showModal(modal);
+    /* Focus the confirm (OK) button, not Cancel, so Enter confirms */
+    setTimeout(function() { okBtn.focus(); }, 60);
   });
 }
 
@@ -485,11 +500,17 @@ function appendRows(tbody, items, rowFn, setupTr) {
   });
   tbody.appendChild(frag);
 }
+function toFriendlyError(err) {
+  if (!err) return 'Error desconocido';
+  const raw = String(err);
+  const m = raw.match(/(?:Error:\s*)?(?:Rust:\s*)?(\w+):\s*(.+)/);
+  return m ? m[1] + ': ' + m[2] : raw;
+}
 async function invokeOrError(promise, errMsg) {
   try {
     return await promise;
   } catch (e) {
-    showToast(errMsg || ('Error: ' + e), 'error');
+    showToast(errMsg || ('Error: ' + toFriendlyError(e)), 'error');
     return undefined;
   }
 }
@@ -519,6 +540,10 @@ async function getTasaConFallback() { return tasaActual || await invoke('get_tas
 
 /* Focus trap for modals */
 let activeModal = null;
+
+function isProtectedModal(id) {
+  return ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'quick-debt-modal', 'stock-adjust-modal'].indexOf(id) !== -1;
+}
 function trapFocus(modalEl) {
   activeModal = modalEl;
   const focusable = modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
@@ -536,6 +561,11 @@ document.querySelectorAll('.modal').forEach(modal => {
 document.addEventListener('keydown', (e) => {
   if (!activeModal) return;
   if (e.key === 'Escape') {
+    if (isProtectedModal(activeModal.id)) {
+      confirmModal('\u00bfSeguro que quieres cerrar? Se perder\u00e1n los datos ingresados.', 'Cerrar ventana', 'S\u00ed, cerrar')
+        .then(ok => { if (ok) closeModal(activeModal); else showModal(activeModal); });
+      return;
+    }
     const closeBtn = activeModal.querySelector('.modal-close, [data-action="close-modal"]');
     if (closeBtn) closeBtn.click();
     return;

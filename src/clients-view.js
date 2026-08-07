@@ -60,6 +60,7 @@ function openCreditoModal(cliente) {
   }
   clearClientErrors();
   showModal(qs(SEL.clientModal));
+  setTimeout(() => qs(SEL.clientNombre).focus(), 100);
 }
 
 function closeClientModal() {

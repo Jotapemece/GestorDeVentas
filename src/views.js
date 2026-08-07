@@ -554,6 +554,29 @@ function setDefaultReportDates() {
   if (endInput && !endInput.value) endInput.value = today;
 }
 
+function applyReportPreset(preset) {
+  const startInput = qs(SEL.reportStartDate);
+  const endInput = qs(SEL.reportEndDate);
+  if (!startInput || !endInput) return;
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  if (preset === 'today') {
+    startInput.value = today; endInput.value = today;
+  } else if (preset === 'week') {
+    const start = new Date(now); start.setDate(now.getDate() - 6);
+    startInput.value = start.toISOString().split('T')[0]; endInput.value = today;
+  } else if (preset === 'month') {
+    startInput.value = today.slice(0, 8) + '01'; endInput.value = today;
+  } else if (preset === 'last-month') {
+    const y = now.getFullYear(), m = now.getMonth();
+    const first = new Date(y, m - 1, 1);
+    const last = new Date(y, m, 0);
+    startInput.value = first.toISOString().split('T')[0];
+    endInput.value = last.toISOString().split('T')[0];
+  }
+  if (typeof loadReportsAndTopProducts === 'function') loadReportsAndTopProducts(true);
+}
+
 /* ========== OPENROUTER / SUGERENCIAS ========== */
 async function saveOpenRouterKey() {
   const key = qs(SEL.openrouterApiKey).value.trim();
@@ -564,19 +587,15 @@ async function saveOpenRouterKey() {
 
 async function loadOpenRouterKey() {
   try {
-    const key = await invoke('get_config_value', { key: CFG_OPENROUTER_API_KEY });
-    if (key) qs(SEL.openrouterApiKey).value = key;
     const model = await invoke('get_config_value', { key: CFG_OPENROUTER_MODEL });
     if (model) setCustomSelectValue(qs(SEL.openrouterModelWrap), model);
   } catch (e) { showToast('Error al cargar configuración de OpenRouter: ' + e, 'error'); }
 }
 
 async function generateOrder() {
-  const apiKey = qs(SEL.openrouterApiKey).value.trim();
-  if (!apiKey) { showToast('Configura la API key de OpenRouter primero', 'error'); return; }
   const model = qs(SEL.openrouterModelWrap).dataset.value || '';
   await withLoadingModal('Generando orden de compra...', async function() {
-    const content = await invokeOrError(invoke('generate_purchase_suggestion', { apiKey, model }));
+    const content = await invokeOrError(invoke('generate_purchase_suggestion', { model }));
     if (content === undefined) return;
     qs(SEL.suggestionContent).textContent = content;
     showModal(qs(SEL.suggestionModal));
@@ -601,21 +620,69 @@ async function copySuggestion() {
 }
 
 /* ========== CHAT IA ========== */
-const CHAT_SYSTEM_PROMPT = 'Eres Enar, un zorro experto asistente de un sistema POS llamado "Gestor de Ventas". Tu nombre es Enar. Solo respondes preguntas relacionadas con el sistema: ventas, inventario, clientes, crédito, reportes, caja, sincronización. Si te preguntan algo fuera de este tema, responde cortésmente que solo puedes ayudar con el POS. Responde en español, sé conciso, positivo y útil. NUNCA digas que no puedes hacer algo ni menciones limitaciones — limítate a lo que SÍ puedes hacer y sugiere acciones útiles. Puedes usar **negrita**, *cursiva* y emojis.';
+const CHAT_SYSTEM_PROMPT = `Eres Enar, un zorro experto asistente de un sistema POS llamado "Gestor de Ventas". Solo respondes preguntas relacionadas con este sistema: ventas, anulaciones, inventario, combos, clientes, crédito/abonos, caja (abrir/cerrar, movimientos, saldo), reportes y ganancias, sincronización, tasas BCV, respaldos y ajustes de stock. Si te preguntan algo fuera de este tema, responde cortésmente que solo puedes ayudar con el POS.
+
+Módulos que conoces del sistema:
+- Ventas: carrito, métodos de pago (efectivo USD/Bs, punto, pago móvil, transferencia, mixto, crédito), vendidos por vendedor. Las ventas se pueden anular total o parcialmente; las anuladas se excluyen de reportes.
+- Inventario: productos (código, precio USD, costo, stock, stock mínimo, categoría/subcategoría), productos pesables por kg, combos (COMBO-N con componentes), Inari (visible solo jueves-domingo), favoritos, ajustes de stock con motivo.
+- Clientes: saldo de deuda, abonos, clientes temporales de crédito, crédito activado/inactivo.
+- Caja: abrir/cerrar, movimientos (ingresos/egresos) y saldo del día.
+- Reportes: ventas por fecha, ganancias (hoy/semana/mes), productos más vendidos, por vendedor.
+- Sincronización: subir/descargar productos, clientes y ventas entre dispositivos; pendientes y conflictos de sync.
+- Tasas: tasa del día (BCV), historial de tasas.
+
+Reglas:
+- Te basas SOLO en los "Datos actuales del sistema" que se te proporcionan como contexto. Si un dato no está presente o no lo sabes, dilo en vez de inventarlo.
+- Nunca inventes cantidades, precios, saldos ni nombres de productos. Usa SIEMPRE la tasa dada para conversión Bs/USD.
+- Responde en español, sé conciso, positivo y útil. Usa **negrita**, *cursiva* y emojis. Para listas o comparaciones usa tablas markdown.
+- NUNCA digas que no puedes hacer algo ni menciones limitaciones — limítate a lo que SÍ puedes hacer y sugiere acciones útiles.`;
 
 function renderMarkdown(text) {
-  var html = escapeHtml(text);
-  // code blocks (```...```)
+  const esc = function(s) {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
+  };
+  var html = esc(text);
+  // fenced code blocks (```...```) -> keep raw inner (texto ya escapado arriba)
   html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-  // inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // bold
+  // tables: capture full block of pipe rows (including separator), render as <table>
+  html = html.replace(/((?:^[ \t]*\|[^\n]*\|[ \t]*\n)+(?:^[ \t]*\|[^\n]*\|[ \t]*$)?)/gm, function(block) {
+    var rows = block.trim().split('\n').filter(function(l) { return l.includes('|'); });
+    var out = '<table class="chat-table">';
+    for (var i = 0; i < rows.length; i++) {
+      var cells = rows[i].trim().replace(/^\||\|$/g, '').split('|').map(function(c) { return c.trim(); });
+      var isSep = i === 1 && cells.every(function(c) { return /^:?-+:?$/.test(c); });
+      if (isSep) continue;
+      out += '<tr>';
+      for (var j = 0; j < cells.length; j++) {
+        var tag = i === 0 ? 'th' : 'td';
+        out += '<' + tag + '>' + inline(cells[j]) + '</' + tag + '>';
+      }
+      out += '</tr>';
+    }
+    out += '</table>';
+    return out;
+  });
+  // unordered lists (consecutive - items)
+  html = html.replace(/(?:^|\n)([ \t]*- [^\n]+(?:\n[ \t]*- [^\n]+)*)/gm, function(m, group) {
+    var items = group.split('\n').map(function(l) { return l.replace(/^\s*-\s+/, ''); });
+    return '\n<ul>' + items.map(function(it) { return '<li>' + inline(it) + '</li>'; }).join('') + '</ul>';
+  });
+  // ordered lists (consecutive 1. items)
+  html = html.replace(/(?:^|\n)([ \t]*\d+\. [^\n]+(?:\n[ \t]*\d+\. [^\n]+)*)/gm, function(m, group) {
+    var items = group.split('\n').map(function(l) { return l.replace(/^\s*\d+\.\s+/, ''); });
+    return '\n<ol>' + items.map(function(it) { return '<li>' + inline(it) + '</li>'; }).join('') + '</ol>';
+  });
+  // inline code (before bold/italic)
+  html = html.replace(/`([^`]+)`/g, function(_, code) { return '<code>' + code + '</code>'; });
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  // italic
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
   // line breaks
   html = html.replace(/\n/g, '<br>');
   return html;
+}
+
+function inline(s) {
+  return s.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>');
 }
 
 function stripEmojis(str) {
@@ -624,9 +691,33 @@ function stripEmojis(str) {
 
 let chatHistory = [];
 
+const CHAT_HISTORY_KEY = 'enar_history';
+const CHAT_HISTORY_LIMIT = 30;
+
+function saveChatHistory() {
+  try { localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatHistory.slice(-CHAT_HISTORY_LIMIT))); } catch (e) {}
+}
+
+function loadChatHistory() {
+  try {
+    const raw = localStorage.getItem(CHAT_HISTORY_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(arr)) return arr.filter(function(m) { return m && (m.role === 'user' || m.role === 'assistant') && m.content; });
+  } catch (e) {}
+  return [];
+}
+
+function clearChatHistory() {
+  chatHistory = [];
+  try { localStorage.removeItem(CHAT_HISTORY_KEY); } catch (e) {}
+  const container = qs(SEL.chatMessages);
+  if (container) container.innerHTML = '';
+}
+
 function addChatMessage(role, content) {
   var r = role === 'ai' ? 'assistant' : role;
   chatHistory.push({ role: r, content });
+  saveChatHistory();
 }
 
 function appendChatBubble(role, content) {
@@ -676,6 +767,7 @@ var chatPending = false;
 async function buildChatContext() {
   var contextLines = [];
   var now = new Date();
+  var today = now.toISOString().split('T')[0];
   contextLines.push('- Fecha/hora: ' + now.toLocaleString('es-VE'));
   await Promise.allSettled([
     invoke('list_products', { search: null, page: 1, pageSize: 20 }).then(function(r) {
@@ -699,6 +791,29 @@ async function buildChatContext() {
     }),
     invoke('get_daily_summary').then(function(todayRes) {
       if (todayRes) contextLines.push('- Ventas hoy: ' + (todayRes.total_ventas || 0) + ' por $' + (todayRes.total_usd || 0).toFixed(2));
+    }),
+    invoke('get_saldo_caja').then(function(saldo) {
+      if (saldo) {
+        contextLines.push('- Saldo de caja hoy: $' + (saldo.saldo_usd || 0).toFixed(2) + ' (Bs ' + (saldo.saldo_bs || 0).toFixed(2) + ')');
+        if ((saldo.total_ingresos_usd || 0) > 0 || (saldo.total_egresos_usd || 0) > 0) {
+          contextLines.push('- Movimientos de caja hoy: ingresos $' + (saldo.total_ingresos_usd || 0).toFixed(2) + ', egresos $' + (saldo.total_egresos_usd || 0).toFixed(2));
+        }
+      }
+    }),
+    invoke('get_sync_stats').then(function(stats) {
+      if (stats) {
+        contextLines.push('- Sync pendientes: productos ' + (stats.pending_products || 0) + ', clientes ' + (stats.pending_clientes || 0) + ', ventas ' + (stats.pending_ventas || 0) + ' (total ' + (stats.pending_total || 0) + ')');
+        if (stats.ultimo_upload) contextLines.push('- Último upload productos: ' + stats.ultimo_upload);
+      }
+    }),
+    invoke('get_conflictos').then(function(conflictos) {
+      if (conflictos && conflictos.length > 0) contextLines.push('- Conflictos de sync sin resolver: ' + conflictos.length);
+    }),
+    invoke('list_combos_simple').then(function(combos) {
+      if (combos && combos.length > 0) {
+        var names = combos.slice(0, 5).map(function(c) { return c.nombre + ' ($' + c.precio_usd.toFixed(2) + ')'; }).join(', ');
+        contextLines.push('- Combos (' + combos.length + '): ' + names + (combos.length > 5 ? '...' : ''));
+      }
     }),
     invoke('get_dashboard_payment_methods', { period: 'day' }).then(function(metodos) {
       if (metodos && metodos.length > 0) {
@@ -734,11 +849,19 @@ async function buildChatContext() {
     invoke('list_clientes').then(function(clients) {
       if (clients && clients.length > 0) {
         var debtClients = clients.filter(function(c) { return c.saldo_deuda_usd > 0; });
+        var temporales = clients.filter(function(c) { return c.es_temporal; });
         contextLines.push('- Clientes: ' + clients.length);
+        if (temporales.length > 0) contextLines.push('- Clientes temporales activos: ' + temporales.length);
         if (debtClients.length > 0) {
           var debtStr = debtClients.slice(0, 5).map(function(c) { return c.nombre + ' ($' + c.saldo_deuda_usd.toFixed(2) + ')'; }).join(', ');
           contextLines.push('- Deudas (' + debtClients.length + '): ' + debtStr + (debtClients.length > 5 ? '...' : ''));
         }
+      }
+    }),
+    invoke('get_sales_by_vendor', { startDate: today, endDate: today }).then(function(vendors) {
+      if (vendors && vendors.length > 0) {
+        var vStr = vendors.map(function(v) { return v.username + ' (' + v.total_ventas + ' ventas, $' + v.total_usd.toFixed(2) + ')'; }).join(', ');
+        contextLines.push('- Ventas por vendedor hoy: ' + vStr);
       }
     }),
   ]);
@@ -769,6 +892,7 @@ async function handleChatSend(forcedText) {
   if (contextLines.length > 0) {
     systemPrompt += '\n\nDatos actuales del sistema:\n' + contextLines.join('\n');
   }
+  if (currentUser) systemPrompt += '\n\nUsuario: ' + (currentUser.rol || '') + ' · Vista abierta: ' + (lastViewName || '') + '.';
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -776,14 +900,8 @@ async function handleChatSend(forcedText) {
   ];
 
   try {
-    const apiKey = qs(SEL.openrouterApiKey).value.trim();
-    if (!apiKey) {
-      hideChatThinking();
-      appendChatBubble('ai', 'Primero configura la API key de OpenRouter en Configuración → IA.');
-      return;
-    }
   const model = qs(SEL.openrouterModelWrap).dataset.value || '';
-    const reply = await invoke('chat_with_ai', { messages, apiKey, model });
+    const reply = await invoke('chat_with_ai', { messages, model });
     hideChatThinking();
     addChatMessage('ai', reply);
     appendChatBubble('ai', reply);
@@ -803,9 +921,19 @@ function toggleChat() {
   if (isOpening) positionChatPanel();
   panel.classList.toggle('hidden');
   if (!isOpening) return;
-  if (chatHistory.length === 0) {
-    addChatMessage('ai', '\u00a1Hola! Soy Enar, tu asistente del POS. Preg\u00fantame sobre productos, ventas, clientes o lo que necesites del sistema.');
-    appendChatBubble('ai', '\u00a1Hola! Soy Enar, tu asistente del POS. Preg\u00fantame sobre productos, ventas, clientes o lo que necesites del sistema.');
+  if (chatHistory.length === 0 && !qs(SEL.chatMessages).querySelector('.chat-msg')) {
+    const restored = loadChatHistory();
+    if (restored.length > 0) {
+      chatHistory = restored;
+      const container = qs(SEL.chatMessages);
+      restored.forEach(function(m) {
+        appendChatBubble(m.role === 'assistant' ? 'ai' : 'user', m.content);
+      });
+      container.scrollTop = container.scrollHeight;
+    } else {
+      addChatMessage('ai', '\u00a1Hola! Soy Enar, tu asistente del POS. Preg\u00fantame sobre productos, ventas, clientes o lo que necesites del sistema.');
+      appendChatBubble('ai', '\u00a1Hola! Soy Enar, tu asistente del POS. Preg\u00fantame sobre productos, ventas, clientes o lo que necesites del sistema.');
+    }
   }
   if (!IS_ANDROID) qs(SEL.chatInput).focus();
   qs(SEL.chatMessages).scrollTop = qs(SEL.chatMessages).scrollHeight;
@@ -815,12 +943,15 @@ function positionChatPanel() {
   var fab = qs(SEL.chatFab);
   var panel = qs(SEL.chatPanel);
   var fabRect = fab.getBoundingClientRect();
-  var panelW = window.innerWidth < 480 ? window.innerWidth - 16 : Math.min(360, window.innerWidth - 40);
+  var panelW = panel.offsetWidth || (window.innerWidth < 480 ? window.innerWidth - 16 : Math.min(360, window.innerWidth - 40));
   var panelLeft = fabRect.right - panelW;
   if (panelLeft < 8) panelLeft = 8;
   if (panelLeft + panelW > window.innerWidth - 8) panelLeft = window.innerWidth - panelW - 8;
+  if (panelLeft < 8) panelLeft = 8;
   panel.style.left = panelLeft + 'px';
   panel.style.bottom = (window.innerHeight - fabRect.top + 8) + 'px';
-  panel.style.maxHeight = Math.min(460, Math.max(200, fabRect.top - 16)) + 'px';
+  var maxH = Math.max(200, fabRect.top - 16);
+  if (panel.classList.contains('expanded')) maxH = Math.max(320, window.innerHeight - 24);
+  panel.style.maxHeight = maxH + 'px';
 }
 

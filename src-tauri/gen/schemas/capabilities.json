@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Permisos por defecto para la aplicación","local":true,"windows":["main"],"permissions":["core:default","opener:default","dialog:default","fs:default","gestor-downloads:default"]}}
+{"default":{"identifier":"default","description":"Permisos por defecto para la aplicación","local":true,"windows":["main"],"permissions":["core:default","opener:default","dialog:default","fs:default","os:default","gestor-downloads:default"]}}

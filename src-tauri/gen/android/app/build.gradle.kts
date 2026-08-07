@@ -13,13 +13,28 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Credenciales de firma: NUNCA hardcodear passwords en el repo.
+// Se leen de keystore.properties (debe estar en .gitignore) o de variables de entorno.
+fun signingPassword(key: String, env: String, keystoreProps: Properties): String? {
+    keystoreProps.getProperty(key)?.let { if (it.isNotBlank()) return it }
+    return System.getenv(env)?.takeIf { it.isNotBlank() }
+}
+
+val ksPropsFile = file("keystore.properties")
+val ksProps = Properties().apply {
+    if (ksPropsFile.exists()) ksPropsFile.inputStream().use { load(it) }
+}
+val storePwd = signingPassword("storePassword", "ANDROID_KEYSTORE_PASSWORD", ksProps)
+val keyPwd = signingPassword("keyPassword", "ANDROID_KEY_PASSWORD", ksProps)
+val keyAlias = signingPassword("keyAlias", "ANDROID_KEY_ALIAS", ksProps) ?: "gestor-ventas"
+
 android {
     signingConfigs {
         create("release") {
             storeFile = file("../../../release-key.keystore")
-            storePassword = System.getenv("STORE_PASSWORD") ?: "gestor2024"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "gestor-ventas"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "gestor2024"
+            storePassword = storePwd
+            keyAlias = keyAlias
+            keyPassword = keyPwd
         }
     }
     compileSdk = 36

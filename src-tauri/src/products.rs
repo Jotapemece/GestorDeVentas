@@ -215,6 +215,29 @@ pub fn update_product(
     }
 }
 
+#[tauri::command]
+pub fn update_product_categoria(
+    state: State<AppState>,
+    codigo: String,
+    categoria_id: Option<i64>,
+    subcategoria: String,
+) -> Result<String, String> {
+    let db = state.lock_db()?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Categorizó producto '{}'", codigo),
+    )?;
+    let ts = crate::helpers::now_iso();
+    match db.execute(
+        "UPDATE productos SET categoria_id = ?1, subcategoria = ?2, updated_at = ?3 WHERE codigo = ?4",
+        params![categoria_id, subcategoria, ts, codigo],
+    ) {
+        Ok(_) => Ok("Categor\u{00ed}a actualizada exitosamente".to_string()),
+        Err(e) => Err(format!("Error al actualizar categor\u{00ed}a: {}", e)),
+    }
+}
+
 fn registrar_precio_historial(
     db: &rusqlite::Connection,
     codigo: &str,
@@ -638,8 +661,8 @@ pub fn update_stock_minimo(
     let db = state.lock_db()?;
     crate::auth::require_admin(&state, &db, &format!("Actualizó stock mínimo de '{}' a {}", codigo, stock_minimo))?;
     db.execute(
-        "UPDATE productos SET stock_minimo = ?1 WHERE codigo = ?2",
-        params![stock_minimo, codigo],
+        "UPDATE productos SET stock_minimo = ?1, updated_at = ?3 WHERE codigo = ?2",
+        params![stock_minimo, codigo, crate::helpers::now_iso()],
     )
     .map_err(|e| format!("Error al actualizar stock mínimo: {}", e))?;
     Ok("Stock mínimo actualizado".to_string())

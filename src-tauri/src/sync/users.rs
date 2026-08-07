@@ -25,16 +25,23 @@ pub(crate) fn upload_usuarios_inner(
 ) -> Result<String, String> {
     let ts = now_iso();
 
+    // Solo usuarios modificados desde el último upload (o sin sync_id todavía).
+    // Antes subía TODOS los usuarios cada vez y regeneraba un hash Argon2 aleatorio
+    // por usuario en cada sync (costo CPU innecesario e inútil para filas sin cambios).
+    let last_sync = super::get_config(db, constants::CFG_ULTIMO_UPLOAD_USUARIOS)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+
     let mut stmt = db
         .prepare(
             "SELECT id, username, password, rol, COALESCE(password_change_required,0), \
-             COALESCE(sync_id,''), COALESCE(updated_at,'') FROM usuarios ORDER BY id ASC",
+             COALESCE(sync_id,''), COALESCE(updated_at,'') FROM usuarios \
+             WHERE updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR \
+                   updated_at > ?1 ORDER BY id ASC",
         )
         .map_err(|e| e.to_string())?;
 
-    #[allow(clippy::type_complexity)]
     let rows: Vec<(i64, String, String, String, i64, String, String)> = stmt
-        .query_map([], |row| {
+        .query_map(params![last_sync], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,

@@ -10,6 +10,16 @@ let tasaActual = 0;
 let tasaInventario = 0;
 let tasaInventarioFecha = '';
 let cartShowBs = false;
+
+function loadStoredPrefs() {
+  try {
+    if (localStorage.getItem('cartShowBs') === '1') cartShowBs = true;
+  } catch (e) {}
+}
+
+function persistCartShowBs() {
+  try { localStorage.setItem('cartShowBs', cartShowBs ? '1' : '0'); } catch (e) {}
+}
 let comboCache = [];
 let editingProduct = null;
 let editingClienteId = null;

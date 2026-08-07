@@ -86,6 +86,8 @@
 }
 .nf-fa-mobile::before { content: "\f10b"; }
 .nf-fa-paper_plane::before { content: "\f1d8"; }
+.nf-fa-minus::before { content: "\f068"; }
+.nf-fa-user_plus::before { content: "\f234"; }
 .nf-fa-robot::before { content: "\f544"; }
 .nf-fa-film::before { content: "\f008"; }
 .nf-fa-ellipsis_h::before { content: "\f141"; }

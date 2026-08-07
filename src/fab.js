@@ -2,8 +2,16 @@
 (function initFab() {
   var fab = qs(SEL.chatFab);
   if (!fab) return;
-  fab.style.left = (window.innerWidth - 72) + 'px';
-  fab.style.top = (window.innerHeight - 152) + 'px';
+  var FAB_POS_KEY = 'enar_fab_pos';
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(FAB_POS_KEY)); } catch (e) {}
+  if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
+    fab.style.left = saved.left + 'px';
+    fab.style.top = saved.top + 'px';
+  } else {
+    fab.style.left = (window.innerWidth - 72) + 'px';
+    fab.style.top = (window.innerHeight - 152) + 'px';
+  }
 
   var fabDragActive = false, fabTouchDrag = false;
   var fabStartX, fabStartY, fabOrigLeft, fabOrigTop, fabDragTimer;
@@ -49,6 +57,7 @@
         fabTouchDrag = true;
         setTimeout(function() { fabTouchDrag = false; }, TIMING.FAB_TOUCH_RESET_MS);
       }
+      try { localStorage.setItem(FAB_POS_KEY, JSON.stringify({ left: parseInt(fab.style.left) || 0, top: parseInt(fab.style.top) || 0 })); } catch (e) {}
     }
     fabStartX = fabStartY = undefined;
   }

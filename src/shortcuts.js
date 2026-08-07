@@ -7,7 +7,7 @@ document.addEventListener('keydown', function(e) {
     case 'F2': e.preventDefault(); showView(VIEW.INVENTORY); break;
     case 'F3': e.preventDefault(); showView(VIEW.CREDITOS); break;
     case 'F4': e.preventDefault(); showView(VIEW.CASHIER); break;
-    case 'F5': e.preventDefault(); showView(VIEW.AUDIT); break;
+    case 'F5': e.preventDefault(); break; // F5 recarga la vista actual (app.js)
     case 'F7': e.preventDefault(); showView(VIEW.CONFIG); break;
     case 'F8':
       e.preventDefault();
@@ -26,6 +26,16 @@ document.addEventListener('keydown', function(e) {
   if (e.ctrlKey && e.key === 'n') {
     e.preventDefault();
     if (viewId === 'view-inventory') openNewProductModal();
+  }
+  // Ctrl/Cmd+1..5 y Ctrl/Cmd+6..9: vistas principales
+  if ((e.ctrlKey || e.metaKey) && /^[1-9]$/.test(e.key)) {
+    var vmap = {
+      '1': VIEW.SALES, '2': VIEW.INVENTORY, '3': VIEW.CREDITOS,
+      '4': VIEW.CASHIER, '5': VIEW.REPORTS, '6': VIEW.AUDIT,
+      '7': VIEW.CONFIG, '8': VIEW.SYNC
+    };
+    var target = vmap[e.key];
+    if (target) { e.preventDefault(); showView(target); }
   }
 });
 document.addEventListener('keydown', function(e) {

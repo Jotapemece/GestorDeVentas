@@ -127,6 +127,7 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("032_drop_detalles_producto_fk", drop_detalles_producto_fk),
     ("033_add_activo_clientes", add_activo_clientes),
     ("034_add_categorias_updated_at", add_categorias_updated_at),
+    ("035_add_updated_at_indexes", add_updated_at_indexes),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -673,16 +674,53 @@ fn add_categorias_updated_at(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Índices sobre `updated_at` para acelerar las consultas de sync
+/// (`updated_at > watermark`). Idempotente.
+fn add_updated_at_indexes(conn: &Connection) -> Result<(), String> {
+    for (table, columns) in [
+        ("productos", "updated_at"),
+        ("ventas", "updated_at"),
+        ("clientes", "updated_at"),
+        ("categorias", "updated_at"),
+    ] {
+        let idx = format!("idx_{table}_{columns}");
+        conn.execute(
+            &format!("CREATE INDEX IF NOT EXISTS {idx} ON {table}({columns})"),
+            [],
+        ).map_err(|e| format!("035 índice {idx}: {}", e))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rusqlite::Connection;
+    use rusqlite::params;
 
     fn setup() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(SQL_CREATE_TABLES).unwrap();
         run_migrations(&conn);
         conn
+    }
+
+    #[test]
+    fn test_add_updated_at_indexes_crea_indices() {
+        let conn = setup();
+        for table in ["productos", "ventas", "clientes", "categorias"] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master \
+                     WHERE type='index' AND name = ?1",
+                    params![format!("idx_{table}_updated_at")],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "falta índice idx_{table}_updated_at");
+        }
+        // Idempotente.
+        add_updated_at_indexes(&conn).unwrap();
     }
 
     #[test]

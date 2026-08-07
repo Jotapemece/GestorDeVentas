@@ -113,6 +113,14 @@ async function loadTopProducts() {
 }
 
 let dashboardChartType = 'bar';
+function loadChartPrefs() {
+  try {
+    var t = localStorage.getItem('dashboardChartType');
+    var p = localStorage.getItem('piePeriod');
+    if (t === 'bar' || t === 'pie' || t === 'line') dashboardChartType = t;
+    if (p) piePeriod = p;
+  } catch (e) {}
+}
 
 async function loadDashboard() {
   const body = qs(SEL.dashboardBody);
@@ -157,6 +165,7 @@ async function loadDashboard() {
               '<div class="dashboard-stat"><span>Total USD</span><strong data-count="' + d.total_usd + '" data-fmt="usd">' + formatUSD(d.total_usd) + '</strong></div>' +
               '<div class="dashboard-stat"><span>Costo</span><strong data-count="' + (d.total_costo_usd || 0) + '" data-fmt="usd">' + formatUSD(d.total_costo_usd || 0) + '</strong></div>' +
               '<div class="dashboard-stat"><span>Ganancia</span><strong data-count="' + (d.total_ganancia_usd || 0) + '" data-fmt="usd">' + formatUSD(d.total_ganancia_usd || 0) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Mov. neto</span><strong data-count="' + (d.neto_movimientos_usd || 0) + '" data-fmt="usd">' + formatUSD(d.neto_movimientos_usd || 0) + '</strong></div>' +
               '<div class="dashboard-stat"><span>Total Bs.</span><strong data-count="' + d.total_bs + '" data-fmt="bs">' + formatBS(d.total_bs) + '</strong></div>' +
             '</div>';
           }).join('') +
@@ -173,6 +182,7 @@ async function loadDashboard() {
       toggleBtns[i].addEventListener('click', function() {
         dashboardChartType = this.dataset.chart;
         if (dashboardChartType === 'pie') piePeriod = 'day';
+        try { localStorage.setItem('dashboardChartType', dashboardChartType); } catch (e) {}
         loadDashboard();
       });
     }
@@ -326,7 +336,12 @@ function drawDashboardBarChart(body, data, periods) {
 
   const metrics = [
     { label: 'Ventas', key: 'total_ventas', values: [data.today.total_ventas, data.week.total_ventas, data.month.total_ventas] },
-    { label: 'USD', key: 'total_usd', values: [data.today.total_usd, data.week.total_usd, data.month.total_usd] }
+    { label: 'USD', key: 'total_usd', values: [data.today.total_usd, data.week.total_usd, data.month.total_usd] },
+    { label: 'Caja', key: 'caja', values: [
+      (data.today.total_usd || 0) + (data.today.neto_movimientos_usd || 0),
+      (data.week.total_usd || 0) + (data.week.neto_movimientos_usd || 0),
+      (data.month.total_usd || 0) + (data.month.neto_movimientos_usd || 0)
+    ] }
   ];
 
   const barColors = [cssVar('--primary'), cssVar('--accent'), cssVar('--inari')];
@@ -446,6 +461,7 @@ function drawDashboardPieChart(body, paymentMethods) {
   for (let pi = 0; pi < periodBtns.length; pi++) {
     periodBtns[pi].addEventListener('click', function() {
       piePeriod = this.dataset.piePeriod;
+      try { localStorage.setItem('piePeriod', piePeriod); } catch (e) {}
       loadDashboard();
     });
   }
@@ -475,7 +491,8 @@ function drawDashboardPieChart(body, paymentMethods) {
     pago_movil: 'Pago M\u00f3vil',
     mixto: 'Mixto',
     credito: 'Cr\u00e9dito',
-    efectivo_usd: 'Efectivo USD'
+    efectivo_usd: 'Efectivo USD',
+    movimientos_caja: 'Ingresos caja'
   };
 
   const slices = [];
@@ -783,6 +800,7 @@ function attachLineHover(canvas, dpr, data) {
         showChartTooltip(e.clientX, e.clientY,
           p.date + ' | Ingreso: $' + p.revenue_usd.toFixed(2) +
           ' | Costo: $' + p.cost_usd.toFixed(2) +
+          ' | Mov. neto: $' + (p.neto_movimientos_usd || 0).toFixed(2) +
           ' | Ganancia: $' + p.profit_usd.toFixed(2));
         canvas.style.cursor = 'pointer';
         return;

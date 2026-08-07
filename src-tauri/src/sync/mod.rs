@@ -4,6 +4,7 @@ pub(crate) mod clients;
 pub(crate) mod users;
 pub(crate) mod conflicts;
 pub(crate) mod orchestrator;
+pub(crate) mod preview;
 
 pub use products::*;
 pub use sales::*;
@@ -11,6 +12,7 @@ pub use clients::*;
 pub use users::*;
 pub use conflicts::*;
 pub use orchestrator::*;
+pub use preview::*;
 
 use crate::constants;
 use serde_json::json;

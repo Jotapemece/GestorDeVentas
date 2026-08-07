@@ -1,5 +1,81 @@
 # Changelog
 
+## [1.2.0] - 2026-08-06
+
+### Lógica de caja
+- Las ventas a crédito (fiado) ya no cuentan en el saldo de caja (`get_saldo_caja` excluye `metodo_pago = 'credito'`): el dinero que no entra a la caja no suma. Las ventas totales (incl. crédito) siguen visibles como cuentas por cobrar
+- Los pagos/abonos de deuda se registran como ingreso de caja (`pay_debt` inserta un movimiento tipo `ingreso`) con el método de pago en el concepto ("Abono deuda - Cliente #X - Método: ... - Ref: ..."). Suben el saldo y aparecen en el listado de movimientos
+- Los movimientos de caja (ingresos/egresos) afectan los gráficos de reportes:
+  - Barras del dashboard: nueva métrica "Caja" = ventas + neto de movimientos; cards con fila "Mov. neto" por período
+  - Ganancias (línea): el resultado del día incorpora el neto de movimientos (días con solo movimientos también aparecen) y se muestra en el tooltip
+  - Pastel: porción "Ingresos caja" con el neto de movimientos del período
+
+### Seguridad
+- `create_sale` deriva el vendedor y el flag `es_inari` de la BD/sesión (no del request): no se puede saltar el control de stock ni forjar autoría
+- `register_movimiento` usa la sesión (no `usuario_id`/`username` del request) y valida tipo y montos
+- Guards de rol añadidos: `set_tasa`, `pay_debt`, `add_quick_debt`, mutaciones de sync (`upload/download_all`, `upload_*`, `resolve_conflicto`), `apply_download`
+- `get_config_value`/`get_user_config_value` exigen sesión y bloquean `CFG_BACKUP_KEY` (la clave maestra de cifrado solo sale por `get_backup_key`, admin-only)
+- OpenRouter: la API key ya no viaja por IPC a la webview — se lee desde `configuracion` en el backend (`chat_with_ai`, `generate_purchase_suggestion`)
+- Nuevo comando `save_exported_file` con auth de empleado, cap de 200 MB y nombre sanitizado; reemplaza a `save_to_path` (sin auth) en escritorio; `allow-save-to-path` quitado del permiso default del plugin
+- `change_password` disponible para empleados (no solo admin); `admin_change_password` valida longitud mínima
+- Chat IA con auth + rate limit; `generate_purchase_suggestion` libera el lock durante el HTTP
+- Argon2 fuera del lock de DB en login/creación de usuarios; lockout no se activa con usernames inexistentes
+- XSS: `escapeHtml` escapa comillas simples; escapado `producto_nombre`/`cantidad` en detalle de deuda y `data-codigo` en inventario
+- Backups: `wal_checkpoint(TRUNCATE)` antes de copiar la BD (no se pierden transacciones del `-wal`)
+
+### Correctitud dinero / stock
+- **Combos vendibles**: códigos `COMBO-N` se resuelven contra `combos`/`combo_productos` (precio real + descuento de stock de componentes no-inari). Migración que recrea `detalles_ventas` sin FK a `productos` y con `cantidad REAL`
+- `void_sale` restaura stock una sola vez (solo ítems no anulados y no-inari) y restaura componentes de combos
+- `void_sale_items` revierte la deuda a crédito al anular todos los ítems (incluye abonos previos → crédito a favor, saldo negativo)
+- Cantidades fraccionarias (pesables) sin truncar a entero en anulaciones y sync
+- Validación de `total_bs_ingresado`: no se puede subreportar el total en Bs.; pagar de más (vuelto) sí se acepta
+- `validate_sale_request` rechaza cantidades negativas/cero/NaN por línea (una cantidad negativa AÑADÍA stock)
+- Reportes y conteos por vendedor excluyen ventas anuladas; `get_saldo_caja` convierte movimientos solo-Bs. con la tasa; las pérdidas ya no se aplanan a 0
+- `get_profit_series` sin fan-out (revenue en `ventas` puro + costo por subquery)
+- Combos en el carrito con nombre/precio reales (antes mostraban $0)
+
+### Sync / multi-dispositivo
+- Timestamps `updated_at` en UTC ISO (migración 031): las comparaciones con watermark funcionan (antes filas naive nunca pasaban el filtro)
+- Las anulaciones remotas se propagan (download actualiza ventas existentes, transición idempotente de stock)
+- Upload incremental: solo lo modificado desde el último watermark, incluye tombstones (`activo=0`) de productos y clientes; categorías solo las cambiadas
+- El watermark NO avanza si falla un UPDATE/INSERT (rollback de la transacción)
+- No se re-descarga lo que subió este dispositivo (`dispositivo_origen` filtrado en descargas de productos/clientes/ventas)
+- Clientes soft-delete (`activo`): el borrado viaja como tombstone y conserva las ventas
+- Deudas con last-write-wins por fecha (no se sobrescriben); conflictos dentro de ventana de 5 min
+- Auto-sync para vendedores (antes admin-only) con intervalo configurable (10 min por defecto) y toggle de activación
+- Badge de pendientes de sync en el sidebar (`updated_at > watermark`)
+- `upload_usuarios_inner` sube solo lo modificado y sin hashes Argon2
+- El sync no mantiene la BD bloqueada durante las llamadas HTTP (transacciones cortas por etapa)
+- `stock_minimo`/stock bumpan `updated_at` para viajar en el upload
+- **Modal de descarga selectiva**: "Descargar todo" ahora muestra un preview con diff campo a campo, checkboxes por ítem, y checkbox "Forzar reemplazo" (el remoto siempre gana para corregir datos obsoletos)
+
+### Android
+- Botón "atrás" del sistema: cierra modales o retrocede en la navegación (stack propio), integrado con `MainActivity`
+- Guardado en Descargas para Android <10 con permiso en runtime (`WRITE_EXTERNAL_STORAGE` solo hasta API 28)
+- Teclado numérico (`inputmode="decimal"`/`numeric"`), `navigator.share` real para recibos con fallback a clipboard
+- Safe-area/notch: edge-to-edge, bars transparentes, orientación portrait fija
+- Firma sin credenciales hardcodeadas (lee `keystore.properties` o variables de entorno)
+
+### Frontend / UX
+- Dropdowns por fila (ventas del día, reporte, usuarios, cierres) y por sección (Caja, Créditos, Reportes); botón "Ver" restaurado en el reporte de ventas
+- Dropdown items con icono alineado y toolbars uniformes
+- Búsqueda global de clientes (Ctrl+K) arreglada: usaba un comando no registrado
+- Modales protegidos (pago, producto, cliente, abono, combo, deuda rápida, ajuste de stock) piden confirmación antes de cerrarse con Escape o clic fuera
+- Toggle de auto-sync en Configuración → Sincronización con badge de estado
+- 3 glifos de Font Awesome añadidos al subset (image, chart_line, rotate_left, minus, user_plus)
+- Snake ASCII (solo PC) accesible desde la Guía rápida
+
+### Bugs
+- `get_sales_by_vendor` contaba ventas anuladas; `get_daily_summary` listaba anuladas junto a totales que las excluyen
+- PDF con acentos en mojibake (fuente WinAnsi escribía UTF-8): codificación Latin-1 correcta y `/Length` ajustado
+- `register_movimiento` aceptaba montos negativos y autoría falsificable
+- Combos no vendibles ("Producto no encontrado"); `es_inari` del request saltaba el control de stock
+- Anulaciones remotas perdidas (INSERT OR IGNORE sin UPDATE); timestamps naive rotos
+- Upload de productos sobrescribía a ciegas y no subía borrados
+- Saldo de caja ignoraba movimientos solo en Bs.; ganancias negativas aplanadas a 0
+- LWW asimétrico en productos (la remota vieja ganaba); clientes con timestamps inflados omitidos en el preview
+- Límite de tiempo de Argon2 bajo el lock (DoS por latencia); lockout abusable con usernames inventados
+
 ## [1.1.0] - 2026-08-02
 
 ### UI móvil rediseñada (≤600px)

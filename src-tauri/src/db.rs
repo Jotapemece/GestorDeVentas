@@ -256,8 +256,8 @@ pub fn set_config_value(conn: &Connection, key: &str, value: &str) -> Result<(),
 
 pub fn add_stock(conn: &Connection, codigo: &str, cantidad: f64) -> Result<(), String> {
     conn.execute(
-        "UPDATE productos SET stock = stock + ?1 WHERE codigo = ?2",
-        params![cantidad, codigo],
+        "UPDATE productos SET stock = stock + ?1, updated_at = ?3 WHERE codigo = ?2",
+        params![cantidad, codigo, crate::helpers::now_iso()],
     )
     .map(|_| ())
     .map_err(|e| format!("Error al restaurar stock: {}", e))
@@ -265,8 +265,8 @@ pub fn add_stock(conn: &Connection, codigo: &str, cantidad: f64) -> Result<(), S
 
 pub fn sub_stock(conn: &Connection, codigo: &str, cantidad: f64) -> Result<usize, String> {
     conn.execute(
-        "UPDATE productos SET stock = stock - ?1 WHERE codigo = ?2 AND stock >= ?1",
-        params![cantidad, codigo],
+        "UPDATE productos SET stock = stock - ?1, updated_at = ?3 WHERE codigo = ?2 AND stock >= ?1",
+        params![cantidad, codigo, crate::helpers::now_iso()],
     )
     .map_err(|e| format!("Error al actualizar stock: {}", e))
 }
@@ -526,6 +526,54 @@ pub fn get_backup_key(state: State<AppState>) -> Result<String, String> {
         crate::db::rate_limit_success(&mut attempts, "get_backup_key");
     }
     Ok(hex::encode(key))
+}
+
+/// Tamaño máximo aceptado para payloads base64 (evita DoS por memoria).
+const MAX_B64_PAYLOAD_BYTES: usize = 200 * 1024 * 1024;
+
+fn sanitize_export_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => c,
+        })
+        .collect();
+    if cleaned.trim().is_empty() {
+        "archivo".into()
+    } else {
+        cleaned
+    }
+}
+
+#[tauri::command]
+pub fn save_exported_file(state: State<AppState>, path: String, content: String) -> Result<String, String> {
+    // Requiere sesión autenticada (empleado). El path viene del diálogo del
+    // usuario vía plugin:dialog|save, nunca de una ruta arbitraria de la webview.
+    crate::auth::check_employee_role(&state)?;
+    if content.len() > MAX_B64_PAYLOAD_BYTES {
+        return Err("Archivo demasiado grande para exportar".to_string());
+    }
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(content)
+        .map_err(|e| format!("Datos no válidos: {}", e))?;
+    let raw = PathBuf::from(&path);
+    if !raw.is_absolute() {
+        return Err("Ruta no válida".to_string());
+    }
+    // Sanitiza solo el nombre de archivo, conservando el directorio del diálogo.
+    let dir = raw.parent().unwrap_or(std::path::Path::new(""));
+    let file_name = raw
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let dest = dir.join(sanitize_export_name(&file_name));
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Error creando directorio: {}", e))?;
+    }
+    std::fs::write(&dest, &bytes).map_err(|e| format!("Error al escribir archivo: {}", e))?;
+    Ok(dest.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

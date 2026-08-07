@@ -32,7 +32,7 @@ async function loadInventory() {
     return;
   }
   appendRows(tbody, products, function(p) {
-    const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button data-action="edit-product" data-codigo="' + p.codigo + '"><i class="nf nf-fa-pencil"></i> Editar</button>' : '';
+    const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button data-action="edit-product" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-pencil"></i> Editar</button>' : '';
     return createInventoryRow(p, editBtn);
   }, function(tr) {
     tr.classList.add('card-collapsible', 'collapsed');
@@ -126,6 +126,20 @@ function closeProductDetail() {
   closeModal(qs(SEL.productDetailModal));
 }
 
+function loadCategoriasSelect() {
+  const sel = qs(SEL.productCategoria);
+  if (!sel || sel.dataset.loaded) return;
+  sel.dataset.loaded = '1';
+  invoke('list_categorias').then(cats => {
+    cats.forEach(function(c) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.nombre;
+      sel.appendChild(opt);
+    });
+  }).catch(function() {});
+}
+
 function openNewProductModal() {
   editingProduct = null;
   qs(SEL.productModalTitle).textContent = 'Registrar Nuevo Producto';
@@ -133,9 +147,13 @@ function openNewProductModal() {
   [SEL.productNombre, SEL.productPrecio, SEL.productCosto, SEL.productStock, SEL.productStockMinimo].forEach(id => qs(id).value = '');
   qs(SEL.productDeleteBtn).style.display = 'none';
   qs(SEL.productEsPesable).checked = false;
+  qs(SEL.productCategoria).value = '';
+  qs(SEL.productSubcategoria).value = '';
   updateProductFormLabels(false);
   clearProductErrors();
+  loadCategoriasSelect();
   showModal(qs(SEL.productModal));
+  setTimeout(() => qs(SEL.productNombre).focus(), 100);
 }
 
 function updateProductFormLabels(pesable) {
@@ -171,9 +189,13 @@ function editProduct(codigo) {
   qs(SEL.productStock).value = p.stock;
   qs(SEL.productStockMinimo).value = p.stock_minimo;
   qs(SEL.productEsPesable).checked = !!p.es_pesable;
+  qs(SEL.productCategoria).value = p.categoria_id != null ? String(p.categoria_id) : '';
+  qs(SEL.productSubcategoria).value = p.subcategoria || '';
   updateProductFormLabels(!!p.es_pesable);
   qs(SEL.productDeleteBtn).style.display = 'inline-flex';
+  loadCategoriasSelect();
   showModal(qs(SEL.productModal));
+  setTimeout(() => qs(SEL.productNombre).focus(), 100);
 }
 
 function closeProductModal() {
@@ -207,16 +229,45 @@ async function showPriceHistory(codigo, nombre) {
   }
 }
 
+let stockAdjustSign = 1;
+
 function openStockAdjustModal(codigo) {
   stockAdjustCodigo = codigo;
+  stockAdjustSign = 1;
   const p = productCache.find(x => x.codigo === codigo);
   if (!p) { showToast('Producto no encontrado', 'error'); return; }
   qs(SEL.stockAdjustNombre).textContent = p.nombre;
   qs(SEL.stockAdjustActual).textContent = Number.isInteger(p.stock) ? p.stock : p.stock.toFixed(3);
   qs(SEL.stockAdjustCantidad).value = '';
   qs(SEL.stockAdjustMotivo).value = '';
+  qs(SEL.stockAdjustPreview).innerHTML = '';
   clearStockAdjustErrors();
+  updateStockAdjustSignUI();
   showModal(qs(SEL.stockAdjustModal));
+  setTimeout(() => qs(SEL.stockAdjustCantidad).focus(), 100);
+}
+
+function updateStockAdjustSignUI() {
+  qsa('.stock-adjust-sign').forEach(function(b) {
+    b.classList.toggle('active', parseInt(b.dataset.sign, 10) === stockAdjustSign);
+  });
+  updateStockAdjustPreview();
+}
+
+function updateStockAdjustPreview() {
+  const el = qs(SEL.stockAdjustPreview);
+  const p = productCache.find(x => x.codigo === stockAdjustCodigo);
+  if (!el || !p) return;
+  const val = parseFloat(qs(SEL.stockAdjustCantidad).value);
+  if (!val || val <= 0) { el.innerHTML = ''; return; }
+  const delta = stockAdjustSign * val;
+  const nuevo = p.stock + delta;
+  if (nuevo < 0) {
+    el.innerHTML = '<span class="stock-adjust-preview-neg">Quedar\u00eda en negativo: ' + p.stock + ' ' + delta + ' = ' + nuevo + '</span>';
+    return;
+  }
+  const fmt = function(n) { return Number.isInteger(n) ? String(n) : n.toFixed(3); };
+  el.innerHTML = '<span class="stock-adjust-preview-ok">' + fmt(p.stock) + ' ' + (delta > 0 ? '+' : '') + delta + ' = <strong>' + fmt(nuevo) + '</strong></span>';
 }
 
 function closeStockAdjustModal() {
@@ -240,8 +291,8 @@ async function confirmStockAdjust() {
   const motivo = qs(SEL.stockAdjustMotivo).value.trim();
   clearStockAdjustErrors();
   let hasError = false;
-  if (!cantidad || cantidad === 0) {
-    qs(SEL.stockAdjustCantidadError).textContent = 'Indique una cantidad distinta de cero';
+  if (!cantidad || cantidad <= 0) {
+    qs(SEL.stockAdjustCantidadError).textContent = 'Indique una cantidad mayor a cero';
     qs(SEL.stockAdjustCantidadError).classList.add('visible');
     qs(SEL.stockAdjustCantidad).classList.add('input-error');
     hasError = true;
@@ -253,20 +304,21 @@ async function confirmStockAdjust() {
     hasError = true;
   }
   if (hasError) return;
+  const cantidadFirmada = stockAdjustSign * cantidad;
   const p = productCache.find(x => x.codigo === stockAdjustCodigo);
-  const nuevo = (p ? p.stock : 0) + cantidad;
+  const nuevo = (p ? p.stock : 0) + cantidadFirmada;
   if (nuevo < 0) { showToast('El ajuste dejar\u00eda el stock en negativo', 'error'); return; }
-  const signo = cantidad > 0 ? '+' : '';
+  const signo = cantidadFirmada > 0 ? '+' : '';
   const ok = await confirmModal(
-    '\u00bfAjustar stock de "' + (p ? p.nombre : stockAdjustCodigo) + '" en ' + signo + cantidad + ' (queda ' + nuevo + ')?\nMotivo: ' + motivo,
+    '\u00bfAjustar stock de "' + (p ? p.nombre : stockAdjustCodigo) + '" en ' + signo + cantidadFirmada + ' (queda ' + nuevo + ')?\nMotivo: ' + motivo,
     'Ajustar Stock', 'Aplicar'
   );
   if (!ok) return;
   const btn = qs(SEL.stockAdjustConfirmBtn);
   if (btn) btn.disabled = true;
   try {
-    if (await invokeOrError(invoke('registrar_ajuste_stock', { codigo: stockAdjustCodigo, cantidad, motivo })) === undefined) return;
-    showToast('Stock ajustado en ' + signo + cantidad);
+    if (await invokeOrError(invoke('registrar_ajuste_stock', { codigo: stockAdjustCodigo, cantidad: cantidadFirmada, motivo })) === undefined) return;
+    showToast('Stock ajustado en ' + signo + cantidadFirmada);
     closeStockAdjustModal();
     loadInventory();
     renderProductSearch();
@@ -399,6 +451,9 @@ async function saveProduct() {
   const stock = parseFloat(qs(SEL.productStock).value) || 0;
   const stockMinimo = parseFloat(qs(SEL.productStockMinimo).value) || 0;
   const esPesable = qs(SEL.productEsPesable).checked;
+  const catSel = qs(SEL.productCategoria);
+  const categoriaId = catSel && catSel.value ? parseInt(catSel.value, 10) : null;
+  const subcategoria = qs(SEL.productSubcategoria).value.trim();
   clearProductErrors();
   var hasError = false;
   if (!nombre || nombre.length < 1) { showProductError('product-nombre', 'El nombre es obligatorio'); hasError = true; }
@@ -415,6 +470,9 @@ async function saveProduct() {
       if (stockMinimo > 0) {
         await invoke('update_stock_minimo', { codigo, stockMinimo });
       }
+    }
+    if (categoriaId !== null || subcategoria) {
+      await invoke('update_product_categoria', { codigo, categoriaId, subcategoria });
     }
     showToast(editingProduct ? 'Producto actualizado con \u00e9xito' : 'Producto registrado con \u00e9xito');
     playSound('success');

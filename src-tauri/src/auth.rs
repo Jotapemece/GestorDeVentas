@@ -168,39 +168,49 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
     };
 
     let username_clone = username.clone();
-    let (stored_hash, usuario, pwd_change_required) = match db.query_row(
-        SQL_USER_BY_USERNAME,
-        rusqlite::params![username],
-        |row| {
-            Ok((
-                row.get::<_, String>(2)?,
-                Usuario {
-                    id: row.get(0)?,
-                    username: row.get(1)?,
-                    rol: row.get(3)?,
-                    password_change_required: row.get::<_, i64>(4)? != 0,
-                },
-                row.get::<_, i64>(4)? != 0,
-            ))
-        },
-    ) {
-        Ok(v) => v,
-        Err(_) => {
-            if let Ok(mut attempts) = state.login_attempts.lock() {
-                let entry = attempts.entry(username_clone.clone()).or_insert((0, Instant::now()));
-                entry.0 += 1;
-                if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                    entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-                }
+    // Leer la fila del usuario y SOLTAR el lock de la BD antes de ejecutar Argon2
+    // (verify_password es costoso; retener el mutex durante él degrada el resto).
+    let (stored_hash, usuario, pwd_change_required) = {
+        let row = db.query_row(
+            SQL_USER_BY_USERNAME,
+            rusqlite::params![&username],
+            |row| {
+                Ok((
+                    row.get::<_, String>(2)?,
+                    Usuario {
+                        id: row.get(0)?,
+                        username: row.get(1)?,
+                        rol: row.get(3)?,
+                        password_change_required: row.get::<_, i64>(4)? != 0,
+                    },
+                    row.get::<_, i64>(4)? != 0,
+                ))
+            },
+        );
+        match row {
+            Ok(v) => v,
+            // Usuario inexistente: responder igual que credencial invalida para no
+            // filtrar que usernames existen, pero NO contar el intento (evita el
+            // DoS de lockout con usernames inexistentes).
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                return LoginResponse {
+                    success: false,
+                    message: "Credenciales inválidas".to_string(),
+                    usuario: None,
+                    password_change_required: false,
+                };
             }
-            return LoginResponse {
-                success: false,
-                message: "Credenciales inválidas".to_string(),
-                usuario: None,
-                password_change_required: false,
-            };
+Err(_e) => {
+                return LoginResponse {
+                    success: false,
+                    message: "Error interno al verificar credenciales".to_string(),
+                    usuario: None,
+                    password_change_required: false,
+                };
+            }
         }
     };
+    drop(db);
 
     if !verify_password(&password, &stored_hash) {
         if let Ok(mut attempts) = state.login_attempts.lock() {
@@ -218,14 +228,16 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
         };
     }
 
-    // Upgrade legacy SHA-256 hash to argon2
+    // Upgrade legacy SHA-256 hash to argon2 (re-adquiere el lock solo para escribir).
     if !stored_hash.starts_with("$argon2") {
         if let Ok(new_hash) = hash_password(&password) {
-            db.execute(
-                "UPDATE usuarios SET password = ?1 WHERE id = ?2",
-                rusqlite::params![new_hash, usuario.id],
-            )
-            .ok();
+            if let Ok(db2) = state.db.lock() {
+                db2.execute(
+                    "UPDATE usuarios SET password = ?1 WHERE id = ?2",
+                    rusqlite::params![new_hash, usuario.id],
+                )
+                .ok();
+            }
         }
     }
 
@@ -233,7 +245,6 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
     if let Ok(mut attempts) = state.login_attempts.lock() {
         attempts.remove(&username_clone);
     }
-    drop(db);
     let mut current = match state.current_user.lock() {
         Ok(c) => c,
         Err(_) => {
@@ -291,8 +302,9 @@ pub fn create_usuario(
         "create_usuario",
         &format!("Cre\u{00f3} usuario '{}' con rol '{}'", username, rol),
     )?;
-    let db = state.lock_db()?;
+    // Argon2 es costoso: hashear FUERA del lock de la BD para no degradar el resto.
     let hashed = hash_password(&password)?;
+    let db = state.lock_db()?;
 
     match db.execute(SQL_INSERT_USUARIO, rusqlite::params![username, hashed, rol]) {
         Ok(_) => {
@@ -479,6 +491,8 @@ pub fn admin_change_password(
 #[tauri::command]
 pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
     crate::auth::admin_guard(&state, "reset_usuarios", "Reset usuarios a solo superadmin")?;
+    // Argon2 costoso: hashear fuera del lock.
+    let hashed = hash_password(constants::DEFAULT_ADMIN_PASSWORD)?;
     let db = state.lock_db()?;
 
     if let Err(e) = db.execute("DELETE FROM usuarios", []) {
@@ -488,7 +502,6 @@ pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
         return Err(format!("Error al eliminar usuarios: {}", e));
     }
 
-    let hashed = hash_password(constants::DEFAULT_ADMIN_PASSWORD)?;
     db.execute(
         "INSERT INTO usuarios (username, password, rol, password_change_required) VALUES (?1, ?2, ?3, 1)",
         params![constants::DEFAULT_ADMIN_USERNAME, hashed, constants::ROL_ADMIN],

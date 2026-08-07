@@ -39,6 +39,11 @@ pub fn set_config_value(
 
 #[tauri::command]
 pub fn get_user_config_value(state: State<AppState>, key: String) -> Result<String, String> {
+    // La clave maestra de cifrado de backups nunca se entrega por este comando
+    // (mismo bloqueo que get_config_value; evita el bypass vía fallback global).
+    if key == crate::constants::CFG_BACKUP_KEY {
+        return Err("Configuración protegida".to_string());
+    }
     let db = state.lock_db()?;
     let username = state.get_username()?;
     let prefixed = format!("{}:{}", username, key);
@@ -54,6 +59,11 @@ pub fn set_user_config_value(
     key: String,
     value: String,
 ) -> Result<(), String> {
+    // Bloquea la escritura de la clave maestra (rotar la clave dejaría los
+    // backups existentes indescifrables y permitiría plantar una clave conocida).
+    if key == crate::constants::CFG_BACKUP_KEY {
+        return Err("Configuración protegida".to_string());
+    }
     let db = state.lock_db()?;
     let username = state.get_username()?;
     let prefixed = format!("{}:{}", username, key);

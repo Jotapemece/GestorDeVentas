@@ -25,6 +25,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_gestor_downloads::init())
         .setup(|app| {
             let (conn, db_path) = match db::init_db(app.handle()) {
@@ -77,6 +78,7 @@ pub fn run() {
             // Clients
             clients::list_clientes,
             clients::create_cliente,
+            clients::quick_create_cliente,
             clients::toggle_cliente_credito,
             clients::get_cliente_history,
             clients::pay_debt,
@@ -118,6 +120,7 @@ pub fn run() {
             db::backup_database_b64,
             db::restore_backup,
             db::get_backup_key,
+            db::save_exported_file,
             // Auth
             auth::admin_change_password,
             auth::reset_usuarios,
@@ -125,6 +128,7 @@ pub fn run() {
             products::get_top_products,
             products::update_stock_minimo,
             products::set_product_inari,
+            products::update_product_categoria,
             products::list_categorias,
             products::registrar_ajuste_stock,
             products::toggle_producto_favorito,
@@ -149,6 +153,8 @@ pub fn run() {
             sync::sync_all,
             sync::get_sync_stats,
             sync::test_supabase_connection,
+            sync::preview_download,
+            sync::apply_download,
             // Combos
             combos::create_combo,
             combos::list_combos,

@@ -328,7 +328,7 @@ function addToCart(codigo) {
   playSound('add');
   haptic(10);
   flyToCart(codigo);
-  const p = productCache.find(x => x.codigo === codigo);
+  const p = resolveCartProduct(codigo);
   const esInari = p && p.es_inari;
   const esPesable = p && p.es_pesable;
   const qtyOverride = (!esInari && !esPesable && pendingCartQty > 0) ? pendingCartQty : 0;
@@ -362,8 +362,21 @@ function addToCart(codigo) {
   cartBody.classList.add('cart-add-highlight');
 }
 
+function resolveCartProduct(codigo) {
+  const fromProducts = productCache.find(x => x.codigo === codigo);
+  if (fromProducts) return fromProducts;
+  if (codigo.indexOf('COMBO-') === 0) {
+    const id = codigo.slice(6);
+    const combo = comboCache.find(c => String(c.id) === id);
+    if (combo) {
+      return { codigo: 'COMBO-' + combo.id, nombre: combo.nombre + ' (Combo)', precio_usd: combo.precio_usd, costo: 0, stock: 999, es_inari: true, es_pesable: false, subcategoria: 'combos' };
+    }
+  }
+  return null;
+}
+
 async function loadProductName(codigo) {
-  const p = productCache.find(x => x.codigo === codigo);
+  const p = resolveCartProduct(codigo);
   if (p) {
     const item = cart.find(x => x.codigo === codigo);
     if (item) {
@@ -553,6 +566,7 @@ function renderCart() {
     qs(SEL.salesBody).classList.remove('cart-hidden');
     appendRows(tbody, cart, createCartRow, function(tr, item) {
       tr.dataset.codigo = item.codigo;
+      if (item.es_pesable && !(item.cantidad > 0)) tr.classList.add('has-zero-pesable');
     });
   }
   updateCartTotals();
@@ -567,7 +581,9 @@ function updateCartTotals() {
 }
 
 function updateCheckoutBtn() {
-  qs(SEL.checkoutBtn).disabled = cart.length === 0;
+  const hasZeroPesable = cart.some(item => item.es_pesable && !(item.cantidad > 0));
+  qs(SEL.checkoutBtn).disabled = cart.length === 0 || hasZeroPesable;
+  qs(SEL.checkoutBtn).title = hasZeroPesable ? 'Hay productos pesables sin peso definido' : '';
 }
 
 async function toggleProductFavorito(codigo, btn) {
@@ -641,7 +657,7 @@ function addMixtoRow(containerId) {
     '</select>' +
     '<div class="mixto-input-group">' +
       '<span class="mixto-currency-label">$</span>' +
-      '<input type="number" step="any" min="0" placeholder="0.00" class="mixto-monto">' +
+      '<input type="number" inputmode="decimal" step="any" min="0" placeholder="0.00" class="mixto-monto">' +
     '</div>' +
     '<span class="mixto-conversion"></span>' +
     '<input type="text" maxlength="4" placeholder="Ref" class="mixto-ref" style="display:none;">' +
@@ -966,11 +982,18 @@ async function confirmPayment() {
     resetCartHistory();
     await loadProductCache();
     renderCart(); updateCheckoutBtn(); closePaymentModal();
+    /* Reset search for the next customer */
+    qs(SEL.productSearch).value = '';
     productos.forEach(function(i) {
       if (productCache.some(function(p) { return p.codigo === i.codigo; })) addRecentProduct(i.codigo);
     });
     renderProductSearch();
     showPaymentSuccess(venta);
+    /* Focus search for the next customer (desktop) */
+    if (!IS_ANDROID) {
+      var searchEl = qs(SEL.productSearch);
+      if (searchEl) searchEl.focus();
+    }
     /* Share receipt on mobile */
     shareReceipt(venta);
   } catch (e) { showToast('Error: ' + e, 'error'); playSound('error'); }
@@ -1229,7 +1252,7 @@ async function openHistorialCierres() {
   } else {
     let html = '<table class="table compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
     cierres.forEach(c => {
-      html += '<tr><td>' + c.id + '</td><td>' + escapeHtml(c.fecha_hora) + '</td><td>' + escapeHtml(c.username) + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><button class="btn btn-sm btn-outline" data-action="show-cierre-detalle" data-id="' + c.id + '">Ver</button></td></tr>';
+      html += '<tr><td>' + c.id + '</td><td>' + escapeHtml(c.fecha_hora) + '</td><td>' + escapeHtml(c.username) + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-cierre-detalle" data-id="' + c.id + '"><i class="nf nf-fa-info_circle"></i> Ver detalle</button></div></div></td></tr>';
     });
     html += '</table>';
     container.innerHTML = html;

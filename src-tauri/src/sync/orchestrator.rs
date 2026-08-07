@@ -5,6 +5,7 @@ use super::users::{download_usuarios_inner, upload_usuarios_inner};
 use super::{api_url, emit_progress, get_config, supabase_config, supabase_get, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
+use rusqlite::Connection;
 use serde::Serialize;
 use serde_json::json;
 use tauri::State;
@@ -186,79 +187,92 @@ pub fn get_ultimo_download(state: State<AppState>) -> Result<String, String> {
 #[tauri::command]
 pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     crate::auth::check_admin_role(&state)?;
-    let mut db = state.secondary_conn()?;
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let (supabase_url, supabase_key, dispositivo_id) = {
+        let db = state.secondary_conn()?;
+        let (u, k) = supabase_config(&db)?;
+        (u, k, get_config(&db, constants::CFG_DISPOSITIVO_ID)?)
+    };
 
-    let (supabase_url, supabase_key) = supabase_config(&tx)?;
-    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
-
-    let total = 4u32;
-    emit_progress(&app_handle, "Subiendo productos...", 1, total);
-    let r1 = upload_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Subiendo clientes...", 2, total);
-    let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Subiendo usuarios...", 3, total);
-    let r3 = upload_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Subiendo ventas...", 4, total);
-    let r4 = upload_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-
-    tx.commit().map_err(|e| format!("Error al confirmar subida: {}", e))?;
-    Ok(format!("{}\n{}\n{}\n{}", r1, r2, r3, r4))
+    // Cada etapa usa SU PROPIA transacción (recolección + red + escrito + commit)
+    // para no mantener un lock de escritura sobre la BD durante TODAS las llamadas
+    // HTTP (evita "database is locked" en el POS con busy_timeout=5000).
+    let steps: Vec<(&str, fn(&Connection, &str, &str, &str) -> Result<String, String>)> = vec![
+        ("productos", upload_products_inner),
+        ("clientes", upload_clientes_inner),
+        ("usuarios", upload_usuarios_inner),
+        ("ventas", upload_sales_inner),
+    ];
+    let mut parts = Vec::new();
+    let total = steps.len() as u32;
+    for (i, (label, f)) in steps.iter().enumerate() {
+        emit_progress(&app_handle, &format!("Subiendo {}...", label), i as u32 + 1, total);
+        let mut db = state.secondary_conn()?;
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+        let r = f(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+        tx.commit().map_err(|e| format!("Error al confirmar subida: {}", e))?;
+        parts.push(r);
+    }
+    Ok(parts.join("\n"))
 }
 
 #[tauri::command]
 pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     crate::auth::check_admin_role(&state)?;
-    let mut db = state.secondary_conn()?;
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let (supabase_url, supabase_key, dispositivo_id) = {
+        let db = state.secondary_conn()?;
+        { let (u,k)=supabase_config(&db)?; (u, k, get_config(&db, constants::CFG_DISPOSITIVO_ID)?) }
+    };
 
-    let (supabase_url, supabase_key) = supabase_config(&tx)?;
-    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
-
-    let total = 4u32;
-    emit_progress(&app_handle, "Descargando productos...", 1, total);
-    let r1 = download_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Descargando clientes...", 2, total);
-    let r2 = download_clientes_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Descargando ventas...", 3, total);
-    let r3 = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Descargando usuarios...", 4, total);
-    let r4 = download_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-
-    tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
-    Ok(format!("{}\n{}\n{}\n{}", r1, r2, r3, r4))
+    let steps: Vec<(&str, fn(&Connection, &str, &str, &str) -> Result<String, String>)> = vec![
+        ("productos", download_products_inner),
+        ("clientes", download_clientes_inner),
+        ("ventas", download_sales_inner),
+        ("usuarios", download_usuarios_inner),
+    ];
+    let mut parts = Vec::new();
+    let total = steps.len() as u32;
+    for (i, (label, f)) in steps.iter().enumerate() {
+        emit_progress(&app_handle, &format!("Descargando {}...", label), i as u32 + 1, total);
+        let mut db = state.secondary_conn()?;
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+        let r = f(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+        tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
+        parts.push(r);
+    }
+    Ok(parts.join("\n"))
 }
 
 #[tauri::command]
 pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     // Empleado (admin o vendedor): el auto-sync en segundo plano corre para ambos.
     crate::auth::check_employee_role(&state)?;
-    let mut db = state.secondary_conn()?;
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let (supabase_url, supabase_key, dispositivo_id) = {
+        let db = state.secondary_conn()?;
+        { let (u,k)=supabase_config(&db)?; (u, k, get_config(&db, constants::CFG_DISPOSITIVO_ID)?) }
+    };
 
-    let (supabase_url, supabase_key) = supabase_config(&tx)?;
-    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
-
-    let total = 8u32;
-    emit_progress(&app_handle, "Subiendo productos...", 1, total);
-    let r1 = upload_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Subiendo clientes...", 2, total);
-    let r2 = upload_clientes_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Subiendo usuarios...", 3, total);
-    let r3 = upload_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Subiendo ventas...", 4, total);
-    let r4 = upload_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Descargando productos...", 5, total);
-    let r5 = download_products_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Descargando clientes...", 6, total);
-    let r6 = download_clientes_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Descargando ventas...", 7, total);
-    let r7 = download_sales_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    emit_progress(&app_handle, "Descargando usuarios...", 8, total);
-    let r8 = download_usuarios_inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-
-    tx.commit().map_err(|e| format!("Error al confirmar sincronización: {}", e))?;
-    Ok(format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", r1, r2, r3, r4, r5, r6, r7, r8))
+    let steps: Vec<(&str, fn(&Connection, &str, &str, &str) -> Result<String, String>)> = vec![
+        ("productos", upload_products_inner),
+        ("clientes", upload_clientes_inner),
+        ("usuarios", upload_usuarios_inner),
+        ("ventas", upload_sales_inner),
+        ("productos", download_products_inner),
+        ("clientes", download_clientes_inner),
+        ("ventas", download_sales_inner),
+        ("usuarios", download_usuarios_inner),
+    ];
+    let mut parts = Vec::new();
+    let total = steps.len() as u32;
+    for (i, (label, f)) in steps.iter().enumerate() {
+        let verb = if i < 4 { "Subiendo" } else { "Descargando" };
+        emit_progress(&app_handle, &format!("{} {}...", verb, label), i as u32 + 1, total);
+        let mut db = state.secondary_conn()?;
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+        let r = f(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+        tx.commit().map_err(|e| format!("Error al confirmar sincronización: {}", e))?;
+        parts.push(r);
+    }
+    Ok(parts.join("\n"))
 }
 
 #[derive(Serialize)]

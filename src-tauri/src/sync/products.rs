@@ -148,8 +148,8 @@ pub(crate) fn download_products_inner(
     let mut upd = db
         .prepare(
             "UPDATE productos SET nombre = ?1, precio_usd = ?2, \
-             costo = ?3, stock_minimo = ?4, activo = ?5, categoria_id = ?6, es_inari = ?7, subcategoria = ?8, updated_at = ?9 \
-             WHERE codigo = ?10",
+             costo = ?3, stock = ?4, stock_minimo = ?5, activo = ?6, categoria_id = ?7, es_inari = ?8, subcategoria = ?9, updated_at = ?10 \
+             WHERE codigo = ?11",
         )
         .map_err(|e| e.to_string())?;
 
@@ -247,8 +247,15 @@ pub(crate) fn download_products_inner(
                 conflicts += 1;
                 continue;
             }
+            // LWW: solo aplicar el remoto si es más nuevo que el local (no sobrescribir
+            // una edición local posterior). Los clientes ya implementan esta simetría.
+            if let (Some(loc), Some(rem)) = (local_ts, remote_ts) {
+                if rem <= loc {
+                    continue;
+                }
+            }
             upd.execute(params![
-                nombre, precio_usd, costo, stock_minimo, activo, cat_id, es_inari, subcategoria,
+                nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts), codigo,
             ]).map(|affected| updated += affected as i64).map_err(|e| format!("Error actualizando producto remoto: {}", e))?;
         } else {

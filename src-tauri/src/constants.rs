@@ -9,6 +9,7 @@ pub const FECHA_MAXIMA: &str = "9999-12-31";
 pub const METODO_PAGO_MOVIL: &str = "pago_movil";
 pub const METODO_CREDITO: &str = "credito";
 pub const METODO_MIXTO: &str = "mixto";
+pub const METODO_MOVIMIENTOS_CAJA: &str = "movimientos_caja";
 
 pub const AUDIT_LOG_DEFAULT_LIMIT: i64 = 50;
 
@@ -44,6 +45,7 @@ pub const CFG_DISPOSITIVO_ID: &str = "dispositivo_id";
 pub const CFG_SUPABASE_URL: &str = "supabase_url";
 pub const CFG_SUPABASE_KEY: &str = "supabase_key";
 pub const CFG_BACKUP_KEY: &str = "backup_encryption_key";
+pub const CFG_OPENROUTER_API_KEY: &str = "openrouter_api_key";
 pub const CFG_ULTIMO_BACKUP_DIARIO: &str = "ultimo_backup_diario";
 pub const CFG_MAX_BACKUPS: &str = "max_backups";
 pub const DEFAULT_MAX_BACKUPS: usize = 10;

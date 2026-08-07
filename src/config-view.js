@@ -113,8 +113,11 @@ async function handleThemeClick(theme) {
 
 /* Share receipt via Web Share API */
 function shareReceipt(venta) {
+  var text = buildReceiptText(venta);
   if (navigator.share) {
-    showToast('Recibo generado - Venta #' + venta.id, 'success');
+    navigator.share({ title: 'Recibo Venta #' + venta.id, text: text }).catch(function(e) {
+      if (e && e.name !== 'AbortError') copyReceiptToClipboard(venta);
+    });
     return;
   }
   copyReceiptToClipboard(venta);

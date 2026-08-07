@@ -2,15 +2,18 @@ package com.gestorventas.downloads
 
 import android.app.Activity
 import android.content.ContentValues
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
+import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.FileOutputStream
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
+import app.tauri.annotation.PermissionCallback
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
@@ -22,7 +25,14 @@ class SaveArgs {
     lateinit var content: String
 }
 
-@TauriPlugin
+@TauriPlugin(
+    permissions = [
+        app.tauri.annotation.Permission(
+            alias = "storage",
+            strings = ["android.permission.WRITE_EXTERNAL_STORAGE"]
+        )
+    ]
+)
 class ExamplePlugin(private val activity: Activity) : Plugin(activity) {
 
     @Command
@@ -30,17 +40,46 @@ class ExamplePlugin(private val activity: Activity) : Plugin(activity) {
         Thread {
             try {
                 val args = invoke.parseArgs(SaveArgs::class.java)
+                if (needsStoragePermission()) {
+                    // Android < 10 y sin permiso concedido: solicitarlo vía Tauri.
+                    requestPermissionForAliases(arrayOf("storage"), invoke, "saveToDownloadsPermissionCallback")
+                    return@Thread
+                }
                 val bytes = decodeBase64(args.content)
                 val name = sanitizeFileName(args.file_name)
                 val path = writeToDownloads(activity, name, bytes)
-                val ret = JSObject()
-                ret.put("path", path)
-                invoke.resolve(ret)
+                invoke.resolve(JSObject().put("path", path))
             } catch (e: Exception) {
                 invoke.reject(e.message ?: "Error al guardar en Descargas")
             }
         }.start()
     }
+
+    // Llamado por el framework tras conceder/negar el permiso.
+    @PermissionCallback
+    fun saveToDownloadsPermissionCallback(invoke: Invoke) {
+        Thread {
+            val args = invoke.parseArgs(SaveArgs::class.java)
+            if (!needsStoragePermission()) {
+                try {
+                    val name = sanitizeFileName(args.file_name)
+                    val path = writeToDownloads(activity, name, decodeBase64(args.content))
+                    invoke.resolve(JSObject().put("path", path))
+                } catch (e: Exception) {
+                    invoke.reject(e.message ?: "Error al guardar en Descargas")
+                }
+            } else {
+                invoke.reject("Permiso de almacenamiento no concedido")
+            }
+        }.start()
+    }
+
+    private fun needsStoragePermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(
+                activity,
+                "android.permission.WRITE_EXTERNAL_STORAGE"
+            ) != PackageManager.PERMISSION_GRANTED
 
     private fun writeToDownloads(activity: Activity, name: String, data: ByteArray): String {
         val resolver = activity.contentResolver

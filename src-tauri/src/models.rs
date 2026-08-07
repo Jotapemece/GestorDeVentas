@@ -314,6 +314,8 @@ pub struct DashboardPeriod {
     pub total_bs: f64,
     pub total_costo_usd: f64,
     pub total_ganancia_usd: f64,
+    pub neto_movimientos_usd: f64,
+    pub neto_movimientos_bs: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -377,6 +379,7 @@ pub struct ProfitDataPoint {
     pub revenue_usd: f64,
     pub cost_usd: f64,
     pub profit_usd: f64,
+    pub neto_movimientos_usd: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

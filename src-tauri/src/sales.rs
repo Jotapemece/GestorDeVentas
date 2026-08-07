@@ -14,7 +14,8 @@ const SQL_INSERT_VENTA: &str =
 const SQL_INSERT_DETALLE: &str =
     "INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
      VALUES (?1, ?2, ?3, ?4, ?5)";
-const SQL_UPDATE_CLIENTE_DEUDA: &str = "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2";
+    const SQL_UPDATE_CLIENTE_DEUDA: &str =
+        "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1, updated_at = ?3 WHERE id = ?2";
 pub(crate) const SQL_SELECT_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.usuario_id, u.username, v.metodo_pago, v.referencia_pago_movil,
            v.pago_detalle, v.cliente_id, c.nombre, v.total_usd, v.tasa_aplicada, v.total_bs, v.anulada,
@@ -85,6 +86,15 @@ fn validate_sale_request(request: &CreateSaleRequest) -> Result<(), String> {
     }
     if request.metodo_pago == constants::METODO_CREDITO && request.cliente_id.is_none() {
         return Err("Debe seleccionar un cliente para la venta a crédito".to_string());
+    }
+    for pv in &request.productos {
+        let q = pv.cantidad;
+        if !q.is_finite() || q <= 0.0 {
+            return Err(format!(
+                "La cantidad del producto '{}' debe ser un número positivo",
+                pv.codigo
+            ));
+        }
     }
     Ok(())
 }
@@ -288,7 +298,7 @@ fn execute_sale_transaction(
 
     if request.metodo_pago == constants::METODO_CREDITO {
         if let Some(cliente_id) = request.cliente_id {
-            tx.execute(SQL_UPDATE_CLIENTE_DEUDA, params![total_usd, cliente_id])
+            tx.execute(SQL_UPDATE_CLIENTE_DEUDA, params![total_usd, cliente_id, crate::helpers::now_iso()])
                 .map_err(|e| format!("Error al actualizar deuda del cliente: {}", e))?;
         }
     }
@@ -563,9 +573,11 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
             let total: f64 = tx
                 .query_row("SELECT total_usd FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
                 .map_err(|e| format!("Error al obtener total de venta: {}", e))?;
+            // Sin MAX(0,...): si el cliente ya abonó parte de la venta, el abono
+            // vuelve como crédito a favor (saldo negativo) en vez de perderse.
             tx.execute(
-                "UPDATE clientes SET saldo_deuda_usd = MAX(0, saldo_deuda_usd - ?1) WHERE id = ?2",
-                params![total, cliente_id],
+                "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd - ?1, updated_at = ?3 WHERE id = ?2",
+                params![total, cliente_id, crate::helpers::now_iso()],
             )
             .map_err(|e| format!("Error al revertir deuda: {}", e))?;
         }
@@ -1087,9 +1099,11 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64, nota: 
             .map_err(|e| format!("Error al obtener venta: {}", e))?;
         if metodo == constants::METODO_CREDITO {
             if let Some(cliente_id) = cliente_id {
+                // Sin MAX(0,...): si el cliente ya abonó parte de la venta, el
+                // abono vuelve como crédito a favor (saldo negativo) en vez de perderse.
                 tx.execute(
-                    "UPDATE clientes SET saldo_deuda_usd = MAX(0, saldo_deuda_usd - ?1) WHERE id = ?2",
-                    params![old_total_usd, cliente_id],
+                    "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd - ?1, updated_at = ?3 WHERE id = ?2",
+                    params![old_total_usd, cliente_id, void_ts],
                 )
                 .map_err(|e| format!("Error al revertir deuda: {}", e))?;
             }
@@ -1363,6 +1377,54 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_sale_request_rechaza_cantidad_negativa() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "efectivo_usd".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: -5.0, es_inari: false }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+            nota: String::new(),
+        };
+        assert!(validate_sale_request(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_sale_request_rechaza_cantidad_cero() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "efectivo_usd".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 0.0, es_inari: false }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+            nota: String::new(),
+        };
+        assert!(validate_sale_request(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_sale_request_rechaza_cantidad_nan() {
+        let req = CreateSaleRequest {
+            usuario_id: 1,
+            metodo_pago: "efectivo_usd".into(),
+            referencia_pago_movil: None,
+            cliente_id: None,
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: f64::NAN, es_inari: false }],
+            tasa: 90.0,
+            pago_detalle: None,
+            total_bs_ingresado: None,
+            nota: String::new(),
+        };
+        assert!(validate_sale_request(&req).is_err());
+    }
+
+    #[test]
     fn test_validate_sale_request_credito_ok() {
         let req = CreateSaleRequest {
             usuario_id: 1,
@@ -1567,6 +1629,32 @@ mod tests {
         recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
         let saldo: f64 = tx.query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert_eq!(saldo, 0.0);
+        let anulada: i64 = tx.query_row("SELECT anulada FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(anulada, 1);
+    }
+
+    #[test]
+    fn test_void_items_todos_abono_previo_queda_credito() {
+        let mut conn = setup_bd();
+        conn.execute(
+            "INSERT INTO clientes (id, nombre, saldo_deuda_usd) VALUES (1, 'Cliente', 60)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (id, fecha_hora, usuario_id, metodo_pago, cliente_id, total_usd, tasa_aplicada, total_bs) \
+             VALUES (1, '2026-07-18 10:00:00', 1, 'credito', 1, 100, 10, 1000)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+             VALUES (1, 1, 'P1', 10, 10)",
+            [],
+        ).unwrap();
+        conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
+        let tx = conn.transaction().unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
+        let saldo: f64 = tx.query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert!((saldo - -40.0).abs() < 0.001);
         let anulada: i64 = tx.query_row("SELECT anulada FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert_eq!(anulada, 1);
     }

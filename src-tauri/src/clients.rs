@@ -43,7 +43,7 @@ const SQL_HISTORY_VENTAS: &str = "
     WHERE v.cliente_id = ?1 AND v.metodo_pago = 'credito'
     ORDER BY v.fecha_hora DESC, dv.id ASC";
 const SQL_PAGO_DEUDA_ATOMICO: &str =
-    "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd - ?1 WHERE id = ?2 AND saldo_deuda_usd >= ?1";
+    "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd - ?1, updated_at = ?3 WHERE id = ?2 AND saldo_deuda_usd >= ?1";
 const SQL_REACTIVAR_CREDITO: &str =
     "UPDATE clientes SET credito_activo = 1 WHERE id = ?1 AND credito_activo = 0";
 const SQL_UPDATE_CLIENTE: &str = "UPDATE clientes SET nombre = ?1, updated_at = ?2 WHERE id = ?3";
@@ -112,6 +112,28 @@ pub fn create_cliente(
         Ok(_) => Ok("Cliente creado exitosamente".to_string()),
         Err(e) => Err(format!("Error al crear cliente: {}", e)),
     }
+}
+
+/// Crea un cliente y devuelve su `id` local (para el alta inline en el modal de pago).
+#[tauri::command]
+pub fn quick_create_cliente(
+    state: State<AppState>,
+    nombre: String,
+) -> Result<i64, String> {
+    if nombre.trim().is_empty() {
+        return Err("El nombre del cliente no puede estar vacío".to_string());
+    }
+    let db = state.lock_db()?;
+    crate::auth::require_admin(
+        &state,
+        &db,
+        &format!("Creó cliente '{}'", nombre),
+    )?;
+    let sync_id = Uuid::new_v4().to_string();
+    let now = crate::helpers::now_iso();
+    db.execute(SQL_INSERT_CLIENTE, params![nombre.trim(), sync_id, now, 0i64])
+        .map_err(|e| format!("Error al crear cliente: {}", e))?;
+    Ok(db.last_insert_rowid())
 }
 
 #[tauri::command]
@@ -248,6 +270,23 @@ fn validate_pay_debt_request(request: &PayDebtRequest) -> Result<(), String> {
     Ok(())
 }
 
+/// Concepto legible del movimiento de caja generado por un pago/abono de deuda.
+fn abono_concepto(cliente_id: i64, metodo_pago: &str, referencia_movil: Option<&str>) -> String {
+    let metodo_label = constants::metodo_label(metodo_pago);
+    let mut concepto = format!(
+        "Abono deuda - Cliente #{} - Método: {}",
+        cliente_id, metodo_label
+    );
+    if metodo_pago == constants::METODO_PAGO_MOVIL {
+        if let Some(ref_movil) = referencia_movil {
+            if !ref_movil.is_empty() {
+                concepto.push_str(&format!(" - Ref: {}", ref_movil));
+            }
+        }
+    }
+    concepto
+}
+
 #[tauri::command]
 pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<String, String> {
     crate::db::check_action_rate_limit(
@@ -257,13 +296,14 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
     crate::auth::check_employee_role(&state)?;
     validate_pay_debt_request(&request)?;
 
-    let username = state.get_username()?;
+    let usuario = state.get_employee()?;
+    let username = usuario.username.clone();
     let mut db = state.lock_db()?;
 
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
     let affected = tx
-        .execute(SQL_PAGO_DEUDA_ATOMICO, params![request.monto_usd, request.cliente_id])
+        .execute(SQL_PAGO_DEUDA_ATOMICO, params![request.monto_usd, request.cliente_id, crate::helpers::now_iso()])
         .map_err(|e| format!("Error al procesar pago: {}", e))?;
 
     if affected == 0 {
@@ -276,6 +316,18 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
     let nuevo_saldo: f64 = tx
         .query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = ?1", params![request.cliente_id], |r| r.get(0))
         .map_err(|_| "Error al leer saldo actualizado".to_string())?;
+
+    // El pago/abono de deuda es dinero que entra a la caja: se registra como
+    // movimiento tipo 'ingreso' indicando el método de pago usado.
+    let tasa = crate::db::get_tasa_from_db(&tx).unwrap_or(0.0);
+    let monto_bs = request.monto_usd * tasa;
+    let concepto = abono_concepto(request.cliente_id, &request.metodo_pago, request.referencia_pago_movil.as_deref());
+    tx.execute(
+        "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username) \
+         VALUES ('ingreso', ?1, ?2, ?3, ?4, ?5)",
+        params![monto_bs, request.monto_usd, concepto, usuario.id, username],
+    )
+    .map_err(|e| format!("Error al registrar ingreso de caja: {}", e))?;
 
     let accion = format!(
         "Pago de deuda - Cliente #{} - Monto: ${:.2} - Método: {} - Saldo restante: ${:.2}",
@@ -399,8 +451,8 @@ pub fn add_quick_debt(
     let db = state.lock_db()?;
     let affected = db
         .execute(
-            "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1 WHERE id = ?2",
-            params![monto_usd, cliente_id],
+            "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1, updated_at = ?3 WHERE id = ?2",
+            params![monto_usd, cliente_id, crate::helpers::now_iso()],
         )
         .map_err(|e| e.to_string())?;
     if affected == 0 {
@@ -545,6 +597,26 @@ mod tests {
         };
         let result = validate_pay_debt_request(&req);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_abono_concepto_efectivo() {
+        let c = abono_concepto(7, "efectivo_usd", None);
+        assert_eq!(c, "Abono deuda - Cliente #7 - Método: Efectivo USD");
+    }
+
+    #[test]
+    fn test_abono_concepto_pago_movil_con_ref() {
+        let c = abono_concepto(7, "pago_movil", Some("1234"));
+        assert!(c.contains("Pago Móvil"));
+        assert!(c.contains("- Ref: 1234"));
+    }
+
+    #[test]
+    fn test_abono_concepto_pago_movil_sin_ref() {
+        let c = abono_concepto(7, "pago_movil", None);
+        assert!(c.contains("Pago Móvil"));
+        assert!(!c.contains("Ref:"));
     }
 
     fn insert_cliente_temporal(conn: &rusqlite::Connection, id: i64, nombre: &str, deuda: f64) {

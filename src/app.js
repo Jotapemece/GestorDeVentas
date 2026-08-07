@@ -1,6 +1,8 @@
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
+  loadStoredPrefs();
   initConnectionMonitor();
+  initAndroidBack();
   initSalesDivider();
   initModalDrag();
   initModalResize();
@@ -109,8 +111,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.tasaInput).addEventListener('blur', handleTasaChange);
   qs(SEL.tasaFetchBtn)?.addEventListener('click', fetchTasaBcv);
   qs(SEL.syncDownloadBtn)?.addEventListener('click', async function() {
-    await withLoadingModal('Descargando datos...', async function() {
-      const msg = await invokeOrError(invoke('download_all'));
+    await withLoadingModal('Sincronizando...', async function() {
+      const msg = await invokeOrError(invoke('sync_all'));
       if (msg === undefined) return;
       showToast(msg, 'success');
       await loadProductCache();
@@ -162,26 +164,53 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  // Quantity shortcut: typing a number + Enter in the product search fixes the quantity for the next add
+  // Smart Enter in product search: exact code -> add to cart;
+  // otherwise if filtered results exist add the first one; a bare number fixes the qty for the next add.
   qs(SEL.productSearch).addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
-    const val = qs(SEL.productSearch).value.trim();
+    e.preventDefault();
+    const input = qs(SEL.productSearch);
+    const val = input.value.trim();
     const num = parseFloat(val);
     const isCodeMatch = productCache.some(p => p.codigo === val);
-    if (!isNaN(num) && String(num) === val && !isCodeMatch) {
-      pendingCartQty = Math.max(1, Math.round(num));
-      qs(SEL.productSearch).value = '';
-      qs(SEL.productSearch).placeholder = 'Cantidad: ' + pendingCartQty + ' — busca el producto o escribe c\u00f3digo';
+    if (isCodeMatch) {
+      // Exact product / code match: add it straight to the cart.
+      addToCart(val);
+      input.value = '';
       handleProductSearch();
-      showToast('Cantidad fijada: ' + pendingCartQty, 'info');
+      input.focus();
+      return;
     }
+    if (isNaN(num) || String(num) !== val) {
+      // Text query: pick first visible (no inari hidden) result.
+      const results = filterProducts(val.toLowerCase());
+      if (results.length > 0) {
+        const p = results[0];
+        addToCart(p.codigo);
+        input.value = '';
+        handleProductSearch();
+        input.focus();
+        showToast('A\u00f1adido: ' + p.nombre, 'info');
+      }
+      return;
+    }
+    // Bare number -> set the quantity prefix for the next add.
+    pendingCartQty = Math.max(1, Math.round(num));
+    input.value = '';
+    input.placeholder = 'Cantidad: ' + pendingCartQty + ' — busca el producto o escribe c\u00f3digo';
+    handleProductSearch();
+    showToast('Cantidad fijada: ' + pendingCartQty, 'info');
   });
 
   // Currency toggle for cart totals column
   const currencyToggle = qs(SEL.cartCurrencyToggle);
   if (currencyToggle) {
+    currencyToggle.textContent = cartShowBs ? 'Bs.' : '$';
+    currencyToggle.classList.toggle('active', cartShowBs);
+    currencyToggle.title = cartShowBs ? 'Cambiar a USD' : 'Cambiar a Bs';
     currencyToggle.addEventListener('click', function() {
       cartShowBs = !cartShowBs;
+      persistCartShowBs();
       this.textContent = cartShowBs ? 'Bs.' : '$';
       this.classList.toggle('active', cartShowBs);
       this.title = cartShowBs ? 'Cambiar a USD' : 'Cambiar a Bs';
@@ -274,7 +303,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     var totalTd = tr.querySelector('.cart-item-total');
     if (!totalTd) return;
     var currentPrice = item.precio_usd;
-    totalTd.innerHTML = '<input type="number" class="cart-price-edit" step="0.01" min="0" value="' + currentPrice.toFixed(2) + '">';
+    totalTd.innerHTML = '<input type="number" inputmode="decimal" class="cart-price-edit" step="0.01" min="0" value="' + currentPrice.toFixed(2) + '">';
     var input = totalTd.querySelector('.cart-price-edit');
     input.focus();
     input.select();
@@ -450,6 +479,16 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.productDeleteBtn).addEventListener('click', deleteProduct);
   qs(SEL.productPrecio).addEventListener('input', function() { applyComaAutomatica(this); });
   qs(SEL.productEsPesable).addEventListener('change', function() { updateProductFormLabels(this.checked); });
+  /* Enter en el modal de producto guarda (evitando el toggle pesable) */
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    const modal = qs(SEL.productModal);
+    if (!modal || modal.classList.contains('hidden')) return;
+    if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+      e.preventDefault();
+      saveProduct();
+    }
+  });
 
   // Combo modal
   qs(SEL.comboSaveBtn).addEventListener('click', saveCombo);
@@ -468,15 +507,46 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.stockAdjustClose).addEventListener('click', closeStockAdjustModal);
   qs(SEL.stockAdjustCancelBtn).addEventListener('click', closeStockAdjustModal);
   qs(SEL.stockAdjustConfirmBtn).addEventListener('click', confirmStockAdjust);
+  qsa('.stock-adjust-sign').forEach(function(b) {
+    b.addEventListener('click', function() {
+      stockAdjustSign = parseInt(this.dataset.sign, 10);
+      updateStockAdjustSignUI();
+      qs(SEL.stockAdjustCantidad).focus();
+    });
+  });
+  qs(SEL.stockAdjustCantidad).addEventListener('input', updateStockAdjustPreview);
+  qs(SEL.stockAdjustCantidad).addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); qs(SEL.stockAdjustMotivo).focus(); }
+  });
+  qs(SEL.stockAdjustMotivo).addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); confirmStockAdjust(); }
+  });
 
   // Creditos
   qs(SEL.creditoAddBtn).addEventListener('click', () => openCreditoModal());
   qs(SEL.clientModalClose).addEventListener('click', closeClientModal);
   qs(SEL.clientCancelBtn).addEventListener('click', closeClientModal);
   qs(SEL.clientSaveBtn).addEventListener('click', saveClient);
+  /* Enter en el modal de cliente guarda */
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    const modal = qs(SEL.clientModal);
+    if (!modal || modal.classList.contains('hidden')) return;
+    if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+      e.preventDefault();
+      saveClient();
+    }
+  });
 
   // Temp clients history
   qs(SEL.tempHistoryBtn).addEventListener('click', openTempHistoryModal);
+  qs(SEL.creditosHeader)?.addEventListener('click', function(e) {
+    const moreBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (moreBtn) {
+      e.stopPropagation();
+      toggleDropdown(moreBtn);
+    }
+  });
   qs(SEL.tempHistoryClose).addEventListener('click', closeTempHistoryModal);
   qs(SEL.tempHistoryOkBtn).addEventListener('click', closeTempHistoryModal);
 
@@ -558,6 +628,41 @@ document.addEventListener('DOMContentLoaded', async function() {
     e.stopPropagation();
     toggleClientDropdown();
   });
+  /* Quick-create client inline in the payment modal */
+  qs(SEL.clientQuickCreateBtn)?.addEventListener('click', function() {
+    var box = qs(SEL.clientQuickCreate);
+    box.classList.toggle('hidden');
+    if (!box.classList.contains('hidden')) {
+      var inp = qs(SEL.clientQuickNombre);
+      var err = qs(SEL.clientQuickError);
+      err.classList.add('hidden'); err.textContent = '';
+      inp.value = '';
+      setTimeout(function() { inp.focus(); }, 50);
+    }
+  });
+  qs(SEL.clientQuickSaveBtn)?.addEventListener('click', async function() {
+    var inp = qs(SEL.clientQuickNombre);
+    var err = qs(SEL.clientQuickError);
+    var nombre = inp.value.trim();
+    if (!nombre) { err.textContent = 'Escribe el nombre del cliente'; err.classList.remove('hidden'); inp.focus(); return; }
+    var btn = qs(SEL.clientQuickSaveBtn);
+    btn.disabled = true;
+    try {
+      var nuevoId = await invoke('quick_create_cliente', { nombre });
+      err.classList.add('hidden'); err.textContent = '';
+      selectCliente(nuevoId, nombre);
+      toggleClientDropdown(false);
+      qs(SEL.clientQuickCreate).classList.add('hidden');
+    } catch (ex) {
+      err.textContent = 'Error al crear el cliente: ' + ex;
+      err.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  qs(SEL.clientQuickNombre)?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); qs(SEL.clientQuickSaveBtn).click(); }
+  });
   // Cashier
   qs(SEL.openCashierBtn).addEventListener('click', handleOpenCashier);
   qs(SEL.closeCashierBtn).addEventListener('click', openCloseCashier);
@@ -578,6 +683,14 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (createUserBtn) createUserBtn.addEventListener('click', handleCreateUser);
   const userListRefreshBtn = qs(SEL.userListRefreshBtn);
   if (userListRefreshBtn) userListRefreshBtn.addEventListener('click', loadUserList);
+  const userListBody = qs(SEL.userListBody);
+  if (userListBody) userListBody.addEventListener('click', function(e) {
+    const dropdownBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (dropdownBtn) {
+      e.stopPropagation();
+      toggleDropdown(dropdownBtn);
+    }
+  });
   const resetUsersBtn = qs(SEL.resetUsersBtn);
   if (resetUsersBtn) resetUsersBtn.addEventListener('click', async function() {
     const ok = await confirmModal('\u00bfEliminar TODOS los usuarios y dejar solo superadmin? Esta acci\u00f3n no se puede deshacer.', 'Reset Usuarios', 'Resetear');
@@ -819,16 +932,132 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
   });
 
-  /* Descargar todo */
+  /* Descargar todo (ahora abre el modal de descarga selectiva) */
   qs(SEL.downloadAllBtn)?.addEventListener('click', async function() {
-    const ok = await confirmModal('¿Descargar productos, clientes y ventas desde Supabase?', 'Descargar todo', 'Descargar');
-    if (!ok) return;
-    runSyncCommand({
-      cmd: () => invoke('download_all'),
-      label: 'Descargando...',
-      successMsg: 'Descarga completa',
-      onSuccess: () => { loadProductCache(); loadConflictCount(); }
+    await openDownloadPreview();
+  });
+
+  function fmtNum(v) { return Math.round(v * 100) / 100; }
+  function fieldLocalValue(f) {
+    if (f.local === '\u2014') return '<em style="color:var(--text-light)">—</em>';
+    return escapeHtml(String(f.local));
+  }
+  function renderPreviewItem(item) {
+    const isNew = !item.local_ts;
+    const badge = isNew ? '<span class="dl-badge-new">Nuevo</span>' : '';
+    const campos = item.campos.map(function(f) {
+      return '<div class="dl-field">' +
+        '<span class="dl-field-label">' + escapeHtml(f.campo) + '</span>' +
+        '<span class="dl-field-local">' + fieldLocalValue(f) + '</span>' +
+        '<span class="dl-field-arrow">&rarr;</span>' +
+        '<span class="dl-field-remote">' + escapeHtml(String(f.remoto)) + '</span>' +
+      '</div>';
+    }).join('');
+    const ts = item.remote_ts
+      ? '<div class="dl-preview-item-ts">Local: ' + (item.local_ts || '\u2014') +
+        ' &middot; Remoto: ' + item.remote_ts + '</div>'
+      : '';
+    return '<label class="dl-preview-item' + (isNew ? ' new' : '') + '">' +
+      '<input type="checkbox" data-type="' + item.tipo + '" data-id="' + escapeHtml(item.sync_id) + '" checked>' +
+      '<div class="dl-preview-item-body">' +
+        '<div class="dl-preview-item-name">' + escapeHtml(item.nombre) + ' ' + badge + '</div>' +
+        ts + campos +
+      '</div>' +
+    '</label>';
+  }
+  function renderPreviewSections(result, showEmpty) {
+    const secciones = [
+      { key: 'clientes', label: 'Clientes', icon: 'nf-fa-user' },
+      { key: 'productos', label: 'Productos', icon: 'nf-fa-cube' },
+    ];
+    const sections = secciones.map(function(sec) {
+      const items = result[sec.key];
+      if (!items || items.length === 0) return '';
+      const html = items.map(renderPreviewItem).join('');
+      return '<div class="dl-preview-section">' +
+        '<div class="dl-preview-section-title"><i class="nf ' + sec.icon + '"></i> ' + sec.label +
+        ' <span class="dl-count">' + items.length + '</span></div>' +
+        html +
+      '</div>';
+    }).join('');
+    qs(SEL.downloadPreviewLegend).textContent = 'Se muestran los cambios detectados. '
+      + 'Por defecto se aplica todo; desmarca lo que no quieras descargar. Si alg\u00fan cambio '
+      + 'se omite porque el local es m\u00e1s reciente, marca "Forzar reemplazo" para aplicar el dato remoto igualmente.';
+    qs(SEL.downloadPreviewSections).innerHTML = sections || '';
+    qs(SEL.downloadPreviewLoading).classList.add('hidden');
+    qs(SEL.downloadPreviewList).classList.remove('hidden');
+    qs(SEL.downloadPreviewEmpty).classList.toggle('hidden', !showEmpty);
+    updatePreviewSelectionInfo();
+  }
+  function updatePreviewSelectionInfo() {
+    const cab = qsa('#download-preview-sections input[type="checkbox"]');
+    const checked = qsa('#download-preview-sections input[type="checkbox"]:checked').length;
+    qs(SEL.downloadPreviewSelectInfo).textContent = checked + ' / ' + cab.length + ' seleccionados';
+  }
+  async function openDownloadPreview() {
+    await openDownloadPreviewModal();
+  }
+  async function openDownloadPreviewModal() {
+    const modal = qs(SEL.downloadPreviewModal);
+    qs(SEL.downloadPreviewLoading).classList.remove('hidden');
+    qs(SEL.downloadPreviewList).classList.add('hidden');
+    qs(SEL.downloadPreviewEmpty).classList.add('hidden');
+    showModal(modal);
+    try {
+      const result = await invoke('preview_download');
+      if (result.total === 0) {
+        qs(SEL.downloadPreviewLoading).classList.add('hidden');
+        qs(SEL.downloadPreviewEmpty).classList.remove('hidden');
+        qs(SEL.downloadPreviewSelectInfo).textContent = '0 / 0';
+        return;
+      }
+      renderPreviewSections(result, false);
+    } catch (e) {
+      qs(SEL.downloadPreviewLoading).classList.add('hidden');
+      showToast('Error al cargar cambios: ' + e, 'error');
+    }
+  }
+  qs(SEL.downloadPreviewSections).addEventListener('change', function(e) {
+    if (e.target && e.target.matches('input[type="checkbox"]')) updatePreviewSelectionInfo();
+  });
+  qs(SEL.downloadPreviewCheckAll).addEventListener('click', function() {
+    qsa('#download-preview-sections input[type="checkbox"]').forEach(function(c) { c.checked = true; });
+    updatePreviewSelectionInfo();
+  });
+  qs(SEL.downloadPreviewNone).addEventListener('click', function() {
+    qsa('#download-preview-sections input[type="checkbox"]').forEach(function(c) { c.checked = false; });
+    updatePreviewSelectionInfo();
+  });
+  qs(SEL.downloadPreviewCancel).addEventListener('click', function() {
+    closeModal(qs(SEL.downloadPreviewModal));
+  });
+  qs(SEL.downloadPreviewClose).addEventListener('click', function() {
+    closeModal(qs(SEL.downloadPreviewModal));
+  });
+  qs(SEL.downloadPreviewApply).addEventListener('click', async function() {
+    const checked = qsa('#download-preview-sections input[type="checkbox"]:checked');
+    if (checked.length === 0) { showToast('Selecciona al menos un cambio', 'error'); return; }
+    const changes = Array.prototype.map.call(checked, function(c) {
+      return { tipo: c.dataset.type, sync_id: c.dataset.id };
     });
+    const force = qs(SEL.downloadPreviewForce).checked;
+    const btn = qs(SEL.downloadPreviewApply);
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Aplicando...';
+    try {
+      const r = await invoke('apply_download', { changes, force });
+      closeModal(qs(SEL.downloadPreviewModal));
+      showToast(r || 'Cambios aplicados');
+      loadProductCache();
+      loadSyncStats();
+      loadConflictCount();
+    } catch (e) {
+      showToast('Error al aplicar: ' + e, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
   });
 
   /* Subir usuarios */
@@ -902,12 +1131,22 @@ statusEl.style.color = cssVar('--text-secondary');
     const el = qs(sel);
     if (el) el.addEventListener('change', setDefaultReportDates);
   });
+  qsa('.report-preset-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyReportPreset(this.dataset.preset); });
+  });
   const topLimitSelect = qs(SEL.topProductsLimit);
   if (topLimitSelect) topLimitSelect.addEventListener('change', loadTopProducts);
   qs(SEL.reportPrevBtn).addEventListener('click', function() { if (reportPage > 1) { reportPage--; loadReportsAndTopProducts(); } });
   qs(SEL.reportNextBtn).addEventListener('click', function() { reportPage++; loadReportsAndTopProducts(); });
 
   /* ========== EXPORT REPORT ========== */
+  qs(SEL.reportsFilters)?.addEventListener('click', function(e) {
+    const moreBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (moreBtn) {
+      e.stopPropagation();
+      toggleDropdown(moreBtn);
+    }
+  });
   const exportBtn = qs(SEL.reportExportBtn);
   if (exportBtn) exportBtn.addEventListener('click', handleExportReport);
   const pdfBtn = qs(SEL.reportPdfBtn);
@@ -923,8 +1162,26 @@ statusEl.style.color = cssVar('--text-secondary');
 
   /* ========== VOID SALE (delegation on daily sales table) ========== */
   qs(SEL.dailySalesBody).addEventListener('click', function(e) {
+    const dropdownBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (dropdownBtn) {
+      e.stopPropagation();
+      toggleDropdown(dropdownBtn);
+      return;
+    }
     const btn = e.target.closest('.void-sale-btn');
     if (btn) handleVoidSale(parseInt(btn.dataset.id), btn);
+    const detailBtn = e.target.closest('.sale-detail-btn');
+    if (detailBtn) showSaleDetail(parseInt(detailBtn.dataset.id), detailBtn);
+  });
+
+  // Ventas del reporte (botón "Ver" antes muerto: no había delegación en reportSalesBody).
+  qs(SEL.reportSalesBody).addEventListener('click', function(e) {
+    const dropdownBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (dropdownBtn) {
+      e.stopPropagation();
+      toggleDropdown(dropdownBtn);
+      return;
+    }
     const detailBtn = e.target.closest('.sale-detail-btn');
     if (detailBtn) showSaleDetail(parseInt(detailBtn.dataset.id), detailBtn);
   });
@@ -951,7 +1208,7 @@ statusEl.style.color = cssVar('--text-secondary');
     return obs;
   }
   // Reports: set default dates + dashboard on show
-  observeView(qs(SEL.viewReports), function() { setDefaultReportDates(); loadDashboard(); });
+  observeView(qs(SEL.viewReports), function() { loadChartPrefs(); setDefaultReportDates(); loadDashboard(); });
   // Config: load user list on show
   observeView(qs(SEL.viewConfig), function() { loadUserList(); });
 
@@ -966,6 +1223,12 @@ statusEl.style.color = cssVar('--text-secondary');
 
   // Event delegation: historial cierres list
   qs(SEL.historialCierresList).addEventListener('click', e => {
+    const dropdownBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (dropdownBtn) {
+      e.stopPropagation();
+      toggleDropdown(dropdownBtn);
+      return;
+    }
     const btn = e.target.closest('[data-action="show-cierre-detalle"]');
     if (btn) showCierreDetalle(parseInt(btn.dataset.id));
   });
@@ -974,6 +1237,13 @@ statusEl.style.color = cssVar('--text-secondary');
   qs(SEL.historialCierreDetalleOkBtn).addEventListener('click', closeHistorialDetalle);
 
   // Movimientos caja
+  qs(SEL.cashierActions)?.addEventListener('click', function(e) {
+    const moreBtn = e.target.closest('[data-action="toggle-dropdown"]');
+    if (moreBtn) {
+      e.stopPropagation();
+      toggleDropdown(moreBtn);
+    }
+  });
   qs(SEL.movimientosBtn)?.addEventListener('click', openMovimientosModal);
   qs(SEL.movimientosClose)?.addEventListener('click', function() { closeModal(qs(SEL.movimientosModal)); });
   qs(SEL.movimientosSaveBtn)?.addEventListener('click', saveMovimiento);
@@ -1002,12 +1272,11 @@ statusEl.style.color = cssVar('--text-secondary');
   });
 
   // Modal backdrop click
-  const PROTECTED_MODALS = ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'quick-debt-modal', 'stock-adjust-modal'];
   qsa('.modal').forEach(m => {
     if (m.id === 'calculator-modal') return; // handled by closeCalculator
     m.addEventListener('click', e => {
       if (e.target !== m) return;
-      if (PROTECTED_MODALS.indexOf(m.id) !== -1) {
+      if (isProtectedModal(m.id)) {
         confirmModal('\u00bfSeguro que quieres cerrar? Se perder\u00e1n los datos ingresados.', 'Cerrar ventana', 'S\u00ed, cerrar')
           .then(ok => { if (ok) closeModal(m); else showModal(m); });
         return;
@@ -1349,8 +1618,8 @@ statusEl.style.color = cssVar('--text-secondary');
 
   // Check if device is already registered
   try {
-    const devId = await invoke('get_config_value', { key: CFG_DISPOSITIVO_ID });
-    if (devId) {
+    const stats = await invoke('get_sync_stats');
+    if (stats.dispositivo_id) {
       qs(SEL.deviceRegScreen).style.display = 'none';
       qs(SEL.loginScreen).style.display = 'flex';
     } else {
@@ -1501,8 +1770,13 @@ statusEl.style.color = cssVar('--text-secondary');
 
   /* Expand chat */
   qs(SEL.chatExpandBtn).addEventListener('click', function() {
-    qs(SEL.chatPanel).classList.toggle('expanded');
-    this.querySelector('i').className = qs(SEL.chatPanel).classList.contains('expanded') ? 'nf nf-fa-compress' : 'nf nf-fa-expand';
+    const panel = qs(SEL.chatPanel);
+    panel.classList.toggle('expanded');
+    this.querySelector('i').className = panel.classList.contains('expanded') ? 'nf nf-fa-compress' : 'nf nf-fa-expand';
+    positionChatPanel();
+  });
+  window.addEventListener('resize', function() {
+    if (!qs(SEL.chatPanel).classList.contains('hidden')) positionChatPanel();
   });
 
   /* Quick prompts */
@@ -1511,6 +1785,10 @@ statusEl.style.color = cssVar('--text-secondary');
       handleChatSend(this.dataset.prompt);
     });
   });
+  const chatGenerateOrderBtn = qs('.chat-generate-order-btn');
+  if (chatGenerateOrderBtn) chatGenerateOrderBtn.addEventListener('click', function() { generateOrder(); });
+  const chatNewBtn = qs(SEL.chatNewBtn);
+  if (chatNewBtn) chatNewBtn.addEventListener('click', function() { clearChatHistory(); });
 
   /* ========== KEYBOARD SHORTCUTS ========== */
   document.addEventListener('keydown', function(e) {
@@ -1635,3 +1913,75 @@ statusEl.style.color = cssVar('--text-secondary');
   /* ========== SOUND TOGGLE (Ctrl+M) ========== */
   /* handled in shortcuts.js */
 });
+
+/* ========== ANDROID BACK NAVIGATION ========== */
+// En Android, MainActivity captura la tecla Atrás y llama goBack(). Aquí mantenemos
+// un stack de navegación (vistas + modales) para que el back del sistema cierre el
+// modal abierto o, si no, retroceda a la vista anterior. Solo activo en la app móvil.
+var _androidNavStack = { stack: ['main'], max: 20 };
+
+function initAndroidBack() {
+  if (!IS_ANDROID) return;
+  androidBackPushState();
+
+  // El back nativo llama goBack() → dispara un popstate con nuestro estado.
+  window.addEventListener('popstate', function(e) {
+    if (e.state && e.state.__andro_back) androidBackStep();
+  });
+}
+
+// Modal visible actual o null.
+function androidCurrentModal() {
+  var open = qsa('.modal');
+  for (var i = 0; i < open.length; i++) {
+    if (!open[i].classList.contains('hidden')) return open[i];
+  }
+  return null;
+}
+
+// Registrar que se navegó a una vista (llamado cuando cambiamos de vista en móvil).
+function androidTrackView(name) {
+  if (!IS_ANDROID) return;
+  var st = _androidNavStack.stack;
+  if (st[st.length - 1] === ('view:' + name)) return;
+  st.push('view:' + name);
+  if (st.length > _androidNavStack.max) st.shift();
+  androidBackPushState();
+}
+
+function androidBackStep() {
+  var modal = androidCurrentModal();
+  if (modal) {
+    // 1) Cerrar el modal abierto antes que navegar entre vistas.
+    var closeBtns = modal.querySelectorAll('.modal-close, [data-action="close-modal"], [data-modal-close]');
+    if (closeBtns.length) closeBtns[closeBtns.length - 1].click();
+    else modal.classList.add('hidden');
+    androidPopNav();
+    androidBackPushState();
+    return;
+  }
+
+  // 2) Sin modal: retroceder a la última vista registrada.
+  var st = _androidNavStack.stack;
+  for (var i = st.length - 1; i >= 0; i--) {
+    if (st[i].indexOf('view:') !== 0) continue;
+    var name = st[i].slice(5);
+    st.splice(i); // quitar esta vista y todo lo posterior
+    if (typeof window.showView === 'function') {
+      try {
+        if (name !== (lastViewName || '')) window.showView(name);
+      } catch (_) {}
+    }
+    break;
+  }
+  if (st.length === 0) st.push('main');
+  androidBackPushState();
+}
+
+function androidBackPushState() {
+  try { history.pushState({ __andro_back: true }, ''); } catch (_) {}
+}
+
+function androidPopNav() {
+  if (_androidNavStack.stack.length > 1) _androidNavStack.stack.pop();
+}

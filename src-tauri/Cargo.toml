@@ -38,3 +38,4 @@ ureq = { version = "2", features = ["json"] }
 uuid = { version = "1", features = ["v4"] }
 aes-gcm = "0.10"
 rand = "0.8"
+tauri-plugin-os = "2.3.2"
