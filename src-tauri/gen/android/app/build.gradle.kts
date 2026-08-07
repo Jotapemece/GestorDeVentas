@@ -13,28 +13,15 @@ val tauriProperties = Properties().apply {
     }
 }
 
-// Credenciales de firma: NUNCA hardcodear passwords en el repo.
-// Se leen de keystore.properties (debe estar en .gitignore) o de variables de entorno.
-fun signingPassword(key: String, env: String, keystoreProps: Properties): String? {
-    keystoreProps.getProperty(key)?.let { if (it.isNotBlank()) return it }
-    return System.getenv(env)?.takeIf { it.isNotBlank() }
-}
-
-val ksPropsFile = file("keystore.properties")
-val ksProps = Properties().apply {
-    if (ksPropsFile.exists()) ksPropsFile.inputStream().use { load(it) }
-}
-val storePwd = signingPassword("storePassword", "ANDROID_KEYSTORE_PASSWORD", ksProps)
-val keyPwd = signingPassword("keyPassword", "ANDROID_KEY_PASSWORD", ksProps)
-val keyAlias = signingPassword("keyAlias", "ANDROID_KEY_ALIAS", ksProps) ?: "gestor-ventas"
-
+// Credenciales de firma hardcodeadas por decisión del usuario (el password ya
+// está expuesto en el historial de git). Rotar el keystore si se hace público el repo.
 android {
     signingConfigs {
         create("release") {
             storeFile = file("../../../release-key.keystore")
-            storePassword = storePwd
-            keyAlias = keyAlias
-            keyPassword = keyPwd
+            storePassword = "gestor2024"
+            keyAlias = "gestor-ventas"
+            keyPassword = "gestor2024"
         }
     }
     compileSdk = 36
