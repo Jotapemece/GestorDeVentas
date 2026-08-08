@@ -330,7 +330,7 @@ function drawDashboardBarChart(body, data, periods) {
 
   const textColor = cssVar('--text', '#e0d8e8');
   const textLight = cssVar('--text-light', '#a098b8');
-  const pad = isMobile ? { top: 12, right: 8, bottom: 28, left: 40 } : { top: 20, right: 20, bottom: 35, left: 55 };
+  const pad = isMobile ? { top: 12, right: 8, bottom: 34, left: 40 } : { top: 20, right: 20, bottom: 42, left: 55 };
   const chartW = w - pad.left - pad.right;
   const chartH = h - pad.top - pad.bottom;
 

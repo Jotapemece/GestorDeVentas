@@ -235,6 +235,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (input) input.select();
   });
   qs(SEL.cartBody).addEventListener('change', e => {
+    const efectivo = e.target.closest('[data-action^="efectivo-"]');
+    if (efectivo) { handleCartEfectivoInput(efectivo); return; }
     const input = e.target.closest('.cart-qty-input');
     if (input) handleCartQtyInput(input.dataset.codigo, input.value);
   });
@@ -469,6 +471,29 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
       });
     }
+    const deleteComboBtn = e.target.closest('[data-action="delete-combo"]');
+    if (deleteComboBtn) {
+      const codigo = deleteComboBtn.dataset.codigo;
+      const nombre = deleteComboBtn.dataset.nombre;
+      const idStr = String(codigo).replace('COMBO-', '');
+      const comboId = parseInt(idStr, 10);
+      if (!comboId) {
+        showToast('Código de combo inválido', 'error');
+        return;
+      }
+      confirmModal('¿Seguro que quieres eliminar el combo "' + nombre + '"? Esta acción no se puede deshacer.', 'Eliminar combo', 'Eliminar').then(function(ok) {
+        if (!ok) return;
+        withButtonLock(deleteComboBtn, async () => {
+          try {
+            await invoke('delete_combo', { comboId });
+            showToast('Combo eliminado', 'success');
+            loadInventory();
+          } catch (err) {
+            showToast('Error: ' + err, 'error');
+          }
+        });
+      });
+    }
   });
 
   // Double-click cart row to edit unit price (admin only)
@@ -530,6 +555,25 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   qs(SEL.stockAdjustMotivo).addEventListener('keydown', function(e) {
     if (e.key === 'Enter') { e.preventDefault(); confirmStockAdjust(); }
+  });
+
+  // Ajustar efectivo (admin)
+  qs(SEL.ajustarEfectivoBtn).addEventListener('click', openAjustarEfectivoModal);
+  qs(SEL.ajustarEfectivoClose).addEventListener('click', closeAjustarEfectivoModal);
+  qs(SEL.ajustarEfectivoCancelBtn).addEventListener('click', closeAjustarEfectivoModal);
+  qs(SEL.ajustarEfectivoConfirmBtn).addEventListener('click', confirmAjustarEfectivo);
+  qsa('.stock-adjust-sign').forEach(function(b) {
+    b.addEventListener('click', function() {
+      ajustarEfectivoSign = parseInt(this.dataset.sign, 10);
+      updateAjustarEfectivoSignUI();
+      qs(SEL.ajustarEfectivoMonto).focus();
+    });
+  });
+  qs(SEL.ajustarEfectivoMonto).addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); qs(SEL.ajustarEfectivoMotivo).focus(); }
+  });
+  qs(SEL.ajustarEfectivoMotivo).addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); confirmAjustarEfectivo(); }
   });
 
   // Creditos
@@ -947,7 +991,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     await openDownloadPreview();
   });
 
-  function fmtNum(v) { return Math.round(v * 100) / 100; }
   function fieldLocalValue(f) {
     if (f.local === '\u2014') return '<em style="color:var(--text-light)">—</em>';
     return escapeHtml(String(f.local));
@@ -977,6 +1020,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   function renderPreviewSections(result, showEmpty) {
     const secciones = [
+      { key: 'ventas', label: 'Ventas', icon: 'nf-fa-receipt' },
       { key: 'clientes', label: 'Clientes', icon: 'nf-fa-user' },
       { key: 'productos', label: 'Productos', icon: 'nf-fa-cube' },
     ];
@@ -1014,7 +1058,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     qs(SEL.downloadPreviewEmpty).classList.add('hidden');
     showModal(modal);
     try {
-      const result = await invoke('preview_download');
+      const ventasDesde = qs(SEL.downloadPreviewVentasDesde).value || null;
+      const ventasHasta = qs(SEL.downloadPreviewVentasHasta).value || null;
+      const result = await invoke('preview_download', { ventasDesde, ventasHasta });
       if (result.total === 0) {
         qs(SEL.downloadPreviewLoading).classList.add('hidden');
         qs(SEL.downloadPreviewEmpty).classList.remove('hidden');
@@ -1029,6 +1075,9 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   qs(SEL.downloadPreviewSections).addEventListener('change', function(e) {
     if (e.target && e.target.matches('input[type="checkbox"]')) updatePreviewSelectionInfo();
+  });
+  qs(SEL.downloadPreviewReload).addEventListener('click', function() {
+    openDownloadPreviewModal();
   });
   qs(SEL.downloadPreviewCheckAll).addEventListener('click', function() {
     qsa('#download-preview-sections input[type="checkbox"]').forEach(function(c) { c.checked = true; });
@@ -1656,7 +1705,11 @@ statusEl.style.color = cssVar('--text-secondary');
         el.classList.contains('modal') ||
         el.classList.contains('dropdown-menu') ||
         el.classList.contains('more-menu') ||
-        el.classList.contains('custom-select-menu')
+        el.classList.contains('custom-select-menu') ||
+        el.classList.contains('chat-fab') ||
+        el.classList.contains('chat-panel') ||
+        el.classList.contains('calc-dock-bar') ||
+        el.classList.contains('calc-dock-btn')
       )) return false;
       if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') return false;
       if (el.tagName === 'TABLE') return false;
@@ -1710,6 +1763,7 @@ statusEl.style.color = cssVar('--text-secondary');
   // Mobile keyboard: push content up when keyboard opens
   if (window.visualViewport) {
     var _prevVpHeight = window.visualViewport.height;
+    var _kbModal = null;
     window.visualViewport.addEventListener('resize', function() {
       var diff = _prevVpHeight - window.visualViewport.height;
       var main = qs(SEL.mainApp);
@@ -1719,6 +1773,17 @@ statusEl.style.color = cssVar('--text-secondary');
         document.body.classList.add('keyboard-open');
         var view = qs(SEL.viewActive);
         if (view) view.classList.add('mobile-keyboard');
+        // Si un modal bottom-sheet está abierto, empujar su contenido para que
+        // el footer (Confirmar Pago/Guardar) no quede bajo el teclado.
+        var modal = null;
+        qsa('.modal').forEach(function(m) { if (!m.classList.contains('hidden')) modal = modal || m; });
+        if (modal) {
+          var content = modal.querySelector('.modal-content');
+          if (content) {
+            content.style.paddingBottom = (diff - KEYBOARD.PAD_OFFSET) + 'px';
+            _kbModal = content;
+          }
+        }
         var el = document.activeElement;
         if (el) {
           setTimeout(function() {
@@ -1731,6 +1796,7 @@ statusEl.style.color = cssVar('--text-secondary');
         document.body.classList.remove('keyboard-open');
         var view2 = qs(SEL.viewActive);
         if (view2) view2.classList.remove('mobile-keyboard');
+        if (_kbModal) { _kbModal.style.paddingBottom = ''; _kbModal = null; }
         main.style.paddingBottom = '';
         window.scrollTo(0, 0);
       }
@@ -1762,7 +1828,6 @@ statusEl.style.color = cssVar('--text-secondary');
   qs(SEL.suggestionCopyBtn).addEventListener('click', copySuggestion);
   qs(SEL.suggestionModalClose).addEventListener('click', function() { closeModal(qs(SEL.suggestionModal)); });
   qs(SEL.suggestionCloseBtn).addEventListener('click', function() { closeModal(qs(SEL.suggestionModal)); });
-  loadOpenRouterKey();
 
   /* ========== CHAT IA ========== */
   qs(SEL.chatCloseBtn).addEventListener('click', toggleChat);
@@ -1940,10 +2005,10 @@ function initAndroidBack() {
   });
 }
 
-// Modal visible actual o null.
+// Modal visible actual (el que está en la cima del apilado) o null.
 function androidCurrentModal() {
   var open = qsa('.modal');
-  for (var i = 0; i < open.length; i++) {
+  for (var i = open.length - 1; i >= 0; i--) {
     if (!open[i].classList.contains('hidden')) return open[i];
   }
   return null;
@@ -1960,9 +2025,29 @@ function androidTrackView(name) {
 }
 
 function androidBackStep() {
+  // El carrito en móvil es un bottom-sheet (body.cart-open), no un `.modal`:
+  // el back del sistema debe cerrarlo antes que navegar entre vistas.
+  if (document.body.classList.contains('cart-open')) {
+    if (typeof closeCartSheet === 'function') closeCartSheet();
+    androidPopNav();
+    androidBackPushState();
+    return;
+  }
   var modal = androidCurrentModal();
   if (modal) {
     // 1) Cerrar el modal abierto antes que navegar entre vistas.
+    // Los modales protegidos piden confirmación igual que Escape/backdrop.
+    if (typeof isProtectedModal === 'function' && isProtectedModal(modal.id)) {
+      confirmModal('\u00bfSeguro que quieres cerrar? Se perder\u00e1n los datos ingresados.', 'Cerrar ventana', 'S\u00ed, cerrar')
+        .then(function(ok) {
+          if (ok) {
+            closeModal(modal);
+            androidPopNav();
+          }
+          androidBackPushState();
+        });
+      return;
+    }
     var closeBtns = modal.querySelectorAll('.modal-close, [data-action="close-modal"], [data-modal-close]');
     if (closeBtns.length) closeBtns[closeBtns.length - 1].click();
     else modal.classList.add('hidden');

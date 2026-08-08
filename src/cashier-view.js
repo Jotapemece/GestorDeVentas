@@ -366,6 +366,7 @@ function addToCart(codigo) {
   }
   var active = ensureActiveCart();
   if (!active) { showToast('M\u00e1ximo 3 carritos alcanzado', 'error'); return; }
+  var wasEmpty = cart.length === 0;
   playSound('add');
   haptic(10);
   flyToCart(codigo);
@@ -397,6 +398,11 @@ function addToCart(codigo) {
     qs(SEL.productSearch).placeholder = 'Buscar por nombre o c\u00f3digo...';
   }
   saveCartSnapshot();
+  // En móvil, al pasar de 0 a 1 ítem abrir el bottom-sheet para que el usuario
+  // descubra dónde quedó el carrito (el FAB solo se muestra con badge).
+  if (wasEmpty && isPhonePos() && cart.length > 0 && typeof openCartSheet === 'function') {
+    openCartSheet();
+  }
   const cartBody = qs(SEL.cartBody);
   cartBody.classList.remove('cart-add-highlight');
   void cartBody.offsetWidth;
@@ -449,6 +455,38 @@ function handleCartQtyInput(codigo, value) {
   renderCart();
   updateCheckoutBtn();
   saveCartSnapshot();
+}
+
+function handleCartEfectivoInput(inputEl) {
+  const item = cart.find(x => x.es_efectivo && x.codigo === inputEl.dataset.codigo);
+  if (!item) return;
+  const campo = inputEl.dataset.action === 'efectivo-entregar' ? 'entregar' : 'cobrar';
+  const valor = redondeado2(inputEl.value);
+  const entregar = campo === 'entregar' ? valor : item.monto_entregar_bs;
+  const cobrar = campo === 'cobrar' ? valor : item.monto_cobrar_bs;
+  cartHistoryPush();
+  if (!(entregar > 0) || !(cobrar > 0)) {
+    renderCart();
+    updateCheckoutBtn();
+    saveCartSnapshot();
+    return;
+  }
+  if (cobrar + 0.005 < entregar) { showToast('El monto a cobrar no puede ser menor al entregado', 'error'); renderCart(); return; }
+  if (entregar + 0.005 > efectivoDisponibleBs) { showToast('Efectivo disponible insuficiente', 'error'); renderCart(); return; }
+  const precio = efectivoPrecioUsd(entregar, cobrar, tasaActual);
+  if (!(precio > 0)) { showToast('La tasa debe ser mayor a cero', 'error'); renderCart(); return; }
+  item.cantidad = entregar;
+  item.precio_usd = precio;
+  item.monto_entregar_bs = entregar;
+  item.monto_cobrar_bs = cobrar;
+  item.stock = efectivoDisponibleBs;
+  renderCart();
+  updateCheckoutBtn();
+  saveCartSnapshot();
+  const totalUSD = cart.reduce((s, i) => s + i.cantidad * i.precio_usd, 0);
+  animateCountUp(qs(SEL.cartTotalUsd), totalUSD, formatUSD, 350);
+  animateCountUp(qs(SEL.cartTotalBs), totalUSD * tasaActual, formatBS, 350);
+  if (qs(SEL.cambioResultado)) { qs(SEL.cambioResultado).classList.add('hidden'); }
 }
 
 function removeFromCart(codigo) {
@@ -779,6 +817,82 @@ function selectPaymentMethod(method) {
   }
 }
 
+/* ========== AJUSTE DE EFECTIVO (admin: entra/sale billetes de la caja) ========== */
+let ajustarEfectivoSign = 1;
+
+function openAjustarEfectivoModal() {
+  ajustarEfectivoSign = 1;
+  qs(SEL.ajustarEfectivoActual).textContent = formatBS(efectivoDisponibleBs);
+  qs(SEL.ajustarEfectivoMonto).value = '';
+  qs(SEL.ajustarEfectivoMotivo).value = '';
+  clearAjustarEfectivoErrors();
+  updateAjustarEfectivoSignUI();
+  showModal(qs(SEL.ajustarEfectivoModal));
+  setTimeout(function() { qs(SEL.ajustarEfectivoMonto).focus(); }, 100);
+}
+
+function updateAjustarEfectivoSignUI() {
+  qsa('.stock-adjust-sign').forEach(function(b) {
+    b.classList.toggle('active', parseInt(b.dataset.sign, 10) === ajustarEfectivoSign);
+  });
+}
+
+function closeAjustarEfectivoModal() {
+  closeModal(qs(SEL.ajustarEfectivoModal));
+  clearAjustarEfectivoErrors();
+}
+
+function clearAjustarEfectivoErrors() {
+  ['ajustar-efectivo-monto', 'ajustar-efectivo-motivo'].forEach(function(id) {
+    var err = qs('#' + id + '-error');
+    var input = qs('#' + id);
+    if (err) { err.textContent = ''; err.classList.remove('visible'); }
+    if (input) input.classList.remove('input-error');
+  });
+}
+
+async function confirmAjustarEfectivo() {
+  const monto = parseFloat(qs(SEL.ajustarEfectivoMonto).value);
+  const motivo = qs(SEL.ajustarEfectivoMotivo).value.trim();
+  clearAjustarEfectivoErrors();
+  let hasError = false;
+  if (!monto || monto <= 0) {
+    qs(SEL.ajustarEfectivoMontoError).textContent = 'Indique un monto mayor a cero';
+    qs(SEL.ajustarEfectivoMontoError).classList.add('visible');
+    qs(SEL.ajustarEfectivoMonto).classList.add('input-error');
+    hasError = true;
+  }
+  if (!motivo) {
+    qs(SEL.ajustarEfectivoMotivoError).textContent = 'El motivo es obligatorio';
+    qs(SEL.ajustarEfectivoMotivoError).classList.add('visible');
+    qs(SEL.ajustarEfectivoMotivo).classList.add('input-error');
+    hasError = true;
+  }
+  if (hasError) return;
+  const delta = ajustarEfectivoSign * monto;
+  const nuevo = efectivoDisponibleBs + delta;
+  if (nuevo < 0) { showToast('El ajuste dejar\u00eda el efectivo en negativo (Bs. ' + formatBS(nuevo) + ')', 'error'); return; }
+  const signo = delta > 0 ? '+' : '';
+  const ok = await confirmModal(
+    '\u00bfAjustar efectivo en ' + signo + formatBS(monto) + ' (queda Bs. ' + formatBS(nuevo) + ')?\nMotivo: ' + motivo,
+    'Ajustar Efectivo', 'Aplicar'
+  );
+  if (!ok) return;
+  const btn = qs(SEL.ajustarEfectivoConfirmBtn);
+  if (btn) btn.disabled = true;
+  try {
+    if (await invokeOrError(invoke('ajustar_efectivo_bs', { delta, motivo })) === undefined) return;
+    showToast('Efectivo ajustado en ' + signo + formatBS(monto));
+    closeAjustarEfectivoModal();
+    efectivoDisponibleBs = await invoke('get_efectivo_saldo') || 0;
+    renderProductSearch();
+    if (typeof loadMovimientos === 'function') loadMovimientos();
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+  finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function addMixtoRow(containerId) {
   const container = document.getElementById(containerId);
   const row = document.createElement('div');
@@ -1065,9 +1179,9 @@ async function confirmPayment() {
   }
   const productos = cart.map(i => {
     if (i.es_efectivo) {
-      return { codigo: i.codigo, cantidad: i.monto_entregar_bs || i.cantidad, monto_cobrar_bs: i.monto_cobrar_bs, es_inari: false };
+      return { codigo: i.codigo, cantidad: i.monto_entregar_bs || i.cantidad, monto_cobrar_bs: i.monto_cobrar_bs };
     }
-    return { codigo: i.codigo, cantidad: i.cantidad, es_inari: !!i.es_inari, es_pesable: !!i.es_pesable };
+    return { codigo: i.codigo, cantidad: i.cantidad };
   });
   const notaInput = qs(SEL.paymentNota);
   const nota = notaInput ? notaInput.value.trim() : '';
@@ -1103,7 +1217,7 @@ async function confirmPayment() {
   confirmBtn.textContent = 'Procesando...';
   try {
     const venta = await invoke('create_sale', {
-      request: { usuario_id: currentUser.id, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle, cliente_id, productos, tasa: tasaActual, total_bs_ingresado, nota }
+      request: { metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle, cliente_id, productos, tasa: tasaActual, total_bs_ingresado, nota }
     });
     playSound('success');
     haptic(50);
@@ -1392,9 +1506,9 @@ async function openHistorialCierres() {
   if (!cierres.length) {
     container.innerHTML = emptyState('<i class="nf nf-fa-history"></i>', 'No hay cierres registrados', 'Los cierres de caja aparecer\u00e1n aqu\u00ed');
   } else {
-    let html = '<table class="table compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
+    let html = '<table class="table table-cards compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
     cierres.forEach(c => {
-      html += '<tr><td>' + c.id + '</td><td>' + escapeHtml(c.fecha_hora) + '</td><td>' + escapeHtml(c.username) + '</td><td>' + c.total_ventas + '</td><td>' + formatUSD(c.total_usd) + '</td><td>' + formatBS(c.total_bs) + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-cierre-detalle" data-id="' + c.id + '"><i class="nf nf-fa-info_circle"></i> Ver detalle</button></div></div></td></tr>';
+      html += '<tr><td data-label="#">' + c.id + '</td><td data-label="Fecha">' + escapeHtml(c.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(c.username) + '</td><td data-label="Ventas">' + c.total_ventas + '</td><td data-label="Total USD">' + formatUSD(c.total_usd) + '</td><td data-label="Total Bs.">' + formatBS(c.total_bs) + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-cierre-detalle" data-id="' + c.id + '"><i class="nf nf-fa-info_circle"></i> Ver detalle</button></div></div></td></tr>';
     });
     html += '</table>';
     container.innerHTML = html;
@@ -1435,9 +1549,9 @@ async function showCierreDetalle(cierreId) {
     }
     if (d.productos_vendidos && d.productos_vendidos.length) {
       html += '<hr style="margin:8px 0;"><h4>Productos Vendidos</h4>';
-      html += '<table class="table compact-table"><tr><th>Producto</th><th>Cant</th><th>Total</th></tr>';
+      html += '<table class="table table-cards compact-table"><tr><th>Producto</th><th>Cant</th><th>Total</th></tr>';
       d.productos_vendidos.forEach(p => {
-        html += '<tr><td>' + escapeHtml(p.nombre) + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>';
+        html += '<tr><td data-label="Producto">' + escapeHtml(p.nombre) + '</td><td data-label="Cant">' + p.cantidad + '</td><td data-label="Total">' + formatUSD(p.total_usd) + '</td></tr>';
       });
       html += '</table>';
     }

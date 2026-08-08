@@ -65,7 +65,6 @@ const CFG_IA_HABILITADO = 'ia_habilitado';
 const CFG_OPENROUTER_API_KEY = 'openrouter_api_key';
 const CFG_OPENROUTER_MODEL = 'openrouter_model';
 const CFG_TASA_DOLAR = 'tasa_dolar';
-const CFG_DISPOSITIVO_ID = 'dispositivo_id';
 
 // Payment method labels (source of truth — matches sales.rs)
 const METODO_LABELS = {
@@ -106,7 +105,6 @@ const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
 const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
 const CFG_SYNC_AUTO_ENABLED = 'sync_auto_enabled';
-const SYNC_AUTO_DEFAULT_ENABLED = true;
 const CFG_MAX_BACKUPS = 'max_backups';
 const DEFAULT_MAX_BACKUPS = 10;
 
@@ -311,6 +309,16 @@ const SEL = {
   efectivoCancelBtn: '#efectivo-cancel-btn',
   efectivoModalClose: '#efectivo-modal-close',
   efectivoOpenFromCart: '#efectivo-open-from-cart',
+  ajustarEfectivoBtn: '#ajustar-efectivo-btn',
+  ajustarEfectivoModal: '#ajustar-efectivo-modal',
+  ajustarEfectivoClose: '#ajustar-efectivo-close',
+  ajustarEfectivoActual: '#ajustar-efectivo-actual',
+  ajustarEfectivoMonto: '#ajustar-efectivo-monto',
+  ajustarEfectivoMontoError: '#ajustar-efectivo-monto-error',
+  ajustarEfectivoMotivo: '#ajustar-efectivo-motivo',
+  ajustarEfectivoMotivoError: '#ajustar-efectivo-motivo-error',
+  ajustarEfectivoConfirmBtn: '#ajustar-efectivo-confirm-btn',
+  ajustarEfectivoCancelBtn: '#ajustar-efectivo-cancel-btn',
 
   // --- Inventory ---
   inventorySearch: '#inventory-search',
@@ -331,7 +339,6 @@ const SEL = {
   inventoryInariBtn: '#inventory-inari-btn',
   inariConfigToggle: '#inari-config-toggle',
   inariSubcatBar: '#inari-subcat-bar',
-  inariSubcatBtn: '.inari-subcat-btn',
   inariCreateComboBtn: '#inari-create-combo-btn',
   comboModal: '#combo-modal',
   comboNombre: '#combo-nombre',
@@ -675,7 +682,6 @@ const SEL = {
   openrouterSaveKeyBtn: '#openrouter-save-key-btn',
   openrouterModelWrap: '#openrouter-model-wrap',
   openrouterModelBtn: '#openrouter-model-btn',
-  openrouterModelValue: '#openrouter-model-value',
   openrouterModelMenu: '#openrouter-model-menu',
   generateOrderBtn: '#generate-order-btn',
   suggestionModal: '#suggestion-modal',
@@ -743,12 +749,7 @@ const SEL = {
   // --- Hardcoded selectors centralized ---
   salesBody: '.sales-body',
   paymentMethodActive: '.payment-method-btn.active',
-  invPage: '[data-inv-page]',
-  dashboardChartToggle: '.dashboard-chart-toggle button',
-  dashboardChartContainer: '.dashboard-chart-container',
-  dataPiePeriod: '[data-pie-period]',
   configCardHeader: '.config-card-header',
-  creditosBodyTr: '#creditos-body tr',
   customSelectOpen: '.custom-select.open',
   salesLeftCenter: '.sales-left, .sales-center',
   viewActive: '.view.active',
@@ -758,9 +759,7 @@ const SEL = {
   movimientosBtn: '#movimientos-btn',
   movimientosModal: '#movimientos-modal',
   movimientosClose: '#movimientos-modal-close',
-  movimientosBody: '#movimientos-body',
   movimientosList: '#movimientos-list',
-  movimientosForm: '#movimientos-form',
   movimientosTipo: '#movimientos-tipo',
   movimientosMontoBs: '#movimientos-monto-bs',
   movimientosMontoUsd: '#movimientos-monto-usd',
@@ -773,7 +772,6 @@ const SEL = {
   abonoTasaRefresh: '#abono-tasa-refresh',
 
   // --- v1.03 Features ---
-  loginGreeting: '#login-greeting',
   loginGreetingTime: '#login-greeting-time',
   loginGreetingText: '#login-greeting-text',
   loginGreetingDate: '#login-greeting-date',
@@ -785,7 +783,6 @@ const SEL = {
   productHoverCard: '#product-hover-card',
   productHoverCardBody: '#product-hover-card-body',
   hoverCardToggle: '#hover-card-toggle',
-  flyEl: '.fly-to-cart',
 
   // --- Snake ---
   guideJuegoTab: '.guide-juego-tab',
@@ -817,5 +814,8 @@ const SEL = {
   downloadPreviewCancel: '#download-preview-cancel',
   downloadPreviewApply: '#download-preview-apply',
   downloadPreviewForce: '#download-preview-force',
+  downloadPreviewVentasDesde: '#download-preview-ventas-desde',
+  downloadPreviewVentasHasta: '#download-preview-ventas-hasta',
+  downloadPreviewReload: '#download-preview-reload',
 };
 

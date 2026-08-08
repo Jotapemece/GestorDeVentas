@@ -167,24 +167,6 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
 }
 
 #[tauri::command]
-pub fn get_ultimo_upload(state: State<AppState>) -> Result<String, String> {
-    let db = state.lock_db()?;
-    match super::get_config(&db, constants::CFG_ULTIMO_UPLOAD) {
-        Ok(v) => Ok(v),
-        Err(_) => Ok("Nunca".to_string()),
-    }
-}
-
-#[tauri::command]
-pub fn get_ultimo_download(state: State<AppState>) -> Result<String, String> {
-    let db = state.lock_db()?;
-    match super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD) {
-        Ok(v) => Ok(v),
-        Err(_) => Ok("Nunca".to_string()),
-    }
-}
-
-#[tauri::command]
 pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     crate::auth::check_admin_role(&state)?;
     let (supabase_url, supabase_key, dispositivo_id) = {

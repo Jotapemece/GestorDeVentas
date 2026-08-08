@@ -1,3 +1,4 @@
+use super::sales::apply_remote_sales;
 use super::{api_url, supabase_get, urlencoding};
 use crate::constants;
 use crate::db::AppState;
@@ -16,7 +17,7 @@ pub struct FieldDiff {
 
 #[derive(Serialize, Clone)]
 pub struct PreviewItem {
-    pub tipo: String,       // "producto" | "cliente"
+    pub tipo: String,       // "producto" | "cliente" | "venta"
     pub sync_id: String,
     pub nombre: String,
     pub local_ts: String,
@@ -28,6 +29,7 @@ pub struct PreviewItem {
 pub struct PreviewResult {
     pub productos: Vec<PreviewItem>,
     pub clientes: Vec<PreviewItem>,
+    pub ventas: Vec<PreviewItem>,
     pub total: usize,
 }
 
@@ -60,8 +62,13 @@ fn fmt_bool(v: &serde_json::Value) -> String {
 /// Descarga TODOS los productos/clientes de Supabase (ignora watermark, mantiene
 /// `dispositivo_origen != local`) y devuelve el diff campo a campo contra lo local.
 /// No escribe nada en la BD: es solo vista previa para el modal de descarga selectiva.
+/// `ventas_desde`/`ventas_hasta` (opcional, `YYYY-MM-DD`) filtran por `fecha_hora`.
 #[tauri::command]
-pub fn preview_download(state: State<AppState>) -> Result<PreviewResult, String> {
+pub fn preview_download(
+    state: State<AppState>,
+    ventas_desde: Option<String>,
+    ventas_hasta: Option<String>,
+) -> Result<PreviewResult, String> {
     crate::auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let (supabase_url, supabase_key) = super::supabase_config(&db)?;
@@ -277,8 +284,118 @@ pub fn preview_download(state: State<AppState>) -> Result<PreviewResult, String>
     }
     drop(local_cli);
 
-    let total = productos.len() + clientes.len();
-    Ok(PreviewResult { productos, clientes, total })
+    // ---------- Ventas ----------
+    let mut ventas = Vec::new();
+    let mut vent_filters = String::new();
+    if let Some(d) = &ventas_desde {
+        if !d.is_empty() {
+            vent_filters.push_str(&format!("&fecha_hora=gte.{}", urlencoding(d.trim())));
+        }
+    }
+    if let Some(h) = &ventas_hasta {
+        if !h.is_empty() {
+            vent_filters.push_str(&format!("&fecha_hora=lte.{}", urlencoding(h.trim())));
+        }
+    }
+    let vent_url = api_url(
+        &supabase_url,
+        &format!(
+            "/ventas?dispositivo_origen=neq.{}{}&select=id,fecha_hora,metodo_pago,total_usd,total_bs,anulada,updated_at",
+            urlencoding(&dispositivo_id),
+            vent_filters,
+        ),
+    );
+    let cloud_ventas: Vec<serde_json::Value> = supabase_get(&vent_url, &supabase_key)?;
+
+    let local_vent: HashMap<String, (String, String, String, f64, f64, i64)> = {
+        let mut stmt = db
+            .prepare(
+                "SELECT sync_id, COALESCE(updated_at,''), fecha_hora, metodo_pago, total_usd, total_bs, \
+                 COALESCE(anulada,0) FROM ventas WHERE sync_id IS NOT NULL AND sync_id != ''",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, f64>(4)?,
+                    row.get::<_, f64>(5)?,
+                    row.get::<_, i64>(6)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok());
+        let mut map = HashMap::new();
+        for (sid, updated_at, fecha, metodo, total_usd, total_bs, anulada) in rows {
+            map.insert(sid, (updated_at, fecha, metodo, total_usd, total_bs, anulada));
+        }
+        map
+    };
+
+    for vent in &cloud_ventas {
+        let sync_id = vent["id"].as_str().unwrap_or("").to_string();
+        if sync_id.is_empty() {
+            continue;
+        }
+        let fecha = vent["fecha_hora"].as_str().unwrap_or("").to_string();
+        let nombre = format!("Venta del {}", if fecha.is_empty() { "—".to_string() } else { fecha.clone() });
+        let remote_ts = vent["updated_at"].as_str().unwrap_or("").to_string();
+        let metodo = vent["metodo_pago"].as_str().unwrap_or("").to_string();
+        let total_usd = vent["total_usd"].as_f64().unwrap_or(0.0);
+        let total_bs = vent["total_bs"].as_f64().unwrap_or(0.0);
+        let anulada = vent["anulada"].as_i64().unwrap_or(0);
+
+        let mut campos = Vec::new();
+        match local_vent.get(&sync_id) {
+            Some((_lts, _l_fecha, l_metodo, l_usd, l_bs, l_anulada)) => {
+                if l_anulada != &anulada {
+                    campos.push(FieldDiff { campo: "anulada".into(), local: fmt_bool(&json!(*l_anulada)), remoto: fmt_bool(&json!(anulada)) });
+                }
+                if (*l_usd - total_usd).abs() > 1e-9 {
+                    campos.push(FieldDiff { campo: "total_usd".into(), local: fmt_num(&json!(*l_usd)), remoto: fmt_num(&json!(total_usd)) });
+                }
+                if (*l_bs - total_bs).abs() > 1e-9 {
+                    campos.push(FieldDiff { campo: "total_bs".into(), local: fmt_num(&json!(*l_bs)), remoto: fmt_num(&json!(total_bs)) });
+                }
+                if l_metodo != &metodo {
+                    campos.push(FieldDiff { campo: "metodo_pago".into(), local: l_metodo.clone(), remoto: metodo });
+                }
+                if !campos.is_empty() {
+                    let local_ts = local_vent[&sync_id].0.clone();
+                    ventas.push(PreviewItem {
+                        tipo: "venta".into(),
+                        sync_id,
+                        nombre,
+                        local_ts,
+                        remote_ts,
+                        campos,
+                    });
+                }
+            }
+            None => {
+                let all = vec![
+                    FieldDiff { campo: "fecha_hora".into(), local: "—".into(), remoto: fecha },
+                    FieldDiff { campo: "total_usd".into(), local: "—".into(), remoto: fmt_num(&json!(total_usd)) },
+                    FieldDiff { campo: "total_bs".into(), local: "—".into(), remoto: fmt_num(&json!(total_bs)) },
+                ];
+                ventas.push(PreviewItem {
+                    tipo: "venta".into(),
+                    sync_id,
+                    nombre,
+                    local_ts: String::new(),
+                    remote_ts,
+                    campos: all,
+                });
+            }
+        }
+    }
+    drop(local_vent);
+
+    let total = productos.len() + clientes.len() + ventas.len();
+    Ok(PreviewResult { productos, clientes, ventas, total })
 }
 
 /// Aplica solo los cambios seleccionados por el usuario (LWW: remoto solo gana si
@@ -295,10 +412,12 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
 
     let mut wanted_prod: Vec<&str> = Vec::new();
     let mut wanted_cli: Vec<&str> = Vec::new();
+    let mut wanted_ventas: Vec<&str> = Vec::new();
     for c in &changes {
         match c.tipo.as_str() {
             "producto" => wanted_prod.push(&c.sync_id),
             "cliente" => wanted_cli.push(&c.sync_id),
+            "venta" => wanted_ventas.push(&c.sync_id),
             _ => {}
         }
     }
@@ -306,6 +425,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
     let mut applied_prod = 0usize;
     let mut applied_cli = 0usize;
     let mut skipped = 0usize;
+    let mut ventas_msg = String::new();
 
     // ---------- Productos ----------
     if !wanted_prod.is_empty() {
@@ -467,6 +587,20 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
         }
     }
 
+    // ---------- Ventas ----------
+    if !wanted_ventas.is_empty() {
+        let wanted_set: std::collections::HashSet<String> =
+            wanted_ventas.iter().map(|s| s.to_string()).collect();
+        ventas_msg = apply_remote_sales(
+            &tx,
+            &supabase_url,
+            &supabase_key,
+            &dispositivo_id,
+            Some(&wanted_set),
+            false,
+        )?;
+    }
+
     tx.commit().map_err(|e| format!("Error al confirmar cambios: {}", e))?;
 
     let mut parts: Vec<String> = Vec::new();
@@ -475,6 +609,9 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
     }
     if applied_cli > 0 {
         parts.push(format!("{} cliente(s)", applied_cli));
+    }
+    if !ventas_msg.is_empty() && ventas_msg != "No hay ventas nuevas para descargar" {
+        parts.push(ventas_msg);
     }
     if skipped > 0 {
         parts.push(format!("{} omitido(s) (local más reciente)", skipped));

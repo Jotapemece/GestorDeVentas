@@ -1,4 +1,4 @@
-.PHONY: dev build build:android build:android:apk build:android:debug combine clean help
+.PHONY: dev build build-android build-android-apk build-android-debug combine clean help
 
 APP_NAME = InariMarket
 
@@ -6,13 +6,13 @@ help:
 	@echo "$(APP_NAME) — POS de Escritorio (Tauri v2 + Rust + SQLite)"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make dev              Iniciar Tauri dev (hot-reload)"
-	@echo "  make build            Build desktop release"
-	@echo "  make build:android    Build Android release (AAB)"
-	@echo "  make build:android:apk  Build Android APK release"
-	@echo "  make build:android:debug Build Android debug APK"
-	@echo "  make combine          Consolidar fuentes en combined.txt"
-	@echo "  make clean            Limpiar artifacts de build"
+	@echo "  make dev                 Iniciar Tauri dev (hot-reload)"
+	@echo "  make build               Build desktop release"
+	@echo "  make build-android       Build Android release (AAB)"
+	@echo "  make build-android-apk   Build Android APK release"
+	@echo "  make build-android-debug Build Android debug APK"
+	@echo "  make combine             Consolidar fuentes en combined.txt"
+	@echo "  make clean               Limpiar artifacts de build"
 	@echo ""
 
 dev:
@@ -21,16 +21,16 @@ dev:
 build:
 	npm run build
 
-build:android:
+build-android:
 	npx tauri android build
 
-build:android:apk:
+build-android-apk:
 	npx tauri android build --apk
 
-build:android:debug:
+build-android-debug:
 	npx tauri android build --apk --debug
 
-combined.txt: src/index.html src/style.css src/app.js src/fa-local.css src-tauri/src/main.rs src-tauri/src/lib.rs src-tauri/src/db.rs src-tauri/src/models.rs src-tauri/src/auth.rs src-tauri/src/products.rs src-tauri/src/sales.rs src-tauri/src/clients.rs src-tauri/src/cashier.rs src-tauri/src/categorias.rs src-tauri/src/audit.rs src-tauri/src/config.rs src-tauri/tauri.conf.json src-tauri/Cargo.toml package.json README.md
+combined.txt: src/index.html src/style.css src/app.js src/fa-local.css src-tauri/src/main.rs src-tauri/src/lib.rs src-tauri/src/db.rs src-tauri/src/models.rs src-tauri/src/auth.rs src-tauri/src/products.rs src-tauri/src/sales.rs src-tauri/src/clients.rs src-tauri/src/cashier.rs src-tauri/src/combos.rs src-tauri/src/audit.rs src-tauri/src/config.rs src-tauri/tauri.conf.json src-tauri/Cargo.toml package.json README.md
 	@echo "=== src/index.html ===" > $@
 	@cat src/index.html >> $@
 	@echo "" >> $@
@@ -70,8 +70,8 @@ combined.txt: src/index.html src/style.css src/app.js src/fa-local.css src-tauri
 	@echo "=== src-tauri/src/cashier.rs ===" >> $@
 	@cat src-tauri/src/cashier.rs >> $@
 	@echo "" >> $@
-	@echo "=== src-tauri/src/categorias.rs ===" >> $@
-	@cat src-tauri/src/categorias.rs >> $@
+	@echo "=== src-tauri/src/combos.rs ===" >> $@
+	@cat src-tauri/src/combos.rs >> $@
 	@echo "" >> $@
 	@echo "=== src-tauri/src/audit.rs ===" >> $@
 	@cat src-tauri/src/audit.rs >> $@

@@ -7,7 +7,6 @@ pub(crate) mod orchestrator;
 pub(crate) mod preview;
 
 pub use products::*;
-pub use sales::*;
 pub use clients::*;
 pub use users::*;
 pub use conflicts::*;

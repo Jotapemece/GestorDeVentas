@@ -49,7 +49,6 @@ pub fn run() {
             // Auth
             auth::login,
             auth::logout,
-            auth::get_current_user,
             auth::create_usuario,
             auth::list_usuarios,
             auth::delete_usuario,
@@ -61,11 +60,8 @@ pub fn run() {
             products::delete_product,
             products::export_products_xlsx,
             products::import_products_from_file,
-            products::import_products_from_db,
-            products::replace_all_products,
             // Sales
             sales::create_sale,
-            sales::list_sales,
             sales::get_sale_detail,
             sales::get_tasa,
             sales::set_tasa,
@@ -103,22 +99,18 @@ pub fn run() {
             cashier::get_saldo_caja,
             // Audit
             audit::get_audit_logs,
-            audit::get_cierres,
             audit::clear_audit,
             // Config
             config::get_config_value,
             config::set_config_value,
             config::get_user_config_value,
             config::set_user_config_value,
-            config::list_theme_names,
             // Efectivo (pseudo-producto)
             efectivo::get_efectivo_saldo,
             efectivo::ajustar_efectivo_bs,
             // Tasa BCV
             tasa_bcv::fetch_tasa_bcv,
-            tasa_bcv::check_tasa_update,
             tasa_bcv::get_historial_tasas,
-            tasa_bcv::get_tasa_historica,
             // DB
             db::backup_database,
             db::backup_database_b64,
@@ -138,18 +130,12 @@ pub fn run() {
             products::toggle_producto_favorito,
             products::get_precio_historial,
             // Sync
-            sync::upload_products,
             sync::download_products,
-            sync::upload_sales,
-            sync::download_sales,
-            sync::upload_clientes,
             sync::download_clientes,
             sync::upload_usuarios,
             sync::download_usuarios,
             sync::register_device,
             sync::list_dispositivos,
-            sync::get_ultimo_upload,
-            sync::get_ultimo_download,
             sync::get_conflictos,
             sync::resolve_conflicto,
             sync::upload_all,
@@ -161,8 +147,6 @@ pub fn run() {
             sync::apply_download,
             // Combos
             combos::create_combo,
-            combos::list_combos,
-            combos::get_combo_detail,
             combos::delete_combo,
             combos::list_combos_simple,
             // OpenRouter

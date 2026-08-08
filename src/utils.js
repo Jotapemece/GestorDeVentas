@@ -66,7 +66,7 @@ function createProductCard(p) {
 function createCartRow(item) {
   const showBs = cartShowBs;
   if (item.es_efectivo) {
-    // Línea del pseudo-producto Efectivo: muestra entregar/cobrar en Bs.
+    // Línea del pseudo-producto Efectivo: Entregar/Cobrar editables inline en Bs.
     const name = escapeHtml(item.nombre || 'Efectivo');
     const code = escapeHtml(item.codigo);
     const entregar = item.monto_entregar_bs || item.cantidad;
@@ -74,9 +74,12 @@ function createCartRow(item) {
     const totalUsd = item.cantidad * item.precio_usd;
     const totalText = showBs ? formatBS(totalUsd * tasaActual) : formatUSD(totalUsd);
     const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
-    const editBtn = '<button class="cart-edit-price-btn" data-action="edit-efectivo" data-codigo="' + code + '" title="Cambiar montos"><i class="nf nf-fa-pencil"></i></button>';
+    const editBtn = '<button class="cart-edit-price-btn" data-action="edit-efectivo" data-codigo="' + code + '" title="Ver disponibilidad y montos"><i class="nf nf-fa-pencil"></i></button>';
     return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td>' +
-      '<td><div class="cart-qty-wrap"><span class="cart-efectivo-qty">Entregar <strong>' + formatBS(entregar) + '</strong></span><span class="cart-efectivo-cobrar text-muted text-sm">Cobrar ' + formatBS(cobrar) + '</span></div></td>' +
+      '<td><div class="cart-qty-wrap cart-efectivo-inline">' +
+        '<label class="cart-efectivo-field">Entregar<input type="text" inputmode="decimal" class="cart-qty-input cart-efectivo-input" data-action="efectivo-entregar" data-codigo="' + code + '" value="' + redondeado2(entregar) + '"></label>' +
+        '<label class="cart-efectivo-field">Cobrar<input type="text" inputmode="decimal" class="cart-qty-input cart-efectivo-input" data-action="efectivo-cobrar" data-codigo="' + code + '" value="' + redondeado2(cobrar) + '"></label>' +
+      '</div></td>' +
       '<td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td>' +
       '<td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
   }
@@ -115,10 +118,13 @@ function createInventoryRow(p, editBtn) {
   var adjustBtn = (currentUser && currentUser.rol === ROL_ADMIN)
     ? '<button data-action="open-stock-adjust" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-scale"></i> Ajustar stock</button>'
     : '';
+  var deleteComboBtn = (currentUser && currentUser.rol === ROL_ADMIN && p.subcategoria === 'combos')
+    ? '<button data-action="delete-combo" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-trash"></i> Eliminar combo</button>'
+    : '';
   var stockDisplay = formatStock(p.stock);
   var stockMinDisplay = formatStock(p.stock_minimo);
   var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron_down"></i></button></td>';
-  return '<td class="cell-key cell-name" data-label="Producto">' + escapeHtml(p.nombre) + inariBadge + pesableBadge + '</td><td class="cell-key cell-price" data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td><td data-label="Costo">' + formatUSD(costo) + '</td><td data-label="Margen">' + margen + '</td><td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td class="cell-key cell-stock' + stockClass + '" data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button><button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>' + editBtn + adjustBtn + inariToggleBtn + '</div></div></td>' + toggleCell;
+  return '<td class="cell-key cell-name" data-label="Producto">' + escapeHtml(p.nombre) + inariBadge + pesableBadge + '</td><td class="cell-key cell-price" data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td><td data-label="Costo">' + formatUSD(costo) + '</td><td data-label="Margen">' + margen + '</td><td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td class="cell-key cell-stock' + stockClass + '" data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button><button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>' + editBtn + adjustBtn + inariToggleBtn + deleteComboBtn + '</div></div></td>' + toggleCell;
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
@@ -582,7 +588,7 @@ async function getTasaConFallback() { return tasaActual || await invoke('get_tas
 let activeModal = null;
 
 function isProtectedModal(id) {
-  return ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'quick-debt-modal', 'stock-adjust-modal'].indexOf(id) !== -1;
+  return ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'quick-debt-modal', 'stock-adjust-modal', 'ajustar-efectivo-modal'].indexOf(id) !== -1;
 }
 function trapFocus(modalEl) {
   activeModal = modalEl;
@@ -752,6 +758,7 @@ function showPaymentSuccess(venta) {
   }, 1200);
 }
 function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
+function redondeado2(v) { const n = parseInput(v); return (Math.round(n * 100) / 100); }
 function totalBsRedondeado(totalUsd) {
   const bs = totalUsd * tasaActual;
   if (redondeoTotal) return Math.round(bs);

@@ -29,9 +29,6 @@ pub(crate) fn log_action(
 
 const SQL_AUDIT_LOGS: &str =
     "SELECT id, fecha_hora, usuario, accion FROM historial_acciones ORDER BY id DESC LIMIT ?1 OFFSET ?2";
-const SQL_CIERRES: &str =
-    "SELECT id, fecha_hora, usuario, accion FROM historial_acciones WHERE accion LIKE 'Cierre de caja%' \
-     ORDER BY id DESC LIMIT ?1 OFFSET ?2";
 
 #[tauri::command]
 pub fn get_audit_logs(
@@ -52,27 +49,6 @@ pub fn get_audit_logs(
         .collect();
 
     Ok(logs)
-}
-
-#[tauri::command]
-pub fn get_cierres(
-    state: State<AppState>,
-    limit: Option<i64>,
-    offset: Option<i64>,
-) -> Result<Vec<HistorialAccion>, String> {
-    let db = state.lock_db()?;
-    let lim = limit.unwrap_or(constants::AUDIT_LOG_DEFAULT_LIMIT);
-    let off = offset.unwrap_or(0).max(0);
-
-    let mut stmt = db.prepare(SQL_CIERRES).map_err(|e| e.to_string())?;
-
-    let cierres: Vec<HistorialAccion> = stmt
-        .query_map(params![lim, off], row_to_historial)
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    Ok(cierres)
 }
 
 #[tauri::command]

@@ -18,20 +18,6 @@ pub struct ComboProductoInput {
     pub cantidad: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ComboDetalle {
-    pub combo: Combo,
-    pub productos: Vec<ComboProductoDetalle>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ComboProductoDetalle {
-    pub id: i64,
-    pub producto_codigo: String,
-    pub producto_nombre: String,
-    pub cantidad: i64,
-}
-
 const SQL_COMBO_COLUMNS: &str = "id, nombre, precio_usd, subcategoria, created_at, updated_at";
 
 fn row_to_combo(row: &rusqlite::Row) -> rusqlite::Result<Combo> {
@@ -109,71 +95,6 @@ pub fn create_combo(
         created_at: ts.clone(),
         updated_at: Some(ts),
     })
-}
-
-#[tauri::command]
-pub fn list_combos(state: State<AppState>) -> Result<Vec<ComboDetalle>, String> {
-    let db = state.lock_db()?;
-
-    let combos = list_combos_inner(&db)?;
-
-    let mut detalle_stmt = db.prepare(
-        "SELECT cp.id, cp.producto_codigo, COALESCE(p.nombre, cp.producto_codigo), cp.cantidad
-         FROM combo_productos cp
-         LEFT JOIN productos p ON cp.producto_codigo = p.codigo
-         WHERE cp.combo_id = ?1 ORDER BY cp.id ASC"
-    ).map_err(|e| e.to_string())?;
-
-    let mut result = Vec::new();
-    for combo in combos {
-        let productos: Vec<ComboProductoDetalle> = detalle_stmt.query_map(
-            rusqlite::params![combo.id],
-            |row| Ok(ComboProductoDetalle {
-                id: row.get(0)?,
-                producto_codigo: row.get(1)?,
-                producto_nombre: row.get(2)?,
-                cantidad: row.get(3)?,
-            })
-        ).map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
-
-        result.push(ComboDetalle { combo, productos });
-    }
-
-    Ok(result)
-}
-
-#[tauri::command]
-pub fn get_combo_detail(state: State<AppState>, combo_id: i64) -> Result<ComboDetalle, String> {
-    let db = state.lock_db()?;
-
-    let combo = db.query_row(
-        &format!("SELECT {} FROM combos WHERE id = ?1", SQL_COMBO_COLUMNS),
-        rusqlite::params![combo_id],
-        row_to_combo,
-    ).map_err(|_| "Combo no encontrado".to_string())?;
-
-    let mut stmt = db.prepare(
-        "SELECT cp.id, cp.producto_codigo, COALESCE(p.nombre, cp.producto_codigo), cp.cantidad
-         FROM combo_productos cp
-         LEFT JOIN productos p ON cp.producto_codigo = p.codigo
-         WHERE cp.combo_id = ?1 ORDER BY cp.id ASC"
-    ).map_err(|e| e.to_string())?;
-
-    let productos: Vec<ComboProductoDetalle> = stmt.query_map(
-        rusqlite::params![combo_id],
-        |row| Ok(ComboProductoDetalle {
-            id: row.get(0)?,
-            producto_codigo: row.get(1)?,
-            producto_nombre: row.get(2)?,
-            cantidad: row.get(3)?,
-        })
-    ).map_err(|e| e.to_string())?
-    .filter_map(|r| r.ok())
-    .collect();
-
-    Ok(ComboDetalle { combo, productos })
 }
 
 #[tauri::command]

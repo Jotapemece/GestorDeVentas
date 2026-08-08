@@ -276,15 +276,6 @@ pub fn logout(state: State<AppState>) -> bool {
 }
 
 #[tauri::command]
-pub fn get_current_user(state: State<AppState>) -> Option<Usuario> {
-    let current = match state.current_user.lock() {
-        Ok(c) => c,
-        Err(_) => return None,
-    };
-    current.clone()
-}
-
-#[tauri::command]
 pub fn create_usuario(
     state: State<AppState>,
     username: String,

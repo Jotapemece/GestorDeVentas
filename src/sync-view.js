@@ -123,6 +123,11 @@ function startSyncAutoInterval(minutes) {
 function showView(name) {
   lastViewName = name;
   if (typeof androidTrackView === 'function') androidTrackView(name);
+  // En móvil el carrito es un bottom-sheet: cerrarlo al cambiar de vista para
+  // que no quede como overlay sobre la vista nueva.
+  if (document.body.classList.contains('cart-open') && typeof closeCartSheet === 'function') {
+    closeCartSheet();
+  }
   try { localStorage.setItem('last_view', name); } catch (e) {}
   qsa('.view').forEach(v => v.classList.remove('active'));
   getViewEl(name).classList.add('active');

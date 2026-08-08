@@ -43,8 +43,6 @@ pub(crate) fn row_to_venta(row: &rusqlite::Row) -> rusqlite::Result<Venta> {
     })
 }
 
-const SQL_LIST_VENTAS: &str = "ORDER BY v.id DESC";
-
 pub(crate) fn validar_pago_detalle(detalle: &[PagoItem], total_usd: f64) -> Result<String, String> {
     let mut suma = 0.0;
     for item in detalle {
@@ -466,43 +464,6 @@ pub fn create_sale(state: State<AppState>, request: CreateSaleRequest) -> Result
         cliente_nombre: None, total_usd, tasa_aplicada: request.tasa,
         total_bs, anulada: false, nota_anulacion: None, sync_id: Some(venta_sync_id),
         dispositivo_origen: Some(dispositivo_origen), nota: request.nota.clone(),
-    })
-}
-
-#[tauri::command]
-pub fn list_sales(
-    state: State<AppState>,
-    page: Option<i64>,
-    page_size: Option<i64>,
-) -> Result<PaginatedResult<Venta>, String> {
-    let db = state.lock_db()?;
-    let p = page.unwrap_or(1).max(1);
-    let ps = page_size.unwrap_or(constants::VENTAS_LIMIT_DEFAULT).max(1);
-    let offset = (p - 1) * ps;
-
-    let total: i64 = db
-        .query_row(
-            "SELECT COUNT(*) FROM ventas v LEFT JOIN usuarios u ON v.usuario_id = u.id LEFT JOIN clientes c ON v.cliente_id = c.id",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-
-    let mut stmt = db
-        .prepare(&format!("{} {} LIMIT ?1 OFFSET ?2", SQL_SELECT_VENTAS, SQL_LIST_VENTAS))
-        .map_err(|e| e.to_string())?;
-
-    let ventas: Vec<Venta> = stmt
-        .query_map(params![ps, offset], row_to_venta)
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    Ok(PaginatedResult {
-        total,
-        page: p,
-        page_size: ps,
-        data: ventas,
     })
 }
 
@@ -1390,7 +1351,6 @@ mod tests {
     #[test]
     fn test_validate_sale_request_empty_productos() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
@@ -1408,11 +1368,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_tasa_cero() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, ..Default::default() }],
             tasa: 0.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1426,11 +1385,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_tasa_negativa() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, ..Default::default() }],
             tasa: -1.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1444,11 +1402,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_pago_movil_sin_ref() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1461,11 +1418,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_pago_movil_ref_corta() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: Some("AB".into()),
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1478,11 +1434,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_credito_sin_cliente() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "credito".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1496,11 +1451,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_ok() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 2.0, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1513,11 +1467,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_rechaza_cantidad_negativa() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: -5.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: -5.0, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1529,11 +1482,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_rechaza_cantidad_cero() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 0.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 0.0, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1545,11 +1497,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_rechaza_cantidad_nan() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: f64::NAN, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: f64::NAN, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1561,11 +1512,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_credito_ok() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "credito".into(),
             referencia_pago_movil: None,
             cliente_id: Some(5),
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1578,11 +1528,10 @@ mod tests {
     #[test]
     fn test_validate_sale_request_pago_movil_ok() {
         let req = CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "pago_movil".into(),
             referencia_pago_movil: Some("ABCD".into()),
             cliente_id: None,
-            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, es_inari: false, ..Default::default() }],
+            productos: vec![ProductoVenta { codigo: "P001".into(), cantidad: 1.0, ..Default::default() }],
             tasa: 90.0,
             pago_detalle: None,
             total_bs_ingresado: None,
@@ -1620,7 +1569,6 @@ mod tests {
 
     fn req_basico(productos: Vec<ProductoVenta>) -> CreateSaleRequest {
         CreateSaleRequest {
-            usuario_id: 1,
             metodo_pago: "efectivo_usd".into(),
             referencia_pago_movil: None,
             cliente_id: None,
@@ -1636,7 +1584,7 @@ mod tests {
     fn test_resolver_linea_venta_producto() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 2.0, es_inari: false, ..Default::default() }, 10.0).unwrap();
+        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 2.0, ..Default::default() }, 10.0).unwrap();
         assert_eq!(linea.codigo, "P1");
         assert_eq!(linea.precio, 10.0);
         assert!(linea.componentes.is_empty());
@@ -1644,15 +1592,15 @@ mod tests {
 
     #[test]
     fn test_resolver_linea_venta_ignora_es_inari_del_request() {
-        // El producto P1 NO es inari en la BD. Aunque el request mande es_inari=true,
-        // el stock debe validarse (es_inari se lee de la BD, no del cliente).
+        // `ProductoVenta` ya no lleva `es_inari`: el resolver SIEMPRE lo lee de la BD.
+        // P1 no es inari en la BD → el stock se valida.
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        // P1 tiene stock 5; pedir 7 con es_inari=true en el request → debe fallar.
-        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 7.0, es_inari: true, ..Default::default() }, 10.0).unwrap_err();
+        // P1 tiene stock 5; pedir 7 → debe fallar (no hay forma de saltar el control).
+        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P1".into(), cantidad: 7.0, ..Default::default() }, 10.0).unwrap_err();
         assert!(err.contains("Stock insuficiente"));
         // Un producto sí inari en la BD ignora el control de stock.
-        let ok = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P2".into(), cantidad: 7.0, es_inari: false, ..Default::default() }, 10.0).unwrap();
+        let ok = resolver_linea_venta(&tx, &ProductoVenta { codigo: "P2".into(), cantidad: 7.0, ..Default::default() }, 10.0).unwrap();
         assert!(ok.es_inari);
     }
 
@@ -1660,7 +1608,7 @@ mod tests {
     fn test_resolver_linea_venta_combo() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true, ..Default::default() }, 10.0).unwrap();
+        let linea = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, ..Default::default() }, 10.0).unwrap();
         assert_eq!(linea.precio, 15.0);
         assert_eq!(linea.componentes.len(), 2);
         assert_eq!(linea.componentes[0], ("P1".to_string(), 2.0, false));
@@ -1671,7 +1619,7 @@ mod tests {
     fn test_resolver_linea_venta_combo_inexistente() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-99".into(), cantidad: 1.0, es_inari: true, ..Default::default() }, 10.0).unwrap_err();
+        let err = resolver_linea_venta(&tx, &ProductoVenta { codigo: "COMBO-99".into(), cantidad: 1.0, ..Default::default() }, 10.0).unwrap_err();
         assert!(err.contains("no encontrado"));
     }
 
@@ -1680,8 +1628,8 @@ mod tests {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
         let request = req_basico(vec![
-            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() },
-            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true, ..Default::default() },
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() },
+            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, ..Default::default() },
         ]);
         let (venta_id, _, total_bs, total_usd) = execute_sale_transaction(
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
@@ -1708,8 +1656,8 @@ mod tests {
         // Combo 1 requiere P1 x2; solo quedan 1 tras la línea P1 x4 -> error
         let tx = conn.transaction().unwrap();
         let request = req_basico(vec![
-            ProductoVenta { codigo: "P1".into(), cantidad: 4.0, es_inari: false, ..Default::default() },
-            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, es_inari: true, ..Default::default() },
+            ProductoVenta { codigo: "P1".into(), cantidad: 4.0, ..Default::default() },
+            ProductoVenta { codigo: "COMBO-1".into(), cantidad: 1.0, ..Default::default() },
         ]);
         let err = execute_sale_transaction(
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
@@ -1721,7 +1669,7 @@ mod tests {
     fn test_total_bs_ingresado_menor_rechazado() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() }]);
+        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() }]);
         request.total_bs_ingresado = Some(0.01); // $10 * tasa 10 = Bs 100, reporta Bs 0.01
         let err = execute_sale_transaction(
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
@@ -1733,7 +1681,7 @@ mod tests {
     fn test_total_bs_ingresado_pago_de_mas_aceptado() {
         let mut conn = setup_bd();
         let tx = conn.transaction().unwrap();
-        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() }]);
+        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() }]);
         request.total_bs_ingresado = Some(150.0); // paga de más, recibe vuelto
         let (_, _, total_bs, _) = execute_sale_transaction(
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
@@ -1958,7 +1906,7 @@ mod tests {
         let tx = conn.transaction().unwrap();
         // Venta normal ($10 = Bs 100) pagada en efectivo_bs → entra el billete.
         let mut request = req_basico(vec![
-            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() },
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() },
         ]);
         request.metodo_pago = constants::METODO_EFECTIVO_BS.into();
         execute_sale_transaction(
@@ -1975,7 +1923,7 @@ mod tests {
         // Venta de $10 = Bs 100; el cliente paga Bs 150 y recibe 50 de vuelto.
         // Neto de billetes retenidos = 100.
         let mut request = req_basico(vec![
-            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() },
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() },
         ]);
         request.metodo_pago = constants::METODO_EFECTIVO_BS.into();
         request.total_bs_ingresado = Some(150.0);
@@ -1992,7 +1940,7 @@ mod tests {
         let tx = conn.transaction().unwrap();
         // Venta $10 con mixto: $4 biopago + $6 efectivo_bs (= Bs 60 a tasa 10).
         let mut request = req_basico(vec![
-            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, es_inari: false, ..Default::default() },
+            ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() },
         ]);
         request.metodo_pago = constants::METODO_MIXTO.into();
         request.pago_detalle = Some(vec![

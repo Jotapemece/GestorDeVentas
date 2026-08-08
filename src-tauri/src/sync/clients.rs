@@ -1,5 +1,5 @@
 use super::conflicts::{check_and_record_conflict, is_conflict};
-use super::{api_url, now_iso, run_download, run_upload, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, now_iso, run_download, supabase_get, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
@@ -96,14 +96,6 @@ pub(crate) fn upload_clientes_inner(
     upsert_config(db, constants::CFG_ULTIMO_UPLOAD_CLIENTES, &ts);
 
     Ok(format!("Subida completada: {} cliente(s) subidos", clientes_json.len()))
-}
-
-#[tauri::command]
-pub fn upload_clientes(state: State<AppState>) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
-    run_upload(&state, |db, supabase_url, supabase_key, dispositivo_id| {
-        upload_clientes_inner(db, supabase_url, supabase_key, dispositivo_id)
-    })
 }
 
 pub(crate) fn download_clientes_inner(

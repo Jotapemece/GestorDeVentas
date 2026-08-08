@@ -171,7 +171,7 @@
           <div class="sales-header">
             <div class="sales-header-left">
               <div class="search-clear-wrap">
-                <input type="text" id="product-search" placeholder="Buscar producto por nombre o c&oacute;digo..." aria-label="Buscar producto">
+                <input type="search" id="product-search" enterkeyhint="search" placeholder="Buscar producto por nombre o c&oacute;digo..." aria-label="Buscar producto">
                 <button class="search-clear-btn" data-clear="product-search" aria-label="Limpiar b&uacute;squeda" tabindex="-1">&times;</button>
               </div>
             </div>
@@ -192,7 +192,7 @@
                 <div class="product-section hidden" id="product-favorites-section">
                   <div class="product-section-title"><i class="nf nf-fa-star"></i> Favoritos</div>
                   <div class="product-section-scroll">
-                    <table class="table product-search-table" id="favorites-table">
+                    <table class="table product-search-table">
                       <thead>
                         <tr>
                           <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
@@ -209,7 +209,7 @@
                 <div class="product-section hidden" id="product-recent-section">
                   <div class="product-section-title"><i class="nf nf-fa-history"></i> Recientes</div>
                   <div class="product-section-scroll">
-                    <table class="table product-search-table" id="recent-table">
+                    <table class="table product-search-table">
                       <thead>
                         <tr>
                           <th data-sortable="nombre">Nombre<span class="sort-arrow"></span></th>
@@ -244,7 +244,7 @@
                 <button id="cart-undo-pill" class="cart-undo-pill hidden" type="button" title="Deshacer último cambio (Ctrl+Z)"><i class="nf nf-fa-rotate_left"></i> Deshacer</button>
               </div>
               <div class="cart-container">
-                <table class="table cart-table" id="cart-table">
+                <table class="table cart-table">
                   <thead>
                     <tr>
                       <th>Producto</th>
@@ -279,7 +279,7 @@
           </div>
           <div class="search-box flex-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div class="search-clear-wrap">
-              <input type="text" id="inventory-search" placeholder="Buscar en inventario..." aria-label="Buscar en inventario">
+              <input type="search" id="inventory-search" enterkeyhint="search" placeholder="Buscar en inventario..." aria-label="Buscar en inventario">
               <button class="search-clear-btn" data-clear="inventory-search" aria-label="Limpiar b&uacute;squeda" tabindex="-1">&times;</button>
             </div>
             <button id="inventory-add-btn" class="btn btn-primary admin-only inv-header-btn"><i class="nf nf-fa-plus"></i> <span class="btn-label">Agregar Producto</span></button>
@@ -335,7 +335,7 @@
               <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
             </div>
           </div>
-          <div class="summary-cards" id="creditos-stats">
+          <div class="summary-cards">
             <div class="summary-card"><i class="nf nf-fa-users summary-icon" style="color:var(--primary)"></i><div class="summary-label">Total Personas</div><div class="summary-value" id="creditos-total-personas">0</div></div>
             <div class="summary-card"><i class="nf nf-fa-credit_card summary-icon" style="color:var(--accent)"></i><div class="summary-label">Con Cr&eacute;dito</div><div class="summary-value" id="creditos-con-deuda">0</div></div>
             <div class="summary-card"><i class="nf nf-fa-money summary-icon" style="color:var(--danger)"></i><div class="summary-label">Deuda Total</div><div class="summary-value" id="creditos-deuda-total">$0.00</div></div>
@@ -407,6 +407,7 @@
               <i class="nf nf-fa-database summary-icon" style="color:var(--danger)"></i>
               <div class="summary-label">Saldo Caja</div>
               <div class="summary-value" id="movimientos-saldo">$0.00</div>
+              <button id="ajustar-efectivo-btn" class="btn btn-sm btn-outline admin-only" type="button" style="margin-top:8px"><i class="nf nf-fa-money"></i> Ajustar efectivo</button>
             </div>
           </div>
           <h3>Ventas del D&iacute;a</h3>
@@ -904,7 +905,7 @@
             <h2><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</h2>
           </div>
           <div class="sync-wrap">
-            <div class="sync-stats" id="sync-stats">
+            <div class="sync-stats">
               <div class="sync-stat">
                 <div class="sync-stat-num" id="stat-products">-</div>
                 <div class="sync-stat-label">Productos activos</div>
@@ -935,7 +936,7 @@
                 </div>
                 <div class="sync-card">
                   <h3><i class="nf nf-fa-history"></i> &Uacute;ltima sincronizaci&oacute;n</h3>
-                  <div id="sync-detail-status" class="sync-detail-status">
+                  <div class="sync-detail-status">
                     <span>Subir productos: <span id="sync-upload-time">-</span></span>
                     <span>Descargar productos: <span id="sync-download-time">-</span></span>
                     <span>Subir ventas: <span id="sync-upload-sales-time">-</span></span>
@@ -1106,7 +1107,7 @@
           <div class="custom-select" id="client-select-dropdown">
             <button class="custom-select-btn" id="client-select-btn">Seleccione un cliente...</button>
             <div class="custom-select-menu" id="client-select-menu">
-              <input type="text" id="client-select-search" class="custom-select-search" placeholder="Buscar cliente..." autocomplete="off">
+              <input type="text" class="custom-select-search" placeholder="Buscar cliente..." autocomplete="off">
             </div>
           </div>
           <button type="button" class="btn btn-sm btn-outline" id="client-quick-create-btn" style="margin-top:6px"><i class="nf nf-fa-user_plus"></i> Nuevo cliente</button>
@@ -1168,6 +1169,41 @@
       <div class="modal-footer">
         <button id="efectivo-cancel-btn" class="btn btn-outline">Cancelar</button>
         <button id="efectivo-confirm-btn" class="btn btn-primary">Agregar al carrito</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ajustar-efectivo-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Ajustar Efectivo">
+    <div class="modal-content" style="max-width:400px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-money"></i> Ajustar Efectivo</h3>
+        <span class="modal-close" id="ajustar-efectivo-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid" style="grid-template-columns:1fr 1fr">
+          <div class="detail-field"><span class="detail-label">Saldo actual</span><span class="detail-value" id="ajustar-efectivo-actual"></span></div>
+        </div>
+        <div class="form-group" style="margin-top:10px">
+          <label>Tipo de ajuste</label>
+          <div class="stock-adjust-type">
+            <button type="button" class="btn btn-sm stock-adjust-sign" data-sign="1"><i class="nf nf-fa-plus"></i> Entrada</button>
+            <button type="button" class="btn btn-sm stock-adjust-sign" data-sign="-1"><i class="nf nf-fa-minus"></i> Salida</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:8px">
+          <label>Monto (Bs.)</label>
+          <input type="number" id="ajustar-efectivo-monto" step="any" placeholder="0.00" inputmode="decimal">
+          <div class="field-error" id="ajustar-efectivo-monto-error"></div>
+        </div>
+        <div class="form-group" style="margin-top:8px">
+          <label>Motivo (obligatorio)</label>
+          <input type="text" id="ajustar-efectivo-motivo" placeholder="Ej: conteo f&iacute;sico, reposici&oacute;n, retiro">
+          <div class="field-error" id="ajustar-efectivo-motivo-error"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="ajustar-efectivo-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="ajustar-efectivo-confirm-btn" class="btn btn-primary"><i class="nf nf-fa-check"></i> Aplicar Ajuste</button>
       </div>
     </div>
   </div>
@@ -1372,15 +1408,15 @@
   <div id="abono-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Registrar Abono">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 id="abono-title">Registrar Abono</h3>
+        <h3>Registrar Abono</h3>
         <span class="modal-close" id="abono-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
-        <div class="abono-cliente-info" id="abono-cliente-info">
+        <div class="abono-cliente-info">
           <span class="abono-cliente-nombre" id="abono-cliente-nombre"></span>
           <span class="abono-deuda-total">Deuda: <strong id="abono-deuda-usd">$0.00</strong> / <strong id="abono-deuda-bs">Bs. 0,00</strong></span>
         </div>
-        <div class="abono-tasa-info" id="abono-tasa-info">
+        <div class="abono-tasa-info">
           Tasa: <strong id="abono-tasa-valor">Bs. 0,00</strong>
           <button id="abono-tasa-refresh" class="btn btn-outline btn-xs"><i class="nf nf-fa-refresh"></i></button>
         </div>
@@ -1710,6 +1746,14 @@
         </div>
         <div id="download-preview-list" class="hidden">
           <div id="download-preview-legend" style="font-size:13px;color:var(--text-secondary);margin-bottom:8px"></div>
+          <div class="download-preview-filters">
+            <span class="download-preview-filters-label"><i class="nf nf-fa-calendar"></i> Ventas desde</span>
+            <input type="date" id="download-preview-ventas-desde">
+            <span>hasta</span>
+            <input type="date" id="download-preview-ventas-hasta">
+            <button id="download-preview-reload" class="btn btn-outline btn-sm" title="Recargar la vista previa con el rango de fechas de ventas">Cargar</button>
+            <span class="download-preview-filters-note">Solo afecta a las ventas; deja vac&iacute;o para no filtrar.</span>
+          </div>
           <div id="download-preview-sections"></div>
           <label class="dl-force-row" title="Reemplaza los datos locales por los remotos aunque el timestamp local sea m&aacute;s reciente">
             <input type="checkbox" id="download-preview-force">

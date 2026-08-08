@@ -43,43 +43,6 @@ pub(crate) fn fetch_tasa_bcv() -> Result<f64, String> {
 }
 
 #[tauri::command]
-pub fn check_tasa_update(state: State<AppState>) -> Result<Option<f64>, String> {
-    let db = state.lock_db()?;
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-
-    let last_check = crate::db::get_config_value(&db, "bcv_ultima_fecha")
-        .unwrap_or_default()
-        .unwrap_or_default();
-
-    if last_check == today {
-        return Ok(None);
-    }
-
-    let current_tasa: f64 = db
-        .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
-        .unwrap_or(0.0);
-
-    match fetch_tasa_bcv_inner() {
-        Ok(new_rate) => {
-            let _ = crate::db::set_config_value(&db, "bcv_ultima_fecha", &today);
-
-            db.execute(
-                "INSERT OR REPLACE INTO historial_tasas (fecha, tasa) VALUES (?1, ?2)",
-                params![today, new_rate],
-            )
-            .ok();
-
-            if (new_rate - current_tasa).abs() > 0.001 {
-                Ok(Some(new_rate))
-            } else {
-                Ok(None)
-            }
-        }
-        Err(_) => Ok(None),
-    }
-}
-
-#[tauri::command]
 pub fn get_historial_tasas(state: State<AppState>, dias: i64) -> Result<Vec<HistorialTasa>, String> {
     let db = state.lock_db()?;
     let dias = dias.clamp(1, 365);
@@ -99,17 +62,4 @@ pub fn get_historial_tasas(state: State<AppState>, dias: i64) -> Result<Vec<Hist
         .map_err(|e| e.to_string())?;
     let result: Vec<HistorialTasa> = rows.filter_map(|r| r.ok()).collect();
     Ok(result)
-}
-
-#[tauri::command]
-pub fn get_tasa_historica(state: State<AppState>, fecha: String) -> Result<Option<f64>, String> {
-    let db = state.lock_db()?;
-    let tasa: Option<f64> = db
-        .query_row(
-            "SELECT tasa FROM historial_tasas WHERE fecha = ?1",
-            params![fecha],
-            |row| row.get(0),
-        )
-        .ok();
-    Ok(tasa)
 }

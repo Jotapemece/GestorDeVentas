@@ -157,8 +157,6 @@ pub struct CloseReport {
 pub struct ProductoVenta {
     pub codigo: String,
     pub cantidad: f64,
-    #[serde(default)]
-    pub es_inari: bool,
     /// Solo para el pseudo-producto `EFECTIVO`: monto a cobrar en Bs. (distinto
     /// del entregado permite cobrar comisión). El precio de la línea se deriva
     /// de `monto_cobrar_bs / tasa / cantidad` en el backend.
@@ -175,7 +173,6 @@ pub struct PagoItem {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateSaleRequest {
-    pub usuario_id: i64,
     pub metodo_pago: String,
     pub referencia_pago_movil: Option<String>,
     pub cliente_id: Option<i64>,

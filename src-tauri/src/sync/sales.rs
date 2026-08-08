@@ -1,9 +1,7 @@
-use super::{api_url, normalize_fecha, now_iso, run_download, run_upload, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, normalize_fecha, now_iso, supabase_get, supabase_post, upsert_config, urlencoding};
 use crate::constants;
-use crate::db::AppState;
 use rusqlite::{params, Connection};
 use serde_json::json;
-use tauri::State;
 
 pub(crate) fn upload_sales_inner(
     db: &Connection,
@@ -203,14 +201,6 @@ pub(crate) fn upload_sales_inner(
     Ok(format!("Subida completada: {} venta(s) subidas", all_ventas.len()))
 }
 
-#[tauri::command]
-pub fn upload_sales(state: State<AppState>) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
-    run_upload(&state, |db, supabase_url, supabase_key, dispositivo_id| {
-        upload_sales_inner(db, supabase_url, supabase_key, dispositivo_id)
-    })
-}
-
 /// Calcula la transición de anulado de un detalle al descargar una venta remota.
 /// Una venta anulada implica todos sus ítems anulados. Devuelve:
 /// - el estado objetivo (`should_be_anulado`)
@@ -231,6 +221,21 @@ pub(crate) fn download_sales_inner(
     supabase_url: &str,
     supabase_key: &str,
     dispositivo_id: &str,
+) -> Result<String, String> {
+    apply_remote_sales(db, supabase_url, supabase_key, dispositivo_id, None, true)
+}
+
+/// Aplica ventas remotas de otros dispositivos con reconciliación idempotente.
+/// Si `wanted` es `Some`, solo se procesan esas ventas (modal de descarga selectiva) y
+/// NO se avanza el watermark. Si es `None`, se descargan todas las que tengan
+/// `updated_at > ultimo_download_ventas` y se avanza el watermark al final.
+pub(crate) fn apply_remote_sales(
+    db: &Connection,
+    supabase_url: &str,
+    supabase_key: &str,
+    dispositivo_id: &str,
+    wanted: Option<&std::collections::HashSet<String>>,
+    use_watermark: bool,
 ) -> Result<String, String> {
     let ts = now_iso();
 
@@ -255,24 +260,41 @@ pub(crate) fn download_sales_inner(
         m
     };
 
-    let last_sync = super::get_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+    let last_sync = if use_watermark {
+        super::get_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string())
+    } else {
+        "1970-01-01T00:00:00.000Z".to_string()
+    };
 
     let since = urlencoding(&last_sync);
-    let get_url = api_url(
-        supabase_url,
-        &format!(
-            "/ventas?updated_at=gt.{}&dispositivo_origen=neq.{}&select=*",
-            since,
-            urlencoding(dispositivo_id),
-        ),
-    );
+    let get_url = if use_watermark {
+        api_url(
+            supabase_url,
+            &format!(
+                "/ventas?updated_at=gt.{}&dispositivo_origen=neq.{}&select=*",
+                since,
+                urlencoding(dispositivo_id),
+            ),
+        )
+    } else {
+        api_url(
+            supabase_url,
+            &format!(
+                "/ventas?dispositivo_origen=neq.{}&select=*",
+                urlencoding(dispositivo_id),
+            ),
+        )
+    };
 
     let cloud_ventas: Vec<serde_json::Value> =
         supabase_get(&get_url, supabase_key)
             .map_err(|e| format!("Error al descargar ventas: {}", e))?;
 
     if cloud_ventas.is_empty() {
+        if use_watermark {
+            upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+        }
         return Ok("No hay ventas nuevas para descargar".to_string());
     }
 
@@ -315,6 +337,11 @@ pub(crate) fn download_sales_inner(
         let sale_id = venta_json["id"].as_str().unwrap_or("");
         if sale_id.is_empty() {
             continue;
+        }
+        if let Some(wanted) = wanted {
+            if !wanted.contains(sale_id) {
+                continue;
+            }
         }
 
         let usr_sync_id = venta_json["usuario_sync_id"].as_str().unwrap_or("");
@@ -383,7 +410,9 @@ pub(crate) fn download_sales_inner(
     }
 
     if to_fetch.is_empty() {
-        upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+        if use_watermark {
+            upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+        }
         return Ok("No hay ventas nuevas para descargar".to_string());
     }
 
@@ -467,7 +496,9 @@ pub(crate) fn download_sales_inner(
         }
     }
 
-    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+    if use_watermark {
+        upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+    }
 
     let mut parts: Vec<String> = Vec::new();
     if inserted_ventas > 0 {
@@ -487,14 +518,6 @@ pub(crate) fn download_sales_inner(
         "Descarga completada: {}.",
         if parts.is_empty() { "sin cambios".to_string() } else { parts.join(", ") }
     ))
-}
-
-#[tauri::command]
-pub fn download_sales(state: State<AppState>) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
-    run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {
-        download_sales_inner(tx, supabase_url, supabase_key, dispositivo_id)
-    })
 }
 
 #[cfg(test)]

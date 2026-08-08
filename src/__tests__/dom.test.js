@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
+function redondeado2(v) { const n = parseFloat(String(v).replace(',', '.')) || 0; return (Math.round(n * 100) / 100); }
 
 describe('createProductRow (DOM)', () => {
   let tasaActual = 40;
@@ -57,9 +58,12 @@ describe('createCartRow (DOM)', () => {
       const totalUsd = item.cantidad * item.precio_usd;
       const totalText = showBs ? formatBS(totalUsd * tasaActual) : formatUSD(totalUsd);
       const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
-      const editBtn = '<button class="cart-edit-price-btn" data-action="edit-efectivo" data-codigo="' + code + '" title="Cambiar montos"><i class="nf nf-fa-pencil"></i></button>';
+      const editBtn = '<button class="cart-edit-price-btn" data-action="edit-efectivo" data-codigo="' + code + '" title="Ver disponibilidad y montos"><i class="nf nf-fa-pencil"></i></button>';
       return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td>' +
-        '<td><div class="cart-qty-wrap"><span class="cart-efectivo-qty">Entregar <strong>' + formatBS(entregar) + '</strong></span><span class="cart-efectivo-cobrar text-muted text-sm">Cobrar ' + formatBS(cobrar) + '</span></div></td>' +
+        '<td><div class="cart-qty-wrap cart-efectivo-inline">' +
+          '<label class="cart-efectivo-field">Entregar<input type="text" inputmode="decimal" class="cart-qty-input cart-efectivo-input" data-action="efectivo-entregar" data-codigo="' + code + '" value="' + redondeado2(entregar) + '"></label>' +
+          '<label class="cart-efectivo-field">Cobrar<input type="text" inputmode="decimal" class="cart-qty-input cart-efectivo-input" data-action="efectivo-cobrar" data-codigo="' + code + '" value="' + redondeado2(cobrar) + '"></label>' +
+        '</div></td>' +
         '<td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td>' +
         '<td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
     }
@@ -113,12 +117,14 @@ describe('createCartRow (DOM)', () => {
     expect(html).toContain('min="1"');
   });
 
-  it('línea Efectivo muestra entregar/cobrar en Bs. y botón editar', () => {
+  it('línea Efectivo muestra entregar/cobrar editables en Bs. y botón editar', () => {
     cartShowBs = false;
     const item = { codigo: 'EFECTIVO', nombre: 'Efectivo', es_efectivo: true, cantidad: 600, precio_usd: 610 / 40 / 600, monto_entregar_bs: 600, monto_cobrar_bs: 610 };
     const html = createCartRow(item);
-    expect(html).toContain('Entregar <strong>Bs. 600,00</strong>');
-    expect(html).toContain('Cobrar Bs. 610,00');
+    expect(html).toContain('data-action="efectivo-entregar"');
+    expect(html).toContain('data-action="efectivo-cobrar"');
+    expect(html).toContain('value="600"');
+    expect(html).toContain('value="610"');
     expect(html).toContain('data-action="edit-efectivo"');
     expect(html).toContain('data-action="remove-from-cart"');
     expect(html).not.toContain('qty-inc');

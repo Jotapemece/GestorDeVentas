@@ -506,6 +506,7 @@ async function handleLogin() {
       applyRoleUI();
       loadSyncAutoConfig();
       loadSyncStats();
+      loadOpenRouterKey();
       await loadTasa();
       updateConnectionState();
       await loadProductCache();

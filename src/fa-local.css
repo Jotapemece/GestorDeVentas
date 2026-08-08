@@ -70,8 +70,6 @@
 .nf-fa-edit::before { content: "\f044"; }
 .nf-fa-cloud_upload::before { content: "\f0ee"; }
 .nf-fa-cube::before { content: "\f1b2"; }
-.nf-fa-calendar_day::before { content: "\f783"; }
-.nf-fa-calendar_week::before { content: "\f784"; }
 .nf-fa-warning::before { content: "\f071"; }
 .nf-fa-database::before { content: "\f1c0"; }
 .nf-fa-link::before { content: "\f0c1"; }
@@ -99,16 +97,13 @@
   animation: nf-spin 1s steps(8) infinite;
 }
 .nf-fa-sign_in::before { content: "\f090"; }
+.nf-fa-shield::before { content: "\f3ed"; }
 .nf-fa-clock::before { content: "\f017"; }
 .nf-fa-gamepad::before { content: "\f11b"; }
 .nf-fa-play::before { content: "\f04b"; }
 .nf-fa-pause::before { content: "\f04c"; }
 .nf-fa-rotate_right::before { content: "\f2f9"; }
 .nf-fa-rotate_left::before { content: "\f2ea"; }
-.nf-fa-arrow_up::before { content: "\f062"; }
-.nf-fa-arrow_down::before { content: "\f063"; }
-.nf-fa-arrow_left::before { content: "\f060"; }
-.nf-fa-arrow_right::before { content: "\f061"; }
 .nf-fa-apple::before { content: "\f179"; }
 .nf-fa-compress::before { content: "\f066"; }
 .nf-fa-expand::before { content: "\f065"; }
@@ -118,7 +113,6 @@
 .nf-fa-wifi::before { content: "\f1eb"; }
 .nf-fa-chevron_right::before { content: "\f054"; }
 .nf-fa-line_chart::before { content: "\f201"; }
-.nf-fa-utensils::before { content: "\f2e7"; }
 .nf-fa-fire::before { content: "\f06d"; }
 .nf-fa-gem::before { content: "\f3a5"; }
 .nf-fa-star::before { content: "\f005"; }
