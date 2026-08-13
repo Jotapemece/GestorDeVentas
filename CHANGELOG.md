@@ -1,6 +1,45 @@
 # Changelog
 
+## [1.2.1] - 2026-08-13
+
+### Permisos por rol (Fase A)
+- Al iniciar sesión se valida que la última vista abierta pertenezca al rol del usuario (un vendedor no queda dentro de una sección solo de administradores)
+- Los vendedores ya no pueden anular ventas ni ítems (solo administradores). En su lugar pueden **"Solicitar anulación"**: el admin aprueba/rechaza desde un modal con badge, y la anulación viaja por sync (`anulado_delta` restaura stock en todos los dispositivos)
+- Vendedores no ven el historial de precios de productos, los cierres anteriores, la configuración de la IA ni el ajuste de efectivo; la lista de usuarios solo se carga para administradores (se elimina el error "solo el administrador puede entrar")
+- `void_sale`/`void_sale_items` pasan de `employee_guard` a `admin_guard`; botones "Anular" ocultos para no-admin
+
+### Caja y crédito (Fase B)
+- Los abonos/pagos de deuda se muestran en la caja con el método usado: "Abono deuda - Cliente #X - Crédito (Biopago)" o "... - Pago Móvil: 7890" (los 4 dígitos con dos puntos)
+- El fiado no cuenta en el saldo de caja; los abonos suben la caja y aparecen en el listado de movimientos y gráficos (`neto_movimientos` en barras/ganancias/pastel)
+- **Clientes temporales eliminados (Fase G)**: migración que convierte los temporales existentes a normales; se quitan el checkbox "Cliente temporal", el badge, "Historial Temporales", `list_clientes_eliminados`, la exclusión de temporales en sync y el historial de la guía
+
+### Sincronización (Fase C)
+- Las categorías viajan con sus productos: `categoria_nombre` se sube en el upload y se re-mapea al id local por nombre al descargar (requiere `ALTER TABLE productos ADD COLUMN categoria_nombre TEXT DEFAULT ''` en Supabase)
+- Las solicitudes de anulación se sincronizan entre dispositivos (tabla `solicitudes_anulacion`, watermark LWW por `sync_id` + `dispositivo_origen`; etapa propia en upload/download/sync_all)
+
+### Recuperación ante corte de energía (Fase D)
+- Si la app se cerró sin hacer el cierre de caja: al abrir descarga las ventas de otros dispositivos y muestra un modal "Cierre pendiente" que lleva directo a la zona de Caja (`get_pendiente_cierre` detecta caja abierta con ventas del día anterior sin cierre)
+- Android: botón "Exportar BD y borrar datos" en Configuración (dos pasos: backup cifrado a Descargas → limpiar datos)
+
+### Fechas y calendarios (Fase E)
+- Las fechas/horas se muestran en formato local limpio sin "+00:00"/Z en historial, cierres, ventas, alertas y sync (`formatDateTime`)
+- Calendario personalizado reutilizable para el rango de fechas de Reportes (reutiliza el de historial de tasas; cierra con clic fuera)
+- El detalle de una venta vieja muestra la tasa aplicada ese día (`tasa_aplicada`)
+- El calendario de tasas del inventario vuelve a mostrar "Hoy" al seleccionar la fecha actual
+
+### Tablas y gráficos (Fase F)
+- Al restaurar una columna, su botón de ojo vuelve al estado normal (ya no queda tachado)
+- El orden de las tablas se persiste en localStorage por tabla (`sort-<tableId>`) y se re-aplica al volver a abrir sesión
+- Los gráficos del dashboard ya no se dibujan colapsados al entrar (guard de ancho en bar/pie/line) y se redibujan al expandir la tarjeta
+- Drill-down Hoy/7 días/Mes sin doble carga: ya no queda el cuadro morado con el círculo girando
+
+### Alertas de crédito
+- Badge + panel de alertas para el admin: notifican ventas a crédito, abonos, deudas rápidas y anulaciones que revierten deuda hechas por VENDEDORES, con sincronización multi-dispositivo vía Supabase (tabla `alertas_credito`)
+
 ## [1.2.0] - 2026-08-06
+
+### Bugs (fix crítico en 1.2.1)
+- **Fix de bloqueo (app colgada) al restaurar columnas**: `sortRows` en `initTableSorting` (utils.js) re-movía siempre las filas aunque ya estuvieran ordenadas, lo que disparaba el `MutationObserver` en bucle infinito (cuelgues al restaurar columnas, recargar con orden guardado y persistía al reiniciar). Ahora no se muta el DOM si el orden no cambió y el observer se desconecta durante el sort. +2 tests vitest
 
 ### Lógica de caja
 - Las ventas a crédito (fiado) ya no cuentan en el saldo de caja (`get_saldo_caja` excluye `metodo_pago = 'credito'`): el dinero que no entra a la caja no suma. Las ventas totales (incl. crédito) siguen visibles como cuentas por cobrar

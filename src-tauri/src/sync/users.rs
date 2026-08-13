@@ -1,4 +1,4 @@
-use super::{api_url, now_iso, run_download, run_upload, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, now_iso, run_download, run_upload, supabase_get_paginated, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rand::Rng;
@@ -33,23 +33,22 @@ pub(crate) fn upload_usuarios_inner(
 
     let mut stmt = db
         .prepare(
-            "SELECT id, username, password, rol, COALESCE(password_change_required,0), \
+            "SELECT id, username, password, rol, \
              COALESCE(sync_id,''), COALESCE(updated_at,'') FROM usuarios \
              WHERE updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR \
                    updated_at > ?1 ORDER BY id ASC",
         )
         .map_err(|e| e.to_string())?;
 
-    let rows: Vec<(i64, String, String, String, i64, String, String)> = stmt
+    let rows: Vec<(i64, String, String, String, String, String)> = stmt
         .query_map(params![last_sync], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
+                row.get::<_, String>(4)?,
                 row.get::<_, String>(5)?,
-                row.get::<_, String>(6)?,
             ))
         })
         .map_err(|e| e.to_string())?
@@ -62,13 +61,14 @@ pub(crate) fn upload_usuarios_inner(
     }
 
     let mut usuarios_json: Vec<serde_json::Value> = Vec::with_capacity(rows.len());
-    for (id, username, _password, rol, _pwd_change, sync_id, updated_at) in &rows {
+    for (id, username, _password, rol, sync_id, updated_at) in &rows {
         let sid = if sync_id.is_empty() {
             let new_id = format!("{}-{}", dispositivo_id, id);
             db.execute(
                 "UPDATE usuarios SET sync_id = ?1, updated_at = ?2 WHERE id = ?3",
                 params![new_id, ts, id],
-            ).ok();
+            )
+            .map_err(|e| format!("Error persistiendo sync_id de usuario #{}: {}", id, e))?;
             new_id
         } else {
             sync_id.clone()
@@ -77,8 +77,7 @@ pub(crate) fn upload_usuarios_inner(
 
         // No se sube el hash real de contraseña (la anon key de Supabase es
         // pública y expondría los hashes Argon2 a ataque offline). Se sube un
-        // hash aleatorio como placeholder: la columna `password` es NOT NULL,
-        // y cualquier dispositivo que descargue usará `password_change_required`.
+        // hash aleatorio como placeholder: la columna `password` es NOT NULL.
         let placeholder = random_password_hash();
         usuarios_json.push(json!({
             "sync_id": sid,
@@ -86,7 +85,6 @@ pub(crate) fn upload_usuarios_inner(
             "username": username,
             "password": placeholder,
             "rol": rol,
-            "password_change_required": 1,
             "dispositivo_origen": dispositivo_id,
             "updated_at": upd_at,
         }));
@@ -135,7 +133,7 @@ pub(crate) fn download_usuarios_inner(
     );
 
     let cloud_usuarios: Vec<serde_json::Value> =
-        supabase_get(&get_url, supabase_key)?;
+        supabase_get_paginated(&get_url, supabase_key)?;
 
     let count = cloud_usuarios.len();
     if count == 0 {
@@ -163,25 +161,26 @@ pub(crate) fn download_usuarios_inner(
             .ok();
 
         if let Some(_existing_name) = existing {
-            // No sobrescribimos la contraseña local; forzamos cambio para
-            // que el usuario establezca su propia clave en este dispositivo.
+            // El usuario ya existe localmente: su contraseña local sigue siendo
+            // válida. Solo se refrescan username/rol.
             let rows = db.execute(
-                "UPDATE usuarios SET username = ?1, rol = ?2, \
-                 password_change_required = 1, updated_at = ?3 WHERE sync_id = ?4",
+                "UPDATE usuarios SET username = ?1, rol = ?2, updated_at = ?3 WHERE sync_id = ?4",
                 params![username, rol, remote_ts, sync_id],
-            ).unwrap_or(0);
+            )
+            .map_err(|e| format!("Error actualizando usuario remoto: {}", e))?;
             if rows > 0 {
                 updated += 1;
             }
         } else {
             let local_id: i64 = db
                 .query_row("SELECT COALESCE(MAX(id),0) + 1 FROM usuarios", [], |row| row.get(0))
-                .unwrap_or(1);
+                .map_err(|e| format!("Error generando id de usuario: {}", e))?;
             db.execute(
-                "INSERT OR IGNORE INTO usuarios (id, username, password, rol, password_change_required, sync_id, updated_at) \
-                 VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6)",
+                "INSERT OR IGNORE INTO usuarios (id, username, password, rol, sync_id, updated_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![local_id, username, random_password_hash(), rol, sync_id, remote_ts],
-            ).ok();
+            )
+            .map_err(|e| format!("Error insertando usuario remoto: {}", e))?;
             inserted += 1;
         }
     }

@@ -1,5 +1,6 @@
+use super::products::resolver_categoria_por_nombre;
 use super::sales::apply_remote_sales;
-use super::{api_url, supabase_get, urlencoding};
+use super::{api_url, supabase_get_paginated, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::params;
@@ -70,9 +71,14 @@ pub fn preview_download(
     ventas_hasta: Option<String>,
 ) -> Result<PreviewResult, String> {
     crate::auth::check_employee_role(&state)?;
-    let db = state.lock_db()?;
-    let (supabase_url, supabase_key) = super::supabase_config(&db)?;
-    let dispositivo_id = super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
+    // T1: NO mantener lock_db durante el HTTP (congelaba el POS ~90s). Se lee
+    // config con lock corto, se hace toda la red sin lock, y los reads locales
+    // vuelven a tomar lock solo en bloques scoped.
+    let (supabase_url, supabase_key, dispositivo_id) = {
+        let db = state.lock_db()?;
+        let (u, k) = super::supabase_config(&db)?;
+        (u, k, super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?)
+    };
 
     let mut productos = Vec::new();
     let mut clientes = Vec::new();
@@ -81,13 +87,14 @@ pub fn preview_download(
     let prod_url = api_url(
         &supabase_url,
         &format!(
-            "/productos?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,es_inari,subcategoria,updated_at,dispositivo_origen",
+            "/productos?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,categoria_nombre,es_inari,subcategoria,updated_at,dispositivo_origen",
             urlencoding(&dispositivo_id),
         ),
     );
-    let cloud_products: Vec<serde_json::Value> = supabase_get(&prod_url, &supabase_key)?;
+    let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &supabase_key)?;
 
     let local_prod: HashMap<String, (String, String, f64, f64, i64, i64, i64, Option<i64>, i64, String)> = {
+        let db = state.lock_db()?;
         let mut stmt = db
             .prepare(
                 "SELECT codigo, updated_at, nombre, precio_usd, COALESCE(costo,0), stock, stock_minimo, activo, \
@@ -200,9 +207,10 @@ pub fn preview_download(
             urlencoding(&dispositivo_id),
         ),
     );
-    let cloud_clientes: Vec<serde_json::Value> = supabase_get(&cli_url, &supabase_key)?;
+    let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &supabase_key)?;
 
     let local_cli: HashMap<String, (String, String, i64, f64, i64)> = {
+        let db = state.lock_db()?;
         let mut stmt = db
             .prepare(
                 "SELECT sync_id, updated_at, nombre, credito_activo, saldo_deuda_usd, COALESCE(activo,1) \
@@ -238,7 +246,9 @@ pub fn preview_download(
         let remote_ts = cli["updated_at"].as_str().unwrap_or("").to_string();
         let credito = cli["credito_activo"].as_i64().unwrap_or(1);
         let saldo = cli["saldo_deuda_usd"].as_f64().unwrap_or(0.0);
-        let activo = cli["activo"].as_i64().unwrap_or(1);
+        // Supabase usa `deleted` (0=activo, 1=borrado) en vez de `activo`.
+        let deleted = cli["deleted"].as_i64().unwrap_or(0);
+        let activo: i64 = if deleted == 1 { 0 } else { 1 };
 
         let mut campos = Vec::new();
         match local_cli.get(&sync_id) {
@@ -305,9 +315,10 @@ pub fn preview_download(
             vent_filters,
         ),
     );
-    let cloud_ventas: Vec<serde_json::Value> = supabase_get(&vent_url, &supabase_key)?;
+    let cloud_ventas: Vec<serde_json::Value> = supabase_get_paginated(&vent_url, &supabase_key)?;
 
     let local_vent: HashMap<String, (String, String, String, f64, f64, i64)> = {
+        let db = state.lock_db()?;
         let mut stmt = db
             .prepare(
                 "SELECT sync_id, COALESCE(updated_at,''), fecha_hora, metodo_pago, total_usd, total_bs, \
@@ -406,9 +417,8 @@ pub fn preview_download(
 pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: bool) -> Result<String, String> {
     crate::auth::check_admin_role(&state)?;
     let mut db = state.secondary_conn()?;
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
-    let (supabase_url, supabase_key) = super::supabase_config(&tx)?;
-    let dispositivo_id = super::get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
+    let (supabase_url, supabase_key) = super::supabase_config(&db)?;
+    let dispositivo_id = super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
 
     let mut wanted_prod: Vec<&str> = Vec::new();
     let mut wanted_cli: Vec<&str> = Vec::new();
@@ -428,20 +438,23 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
     let mut ventas_msg = String::new();
 
     // ---------- Productos ----------
+    // T2: el HTTP se hace FUERA de la tx; los writes aplican dentro de una
+    // tx corta por etapa (patrón del orchestrator). NO mantener una tx abierta
+    // durante las llamadas de red (SQLITE_BUSY en el POS).
     if !wanted_prod.is_empty() {
         let prod_url = api_url(
             &supabase_url,
             &format!(
-                "/productos?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,es_inari,subcategoria,updated_at,dispositivo_origen",
+"/productos?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,categoria_nombre,es_inari,subcategoria,updated_at,dispositivo_origen",
                 urlencoding(&dispositivo_id),
             ),
         );
-        let cloud_products: Vec<serde_json::Value> = supabase_get(&prod_url, &supabase_key)?;
+let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &supabase_key)?;
 
-        // Local map: sync_id (codigo) -> updated_at
+        // Local map: sync_id (codigo) -> updated_at (lectura sin tx)
         let mut local_ts: HashMap<String, String> = HashMap::new();
         {
-            let mut stmt = tx
+            let mut stmt = db
                 .prepare("SELECT codigo, COALESCE(updated_at,'') FROM productos")
                 .map_err(|e| e.to_string())?;
             let rows = stmt
@@ -452,6 +465,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
             }
         }
 
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
         for prod in &cloud_products {
             let codigo = prod["codigo"].as_str().unwrap_or_default();
             if !wanted_prod.contains(&codigo) {
@@ -467,6 +481,12 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                 }
             }
             let rows = if exists {
+                let cat_nombre = prod["categoria_nombre"].as_str().unwrap_or("");
+                let cat_id_uso: Option<i64> = if cat_nombre.trim().is_empty() {
+                    prod["categoria_id"].as_i64()
+                } else {
+                    resolver_categoria_por_nombre(&tx, cat_nombre)?
+                };
                 tx.execute(
                     "UPDATE productos SET nombre = ?1, precio_usd = ?2, costo = ?3, stock = ?4, \
                      stock_minimo = ?5, activo = ?6, categoria_id = ?7, es_inari = ?8, subcategoria = ?9, updated_at = ?10 \
@@ -478,7 +498,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                         prod["stock"].as_i64().unwrap_or(0),
                         prod["stock_minimo"].as_i64().unwrap_or(0),
                         prod["activo"].as_i64().unwrap_or(1),
-                        prod["categoria_id"].as_i64(),
+                        cat_id_uso,
                         prod["es_inari"].as_i64().unwrap_or(0),
                         prod["subcategoria"].as_str().unwrap_or(""),
                         remote_ts,
@@ -487,6 +507,12 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                 )
 .map_err(|e| format!("Error actualizando producto: {}", e))?
             } else {
+                let cat_nombre = prod["categoria_nombre"].as_str().unwrap_or("");
+                let cat_id_uso: Option<i64> = if cat_nombre.trim().is_empty() {
+                    prod["categoria_id"].as_i64()
+                } else {
+                    resolver_categoria_por_nombre(&tx, cat_nombre)?
+                };
                 tx.execute(
                     "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, costo, stock, stock_minimo, \
                      activo, categoria_id, es_inari, subcategoria, created_at, updated_at) \
@@ -499,7 +525,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                         prod["stock"].as_i64().unwrap_or(0),
                         prod["stock_minimo"].as_i64().unwrap_or(0),
                         prod["activo"].as_i64().unwrap_or(1),
-                        prod["categoria_id"].as_i64(),
+                        cat_id_uso,
                         prod["es_inari"].as_i64().unwrap_or(0),
                         prod["subcategoria"].as_str().unwrap_or(""),
                         &remote_ts,
@@ -512,6 +538,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                 applied_prod += 1;
             }
         }
+        tx.commit().map_err(|e| format!("Error al confirmar productos: {}", e))?;
     }
 
     // ---------- Clientes ----------
@@ -523,11 +550,11 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                 urlencoding(&dispositivo_id),
             ),
         );
-        let cloud_clientes: Vec<serde_json::Value> = supabase_get(&cli_url, &supabase_key)?;
+let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &supabase_key)?;
 
         let mut local_ts: HashMap<String, String> = HashMap::new();
         {
-            let mut stmt = tx
+            let mut stmt = db
                 .prepare("SELECT sync_id, COALESCE(updated_at,'') FROM clientes WHERE sync_id IS NOT NULL AND sync_id != ''")
                 .map_err(|e| e.to_string())?;
             let rows = stmt
@@ -538,6 +565,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
             }
         }
 
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
         for cli in &cloud_clientes {
             let sync_id = cli["sync_id"].as_str().unwrap_or("");
             if !wanted_cli.contains(&sync_id) {
@@ -560,7 +588,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                         cli["nombre"].as_str().unwrap_or(""),
                         cli["credito_activo"].as_i64().unwrap_or(1),
                         cli["saldo_deuda_usd"].as_f64().unwrap_or(0.0),
-                        cli["activo"].as_i64().unwrap_or(1),
+                        if cli["deleted"].as_i64().unwrap_or(0) == 1 { 0 } else { 1 },
                         remote_ts,
                         sync_id,
                     ],
@@ -575,7 +603,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                         cli["credito_activo"].as_i64().unwrap_or(1),
                         cli["saldo_deuda_usd"].as_f64().unwrap_or(0.0),
                         sync_id,
-                        cli["activo"].as_i64().unwrap_or(1),
+                        if cli["deleted"].as_i64().unwrap_or(0) == 1 { 0 } else { 1 },
                         remote_ts,
                     ],
                 )
@@ -585,12 +613,17 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                 applied_cli += 1;
             }
         }
+        tx.commit().map_err(|e| format!("Error al confirmar clientes: {}", e))?;
     }
 
     // ---------- Ventas ----------
     if !wanted_ventas.is_empty() {
         let wanted_set: std::collections::HashSet<String> =
             wanted_ventas.iter().map(|s| s.to_string()).collect();
+        // apply_remote_sales hace su propio HTTP (ventas + detalles chunked);
+        // se le pasa una tx corta para que sus writes sean atómicos y se
+        // libere el lock antes de las siguientes etapas.
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
         ventas_msg = apply_remote_sales(
             &tx,
             &supabase_url,
@@ -599,9 +632,8 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
             Some(&wanted_set),
             false,
         )?;
+        tx.commit().map_err(|e| format!("Error al confirmar ventas: {}", e))?;
     }
-
-    tx.commit().map_err(|e| format!("Error al confirmar cambios: {}", e))?;
 
     let mut parts: Vec<String> = Vec::new();
     if applied_prod > 0 {

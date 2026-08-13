@@ -111,7 +111,6 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("016_add_product_updated_at_conflictos", add_product_updated_at_conflictos),
     ("017_add_costo_productos", add_costo_productos),
     ("018_add_historial_tasas", add_historial_tasas),
-    ("019_add_password_change_required", add_password_change_required),
     ("020_add_es_inari", add_es_inari),
     ("021_add_subcategoria_combos", add_subcategoria_combos),
     ("022_add_inari_products", add_inari_products),
@@ -128,6 +127,11 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("033_add_activo_clientes", add_activo_clientes),
     ("034_add_categorias_updated_at", add_categorias_updated_at),
     ("035_add_updated_at_indexes", add_updated_at_indexes),
+    ("036_create_alertas_credito", create_alertas_credito),
+    ("037_create_solicitudes_anulacion", create_solicitudes_anulacion),
+    ("038_convert_temporales_a_normales", convert_temporales_a_normales),
+    ("039_add_rango_cierres", add_rango_cierres),
+    ("040_fix_utc_offset_031", fix_utc_offset_031),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -163,6 +167,38 @@ pub fn run_migrations(conn: &Connection) {
             eprintln!("Error registrando versión '{}': {}", name, e);
         }
     }
+}
+
+/// Fase G: elimina la feature de clientes temporales. Se conserva la columna
+/// `es_temporal` en la BD (no molesta ni se usa), pero todos los clientes
+/// existentes marcados como temporales pasan a ser normales.
+fn convert_temporales_a_normales(conn: &Connection) -> Result<(), String> {
+    if column_exists(conn, "clientes", "es_temporal") {
+        conn.execute_batch("UPDATE clientes SET es_temporal = 0 WHERE es_temporal = 1;")
+            .map_err(|e| format!("038 convertir temporales a normales: {}", e))?;
+    }
+    Ok(())
+}
+
+/// Cierre pendiente multi-día (corte de energía): agrega `desde`/`hasta` a
+/// `cierres_caja` para poder representar UN solo cierre que cubra varios días.
+/// En cierres normales de un día, `desde = hasta = fecha`.
+fn add_rango_cierres(conn: &Connection) -> Result<(), String> {
+    if !column_exists(conn, "cierres_caja", "desde") {
+        conn.execute_batch("ALTER TABLE cierres_caja ADD COLUMN desde TEXT;")
+            .map_err(|e| format!("039 add desde: {}", e))?;
+    }
+    if !column_exists(conn, "cierres_caja", "hasta") {
+        conn.execute_batch("ALTER TABLE cierres_caja ADD COLUMN hasta TEXT;")
+            .map_err(|e| format!("039 add hasta: {}", e))?;
+    }
+    // Backfill: los cierres existentes cubren el día de su fecha_hora.
+    conn.execute_batch(
+        "UPDATE cierres_caja SET desde = substr(fecha_hora, 1, 10), hasta = substr(fecha_hora, 1, 10) \
+         WHERE desde IS NULL OR hasta IS NULL OR desde = '' OR hasta = '';",
+    )
+    .map_err(|e| format!("039 backfill rango: {}", e))?;
+    Ok(())
 }
 
 fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
@@ -485,19 +521,6 @@ fn add_ventas_sync_refs(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn add_password_change_required(conn: &Connection) -> Result<(), String> {
-    if !column_exists(conn, "usuarios", "password_change_required") {
-        conn.execute_batch(
-            "ALTER TABLE usuarios ADD COLUMN password_change_required INTEGER NOT NULL DEFAULT 0;"
-        ).map_err(|e| format!("019 add password_change_required: {}", e))?;
-        conn.execute(
-            "UPDATE usuarios SET password_change_required = 1 WHERE username IN ('admin', 'jota', 'vendedor')",
-            [],
-        ).map_err(|e| format!("019 marcar default users: {}", e))?;
-    }
-    Ok(())
-}
-
 fn add_movimientos_caja(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS movimientos_caja (
@@ -688,6 +711,80 @@ fn add_updated_at_indexes(conn: &Connection) -> Result<(), String> {
             &format!("CREATE INDEX IF NOT EXISTS {idx} ON {table}({columns})"),
             [],
         ).map_err(|e| format!("035 índice {idx}: {}", e))?;
+    }
+    Ok(())
+}
+
+fn create_alertas_credito(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS alertas_credito (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL,
+            monto_usd REAL NOT NULL DEFAULT 0,
+            cliente_id INTEGER,
+            cliente_nombre TEXT DEFAULT '',
+            metodo_pago TEXT DEFAULT '',
+            nota TEXT DEFAULT '',
+            usuario TEXT NOT NULL,
+            fecha_hora TEXT NOT NULL,
+            visto INTEGER NOT NULL DEFAULT 0,
+            sync_id TEXT UNIQUE,
+            updated_at TEXT,
+            dispositivo_origen TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_alertas_credito_fecha_hora ON alertas_credito(fecha_hora);
+        CREATE INDEX IF NOT EXISTS idx_alertas_credito_visto ON alertas_credito(visto);
+        CREATE INDEX IF NOT EXISTS idx_alertas_credito_updated_at ON alertas_credito(updated_at);",
+    )
+    .map_err(|e| format!("036 create alertas_credito: {}", e))
+}
+
+fn create_solicitudes_anulacion(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS solicitudes_anulacion (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            venta_id INTEGER NOT NULL,
+            venta_sync_id TEXT NOT NULL DEFAULT '',
+            motivo TEXT NOT NULL DEFAULT '',
+            solicitante TEXT NOT NULL DEFAULT '',
+            fecha_hora TEXT NOT NULL,
+            estado TEXT NOT NULL DEFAULT 'pendiente',
+            resuelto_por TEXT DEFAULT '',
+            nota_resolucion TEXT DEFAULT '',
+            sync_id TEXT UNIQUE,
+            updated_at TEXT,
+            dispositivo_origen TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_solicitudes_anulacion_estado ON solicitudes_anulacion(estado);
+        CREATE INDEX IF NOT EXISTS idx_solicitudes_anulacion_fecha_hora ON solicitudes_anulacion(fecha_hora);
+        CREATE INDEX IF NOT EXISTS idx_solicitudes_anulacion_updated_at ON solicitudes_anulacion(updated_at);",
+    )
+    .map_err(|e| format!("037 create solicitudes_anulacion: {}", e))
+}
+
+/// Corrige el desvío de la migración 031. 031 convirtió timestamps naives
+/// (hora local del dispositivo, p.ej. UTC-4) a ISO UTC con
+/// `datetime(updated_at,'utc')`, que TRATA el string naive como si ya fuera
+/// UTC → las filas quedan 4h ATRÁS del UTC real (p.ej. una venta local de
+/// 10:00 quedó como "10:00Z" cuando en realidad es "14:00Z"). Eso torcía el
+/// LWW del sync (una fila remota de horas después podía parecer "anterior").
+///
+/// Fix (aprobado): sumar +4h fijo a los `updated_at` ISO de las 4 tablas que
+/// 031 convirtió (productos/ventas/clientes/usuarios). NO toca categorías,
+/// alertas ni solicitudes (esas escriben UTC real desde su creación).
+/// Idempotente: solo toca filas ISO y se corre UNA sola vez (migración 040).
+fn fix_utc_offset_031(conn: &Connection) -> Result<(), String> {
+    for table in ["productos", "ventas", "clientes", "usuarios"] {
+        if !column_exists(conn, table, "updated_at") {
+            continue;
+        }
+        let sql = format!(
+            "UPDATE {table} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', datetime(updated_at, '+4 hours')) \
+             WHERE updated_at IS NOT NULL AND updated_at != '' \
+             AND instr(updated_at, 'T') != 0 AND instr(updated_at, 'Z') != 0"
+        );
+        conn.execute_batch(&sql)
+            .map_err(|e| format!("040 fix {table}.updated_at offset: {}", e))?;
     }
     Ok(())
 }

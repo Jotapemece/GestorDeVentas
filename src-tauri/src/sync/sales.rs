@@ -1,7 +1,19 @@
-use super::{api_url, normalize_fecha, now_iso, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, normalize_fecha, now_iso, supabase_post, supabase_get_paginated, upsert_config, urlencoding};
 use crate::constants;
 use rusqlite::{params, Connection};
 use serde_json::json;
+
+/// LWW: ¿debe aplicarse la versión remota sobre la local? Devuelve `false` si la
+/// remota es más vieja que la local (o si no trae timestamp y la local sí).
+pub(crate) fn remota_mas_nueva(remote_ts: &str, local_ts: &str) -> bool {
+    if remote_ts.is_empty() {
+        return false;
+    }
+    if local_ts.is_empty() {
+        return true;
+    }
+    remote_ts > local_ts
+}
 
 pub(crate) fn upload_sales_inner(
     db: &Connection,
@@ -18,7 +30,8 @@ pub(crate) fn upload_sales_inner(
         .prepare(
             "SELECT v.id, v.sync_id, v.fecha_hora, v.usuario_id, v.metodo_pago, \
              v.referencia_pago_movil, v.pago_detalle, v.cliente_id, v.total_usd, \
-             v.tasa_aplicada, v.total_bs, v.anulada, v.dispositivo_origen, COALESCE(v.updated_at,'') \
+             v.tasa_aplicada, v.total_bs, v.anulada, v.dispositivo_origen, COALESCE(v.updated_at,''), \
+             COALESCE(v.usuario_sync_id,''), v.cliente_sync_id \
              FROM ventas v \
              WHERE v.sync_id IS NOT NULL AND v.sync_id != '' AND v.updated_at > ?1 \
              ORDER BY v.id ASC",
@@ -27,7 +40,7 @@ pub(crate) fn upload_sales_inner(
 
     #[allow(clippy::type_complexity)]
     let rows: Vec<(i64, String, String, i64, String, Option<String>, String, Option<i64>,
-                   f64, f64, f64, bool, String, String)> = stmt
+                   f64, f64, f64, bool, String, String, String, Option<String>)> = stmt
         .query_map(params![last_upload], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
@@ -44,6 +57,8 @@ pub(crate) fn upload_sales_inner(
                 { let a: i64 = row.get::<_, i64>(11)?; a != 0 },
                 row.get::<_, String>(12)?,
                 row.get::<_, String>(13)?,
+                row.get::<_, String>(14)?,
+                row.get::<_, Option<String>>(15)?,
             ))
         })
         .map_err(|e| e.to_string())?
@@ -80,10 +95,22 @@ pub(crate) fn upload_sales_inner(
         m
     };
 
-    for (id, sync_id, fecha, uid, metodo, refe, pago_det, cliente_id, total_usd, tasa, total_bs, anulada, disp_origen, updated_at) in &rows {
+    for (id, sync_id, fecha, uid, metodo, refe, pago_det, cliente_id, total_usd, tasa, total_bs, anulada, disp_origen, updated_at, usr_sync_stored, cli_sync_stored) in &rows {
         let fecha_iso = fecha.replace(' ', "T");
-        let usr_sync_id = user_map.get(uid).cloned().unwrap_or_default();
-        let cli_sync_id = cliente_id.and_then(|cid| client_map.get(&cid).cloned());
+        // F4: conservar los `*_sync_id` ya subidos (lectura desde BD) — no
+        // sobrescribir con ""/null si el usuario/cliente aún no está en el mapa
+        // (ej. no subido aún o soft-deleted). Solo resolver desde el mapa cuando
+        // la columna local está vacía (primera subida o cambio de dueño).
+        let usr_sync_id = if usr_sync_stored.is_empty() {
+            user_map.get(uid).cloned().unwrap_or_default()
+        } else {
+            usr_sync_stored.clone()
+        };
+        let cli_sync_id = match (cli_sync_stored, cliente_id) {
+            (Some(stored), _) if !stored.is_empty() => Some(stored.clone()),
+            (_, Some(cid)) => client_map.get(&cid).cloned(),
+            _ => None,
+        };
         let updated_at = if updated_at.is_empty() { now_iso() } else { updated_at.clone() };
         all_ventas.push(json!({
             "id": sync_id,
@@ -140,6 +167,16 @@ pub(crate) fn upload_sales_inner(
         .collect();
     drop(d_stmt);
 
+    // La columna `cantidad` remota puede ser INTEGER; serializar sin ".0" los
+    // enteros para que PostgREST los acepte (las fraccionarias se envían como float).
+    fn cantidad_json(c: f64) -> serde_json::Value {
+        if c.fract() == 0.0 {
+            json!(c as i64)
+        } else {
+            json!(c)
+        }
+    }
+
     let sale_sync_map: std::collections::HashMap<i64, &str> = rows
         .iter()
         .map(|(id, sync_id, ..)| (*id, sync_id.as_str()))
@@ -162,8 +199,8 @@ pub(crate) fn upload_sales_inner(
                 "venta_id": venta_sync_id,
                 "local_id": local_det_id,
                 "producto_codigo": codigo,
-                "cantidad": cantidad,
-                "precio_usd_unitario": precio,
+                "cantidad": cantidad_json(*cantidad),
+                "precio_usd_unitario": cantidad_json(*precio),
                 "anulado": if *anulado != 0 { 1i64 } else { 0i64 },
                 "updated_at": &ts,
             }));
@@ -268,27 +305,44 @@ pub(crate) fn apply_remote_sales(
     };
 
     let since = urlencoding(&last_sync);
+    // F3: las ventas propias NO se excluyen a ciegas — si otra dispositivo las
+    // modificó (p.ej. anuló) después de nuestro último upload, la actualización
+    // remota debe volver a nosotros. Se traen propias solo con
+    // `updated_at > ultimo_upload_ventas` local; las de otros dispositivos con
+    // `updated_at > ultimo_download_ventas`. (El LWW posterior decide si aplicar.)
+    let upload_since = super::get_config(db, constants::CFG_ULTIMO_UPLOAD_VENTAS)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+    let dev_enc = urlencoding(dispositivo_id);
+    let up_enc = urlencoding(&upload_since);
     let get_url = if use_watermark {
         api_url(
             supabase_url,
             &format!(
-                "/ventas?updated_at=gt.{}&dispositivo_origen=neq.{}&select=*",
-                since,
-                urlencoding(dispositivo_id),
+                "/ventas?or=(and(dispositivo_origen.is.null,updated_at.gt.{s}),\
+                 and(dispositivo_origen.neq.{d},updated_at.gt.{s}),\
+                 and(dispositivo_origen.eq.{d},updated_at.gt.{u}))&select=*",
+                s = since,
+                d = dev_enc,
+                u = up_enc,
             ),
         )
     } else {
+        // Descarga completa (modal selectivo): todo lo de otros dispositivos +
+        // lo propio modificado remotamente tras nuestro último upload.
         api_url(
             supabase_url,
             &format!(
-                "/ventas?dispositivo_origen=neq.{}&select=*",
-                urlencoding(dispositivo_id),
+                "/ventas?or=(dispositivo_origen.is.null,\
+                 and(dispositivo_origen.neq.{d},updated_at.gt.1970-01-01T00:00:00.000Z),\
+                 and(dispositivo_origen.eq.{d},updated_at.gt.{u}))&select=*",
+                d = dev_enc,
+                u = up_enc,
             ),
         )
     };
 
     let cloud_ventas: Vec<serde_json::Value> =
-        supabase_get(&get_url, supabase_key)
+        supabase_get_paginated(&get_url, supabase_key)
             .map_err(|e| format!("Error al descargar ventas: {}", e))?;
 
     if cloud_ventas.is_empty() {
@@ -300,16 +354,18 @@ pub(crate) fn apply_remote_sales(
 
     // Estado local para reconciliar por transición (idempotente): el stock se ajusta
     // SOLO cuando el estado local difiere del remoto, así repetir el sync no duplica.
-    let mut local_ventas: std::collections::HashMap<String, (i64, bool)> = std::collections::HashMap::new();
+    // Se guarda también `updated_at` local para LWW (no pisa una versión local más
+    // reciente con una remota más vieja).
+    let mut local_ventas: std::collections::HashMap<String, (i64, bool, String)> = std::collections::HashMap::new();
     {
         let mut s = db
-            .prepare("SELECT sync_id, id, COALESCE(anulada,0) FROM ventas WHERE sync_id IS NOT NULL AND sync_id != ''")
+            .prepare("SELECT sync_id, id, COALESCE(anulada,0), COALESCE(updated_at,'') FROM ventas WHERE sync_id IS NOT NULL AND sync_id != ''")
             .map_err(|e| e.to_string())?;
         let rows = s
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?)))
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?, row.get::<_, String>(3)?)))
             .map_err(|e| e.to_string())?;
         for r in rows.filter_map(|r| r.ok()) {
-            local_ventas.insert(r.0, (r.1, r.2 != 0));
+            local_ventas.insert(r.0, (r.1, r.2 != 0, r.3));
         }
     }
 
@@ -352,8 +408,14 @@ pub(crate) fn apply_remote_sales(
         let remote_ts = venta_json["updated_at"].as_str().unwrap_or(&ts).to_string();
         venta_remote_anulada.insert(sale_id.to_string(), remote_anulada);
 
-        if let Some((lvid, local_anulada)) = local_ventas.get(sale_id).copied() {
-            // Venta ya existente: aplicar totales/anulación remota (la remota es más nueva).
+        if let Some((lvid, local_anulada, local_ts)) = local_ventas.get(sale_id).cloned() {
+            // LWW: solo aplica la versión remota si es más reciente que la local
+            // (mismo criterio que productos/clientes). Evita que una remota más
+            // vieja des-haga una anulación o un total local más nuevo.
+            if !remota_mas_nueva(&remote_ts, &local_ts) {
+                continue;
+            }
+            // Venta ya existente y remota más nueva: aplicar totales/anulación remota.
             db.execute(
                 "UPDATE ventas SET total_usd = ?1, total_bs = ?2, anulada = ?3, \
                  nota_anulacion = ?4, updated_at = ?5 WHERE id = ?6",
@@ -367,7 +429,7 @@ pub(crate) fn apply_remote_sales(
                 ],
             ).map_err(|e| format!("Error actualizando venta remota: {}", e))?;
             if remote_anulada != local_anulada {
-                local_ventas.insert(sale_id.to_string(), (lvid, remote_anulada));
+                local_ventas.insert(sale_id.to_string(), (lvid, remote_anulada, remote_ts.clone()));
             }
             updated_ventas += 1;
         } else {
@@ -402,7 +464,7 @@ pub(crate) fn apply_remote_sales(
                 db.query_row("SELECT id FROM ventas WHERE sync_id = ?1", params![sale_id], |row| row.get(0))
                     .map_err(|_| "Error leyendo venta recién insertada".to_string())?
             };
-            local_ventas.insert(sale_id.to_string(), (local_id, remote_anulada));
+            local_ventas.insert(sale_id.to_string(), (local_id, remote_anulada, remote_ts.clone()));
             inserted_ventas += 1;
         }
 
@@ -416,16 +478,20 @@ pub(crate) fn apply_remote_sales(
         return Ok("No hay ventas nuevas para descargar".to_string());
     }
 
-    // Fetch detalles de TODAS las ventas remotas (nuevas y ya existentes) en un request.
-    let in_clause = to_fetch.iter().map(|id| urlencoding(id)).collect::<Vec<_>>().join(",");
-    let det_url = api_url(
-        supabase_url,
-        &format!("/detalles_ventas?venta_id=in.({})&select=*", in_clause),
-    );
-
-    let cloud_detalles: Vec<serde_json::Value> =
-        supabase_get(&det_url, supabase_key)
+    // Fetch detalles de TODAS las ventas remotas (nuevas y ya existentes),
+    // en lotes de `venta_id` para no exceder el largo de URL ni el corte de
+    // filas por request (PostgREST). Cada lote se descarga paginado.
+    let mut cloud_detalles: Vec<serde_json::Value> = Vec::new();
+    for chunk in to_fetch.chunks(500) {
+        let in_clause = chunk.iter().map(|id| urlencoding(id)).collect::<Vec<_>>().join(",");
+        let det_url = api_url(
+            supabase_url,
+            &format!("/detalles_ventas?venta_id=in.({})&select=*", in_clause),
+        );
+        let mut dets = supabase_get_paginated(&det_url, supabase_key)
             .map_err(|e| format!("Error al descargar detalles: {}", e))?;
+        cloud_detalles.append(&mut dets);
+    }
 
     let mut detalles_by_venta: std::collections::HashMap<String, Vec<&serde_json::Value>> =
         std::collections::HashMap::new();
@@ -437,7 +503,7 @@ pub(crate) fn apply_remote_sales(
     }
 
     for (v_sync, dets) in &detalles_by_venta {
-        let Some(&(lvid, _)) = local_ventas.get(v_sync) else { continue };
+        let Some((lvid, _, _)) = local_ventas.get(v_sync) else { continue };
         let venta_anulada = venta_remote_anulada.get(v_sync).copied().unwrap_or(false);
 
         for det in dets {
@@ -490,7 +556,7 @@ pub(crate) fn apply_remote_sales(
                             .map_err(|e| format!("Error ajustando stock: {}", e))?;
                         items_consumed += cantidad;
                     }
-                    local_dets.insert(det_sync.to_string(), (lvid, should_be_anulado));
+                    local_dets.insert(det_sync.to_string(), (*lvid, should_be_anulado));
                 }
             }
         }
@@ -522,7 +588,7 @@ pub(crate) fn apply_remote_sales(
 
 #[cfg(test)]
 mod tests {
-    use super::anulado_delta;
+    use super::{anulado_delta, remota_mas_nueva};
 
     #[test]
     fn test_anulado_delta_activo_a_anulado_restaura() {
@@ -560,5 +626,19 @@ mod tests {
         let (state, delta) = anulado_delta(true, false, false);
         assert_eq!(state, false);
         assert_eq!(delta, -1);
+    }
+
+    #[test]
+    fn test_remota_mas_nueva_lww() {
+        assert!(remota_mas_nueva("2026-08-13T12:00:00Z", "2026-08-13T11:00:00Z"));
+        assert!(!remota_mas_nueva("2026-08-13T11:00:00Z", "2026-08-13T12:00:00Z"));
+        assert!(!remota_mas_nueva("2026-08-13T11:00:00Z", "2026-08-13T11:00:00Z"));
+    }
+
+    #[test]
+    fn test_remota_mas_nueva_timestamps_vacios() {
+        assert!(!remota_mas_nueva("", "2026-08-13T12:00:00Z"));
+        assert!(remota_mas_nueva("2026-08-13T12:00:00Z", ""));
+        assert!(!remota_mas_nueva("", ""));
     }
 }

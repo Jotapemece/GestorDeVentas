@@ -1,7 +1,9 @@
 /* ========== LOGIN GREETING ========== */
+let _greetingInterval = null;
 function initLoginGreeting() {
   updateLoginGreeting();
-  setInterval(updateLoginGreeting, 1000);
+  if (_greetingInterval) clearInterval(_greetingInterval);
+  _greetingInterval = setInterval(updateLoginGreeting, 1000);
 }
 
 function updateLoginGreeting() {
@@ -288,6 +290,14 @@ function initTableColumnToggle(table, storageKey) {
         hiddenCols.clear();
         localStorage.setItem(savedKey, JSON.stringify([]));
         applyVisibility();
+        ths.forEach(function(t, ti) {
+          if (protectedCols.has(ti)) return;
+          const b = t.querySelector('.col-toggle-btn');
+          if (b) {
+            b.title = 'Ocultar columna';
+            b.innerHTML = '<i class="nf nf-fa-eye"></i>';
+          }
+        });
         const reload = TABLE_RELOADS[storageKey];
         if (reload) reload();
       });
@@ -467,28 +477,6 @@ async function handleLogin() {
         localStorage.removeItem('recordar_usuario');
       }
       currentUser = res.usuario;
-      if (res.password_change_required) {
-        const ok = await confirmModal(
-          'Por seguridad, debe cambiar su contraseña antes de continuar.',
-          'Cambio de contraseña requerido',
-          'Cambiar ahora'
-        );
-        if (!ok) { handleLogout(); return; }
-        qs(SEL.loginScreen).style.display = 'none';
-        qs(SEL.mainApp).style.display = 'flex';
-        qs(SEL.bottomTabs).style.display = '';
-        showView(VIEW.CONFIG);
-        await new Promise(r => setTimeout(r, 200));
-        const pwdSection = qs(SEL.changePwdOld)?.closest('.config-card');
-        if (pwdSection) {
-          const header = pwdSection.querySelector('.config-card-header');
-          if (header) header.classList.remove('collapsed');
-          pwdSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          setTimeout(() => qs(SEL.changePwdOld)?.focus(), 300);
-        }
-        showToast('Cambie su contraseña para continuar usando la aplicación', 'warning');
-        return;
-      }
       qs(SEL.loginScreen).style.display = 'none';
       qs(SEL.mainApp).style.display = 'flex';
       qs(SEL.bottomTabs).style.display = '';
@@ -506,17 +494,20 @@ async function handleLogin() {
       applyRoleUI();
       loadSyncAutoConfig();
       loadSyncStats();
+      refreshCreditoAlertBadge();
       loadOpenRouterKey();
       await loadTasa();
       updateConnectionState();
       await loadProductCache();
       restoreCartSnapshot();
       try { lastViewName = localStorage.getItem('last_view') || VIEW.SALES; } catch (e) {}
+      if (!viewAllowedForRole(lastViewName, currentUser)) lastViewName = VIEW.SALES;
       showView(lastViewName);
       if (lastViewName === VIEW.SALES) {
         renderProductSearch();
         renderCart();
       }
+      checkPendienteCierre();
     } else {
       errEl.textContent = res.message;
     }
@@ -538,6 +529,10 @@ async function handleLogout() {
     syncAutoIntervalId = null;
     currentAutoMinutes = 0;
   }
+  // F6-f: detener los intervalos de 1s (reloj del login y reloj del sidebar)
+  // para no dejarlos corriendo en segundo plano tras el logout.
+  if (_greetingInterval) { clearInterval(_greetingInterval); _greetingInterval = null; }
+  if (_clockInterval) { clearInterval(_clockInterval); _clockInterval = null; }
   currentUser = null; carts = [{ id: 1, items: [], folded: false }]; cart = carts[0].items; cartIdCounter = 1; recentProducts = []; lastCloseReportData = null;
   qs(SEL.loginPassword).value = '';
   qs(SEL.loginError).textContent = '';
@@ -626,7 +621,7 @@ const CHAT_SYSTEM_PROMPT = `Eres Enar, un zorro experto asistente de un sistema 
 Módulos que conoces del sistema:
 - Ventas: carrito, métodos de pago (efectivo USD/Bs, punto, pago móvil, transferencia, mixto, crédito), vendidos por vendedor. Las ventas se pueden anular total o parcialmente; las anuladas se excluyen de reportes.
 - Inventario: productos (código, precio USD, costo, stock, stock mínimo, categoría/subcategoría), productos pesables por kg, combos (COMBO-N con componentes), Inari (visible solo jueves-domingo), favoritos, ajustes de stock con motivo.
-- Clientes: saldo de deuda, abonos, clientes temporales de crédito, crédito activado/inactivo.
+- Clientes: saldo de deuda, abonos, crédito activado/inactivo.
 - Caja: abrir/cerrar, movimientos (ingresos/egresos) y saldo del día.
 - Reportes: ventas por fecha, ganancias (hoy/semana/mes), productos más vendidos, por vendedor.
 - Sincronización: subir/descargar productos, clientes y ventas entre dispositivos; pendientes y conflictos de sync.
@@ -850,9 +845,7 @@ async function buildChatContext() {
     invoke('list_clientes').then(function(clients) {
       if (clients && clients.length > 0) {
         var debtClients = clients.filter(function(c) { return c.saldo_deuda_usd > 0; });
-        var temporales = clients.filter(function(c) { return c.es_temporal; });
         contextLines.push('- Clientes: ' + clients.length);
-        if (temporales.length > 0) contextLines.push('- Clientes temporales activos: ' + temporales.length);
         if (debtClients.length > 0) {
           var debtStr = debtClients.slice(0, 5).map(function(c) { return c.nombre + ' ($' + c.saldo_deuda_usd.toFixed(2) + ')'; }).join(', ');
           contextLines.push('- Deudas (' + debtClients.length + '): ' + debtStr + (debtClients.length > 5 ? '...' : ''));

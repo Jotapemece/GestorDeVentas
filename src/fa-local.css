@@ -28,6 +28,7 @@
 .nf-fa-sign_out::before { content: "\f08b"; }
 .nf-fa-lock::before { content: "\f023"; }
 .nf-fa-unlock::before { content: "\f09c"; }
+.nf-fa-bell::before { content: "\f0f3"; }
 .nf-fa-upload::before { content: "\f093"; }
 .nf-fa-download::before { content: "\f019"; }
 .nf-fa-plus::before { content: "\2b"; }
@@ -49,6 +50,7 @@
 .nf-fa-exclamation_triangle::before { content: "\f071"; }
 .nf-fa-text_height::before { content: "\f034"; }
 .nf-fa-eraser::before { content: "\f12d"; }
+.nf-fa-calendar_day::before { content: "\f073"; }
 .nf-fa-spinner::before { content: "\f110"; }
 .nf-fa-search::before { content: "\f002"; }
 .nf-fa-receipt::before { content: "\f543"; }
@@ -98,6 +100,8 @@
 }
 .nf-fa-sign_in::before { content: "\f090"; }
 .nf-fa-shield::before { content: "\f3ed"; }
+.nf-fa-user-shield::before { content: "\f505"; }
+.nf-fa-table::before { content: "\f0ce"; }
 .nf-fa-clock::before { content: "\f017"; }
 .nf-fa-gamepad::before { content: "\f11b"; }
 .nf-fa-play::before { content: "\f04b"; }
@@ -110,6 +114,7 @@
 .nf-fa-copy::before { content: "\f0c5"; }
 .nf-fa-key::before { content: "\f084"; }
 .nf-fa-share::before { content: "\f064"; }
+.nf-fa-list_ul::before { content: "\f0ca"; }
 .nf-fa-wifi::before { content: "\f1eb"; }
 .nf-fa-chevron_right::before { content: "\f054"; }
 .nf-fa-line_chart::before { content: "\f201"; }
@@ -120,6 +125,10 @@
 .nf-fa-note_sticky::before { content: "\f249"; }
 .nf-fa-layer_group::before { content: "\f5fd"; }
 .nf-fa-scale::before { content: "\f24e"; }
+.nf-fa-floppy::before { content: "\f0c7"; }
+.nf-fa-tags::before { content: "\f02c"; }
+.nf-fa-triangle_warning::before { content: "\f071"; }
+.nf-fa-zap::before { content: "\f0e7"; }
 @keyframes nf-spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }

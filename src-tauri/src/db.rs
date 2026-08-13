@@ -51,7 +51,6 @@ pub struct AppState {
     pub db: Mutex<Connection>,
     pub db_path: Mutex<PathBuf>,
     pub current_user: Mutex<Option<crate::models::Usuario>>,
-    pub login_attempts: Mutex<HashMap<String, (i32, Instant)>>,
     pub admin_action_attempts: Mutex<HashMap<String, (i32, Instant)>>,
 }
 
@@ -202,8 +201,8 @@ fn auto_import_products(conn: &Connection, app_handle: &AppHandle) {
                     ).ok();
                 }
                 Err(_) => continue,
-            }
-        }
+}
+}
     }
 }
 
@@ -374,6 +373,70 @@ pub fn backup_database_b64(state: State<AppState>) -> Result<serde_json::Value, 
         "file_name": file_name,
         "base64": base64::engine::general_purpose::STANDARD.encode(&bytes)
     }))
+}
+
+/// Borra TODOS los datos de negocio (ventas, productos, clientes, cierres,
+/// movimientos, auditoría, combos, alertas, solicitudes...). Conserva usuarios
+/// (para no perder la sesión/datos de auth) y configuración (tasa, sync, key de
+/// cifrado). Pensado para Android: "Exportar BD / Borrar datos" hace primero un
+/// backup cifrado a Descargas y luego llama a este comando.
+#[tauri::command]
+pub fn clear_all_data(state: State<AppState>) -> Result<String, String> {
+    let mut db = state.lock_db()?;
+    let _admin = crate::auth::require_admin(&state, &db, "Borró todos los datos de la aplicación")?;
+    clear_all_data_inner(&mut db)
+}
+
+/// Lógica pura de borrado: elimina todas las tablas de negocio conservando
+/// `usuarios`/`configuracion`/`schema_version`. Extraída para poder testearla
+/// sin Tauri.
+fn clear_all_data_inner(db: &mut rusqlite::Connection) -> Result<String, String> {
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    // Orden inverso a las FK para no violarlas.
+    for tabla in [
+        "detalles_ventas",
+        "ventas",
+        "cierres_detalle",
+        "solicitudes_anulacion",
+        "alertas_credito",
+        "historial_precios",
+        "historial_tasas",
+        "clientes_eliminados",
+        "ajustes_stock",
+        "movimientos_caja",
+        "combo_productos",
+        "combos",
+        "conflictos",
+        "historial_acciones",
+        "cierres_caja",
+        "clientes",
+        "productos",
+        "categorias",
+    ] {
+        // Si una no existe, la ignoramos.
+        if tx.execute(&format!("DELETE FROM {}", tabla), []).is_err() {
+            let _ = tx.execute(&format!("DELETE FROM sqlite_sequence WHERE name = '{}'", tabla), []);
+        }
+    }
+    // Resetear secuencias para no reutilizar IDs viejos.
+    for seq in [
+        "ventas",
+        "detalles_ventas",
+        "clientes",
+        "productos",
+        "cierres_caja",
+        "categorias",
+        "solicitudes_anulacion",
+        "alertas_credito",
+        "combos",
+        "conflictos",
+    ] {
+        let _ = tx.execute(&format!("DELETE FROM sqlite_sequence WHERE name = '{}'", seq), []);
+    }
+    // Restablecer estado de caja y flags de negocio.
+    let _ = crate::db::set_config_value(&tx, constants::CFG_CAJA_ABIERTA, "false");
+    tx.commit().map_err(|e| format!("Error al confirmar borrado: {}", e))?;
+    Ok("Datos borrados correctamente. La aplicación quedó en blanco, pero conserva tu usuario y configuración.".to_string())
 }
 
 /// Copia y cifra la BD en una ruta de backup. `dest_path` opcional; si es None se
@@ -590,5 +653,40 @@ pub mod test_support {
         insert_default_admin(&conn);
         insert_default_config(&conn);
         conn
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clear_all_data_vacia_todas_las_tablas_negocio() {
+        let mut conn = test_support::test_conn();
+        conn.execute_batch(
+            "INSERT INTO productos (codigo, nombre, precio_usd, stock) VALUES ('P1', 'Prod', 1.0, 5); \
+             INSERT INTO clientes (nombre) VALUES ('Cliente A'); \
+             INSERT INTO ventas (fecha_hora, usuario_id, metodo_pago, total_usd, tasa_aplicada) \
+             VALUES ('2026-08-01 10:00:00', 1, 'efectivo_usd', 10.0, 1.0);",
+        )
+        .unwrap();
+        let msg = clear_all_data_inner(&mut conn).unwrap();
+        assert!(msg.contains("Datos borrados"));
+        let productos: i64 = conn.query_row("SELECT COUNT(*) FROM productos", [], |r| r.get(0)).unwrap();
+        let clientes: i64 = conn.query_row("SELECT COUNT(*) FROM clientes", [], |r| r.get(0)).unwrap();
+        let ventas: i64 = conn.query_row("SELECT COUNT(*) FROM ventas", [], |r| r.get(0)).unwrap();
+        let usuarios: i64 = conn.query_row("SELECT COUNT(*) FROM usuarios", [], |r| r.get(0)).unwrap();
+        assert_eq!(productos, 0);
+        assert_eq!(clientes, 0);
+        assert_eq!(ventas, 0);
+        assert!(usuarios >= 1, "los usuarios se conservan");
+    }
+
+    #[test]
+    fn test_clear_all_data_no_falla_sin_datos() {
+        let mut conn = test_support::test_conn();
+        clear_all_data_inner(&mut conn).unwrap();
+        let usuarios: i64 = conn.query_row("SELECT COUNT(*) FROM usuarios", [], |r| r.get(0)).unwrap();
+        assert!(usuarios >= 1);
     }
 }

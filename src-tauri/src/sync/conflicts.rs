@@ -119,7 +119,13 @@ pub fn resolve_conflicto(
                 let precio_usd = remote["precio_usd"].as_f64().unwrap_or(0.0);
                 let stock_minimo = remote["stock_minimo"].as_i64().unwrap_or(0);
                 let activo = remote["activo"].as_i64().unwrap_or(1);
-                let cat_id = remote["categoria_id"].as_i64();
+                let cat_nombre = remote["categoria_nombre"].as_str().unwrap_or("");
+                let resolved = if cat_nombre.trim().is_empty() {
+                    None
+                } else {
+                    super::products::resolver_categoria_por_nombre(&tx, cat_nombre)?
+                };
+                let cat_id = resolved.or_else(|| remote["categoria_id"].as_i64());
                 tx.execute(
                     "UPDATE productos SET nombre = ?1, precio_usd = ?2, stock_minimo = ?3, \
                      activo = ?4, categoria_id = ?5, updated_at = ?6 WHERE codigo = ?7",

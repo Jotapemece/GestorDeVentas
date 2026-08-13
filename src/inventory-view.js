@@ -22,7 +22,8 @@ async function loadInventory() {
   const query = qs(SEL.inventorySearch).value.trim();
   const tbody = qs(SEL.inventoryBody);
   showSkeleton(tbody, 8);
-  const result = await invokeOrError(invoke('list_products', { search: query || null, page: inventoryPage, pageSize: INVENTORY_PAGE_SIZE, inari: showInari || null, subcategoria: inariSubcat || null }));
+  const catId = inventoryCategoriaFilter ? inventoryCategoriaFilter.getValue() : '';
+  const result = await invokeOrError(invoke('list_products', { search: query || null, page: inventoryPage, pageSize: INVENTORY_PAGE_SIZE, inari: showInari || null, subcategoria: inariSubcat || null, categoriaId: catId ? parseInt(catId, 10) : null }));
   if (result === undefined) return;
   const products = result.data || result;
   tbody.innerHTML = '';
@@ -66,26 +67,33 @@ function toggleDropdown(btn) {
   closeAllDropdowns();
   if (!isOpen) {
     menu.classList.add('show');
-    if (window.innerWidth > BREAKPOINT.DESKTOP) {
-      const btnRect = btn.getBoundingClientRect();
-      const mw = menu.offsetWidth;
-      menu.style.position = 'fixed';
-      menu.style.top = btnRect.bottom + 'px';
-      menu.style.right = 'auto';
-      menu.style.bottom = 'auto';
-      // Align left edge with button left, but if it overflows right, flip
-      const spaceRight = window.innerWidth - btnRect.left;
-      if (spaceRight >= mw) {
-        menu.style.left = btnRect.left + 'px';
-      } else {
-        menu.style.left = Math.max(4, btnRect.right - mw) + 'px';
-      }
-      const menuRect = menu.getBoundingClientRect();
-      const overflowY = menuRect.bottom - window.innerHeight;
-      if (overflowY > 0) {
-        menu.style.top = Math.max(4, btnRect.top - menuRect.height) + 'px';
-      }
+    const btnRect = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    menu.style.position = 'fixed';
+    menu.style.right = 'auto';
+    menu.style.bottom = 'auto';
+    menu.style.maxHeight = 'none';
+    menu.style.overflowY = '';
+    // Horizontal: align right edge with button right, clamped to viewport
+    let left = btnRect.right - mw;
+    if (left < 4) left = 4;
+    if (left + mw > vw - 4) left = Math.max(4, vw - mw - 4);
+    menu.style.left = left + 'px';
+    // Vertical: prefer below; flip up only if it would overflow the bottom
+    let top = btnRect.bottom + 4;
+    const menuH = menu.offsetHeight;
+    if (top + menuH > vh - 4) {
+      top = btnRect.top - menuH - 4;
     }
+    // If still off-screen (very tall menu / button at top), anchor to top and scroll
+    if (top < 4) {
+      top = 4;
+      menu.style.maxHeight = (vh - 8) + 'px';
+      menu.style.overflowY = 'auto';
+    }
+    menu.style.top = top + 'px';
   }
 }
 
@@ -100,9 +108,12 @@ function showProductDetail(codigo) {
   if (!p) { showToast('Producto no encontrado', 'error'); return; }
   qs(SEL.detailNombre).textContent = p.nombre;
   qs(SEL.detailPrecio).textContent = formatUSD(p.precio_usd);
-  qs(SEL.detailCosto).textContent = formatUSD(p.costo || 0);
+  const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
+  qs(SEL.detailCosto).textContent = isAdmin ? formatUSD(p.costo || 0) : '';
+  qs(SEL.detailCosto).parentElement.style.display = isAdmin ? '' : 'none';
   const margen = calcularMargen(p.precio_usd, p.costo);
-  qs(SEL.detailMargen).textContent = margen;
+  qs(SEL.detailMargen).textContent = isAdmin ? margen : '';
+  qs(SEL.detailMargen).parentElement.style.display = isAdmin ? '' : 'none';
   if (p.es_pesable) {
     qs(SEL.detailPrecioLabel).textContent = 'Precio ($/kg)';
     qs(SEL.detailCostoLabel).textContent = 'Costo ($/kg)';
@@ -118,6 +129,12 @@ function showProductDetail(codigo) {
     qs(SEL.detailStock).textContent = p.stock;
     qs(SEL.detailStockMinimo).textContent = p.stock_minimo;
   }
+  if (p.categoria) {
+    const catColor = p.categoria_color || '#CCCCCC';
+    qs(SEL.detailCategoria).innerHTML = '<span class="cat-chip" style="background:' + escapeHtml(catColor) + ';color:' + contrastTextColor(catColor) + '">' + escapeHtml(p.categoria) + '</span>';
+  } else {
+    qs(SEL.detailCategoria).textContent = 'Sin categor\u00eda';
+  }
   qs(SEL.detailCreated).textContent = p.created_at || 'No disponible';
   showModal(qs(SEL.productDetailModal));
 }
@@ -126,17 +143,62 @@ function closeProductDetail() {
   closeModal(qs(SEL.productDetailModal));
 }
 
-function loadCategoriasSelect() {
-  const sel = qs(SEL.productCategoria);
-  if (!sel || sel.dataset.loaded) return;
-  sel.dataset.loaded = '1';
+let productCategoriaSelect = null;
+let pendingCategoriaValue = '';
+let inventoryCategoriaFilter = null;
+
+function buildInventoryCategoriaFilter() {
+  const wrap = qs(SEL.inventoryCategoriaFilterWrap);
+  if (!wrap) return;
   invoke('list_categorias').then(cats => {
-    cats.forEach(function(c) {
-      const opt = document.createElement('option');
-      opt.value = c.id;
-      opt.textContent = c.nombre;
-      sel.appendChild(opt);
+    const options = [{ value: '', label: 'Todas las categor\u00edas' }];
+    (cats || []).forEach(function(c) {
+      options.push({ value: String(c.id), label: c.nombre, color: c.color || '#CCCCCC' });
     });
+    const current = inventoryCategoriaFilter ? inventoryCategoriaFilter.getValue() : '';
+    const sel = buildCustomSelect({
+      options: options,
+      value: current,
+      placeholder: 'Todas las categor\u00edas',
+      className: 'inventory-cat-filter',
+      onChange: () => {
+        inventoryPage = 1;
+        loadInventory();
+      }
+    });
+    sel.setAttribute('title', 'Filtrar por categor\u00eda');
+    inventoryCategoriaFilter = sel;
+    wrap.innerHTML = '';
+    wrap.appendChild(sel);
+  }).catch(function() {});
+}
+
+function getCategoriaValue() {
+  return productCategoriaSelect ? productCategoriaSelect.getValue() : pendingCategoriaValue;
+}
+
+function setCategoriaValue(value) {
+  pendingCategoriaValue = value == null ? '' : String(value);
+  if (productCategoriaSelect) productCategoriaSelect.setValue(pendingCategoriaValue);
+}
+
+function loadCategoriasSelect() {
+  const container = qs(SEL.productCategoria);
+  if (!container || container.dataset.loaded) return;
+  container.dataset.loaded = '1';
+  invoke('list_categorias').then(cats => {
+    const options = [{ value: '', label: 'Sin categor\u00eda' }];
+    (cats || []).forEach(function(c) {
+      options.push({ value: String(c.id), label: c.nombre, color: c.color || '#CCCCCC' });
+    });
+    productCategoriaSelect = buildCustomSelect({
+      options: options,
+      value: pendingCategoriaValue,
+      placeholder: 'Sin categor\u00eda',
+      className: 'product-categoria-cs'
+    });
+    container.innerHTML = '';
+    container.appendChild(productCategoriaSelect);
   }).catch(function() {});
 }
 
@@ -147,7 +209,7 @@ function openNewProductModal() {
   [SEL.productNombre, SEL.productPrecio, SEL.productCosto, SEL.productStock, SEL.productStockMinimo].forEach(id => qs(id).value = '');
   qs(SEL.productDeleteBtn).style.display = 'none';
   qs(SEL.productEsPesable).checked = false;
-  qs(SEL.productCategoria).value = '';
+  setCategoriaValue('');
   qs(SEL.productSubcategoria).value = '';
   updateProductFormLabels(false);
   clearProductErrors();
@@ -189,7 +251,7 @@ function editProduct(codigo) {
   qs(SEL.productStock).value = p.stock;
   qs(SEL.productStockMinimo).value = p.stock_minimo;
   qs(SEL.productEsPesable).checked = !!p.es_pesable;
-  qs(SEL.productCategoria).value = p.categoria_id != null ? String(p.categoria_id) : '';
+  setCategoriaValue(p.categoria_id != null ? String(p.categoria_id) : '');
   qs(SEL.productSubcategoria).value = p.subcategoria || '';
   updateProductFormLabels(!!p.es_pesable);
   qs(SEL.productDeleteBtn).style.display = 'inline-flex';
@@ -222,7 +284,7 @@ async function showPriceHistory(codigo, nombre) {
     appendRows(tbody, items, function(item) {
       const diff = item.precio_nuevo - item.precio_anterior;
       const arrow = diff > 0 ? '<span style="color:var(--success)">▲</span>' : (diff < 0 ? '<span style="color:var(--danger)">▼</span>' : '');
-      return '<td>' + escapeHtml(item.fecha_hora) + '</td><td>' + formatUSD(item.precio_anterior) + '</td><td>' + formatUSD(item.precio_nuevo) + '</td><td>' + arrow + ' ' + formatUSD(diff) + '</td><td>' + escapeHtml(item.usuario || '—') + '</td>';
+      return '<td>' + escapeHtml(formatDateTime(item.fecha_hora)) + '</td><td>' + formatUSD(item.precio_anterior) + '</td><td>' + formatUSD(item.precio_nuevo) + '</td><td>' + arrow + ' ' + formatUSD(diff) + '</td><td>' + escapeHtml(item.usuario || '—') + '</td>';
     });
   } catch (e) {
     tbody.innerHTML = errorTableRow(5, e);
@@ -451,8 +513,7 @@ async function saveProduct() {
   const stock = parseFloat(qs(SEL.productStock).value) || 0;
   const stockMinimo = parseFloat(qs(SEL.productStockMinimo).value) || 0;
   const esPesable = qs(SEL.productEsPesable).checked;
-  const catSel = qs(SEL.productCategoria);
-  const categoriaId = catSel && catSel.value ? parseInt(catSel.value, 10) : null;
+  const categoriaId = getCategoriaValue() ? parseInt(getCategoriaValue(), 10) : null;
   const subcategoria = qs(SEL.productSubcategoria).value.trim();
   clearProductErrors();
   var hasError = false;
@@ -527,6 +588,160 @@ function openImportModal() {
     } catch (err) { showToast('Error: ' + err, 'error'); }
   };
   input.click();
+}
+
+/* ========== CATEGORÍAS ========== */
+let editingCategoriaId = null;
+
+function openCategoriasModal() {
+  editingCategoriaId = null;
+  qs(SEL.categoriaSaveText).textContent = 'Agregar';
+  qs(SEL.categoriaSaveBtn).querySelector('i').className = 'nf nf-fa-plus';
+  qs(SEL.categoriaNombre).value = '';
+  qs(SEL.categoriaColor).value = '#3B82F6';
+  qs(SEL.categoriaNombreError).classList.remove('visible');
+  qs(SEL.categoriaNombreError).textContent = '';
+  loadCategoriasList();
+  showModal(qs(SEL.categoriasModal));
+  setTimeout(() => qs(SEL.categoriaNombre).focus(), 100);
+}
+
+function closeCategoriasModal() {
+  closeModal(qs(SEL.categoriasModal));
+}
+
+async function loadCategoriasList() {
+  const list = qs(SEL.categoriasList);
+  try {
+    const cats = await invoke('list_categorias');
+    if (!cats || cats.length === 0) {
+      list.innerHTML = '<div class="empty-state" style="padding:16px"><i class="nf nf-fa-tags" style="font-size:28px"></i><div>Sin categor\u00edas. Agrega la primera.</div></div>';
+      return;
+    }
+    list.innerHTML = cats.map(function(c) {
+      const selected = editingCategoriaId !== null && String(editingCategoriaId) === String(c.id);
+      const color = c.color || '#CCCCCC';
+      return '<div class="categoria-row' + (selected ? ' selected' : '') + '">' +
+        '<span class="cat-chip" style="background:' + escapeHtml(color) + ';color:' + contrastTextColor(color) + '">' + escapeHtml(c.nombre) + '</span>' +
+        '<span class="categoria-row-actions">' +
+          '<button class="categoria-edit-btn" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '" data-color="' + escapeHtml(color) + '" title="Renombrar / cambiar color"><i class="nf nf-fa-pencil"></i></button>' +
+          '<button class="categoria-del-btn" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '" title="Eliminar categor\u00eda"><i class="nf nf-fa-trash"></i></button>' +
+        '</span>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="empty-state"><i class="nf nf-fa-triangle_warning"></i><div>Error: ' + escapeHtml(e) + '</div></div>';
+  }
+}
+
+function startEditCategoria(id, nombre, color) {
+  editingCategoriaId = id;
+  qs(SEL.categoriaNombre).value = nombre;
+  qs(SEL.categoriaColor).value = color || '#CCCCCC';
+  qs(SEL.categoriaSaveText).textContent = 'Guardar';
+  qs(SEL.categoriaSaveBtn).querySelector('i').className = 'nf nf-fa-floppy';
+  qs(SEL.categoriaNombreError).classList.remove('visible');
+  qs(SEL.categoriaNombreError).textContent = '';
+  loadCategoriasList();
+  qs(SEL.categoriaNombre).focus();
+}
+
+function resetCategoriaForm() {
+  editingCategoriaId = null;
+  qs(SEL.categoriaNombre).value = '';
+  qs(SEL.categoriaColor).value = '#3B82F6';
+  qs(SEL.categoriaSaveText).textContent = 'Agregar';
+  qs(SEL.categoriaSaveBtn).querySelector('i').className = 'nf nf-fa-plus';
+  qs(SEL.categoriaNombreError).classList.remove('visible');
+  qs(SEL.categoriaNombreError).textContent = '';
+  loadCategoriasList();
+}
+
+async function saveCategoria(e) {
+  if (e) e.preventDefault();
+  const nombre = qs(SEL.categoriaNombre).value.trim();
+  const color = qs(SEL.categoriaColor).value;
+  const errEl = qs(SEL.categoriaNombreError);
+  errEl.classList.remove('visible');
+  errEl.textContent = '';
+  if (!nombre) {
+    errEl.textContent = 'El nombre es obligatorio';
+    errEl.classList.add('visible');
+    qs(SEL.categoriaNombre).focus();
+    return;
+  }
+  const btn = qs(SEL.categoriaSaveBtn);
+  btn.disabled = true;
+  try {
+    if (editingCategoriaId !== null) {
+      await invoke('update_categoria', { id: editingCategoriaId, nombre, color });
+      showToast('Categor\u00eda actualizada');
+    } else {
+      await invoke('create_categoria', { nombre, color });
+      showToast('Categor\u00eda creada');
+    }
+    playSound('success');
+    refreshCategoriasAfterChange();
+    resetCategoriaForm();
+  } catch (err) {
+    showToast('Error: ' + err, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteCategoria(id, nombre) {
+  const ok = await confirmModal('\u00bfEliminar la categor\u00eda "' + nombre + '"?\nLos productos de esa categor\u00eda quedar\u00e1n sin categor\u00eda.', 'Eliminar Categor\u00eda', 'Eliminar');
+  if (!ok) return;
+  try {
+    await invokeOrError(invoke('delete_categoria', { id }));
+    showToast('Categor\u00eda eliminada');
+    playSound('remove');
+    refreshCategoriasAfterChange();
+    resetCategoriaForm();
+  } catch (e) { showToast('Error: ' + e, 'error'); }
+}
+
+function refreshCategoriasAfterChange() {
+  loadProductCache();
+  loadInventory();
+  if (typeof renderProductSearch === 'function') renderProductSearch();
+  buildInventoryCategoriaFilter();
+  if (productCategoriaSelect) {
+    invoke('list_categorias').then(cats => {
+      const current = productCategoriaSelect.getValue();
+      const container = qs(SEL.productCategoria);
+      const options = [{ value: '', label: 'Sin categor\u00eda' }];
+      (cats || []).forEach(function(c) {
+        options.push({ value: String(c.id), label: c.nombre, color: c.color || '#CCCCCC' });
+      });
+      productCategoriaSelect = buildCustomSelect({
+        options: options,
+        value: current,
+        placeholder: 'Sin categor\u00eda',
+        className: 'product-categoria-cs'
+      });
+      if (container) {
+        container.innerHTML = '';
+        container.appendChild(productCategoriaSelect);
+      }
+    });
+  }
+}
+
+/* Event delegation for categorías modal */
+function initCategoriasHandlers() {
+  const list = qs(SEL.categoriasList);
+  list.addEventListener('click', function(e) {
+    if (e.target.closest('.categoria-edit-btn')) {
+      const btn = e.target.closest('.categoria-edit-btn');
+      startEditCategoria(btn.dataset.id, btn.dataset.nombre, btn.dataset.color);
+    } else if (e.target.closest('.categoria-del-btn')) {
+      const btn = e.target.closest('.categoria-del-btn');
+      deleteCategoria(btn.dataset.id, btn.dataset.nombre);
+    }
+  });
+  qs(SEL.categoriaForm).addEventListener('submit', saveCategoria);
 }
 
 

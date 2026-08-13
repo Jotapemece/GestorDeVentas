@@ -1,6 +1,8 @@
+use super::alertas::{download_alertas_inner, upload_alertas_inner};
 use super::clients::{download_clientes_inner, upload_clientes_inner};
 use super::products::{download_products_inner, upload_products_inner};
 use super::sales::{download_sales_inner, upload_sales_inner};
+use super::solicitudes::{download_solicitudes_inner, upload_solicitudes_inner};
 use super::users::{download_usuarios_inner, upload_usuarios_inner};
 use super::{api_url, emit_progress, get_config, supabase_config, supabase_get, upsert_config, urlencoding};
 use crate::constants;
@@ -111,13 +113,15 @@ fn short_hash(input: &str) -> String {
 
 #[tauri::command]
 pub fn register_device(state: State<AppState>, nombre: String) -> Result<String, String> {
-    let db = state.lock_db()?;
-
-    let (supabase_url, supabase_key) = supabase_config(&db)?;
-
-    if let Ok(id) = super::get_config(&db, constants::CFG_DISPOSITIVO_ID) {
-        return Ok(format!("Ya registrado: {}", id));
-    }
+    // Leer config con lock CORTO y soltarlo antes del HTTP (F6): la búsqueda y
+    // el registro en Supabase no deben bloquear el POS mientras hay red.
+    let (supabase_url, supabase_key) = {
+        let db = state.lock_db()?;
+        if let Ok(id) = super::get_config(&db, constants::CFG_DISPOSITIVO_ID) {
+            return Ok(format!("Ya registrado: {}", id));
+        }
+        supabase_config(&db)?
+    };
 
     let huella = get_fingerprint()?;
     let encoded_huella = urlencoding(&huella);
@@ -127,11 +131,15 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
         &format!("/dispositivos?huella=eq.{}&select=id", encoded_huella),
     );
 
+    // F6: propagar el error de red (NO `unwrap_or_default`): si la búsqueda
+    // falla transitoriamente y la traga, se crearía un dispositivo DUPLICADO
+    // (la huella existente nunca se encuentra).
     let existing = supabase_get(&search_url, &supabase_key)
-        .unwrap_or_default();
+        .map_err(|e| format!("Error buscando dispositivo registrado: {}", e))?;
 
     if let Some(device) = existing.first() {
         if let Some(existing_id) = device["id"].as_str() {
+            let db = state.lock_db()?;
             upsert_config(&db, constants::CFG_DISPOSITIVO_ID, existing_id);
             return Ok(format!("Dispositivo recuperado: {}", existing_id));
         }
@@ -161,6 +169,7 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
         return Err("No se recibió ID del dispositivo".to_string());
     }
 
+    let db = state.lock_db()?;
     upsert_config(&db, constants::CFG_DISPOSITIVO_ID, &new_id);
 
     Ok(format!("Dispositivo registrado: {}", new_id))
@@ -183,6 +192,8 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
         ("clientes", upload_clientes_inner),
         ("usuarios", upload_usuarios_inner),
         ("ventas", upload_sales_inner),
+        ("alertas", upload_alertas_inner),
+        ("solicitudes", upload_solicitudes_inner),
     ];
     let mut parts = Vec::new();
     let total = steps.len() as u32;
@@ -210,6 +221,8 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
         ("clientes", download_clientes_inner),
         ("ventas", download_sales_inner),
         ("usuarios", download_usuarios_inner),
+        ("alertas", download_alertas_inner),
+        ("solicitudes", download_solicitudes_inner),
     ];
     let mut parts = Vec::new();
     let total = steps.len() as u32;
@@ -238,15 +251,19 @@ pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<
         ("clientes", upload_clientes_inner),
         ("usuarios", upload_usuarios_inner),
         ("ventas", upload_sales_inner),
+        ("alertas", upload_alertas_inner),
+        ("solicitudes", upload_solicitudes_inner),
         ("productos", download_products_inner),
         ("clientes", download_clientes_inner),
         ("ventas", download_sales_inner),
         ("usuarios", download_usuarios_inner),
+        ("alertas", download_alertas_inner),
+        ("solicitudes", download_solicitudes_inner),
     ];
     let mut parts = Vec::new();
     let total = steps.len() as u32;
     for (i, (label, f)) in steps.iter().enumerate() {
-        let verb = if i < 4 { "Subiendo" } else { "Descargando" };
+        let verb = if i < 6 { "Subiendo" } else { "Descargando" };
         emit_progress(&app_handle, &format!("{} {}...", verb, label), i as u32 + 1, total);
         let mut db = state.secondary_conn()?;
         let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
@@ -279,6 +296,7 @@ pub struct SyncStats {
 
 #[tauri::command]
 pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
+    crate::auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
 
     let active_products: i64 = db
@@ -318,7 +336,7 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
         constants::CFG_ULTIMO_UPLOAD,
     );
     let pending_clientes = count_pending(
-        "SELECT COUNT(*) FROM clientes WHERE COALESCE(es_temporal,0) = 0 AND (updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR updated_at > ?1)",
+        "SELECT COUNT(*) FROM clientes WHERE (updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR updated_at > ?1)",
         constants::CFG_ULTIMO_UPLOAD_CLIENTES,
     );
     let pending_ventas = count_pending(
@@ -349,16 +367,24 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
 
 #[tauri::command]
 pub fn list_dispositivos(state: State<AppState>) -> Result<Vec<serde_json::Value>, String> {
-    let db = state.lock_db()?;
-    let (supabase_url, supabase_key) = supabase_config(&db)?;
+    crate::auth::check_admin_role(&state)?;
+    // Lock corto solo para leer config; soltar antes del HTTP.
+    let (supabase_url, supabase_key) = {
+        let db = state.lock_db()?;
+        supabase_config(&db)?
+    };
     let get_url = api_url(&supabase_url, "/dispositivos?select=*");
     supabase_get(&get_url, &supabase_key)
 }
 
 #[tauri::command]
 pub fn test_supabase_connection(state: State<AppState>) -> Result<bool, String> {
-    let db = state.lock_db()?;
-    let (supabase_url, supabase_key) = supabase_config(&db)?;
+    crate::auth::check_employee_role(&state)?;
+    // Lock corto solo para leer config; soltar antes del HTTP.
+    let (supabase_url, supabase_key) = {
+        let db = state.lock_db()?;
+        supabase_config(&db)?
+    };
 
     let test_url = api_url(&supabase_url, "/productos?select=codigo&limit=1");
 

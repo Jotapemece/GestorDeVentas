@@ -22,16 +22,14 @@ type VentaRow = (
 
 const SQL_LIST_CLIENTES: &str =
     "SELECT c.id, c.nombre, c.credito_activo, c.saldo_deuda_usd, c.sync_id, c.updated_at, \
-     (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id) as ultima_compra, \
-     COALESCE(c.es_temporal, 0) \
+     (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id) as ultima_compra \
      FROM clientes c WHERE COALESCE(c.activo, 1) = 1 ORDER BY c.nombre ASC";
 const SQL_CLIENTE_BY_ID: &str =
     "SELECT c.id, c.nombre, c.credito_activo, c.saldo_deuda_usd, c.sync_id, c.updated_at, \
-     (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id) as ultima_compra, \
-     COALESCE(c.es_temporal, 0) \
+     (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id) as ultima_compra \
      FROM clientes c WHERE c.id = ?1 AND COALESCE(c.activo, 1) = 1";
 const SQL_INSERT_CLIENTE: &str =
-    "INSERT INTO clientes (nombre, sync_id, updated_at, es_temporal, created_at) VALUES (?1, ?2, ?3, ?4, ?3)";
+    "INSERT INTO clientes (nombre, sync_id, updated_at, created_at) VALUES (?1, ?2, ?3, ?3)";
 const SQL_TOGGLE_CREDITO: &str = "UPDATE clientes SET credito_activo = ?1 WHERE id = ?2";
 const SQL_HISTORY_VENTAS: &str = "
     SELECT v.id, v.fecha_hora, v.total_usd, v.tasa_aplicada,
@@ -47,11 +45,9 @@ const SQL_PAGO_DEUDA_ATOMICO: &str =
 const SQL_REACTIVAR_CREDITO: &str =
     "UPDATE clientes SET credito_activo = 1 WHERE id = ?1 AND credito_activo = 0";
 const SQL_UPDATE_CLIENTE: &str = "UPDATE clientes SET nombre = ?1, updated_at = ?2 WHERE id = ?3";
-const SQL_DELETE_CLIENTE: &str = "DELETE FROM clientes WHERE id = ?1";
 
 fn row_to_cliente(row: &rusqlite::Row) -> rusqlite::Result<Cliente> {
     let activo: i64 = row.get(2)?;
-    let temporal: i64 = row.get(7)?;
     Ok(Cliente {
         id: row.get(0)?,
         nombre: row.get(1)?,
@@ -60,7 +56,6 @@ fn row_to_cliente(row: &rusqlite::Row) -> rusqlite::Result<Cliente> {
         sync_id: row.get(4)?,
         updated_at: row.get(5)?,
         ultima_compra: row.get(6)?,
-        es_temporal: temporal == 1,
     })
 }
 
@@ -94,7 +89,6 @@ pub fn list_clientes(
 pub fn create_cliente(
     state: State<AppState>,
     nombre: String,
-    es_temporal: Option<bool>,
 ) -> Result<String, String> {
     if nombre.trim().is_empty() {
         return Err("El nombre del cliente no puede estar vacío".to_string());
@@ -103,12 +97,11 @@ pub fn create_cliente(
     crate::auth::require_admin(
         &state,
         &db,
-        &format!("Creó cliente '{}'{}", nombre, if es_temporal.unwrap_or(false) { " (temporal)" } else { "" }),
+        &format!("Creó cliente '{}'", nombre),
     )?;
     let sync_id = Uuid::new_v4().to_string();
     let now = crate::helpers::now_iso();
-    let temporal: i64 = if es_temporal.unwrap_or(false) { 1 } else { 0 };
-    match db.execute(SQL_INSERT_CLIENTE, params![nombre, sync_id, now, temporal]) {
+    match db.execute(SQL_INSERT_CLIENTE, params![nombre.trim(), sync_id, now]) {
         Ok(_) => Ok("Cliente creado exitosamente".to_string()),
         Err(e) => Err(format!("Error al crear cliente: {}", e)),
     }
@@ -131,7 +124,7 @@ pub fn quick_create_cliente(
     )?;
     let sync_id = Uuid::new_v4().to_string();
     let now = crate::helpers::now_iso();
-    db.execute(SQL_INSERT_CLIENTE, params![nombre.trim(), sync_id, now, 0i64])
+    db.execute(SQL_INSERT_CLIENTE, params![nombre.trim(), sync_id, now])
         .map_err(|e| format!("Error al crear cliente: {}", e))?;
     Ok(db.last_insert_rowid())
 }
@@ -238,6 +231,9 @@ pub fn get_cliente_history(
 }
 
 fn validate_pay_debt_request(request: &PayDebtRequest) -> Result<(), String> {
+    if !request.monto_usd.is_finite() {
+        return Err("El monto no puede ser NaN o infinito".to_string());
+    }
     if request.monto_usd <= 0.0 {
         return Err("El monto debe ser mayor a cero".to_string());
     }
@@ -271,18 +267,19 @@ fn validate_pay_debt_request(request: &PayDebtRequest) -> Result<(), String> {
 }
 
 /// Concepto legible del movimiento de caja generado por un pago/abono de deuda.
+/// El método se muestra como "Crédito (Biopago)" para cualquier método excepto
+/// pago móvil, donde se usa "Pago Móvil: ref" (mantiene la referencia de 4 dígitos).
 fn abono_concepto(cliente_id: i64, metodo_pago: &str, referencia_movil: Option<&str>) -> String {
-    let metodo_label = constants::metodo_label(metodo_pago);
-    let mut concepto = format!(
-        "Abono deuda - Cliente #{} - Método: {}",
-        cliente_id, metodo_label
-    );
+    let mut concepto = format!("Abono deuda - Cliente #{} - ", cliente_id);
     if metodo_pago == constants::METODO_PAGO_MOVIL {
+        concepto.push_str("Pago Móvil");
         if let Some(ref_movil) = referencia_movil {
             if !ref_movil.is_empty() {
-                concepto.push_str(&format!(" - Ref: {}", ref_movil));
+                concepto.push_str(&format!(": {}", ref_movil));
             }
         }
+    } else {
+        concepto.push_str(&format!("Crédito ({})", constants::metodo_label(metodo_pago)));
     }
     concepto
 }
@@ -302,14 +299,48 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
 
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
+    let result = pay_debt_inner(&tx, &request, &username, usuario.id);
+    match result {
+        Ok(pay_result) => {
+            if let Err(e) = tx.commit() {
+                return Err(format!("Error al confirmar pago: {}", e));
+            }
+            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+                crate::db::rate_limit_success(&mut attempts, "pay_debt");
+            }
+            let msg = format!(
+                "Pago registrado. Monto: ${:.2}, Saldo restante: ${:.2}",
+                request.monto_usd, pay_result.nuevo_saldo
+            );
+            Ok(msg)
+        }
+        Err(e) => {
+            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+                crate::db::rate_limit_fail(&mut attempts, "pay_debt");
+            }
+            Err(e)
+        }
+    }
+}
+
+struct PayDebtInnerResult {
+    nuevo_saldo: f64,
+}
+
+/// Lógica transaccional del pago/abono de deuda, aislada del comando Tauri
+/// para poder testearla directamente. Ejecuta el pago, registra el ingreso de
+/// caja, la auditoría y la alerta de crédito (si el autor es vendedor).
+fn pay_debt_inner(
+    tx: &rusqlite::Transaction,
+    request: &PayDebtRequest,
+    username: &str,
+    usuario_id: i64,
+) -> Result<PayDebtInnerResult, String> {
     let affected = tx
         .execute(SQL_PAGO_DEUDA_ATOMICO, params![request.monto_usd, request.cliente_id, crate::helpers::now_iso()])
         .map_err(|e| format!("Error al procesar pago: {}", e))?;
 
     if affected == 0 {
-        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            crate::db::rate_limit_fail(&mut attempts, "pay_debt");
-        }
         return Err("Cliente no encontrado o saldo insuficiente".to_string());
     }
 
@@ -319,13 +350,13 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
 
     // El pago/abono de deuda es dinero que entra a la caja: se registra como
     // movimiento tipo 'ingreso' indicando el método de pago usado.
-    let tasa = crate::db::get_tasa_from_db(&tx).unwrap_or(0.0);
+    let tasa = crate::db::get_tasa_from_db(tx).unwrap_or(0.0);
     let monto_bs = request.monto_usd * tasa;
     let concepto = abono_concepto(request.cliente_id, &request.metodo_pago, request.referencia_pago_movil.as_deref());
     tx.execute(
         "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username) \
          VALUES ('ingreso', ?1, ?2, ?3, ?4, ?5)",
-        params![monto_bs, request.monto_usd, concepto, usuario.id, username],
+        params![monto_bs, request.monto_usd, concepto, usuario_id, username],
     )
     .map_err(|e| format!("Error al registrar ingreso de caja: {}", e))?;
 
@@ -333,84 +364,39 @@ pub fn pay_debt(state: State<AppState>, request: PayDebtRequest) -> Result<Strin
         "Pago de deuda - Cliente #{} - Monto: ${:.2} - Método: {} - Saldo restante: ${:.2}",
         request.cliente_id, request.monto_usd, request.metodo_pago, nuevo_saldo
     );
-    if let Err(e) = crate::audit::log_action(&tx, &username, &accion) {
-        eprintln!("[audit] Error al registrar acción: {}", e);
-    }
-
-    let mut cliente_eliminado = false;
-    if (nuevo_saldo - 0.0).abs() < constants::MONTO_TOLERANCIA {
-        let es_temporal: i64 = tx
-            .query_row(
-                "SELECT COALESCE(es_temporal, 0) FROM clientes WHERE id = ?1",
-                params![request.cliente_id],
-                |r| r.get(0),
-            )
-            .unwrap_or(0);
-        if es_temporal == 1 {
-            eliminar_cliente_temporal(&tx, request.cliente_id, &username, "deuda_pagada")?;
-            cliente_eliminado = true;
-        } else {
-            let _ = tx.execute(SQL_REACTIVAR_CREDITO, params![request.cliente_id]);
-        }
-    }
-
-    tx.commit().map_err(|e| format!("Error al confirmar pago: {}", e))?;
-
-    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        crate::db::rate_limit_success(&mut attempts, "pay_debt");
-    }
-
-    let msg = if cliente_eliminado {
-        format!(
-            "Pago registrado. El cliente temporal fue eliminado por saldar su deuda (${:.2}).",
-            request.monto_usd
-        )
-    } else {
-        format!(
-            "Pago registrado. Monto: ${:.2}, Saldo restante: ${:.2}",
-            request.monto_usd, nuevo_saldo
-        )
-    };
-
-    Ok(msg)
-}
-
-/// Elimina un cliente temporal dejando constancia en `clientes_eliminados`.
-/// Desvincula sus ventas y audita la acción. Se ejecuta dentro de una transacción.
-fn eliminar_cliente_temporal(
-    tx: &rusqlite::Transaction,
-    cliente_id: i64,
-    username: &str,
-    motivo: &str,
-) -> Result<(), String> {
-    let (nombre, saldo_pagado, creado_en): (String, f64, String) = tx
-        .query_row(
-            "SELECT nombre, saldo_deuda_usd, COALESCE(created_at, datetime('now','localtime')) FROM clientes WHERE id = ?1",
-            params![cliente_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .map_err(|_| "Cliente no encontrado".to_string())?;
-
-    tx.execute(
-        "INSERT INTO clientes_eliminados (cliente_id, nombre, saldo_pagado_usd, creado_en, eliminado_en, motivo) \
-         VALUES (?1, ?2, ?3, ?4, datetime('now','localtime'), ?5)",
-        params![cliente_id, nombre, saldo_pagado, creado_en, motivo],
-    )
-    .map_err(|e| format!("Error al registrar cliente temporal eliminado: {}", e))?;
-
-    tx.execute("UPDATE ventas SET cliente_id = NULL WHERE cliente_id = ?1", params![cliente_id])
-        .map_err(|e| format!("Error al desvincular ventas: {}", e))?;
-    tx.execute(SQL_DELETE_CLIENTE, params![cliente_id])
-        .map_err(|e| format!("Error al eliminar cliente temporal: {}", e))?;
-
-    let accion = format!(
-        "Eliminó cliente temporal #{} '{}' ({}) — saldo liquidado: ${:.2}",
-        cliente_id, nombre, motivo, saldo_pagado
-    );
     if let Err(e) = crate::audit::log_action(tx, username, &accion) {
         eprintln!("[audit] Error al registrar acción: {}", e);
     }
-    Ok(())
+
+    // Alerta de crédito para el admin (solo operaciones de vendedores).
+    let cliente_nombre: String = tx
+        .query_row(
+            "SELECT COALESCE(nombre, '') FROM clientes WHERE id = ?1",
+            params![request.cliente_id],
+            |r| r.get(0),
+        )
+        .unwrap_or_default();
+    let nota = format!(
+        "Saldo restante: ${:.2} - Ref: {}",
+        nuevo_saldo,
+        request.referencia_pago_movil.as_deref().unwrap_or("-")
+    );
+    let _ = crate::alertas::insertar_alerta_si_vendedor(
+        tx,
+        username,
+        crate::alertas::TIPO_ABONO,
+        request.monto_usd,
+        Some(request.cliente_id),
+        &cliente_nombre,
+        &request.metodo_pago,
+        &nota,
+    );
+
+    if (nuevo_saldo - 0.0).abs() < constants::MONTO_TOLERANCIA {
+        let _ = tx.execute(SQL_REACTIVAR_CREDITO, params![request.cliente_id]);
+    }
+
+    Ok(PayDebtInnerResult { nuevo_saldo })
 }
 
 #[tauri::command]
@@ -441,42 +427,87 @@ pub fn add_quick_debt(
         "add_quick_debt",
     )?;
     crate::auth::check_employee_role(&state)?;
+    if !monto_usd.is_finite() {
+        return Err("El monto no puede ser NaN o infinito".to_string());
+    }
     if monto_usd <= 0.0 {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
             crate::db::rate_limit_fail(&mut attempts, "add_quick_debt");
         }
         return Err("El monto debe ser mayor a cero".to_string());
     }
-    let username = state.get_username()?;
-    let db = state.lock_db()?;
-    let affected = db
+    let usuario = state.get_employee()?;
+    let username = usuario.username.clone();
+    let mut db = state.lock_db()?;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    let result = add_quick_debt_inner(&tx, cliente_id, monto_usd, &username);
+    match result {
+        Ok(()) => {
+            if let Err(e) = tx.commit() {
+                return Err(format!("Error al confirmar deuda: {}", e));
+            }
+            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+                crate::db::rate_limit_success(&mut attempts, "add_quick_debt");
+            }
+            Ok(format!("Deuda de ${:.2} registrada correctamente", monto_usd))
+        }
+        Err(e) => {
+            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+                crate::db::rate_limit_fail(&mut attempts, "add_quick_debt");
+            }
+            Err(e)
+        }
+    }
+}
+
+/// Lógica de la deuda rápida aislada del comando Tauri para poder testearla.
+/// Suma la deuda al cliente, audita y genera la alerta de crédito (si el autor
+/// es vendedor).
+fn add_quick_debt_inner(
+    tx: &rusqlite::Transaction,
+    cliente_id: i64,
+    monto_usd: f64,
+    username: &str,
+) -> Result<(), String> {
+    let affected = tx
         .execute(
             "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1, updated_at = ?3 WHERE id = ?2",
             params![monto_usd, cliente_id, crate::helpers::now_iso()],
         )
         .map_err(|e| e.to_string())?;
     if affected == 0 {
-        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            crate::db::rate_limit_fail(&mut attempts, "add_quick_debt");
-        }
         return Err("Cliente no encontrado".to_string());
     }
     let accion = format!(
         "Deuda rápida - Cliente #{} - Monto: ${:.2}",
         cliente_id, monto_usd
     );
-    if let Err(e) = crate::audit::log_action(&db, &username, &accion) {
+    if let Err(e) = crate::audit::log_action(tx, username, &accion) {
         eprintln!("[audit] Error al registrar acción: {}", e);
     }
-    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        crate::db::rate_limit_success(&mut attempts, "add_quick_debt");
-    }
-    Ok(format!("Deuda de ${:.2} registrada correctamente", monto_usd))
+    // Alerta de crédito para el admin (solo operaciones de vendedores).
+    let cliente_nombre: String = tx
+        .query_row(
+            "SELECT COALESCE(nombre, '') FROM clientes WHERE id = ?1",
+            params![cliente_id],
+            |r| r.get(0),
+        )
+        .unwrap_or_default();
+    let _ = crate::alertas::insertar_alerta_si_vendedor(
+        tx,
+        username,
+        crate::alertas::TIPO_DEUDA_RAPIDA,
+        monto_usd,
+        Some(cliente_id),
+        &cliente_nombre,
+        "",
+        "Deuda rápida registrada",
+    );
+    Ok(())
 }
 
 #[tauri::command]
 pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String, String> {
-    let username = state.get_username()?;
     let mut db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
@@ -484,19 +515,6 @@ pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String,
         &format!("Eliminó cliente #{}", cliente_id),
     )?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
-
-    let es_temporal: i64 = tx
-        .query_row(
-            "SELECT COALESCE(es_temporal, 0) FROM clientes WHERE id = ?1",
-            params![cliente_id],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
-    if es_temporal == 1 {
-        eliminar_cliente_temporal(&tx, cliente_id, &username, "eliminacion_manual")?;
-        tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
-        return Ok("Cliente temporal eliminado exitosamente".to_string());
-    }
 
     // Soft-delete: se oculta en listas (activo=0) pero se conserva la fila y sus ventas,
     // y el borrado viaja como tombstone en la sincronización.
@@ -510,33 +528,6 @@ pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String,
     }
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
     Ok("Cliente eliminado exitosamente".to_string())
-}
-
-#[tauri::command]
-pub fn list_clientes_eliminados(state: State<AppState>) -> Result<Vec<ClienteEliminado>, String> {
-    let db = state.lock_db()?;
-    let mut stmt = db
-        .prepare(
-            "SELECT id, cliente_id, nombre, saldo_pagado_usd, creado_en, eliminado_en, motivo \
-             FROM clientes_eliminados ORDER BY eliminado_en DESC",
-        )
-        .map_err(|e| e.to_string())?;
-    let items = stmt
-        .query_map([], |row| {
-            Ok(ClienteEliminado {
-                id: row.get(0)?,
-                cliente_id: row.get(1)?,
-                nombre: row.get(2)?,
-                saldo_pagado_usd: row.get(3)?,
-                creado_en: row.get(4)?,
-                eliminado_en: row.get(5)?,
-                motivo: row.get(6)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
-    Ok(items)
 }
 
 #[cfg(test)]
@@ -602,83 +593,167 @@ mod tests {
     #[test]
     fn test_abono_concepto_efectivo() {
         let c = abono_concepto(7, "efectivo_usd", None);
-        assert_eq!(c, "Abono deuda - Cliente #7 - Método: Efectivo USD");
+        assert_eq!(c, "Abono deuda - Cliente #7 - Crédito (Efectivo USD)");
+    }
+
+    #[test]
+    fn test_abono_concepto_biopago() {
+        let c = abono_concepto(7, "biopago", None);
+        assert_eq!(c, "Abono deuda - Cliente #7 - Crédito (Biopago)");
     }
 
     #[test]
     fn test_abono_concepto_pago_movil_con_ref() {
         let c = abono_concepto(7, "pago_movil", Some("1234"));
-        assert!(c.contains("Pago Móvil"));
-        assert!(c.contains("- Ref: 1234"));
+        assert_eq!(c, "Abono deuda - Cliente #7 - Pago Móvil: 1234");
     }
 
     #[test]
     fn test_abono_concepto_pago_movil_sin_ref() {
         let c = abono_concepto(7, "pago_movil", None);
-        assert!(c.contains("Pago Móvil"));
+        assert_eq!(c, "Abono deuda - Cliente #7 - Pago Móvil");
         assert!(!c.contains("Ref:"));
     }
 
-    fn insert_cliente_temporal(conn: &rusqlite::Connection, id: i64, nombre: &str, deuda: f64) {
+    fn insertar_usuario_rol(conn: &rusqlite::Connection, id: i64, username: &str, rol: &str) {
         conn.execute(
-            "INSERT INTO clientes (id, nombre, sync_id, updated_at, es_temporal, saldo_deuda_usd, created_at) VALUES (?1, ?2, ?3, ?3, 1, ?4, ?3)",
-            params![id, nombre, "sync-".to_owned() + &id.to_string(), deuda],
+            "INSERT INTO usuarios (id, username, password, rol) VALUES (?1, ?2, 'x', ?3)",
+            params![id, username, rol],
         )
         .unwrap();
     }
 
-    #[test]
-    fn test_eliminar_cliente_temporal_registra_historial() {
-        let mut conn = crate::db::test_support::test_conn();
-        insert_cliente_temporal(&conn, 42, "Cliente Tmp", 0.0);
-        let tx = conn.transaction().unwrap();
-        eliminar_cliente_temporal(&tx, 42, "admin", "saldó deuda").unwrap();
-        tx.commit().unwrap();
+    fn insertar_cliente_con_deuda(conn: &rusqlite::Connection, id: i64, nombre: &str, deuda: f64) {
+        conn.execute(
+            "INSERT INTO clientes (id, nombre, saldo_deuda_usd) VALUES (?1, ?2, ?3)",
+            params![id, nombre, deuda],
+        )
+        .unwrap();
+    }
 
-        let count: i64 = conn.query_row("SELECT COUNT(*) FROM clientes WHERE id = 42", [], |r| r.get(0)).unwrap();
-        assert_eq!(count, 0);
-        let (nombre, motivo, saldo): (String, String, f64) = conn
+    fn count_alertas(conn: &rusqlite::Connection, tipo: &str) -> i64 {
+        conn.query_row(
+            "SELECT COUNT(*) FROM alertas_credito WHERE tipo = ?1",
+            params![tipo],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_pay_debt_vendedor_genera_alerta_abono() {
+        let mut conn = crate::db::test_support::test_conn();
+        insertar_usuario_rol(&conn, 2, "vendedor1", constants::ROL_VENDEDOR);
+        insertar_cliente_con_deuda(&conn, 1, "Juan Pérez", 100.0);
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: 25.0, metodo_pago: "efectivo_usd".to_string(),
+            referencia_pago_movil: None, pago_detalle: None,
+        };
+        let tx = conn.transaction().unwrap();
+        pay_debt_inner(&tx, &req, "vendedor1", 2).unwrap();
+        tx.commit().unwrap();
+        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_ABONO), 1);
+        // La alerta registra el monto y el usuario vendedor.
+        let (monto, usuario, cliente): (f64, String, String) = conn
             .query_row(
-                "SELECT nombre, motivo, saldo_pagado_usd FROM clientes_eliminados WHERE cliente_id = 42",
-                [],
+                "SELECT monto_usd, usuario, cliente_nombre FROM alertas_credito WHERE tipo = ?1",
+                params![crate::alertas::TIPO_ABONO],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .unwrap();
-        assert_eq!(nombre, "Cliente Tmp");
-        assert_eq!(motivo, "saldó deuda");
-        assert!((saldo - 0.0).abs() < 0.001);
-        let audit: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM historial_acciones WHERE accion LIKE ?1",
-            params!["%Eliminó cliente temporal%"],
-            |r| r.get(0),
-        ).unwrap();
-        assert_eq!(audit, 1);
+        assert!((monto - 25.0).abs() < 0.001);
+        assert_eq!(usuario, "vendedor1");
+        assert_eq!(cliente, "Juan Pérez");
     }
 
     #[test]
-    fn test_eliminar_cliente_temporal_desvincula_ventas() {
+    fn test_pay_debt_admin_no_genera_alerta() {
         let mut conn = crate::db::test_support::test_conn();
-        insert_cliente_temporal(&conn, 7, "Tmp Ventas", 12.0);
-        conn.execute(
-            "INSERT INTO ventas (cliente_id, fecha_hora, usuario_id, metodo_pago, total_usd, tasa_aplicada, total_bs, anulada) VALUES (7, datetime('now','localtime'), 1, 'efectivo_usd', 5.0, 1.0, 5.0, 0)",
-            [],
-        )
-        .unwrap();
+        insertar_cliente_con_deuda(&conn, 1, "Cliente", 100.0);
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: 25.0, metodo_pago: "efectivo_usd".to_string(),
+            referencia_pago_movil: None, pago_detalle: None,
+        };
         let tx = conn.transaction().unwrap();
-        eliminar_cliente_temporal(&tx, 7, "admin", "liquidado").unwrap();
+        // El admin por defecto de test_conn se llama "Jota_admin".
+        pay_debt_inner(&tx, &req, constants::DEFAULT_ADMIN_USERNAME, 1).unwrap();
         tx.commit().unwrap();
-        let nulls: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ventas WHERE cliente_id IS NULL", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(nulls, 1);
+        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_ABONO), 0);
     }
 
     #[test]
-    fn test_eliminar_cliente_temporal_inexistente() {
+    fn test_pay_debt_registra_ingreso_caja_con_concepto_credito() {
         let mut conn = crate::db::test_support::test_conn();
+        insertar_cliente_con_deuda(&conn, 1, "Juan Pérez", 100.0);
+        crate::db::set_config_value(&conn, "tasa_dolar", "10.0").unwrap();
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: 25.0, metodo_pago: "biopago".to_string(),
+            referencia_pago_movil: None, pago_detalle: None,
+        };
         let tx = conn.transaction().unwrap();
-        let res = eliminar_cliente_temporal(&tx, 999, "admin", "motivo");
-        assert!(res.is_err());
-        assert!(res.unwrap_err().contains("no encontrado"));
+        pay_debt_inner(&tx, &req, constants::DEFAULT_ADMIN_USERNAME, 1).unwrap();
+        tx.commit().unwrap();
+        // El abono de deuda entra a la caja como ingreso (no cuenta como venta
+        // a crédito) y su concepto indica el método usado: "Crédito (Biopago)".
+        let (tipo, monto_usd, monto_bs, concepto): (String, f64, f64, String) = conn
+            .query_row(
+                "SELECT tipo, monto_usd, monto_bs, concepto FROM movimientos_caja WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(tipo, "ingreso");
+        assert!((monto_usd - 25.0).abs() < 0.001);
+        assert!((monto_bs - 250.0).abs() < 0.001);
+        assert_eq!(concepto, "Abono deuda - Cliente #1 - Crédito (Biopago)");
+    }
+
+    #[test]
+    fn test_pay_debt_registra_ingreso_caja_pago_movil_con_ref() {
+        let mut conn = crate::db::test_support::test_conn();
+        insertar_cliente_con_deuda(&conn, 1, "Cliente", 80.0);
+        crate::db::set_config_value(&conn, "tasa_dolar", "10.0").unwrap();
+        let req = PayDebtRequest {
+            cliente_id: 1, monto_usd: 30.0, metodo_pago: "pago_movil".to_string(),
+            referencia_pago_movil: Some("7890".to_string()), pago_detalle: None,
+        };
+        let tx = conn.transaction().unwrap();
+        pay_debt_inner(&tx, &req, constants::DEFAULT_ADMIN_USERNAME, 1).unwrap();
+        tx.commit().unwrap();
+        // Pago móvil: el concepto muestra "Pago Móvil: ref" (los 4 dígitos).
+        let (tipo, concepto): (String, String) = conn
+            .query_row(
+                "SELECT tipo, concepto FROM movimientos_caja WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(tipo, "ingreso");
+        assert_eq!(concepto, "Abono deuda - Cliente #1 - Pago Móvil: 7890");
+    }
+
+    #[test]
+    fn test_add_quick_debt_vendedor_genera_alerta_deuda_rapida() {
+        let mut conn = crate::db::test_support::test_conn();
+        insertar_usuario_rol(&conn, 2, "vendedor1", constants::ROL_VENDEDOR);
+        insertar_cliente_con_deuda(&conn, 1, "Juan Pérez", 10.0);
+        let tx = conn.transaction().unwrap();
+        add_quick_debt_inner(&tx, 1, 50.0, "vendedor1").unwrap();
+        tx.commit().unwrap();
+        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_DEUDA_RAPIDA), 1);
+        let deuda: f64 = conn
+            .query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert!((deuda - 60.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_add_quick_debt_admin_no_genera_alerta() {
+        let mut conn = crate::db::test_support::test_conn();
+        insertar_cliente_con_deuda(&conn, 1, "Cliente", 10.0);
+        let tx = conn.transaction().unwrap();
+        add_quick_debt_inner(&tx, 1, 50.0, constants::DEFAULT_ADMIN_USERNAME).unwrap();
+        tx.commit().unwrap();
+        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_DEUDA_RAPIDA), 0);
     }
 }

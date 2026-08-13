@@ -5,8 +5,12 @@ async function loadTasa() {
     qs(SEL.tasaInput).value = tasaActual.toFixed(2);
     const updatedAt = await invoke('get_config_value', { key: CFG_TASA_UPDATED_AT });
     const today = new Date().toLocaleDateString('en-CA');
+    // F5-f: normalizar a "YYYY-MM-DD" — si el valor trae hora (ISO con T/Z u
+    // offset), la comparación estricta mostraba el warning aunque la tasa se
+    // hubiera actualizado hoy.
+    const diaTasa = typeof updatedAt === 'string' && updatedAt ? updatedAt.slice(0, 10) : '';
     const warn = qs(SEL.tasaWarning);
-    if (warn) warn.style.display = (!updatedAt || updatedAt !== today) ? 'inline' : 'none';
+    if (warn) warn.style.display = (!diaTasa || diaTasa !== today) ? 'inline' : 'none';
   } catch (e) { showToast('Error al cargar tasa', 'error'); }
 }
 
@@ -124,7 +128,6 @@ async function loadProductCache() {
 
 /* ========== SALES ========== */
 let productSearchTimer = null;
-let pendingCartQty = 0;
 
 /* Recent products in session (quick-add) */
 function addRecentProduct(codigo) {
@@ -373,29 +376,24 @@ function addToCart(codigo) {
   const p = resolveCartProduct(codigo);
   const esInari = p && p.es_inari;
   const esPesable = p && p.es_pesable;
-  const qtyOverride = (!esInari && !esPesable && pendingCartQty > 0) ? pendingCartQty : 0;
   const existing = cart.find(item => item.codigo === codigo);
   if (existing) {
     if (!esInari && !esPesable && existing.stock === 0) {
       showToast('El producto no tiene stock disponible', 'error');
       return;
     }
-    if (!esInari && !esPesable && existing.cantidad + (qtyOverride || 1) > existing.stock) {
+    if (!esInari && !esPesable && existing.cantidad + 1 > existing.stock) {
       showToast('Stock m\u00e1ximo alcanzado (' + existing.stock + ')', 'error');
       return;
     }
     cartHistoryPush();
-    existing.cantidad = esPesable ? (existing.cantidad || 0) : existing.cantidad + (qtyOverride || 1);
+    existing.cantidad = esPesable ? (existing.cantidad || 0) : existing.cantidad + 1;
     renderCart();
     updateCheckoutBtn();
   } else {
     cartHistoryPush();
-    cart.push({ codigo, cantidad: esPesable ? 0 : (qtyOverride || 1), nombre: '', precio_usd: 0, stock: 0, es_inari: esInari, es_pesable: !!esPesable });
+    cart.push({ codigo, cantidad: esPesable ? 0 : 1, nombre: '', precio_usd: 0, stock: 0, es_inari: esInari, es_pesable: !!esPesable });
     loadProductName(codigo);
-  }
-  if (qtyOverride > 0) {
-    pendingCartQty = 0;
-    qs(SEL.productSearch).placeholder = 'Buscar por nombre o c\u00f3digo...';
   }
   saveCartSnapshot();
   // En móvil, al pasar de 0 a 1 ítem abrir el bottom-sheet para que el usuario
@@ -503,7 +501,6 @@ function removeFromCart(codigo) {
 function clearCart() {
   if (cart.length === 0) return;
   cartHistoryPush();
-  pendingCartQty = 0;
   qs(SEL.productSearch).placeholder = 'Buscar por nombre o c\u00f3digo...';
   closeCartSheet();
   cart.splice(0, cart.length);
@@ -707,6 +704,10 @@ function openPaymentModal() {
   const cambioGroup = qs(SEL.cambioGroup);
   if (cambioGroup) { cambioGroup.style.display = 'none'; qs(SEL.cambioRecibido).value = ''; qs(SEL.cambioResultado).classList.add('hidden'); }
   loadClientesForSelect();
+  // Preseleccionar "Efectivo Bs." (método más común) para agilizar el cobro.
+  // Si el pseudo-producto Efectivo está en el carrito, Efectivo Bs. queda
+  // deshabilitado y el modal espera una selección manual.
+  if (!disallowCash) selectPaymentMethod(METODO_EFECTIVO_BS);
 }
 
 function closePaymentModal() {
@@ -898,13 +899,7 @@ function addMixtoRow(containerId) {
   const row = document.createElement('div');
   row.className = 'mixto-row';
   row.innerHTML =
-    '<select>' +
-      '<option value="efectivo_usd">Efectivo USD</option>' +
-      (cartHasEfectivo() ? '' : '<option value="efectivo_bs">Efectivo Bs.</option>') +
-      '<option value="biopago">Biopago</option>' +
-      '<option value="punto">Punto</option>' +
-      '<option value="pago_movil">Pago M\u00f3vil</option>' +
-    '</select>' +
+    '<div class="mixto-method-wrap"></div>' +
     '<div class="mixto-input-group">' +
       '<span class="mixto-currency-label">$</span>' +
       '<input type="number" inputmode="decimal" step="any" min="0" placeholder="0.00" class="mixto-monto">' +
@@ -912,7 +907,23 @@ function addMixtoRow(containerId) {
     '<span class="mixto-conversion"></span>' +
     '<input type="text" maxlength="4" placeholder="Ref" class="mixto-ref" style="display:none;">' +
     '<button class="mixto-remove">&times;</button>';
-  const sel = row.querySelector('select');
+  const methodOptions = [
+    { value: 'efectivo_usd', label: 'Efectivo USD' },
+    { value: 'efectivo_bs', label: 'Efectivo Bs.', disabled: cartHasEfectivo() },
+    { value: 'biopago', label: 'Biopago' },
+    { value: 'punto', label: 'Punto' },
+    { value: 'pago_movil', label: 'Pago M\u00f3vil' }
+  ];
+  const sel = buildCustomSelect({
+    options: methodOptions,
+    value: 'efectivo_usd',
+    className: 'mixto-method',
+    onChange: function() {
+      updateMethodUI();
+      distributeMixto(containerId);
+    }
+  });
+  row.querySelector('.mixto-method-wrap').appendChild(sel);
   const montoInput = row.querySelector('.mixto-monto');
   const convSpan = row.querySelector('.mixto-conversion');
   const refInput = row.querySelector('.mixto-ref');
@@ -920,11 +931,11 @@ function addMixtoRow(containerId) {
 
   function updateConversion() {
     const val = parseInput(montoInput.value);
-    if (sel.value === METODO_EFECTIVO_USD) {
+    if (sel.getValue() === METODO_EFECTIVO_USD) {
       convSpan.textContent = '= Bs. ' + formatBS(val * tasaActual);
       convSpan.style.display = 'inline';
       montoInput._usdValue = val;
-    } else if (isBsMethod(sel.value)) {
+    } else if (isBsMethod(sel.getValue())) {
       const usd = tasaActual > 0 ? val / tasaActual : 0;
       convSpan.textContent = '= $ ' + formatUSD(usd);
       convSpan.style.display = 'inline';
@@ -937,7 +948,7 @@ function addMixtoRow(containerId) {
   }
 
   function updateMethodUI() {
-    const method = sel.value;
+    const method = sel.getValue();
     refInput.style.display = method === METODO_PAGO_MOVIL ? 'block' : 'none';
     if (method !== METODO_PAGO_MOVIL) refInput.value = '';
     if (method === METODO_EFECTIVO_USD) {
@@ -950,10 +961,6 @@ function addMixtoRow(containerId) {
     updateConversion();
   }
 
-  sel.addEventListener('change', function() {
-    updateMethodUI();
-    distributeMixto(containerId);
-  });
   montoInput.addEventListener('input', updateConversion);
 
   row.querySelector('.mixto-remove').addEventListener('click', function() {
@@ -977,9 +984,9 @@ function distributeMixto(containerId) {
   if (total <= 0) return;
   const share = total / rows.length;
   for (const row of rows) {
-    const sel = row.querySelector('select');
+    const methodEl = row.querySelector('.mixto-method');
+    const method = methodEl ? methodEl.getValue() : '';
     const input = row.querySelector('.mixto-monto');
-    const method = sel.value;
     if (isBsMethod(method)) {
       input.value = (share * tasaActual).toFixed(2).replace(/\.?0+$/, '');
       input._usdValue = share;
@@ -1006,7 +1013,8 @@ function getMixtoData(containerId) {
   const rows = document.querySelectorAll('#' + containerId + ' .mixto-row');
   const items = [];
   for (const row of rows) {
-    const metodo = row.querySelector('select').value;
+    const methodEl = row.querySelector('.mixto-method');
+    const metodo = methodEl ? methodEl.getValue() : '';
     const ref = row.querySelector('.mixto-ref').value.trim() || null;
     const input = row.querySelector('.mixto-monto');
     let monto_usd;
@@ -1221,7 +1229,6 @@ async function confirmPayment() {
     });
     playSound('success');
     haptic(50);
-    pendingCartQty = 0;
     qs(SEL.productSearch).placeholder = 'Buscar por nombre o c\u00f3digo...';
     closeCartSheet();
     showToast('Venta #' + venta.id + ' registrada - ' + formatUSD(venta.total_usd));
@@ -1315,6 +1322,17 @@ async function loadDailySummary() {
     refreshEfectivoSaldo();
 }
 
+async function updateSalesCashierBanner() {
+  const banner = qs(SEL.salesCashierBanner);
+  if (!banner) return;
+  try {
+    const abierta = await invoke('get_caja_abierta');
+    banner.classList.toggle('hidden', !!abierta);
+  } catch (e) {
+    banner.classList.add('hidden');
+  }
+}
+
 async function handleOpenCashier() {
   const btn = qs(SEL.openCashierBtn);
   if (btn) btn.disabled = true;
@@ -1324,9 +1342,32 @@ async function handleOpenCashier() {
   playSound('success');
   showToast(res);
   loadDailySummary();
+  updateSalesCashierBanner();
 }
 
-function openCloseCashier() {
+async function openCloseCashier() {
+  // Si hay un cierre pendiente (corte de energía), el resumen debe reflejar ESE
+  // día/días, no el de hoy. Se re-consulta para que "Cerrar Jornada" siempre apunte
+  // al cierre pendiente aunque el modal inicial se haya cerrado con "Ahora no".
+  let pend = null;
+  try {
+    pend = await invoke('get_pendiente_cierre');
+  } catch (e) {
+    console.log('openCloseCashier (pendiente):', e);
+  }
+  if (pend && pend.desde) {
+    lastPendienteCierre = pend;
+    lastPendienteFecha = pend.hasta;
+    let html = '';
+    (pend.dias || []).forEach(d => {
+      html += '<div class="close-pend-dia"><span>' + d.fecha + '</span><span>' + d.total_ventas + ' ventas</span><span>' + formatUSD(d.total_usd) + '</span></div>';
+    });
+    html += '<div class="close-pend-total">Total (' + (pend.dias || []).length + ' d\u00edas): <strong>' + pend.total_ventas + '</strong> ventas &middot; ' + formatUSD(pend.total_usd) + ' &middot; ' + formatBS(pend.total_bs) + '</div>';
+    qs(SEL.closeSummary).innerHTML = html;
+    showModal(qs(SEL.closeCashierModal));
+    return;
+  }
+  lastPendienteCierre = null;
   const totalUSD = qs(SEL.dailyUsd).textContent;
   const totalBS = qs(SEL.dailyBs).textContent;
   const count = qs(SEL.dailyCount).textContent;
@@ -1339,61 +1380,78 @@ function closeCloseCashier() { closeModal(qs(SEL.closeCashierModal)); }
 async function confirmCloseCashier() {
   const btn = qs(SEL.closeCashierConfirmBtn);
   if (btn) btn.disabled = true;
-  const results = await invokeOrError(Promise.all([
-    invoke('close_cashier'),
-    invoke('get_close_report_data')
-  ]));
+  const esPendiente = !!lastPendienteCierre;
+  const results = await invokeOrError(esPendiente
+    ? invoke('close_pendiente_cashier')
+    : Promise.all([
+        invoke('close_cashier', { fecha: lastPendienteFecha || null }),
+        invoke('get_close_report_data', { fecha: lastPendienteFecha || null })
+      ]));
   if (btn) btn.disabled = false;
+  // F1-f: el estado pendiente se limpia SOLO tras éxito. Si el comando falla,
+  // `invokeOrError` devuelve undefined y el cierre pendiente se conserva para
+  // el siguiente intento (antes se reseteaba antes del guard y se perdían días).
   if (results === undefined) return;
-  const [report, reportData] = results;
-    closeCloseCashier();
-    let html = '<div class="close-report-content">';
-    html += '<div class="close-report-icon">' + ICON.FILE_TEXT + '</div>';
-    html += '<h3>Reporte de Cierre de Jornada</h3>';
-    html += '<p><strong>Fecha:</strong> ' + report.fecha_cierre + '</p>';
-    html += '<p><strong>Usuario:</strong> ' + report.usuario + '</p>';
-    html += '<hr class="close-report-hr">';
-    html += '<p><strong>Ventas realizadas:</strong> ' + reportData.total_ventas + '</p>';
-    html += '<p><strong>Total USD:</strong> ' + formatUSD(reportData.total_usd) + '</p>';
-    html += '<p><strong>Total Bs.:</strong> ' + formatBS(reportData.total_bs) + '</p>';
-    if (reportData.por_metodo && reportData.por_metodo.length) {
-      html += '<hr class="close-report-hr"><h4>Totales por M\u00e9todo de Pago</h4>';
-      html += '<canvas id="close-pie-chart" class="chart-canvas" width="' + CHART.CANVAS_WIDTH + '" height="' + CHART.CANVAS_HEIGHT + '"></canvas>';
-      reportData.por_metodo.forEach(m => {
-        const label = formatMetodoLabel(m.metodo);
-        let refStr = '';
-        if (m.referencias && m.referencias.length) {
-          refStr = ' (' + m.referencias.join(', ') + ')';
-        }
-        html += '<p>' + label + refStr + ': ' + formatUSD(m.total_usd) + ' / ' + formatBS(m.total_usd * tasaActual) + '</p>';
-      });
-    }
-    if (reportData.productos_vendidos && reportData.productos_vendidos.length) {
-      html += '<hr class="close-report-hr"><h4>Productos Vendidos</h4>';
-      html += '<table class="compact-table"><tr><th>Producto</th><th>Cant</th><th>Total</th></tr>';
-      reportData.productos_vendidos.forEach(p => {
-        html += '<tr><td>' + escapeHtml(p.nombre) + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>';
-      });
-      html += '</table>';
-    }
-    if (reportData.clientes_credito && reportData.clientes_credito.length) {
-      html += '<hr class="close-report-hr"><h4>Clientes a Cr\u00e9dito</h4>';
-      reportData.clientes_credito.forEach(c => {
-        html += '<p>' + escapeHtml(c.nombre) + ': ' + formatUSD(c.total_usd) + '</p>';
-      });
-    }
-    html += '<div class="close-report-actions"><button class="btn btn-primary" data-action="print-close-report">Exportar PDF</button></div>';
-    html += '</div>';
-    qs(SEL.closeReportBody).innerHTML = html;
-    showModal(qs(SEL.closeReportModal));
-    lastCloseReportData = reportData;
-    requestAnimationFrame(() => drawCloseChart(reportData));
-    playSound('success');
-    showToast('Jornada cerrada exitosamente');
-    if (report.backup_msg) {
-      showToast(report.backup_msg, 'info');
-    }
-    loadDailySummary();
+  lastPendienteFecha = null;
+  lastPendienteCierre = null;
+  // Cierre pendiente: el comando devuelve { report, data } en un solo objeto.
+  const finalReport = esPendiente ? results.report : results[0];
+  const finalData = esPendiente ? results.data : results[1];
+  closeCloseCashier();
+  updateSalesCashierBanner();
+  let html = '<div class="close-report-content">';
+  html += '<div class="close-report-icon">' + ICON.FILE_TEXT + '</div>';
+  html += '<h3>Reporte de Cierre de Jornada</h3>';
+  html += '<p><strong>Fecha:</strong> ' + finalReport.fecha_cierre + '</p>';
+  html += '<p><strong>Usuario:</strong> ' + finalReport.usuario + '</p>';
+  html += '<hr class="close-report-hr">';
+  html += '<p><strong>Ventas realizadas:</strong> ' + finalData.total_ventas + '</p>';
+  html += '<p><strong>Total USD:</strong> ' + formatUSD(finalData.total_usd) + '</p>';
+  html += '<p><strong>Total Bs.:</strong> ' + formatBS(finalData.total_bs) + '</p>';
+  if (finalData.dias && finalData.dias.length) {
+    html += '<hr class="close-report-hr"><h4>Desglose por d\u00eda</h4>';
+    finalData.dias.forEach(d => {
+      html += '<div class="close-pend-dia"><span>' + d.fecha + '</span><span>' + d.total_ventas + ' ventas</span><span>' + formatUSD(d.total_usd) + ' / ' + formatBS(d.total_bs) + '</span></div>';
+    });
+  }
+  if (finalData.por_metodo && finalData.por_metodo.length) {
+    html += '<hr class="close-report-hr"><h4>Totales por M\u00e9todo de Pago</h4>';
+    html += '<canvas id="close-pie-chart" class="chart-canvas" width="' + CHART.CANVAS_WIDTH + '" height="' + CHART.CANVAS_HEIGHT + '"></canvas>';
+    finalData.por_metodo.forEach(m => {
+      const label = formatMetodoLabel(m.metodo);
+      let refStr = '';
+      if (m.referencias && m.referencias.length) {
+        refStr = ' (' + m.referencias.join(', ') + ')';
+      }
+      html += '<p>' + label + refStr + ': ' + formatUSD(m.total_usd) + ' / ' + formatBS(m.total_usd * tasaActual) + '</p>';
+    });
+  }
+  if (finalData.productos_vendidos && finalData.productos_vendidos.length) {
+    html += '<hr class="close-report-hr"><h4>Productos Vendidos</h4>';
+    html += '<table class="compact-table"><tr><th>Producto</th><th>Cant</th><th>Total</th></tr>';
+    finalData.productos_vendidos.forEach(p => {
+      html += '<tr><td>' + escapeHtml(p.nombre) + '</td><td>' + p.cantidad + '</td><td>' + formatUSD(p.total_usd) + '</td></tr>';
+    });
+    html += '</table>';
+  }
+  if (finalData.clientes_credito && finalData.clientes_credito.length) {
+    html += '<hr class="close-report-hr"><h4>Clientes a Cr\u00e9dito</h4>';
+    finalData.clientes_credito.forEach(c => {
+      html += '<p>' + escapeHtml(c.nombre) + ': ' + formatUSD(c.total_usd) + '</p>';
+    });
+  }
+  html += '<div class="close-report-actions"><button class="btn btn-primary" data-action="print-close-report">Exportar PDF</button></div>';
+  html += '</div>';
+  qs(SEL.closeReportBody).innerHTML = html;
+  showModal(qs(SEL.closeReportModal));
+  lastCloseReportData = finalData;
+  requestAnimationFrame(() => drawCloseChart(finalData));
+  playSound('success');
+  showToast('Jornada cerrada exitosamente');
+  if (finalReport.backup_msg) {
+    showToast(finalReport.backup_msg, 'info');
+  }
+  loadDailySummary();
 }
 
 function drawPieChart(canvasId, data) {
@@ -1465,6 +1523,12 @@ function printCloseReport() {
   doc.write('<p><strong>Ventas realizadas:</strong> ' + d.total_ventas + '</p>');
   doc.write('<p><strong>Total USD:</strong> ' + formatUSD(d.total_usd) + '</p>');
   doc.write('<p><strong>Total Bs.:</strong> ' + formatBS(d.total_bs) + '</p>');
+  if (d.dias && d.dias.length) {
+    doc.write('<h4>Desglose por d\u00eda</h4>');
+    d.dias.forEach(dd => {
+      doc.write('<p>' + dd.fecha + ': ' + dd.total_ventas + ' ventas &middot; ' + formatUSD(dd.total_usd) + ' / ' + formatBS(dd.total_bs) + '</p>');
+    });
+  }
   doc.write('<hr>');
   doc.write('<h4>Totales por M\u00e9todo de Pago</h4>');
   d.por_metodo.forEach(m => {
@@ -1508,7 +1572,7 @@ async function openHistorialCierres() {
   } else {
     let html = '<table class="table table-cards compact-table"><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Ventas</th><th>Total USD</th><th>Total Bs.</th><th></th></tr>';
     cierres.forEach(c => {
-      html += '<tr><td data-label="#">' + c.id + '</td><td data-label="Fecha">' + escapeHtml(c.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(c.username) + '</td><td data-label="Ventas">' + c.total_ventas + '</td><td data-label="Total USD">' + formatUSD(c.total_usd) + '</td><td data-label="Total Bs.">' + formatBS(c.total_bs) + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-cierre-detalle" data-id="' + c.id + '"><i class="nf nf-fa-info_circle"></i> Ver detalle</button></div></div></td></tr>';
+      html += '<tr><td data-label="#">' + c.id + '</td><td data-label="Fecha">' + escapeHtml(formatDateTime(c.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(c.username) + '</td><td data-label="Ventas">' + c.total_ventas + '</td><td data-label="Total USD">' + formatUSD(c.total_usd) + '</td><td data-label="Total Bs.">' + formatBS(c.total_bs) + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-cierre-detalle" data-id="' + c.id + '"><i class="nf nf-fa-info_circle"></i> Ver detalle</button></div></div></td></tr>';
     });
     html += '</table>';
     container.innerHTML = html;
@@ -1530,7 +1594,7 @@ async function showCierreDetalle(cierreId) {
     let html = '<div style="text-align:center;padding:8px 20px;">';
     html += '<div style="font-size:28px;margin-bottom:4px;">' + ICON.FILE_TEXT + '</div>';
     html += '<h3>Reporte de Cierre #' + c.id + '</h3>';
-    html += '<p><strong>Fecha:</strong> ' + escapeHtml(c.fecha_hora) + '</p>';
+    html += '<p><strong>Fecha:</strong> ' + escapeHtml(formatDateTime(c.fecha_hora)) + '</p>';
     html += '<p><strong>Usuario:</strong> ' + escapeHtml(c.username) + '</p>';
     html += '<hr style="margin:8px 0;">';
     html += '<p><strong>Ventas realizadas:</strong> ' + d.total_ventas + '</p>';
@@ -1604,7 +1668,7 @@ async function loadMovimientos() {
           '<span class="movimiento-tipo ' + m.tipo + '">' + (m.tipo === 'egreso' ? '&#8593;' : '&#8595;') + '</span>' +
           '<span class="movimiento-monto">' + sign + formatUSD(m.monto_usd) + ' <span class="movimiento-monto-bs">(' + formatBS(m.monto_bs) + ')</span></span>' +
           '<span class="movimiento-concepto">' + escapeHtml(m.concepto) + '</span>' +
-          '<span class="movimiento-meta">' + escapeHtml(m.username) + ' ' + m.created_at.slice(11, 16) + '</span>' +
+          '<span class="movimiento-meta">' + escapeHtml(m.username) + ' ' + formatDateTime(m.created_at).split(' ')[1] + '</span>' +
         '</div>';
       }).join('');
     }

@@ -32,7 +32,7 @@ document.addEventListener('keydown', function(e) {
     var vmap = {
       '1': VIEW.SALES, '2': VIEW.INVENTORY, '3': VIEW.CREDITOS,
       '4': VIEW.CASHIER, '5': VIEW.REPORTS, '6': VIEW.AUDIT,
-      '7': VIEW.CONFIG, '8': VIEW.SYNC
+      '7': VIEW.SYNC, '8': VIEW.CONFIG
     };
     var target = vmap[e.key];
     if (target) { e.preventDefault(); showView(target); }

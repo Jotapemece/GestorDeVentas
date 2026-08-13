@@ -5,12 +5,11 @@ use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, Pass
 use argon2::Argon2;
 use rusqlite::params;
 use sha2::{Digest, Sha256};
-use std::time::Instant;
 use tauri::State;
 
-const SQL_USER_BY_USERNAME: &str = "SELECT id, username, password, rol, COALESCE(password_change_required, 0) FROM usuarios WHERE username = ?1";
+const SQL_USER_BY_USERNAME: &str = "SELECT id, username, password, rol FROM usuarios WHERE username = ?1";
 const SQL_INSERT_USUARIO: &str = "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)";
-const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol, COALESCE(password_change_required, 0) FROM usuarios ORDER BY username";
+const SQL_LIST_USUARIOS: &str = "SELECT id, username, rol FROM usuarios ORDER BY username";
 const SQL_DELETE_USUARIO: &str = "DELETE FROM usuarios WHERE id = ?1 AND username != 'admin' AND username != 'Jota_admin'";
 
 
@@ -125,33 +124,13 @@ pub(crate) fn employee_guard(
 
 #[tauri::command]
 pub fn login(state: State<AppState>, username: String, password: String) -> LoginResponse {
-    {
-        let mut attempts = match state.login_attempts.lock() {
-            Ok(a) => a,
-            Err(_) => {
-                return LoginResponse {
-                    success: false,
-                    message: "Error interno".to_string(),
-                    usuario: None,
-                    password_change_required: false,
-                }
-            }
-        };
-        if let Some(&(count, until)) = attempts.get(&username) {
-            if count >= crate::db::LOGIN_MAX_ATTEMPTS && Instant::now() < until {
-                return LoginResponse {
-                    success: false,
-                    message: format!(
-                        "Demasiados intentos. Intente de nuevo en {} segundos.",
-                        until.duration_since(Instant::now()).as_secs()
-                    ),
-                    usuario: None,
-                    password_change_required: false,
-                };
-            }
-            if Instant::now() >= until {
-                attempts.remove(&username);
-            }
+    // M5: lockout por intentos fallidos POR USUARIO (clave tipo "login:alice").
+    // No se cuenta cuando el usuario no existe (evita bloquear cuentas reales
+    // bajo usernames inventados — DoS).
+    let lock_key = format!("login:{}", username.to_lowercase());
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        if let Err(e) = crate::db::check_action_rate_limit(&mut attempts, &lock_key) {
+            return LoginResponse { success: false, message: e, usuario: None };
         }
     }
 
@@ -162,15 +141,13 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                 success: false,
                 message: "Error interno del servidor".to_string(),
                 usuario: None,
-                password_change_required: false,
             }
         }
     };
 
-    let username_clone = username.clone();
     // Leer la fila del usuario y SOLTAR el lock de la BD antes de ejecutar Argon2
     // (verify_password es costoso; retener el mutex durante él degrada el resto).
-    let (stored_hash, usuario, pwd_change_required) = {
+    let (stored_hash, usuario) = {
         let row = db.query_row(
             SQL_USER_BY_USERNAME,
             rusqlite::params![&username],
@@ -181,31 +158,26 @@ pub fn login(state: State<AppState>, username: String, password: String) -> Logi
                         id: row.get(0)?,
                         username: row.get(1)?,
                         rol: row.get(3)?,
-                        password_change_required: row.get::<_, i64>(4)? != 0,
                     },
-                    row.get::<_, i64>(4)? != 0,
                 ))
             },
         );
         match row {
             Ok(v) => v,
             // Usuario inexistente: responder igual que credencial invalida para no
-            // filtrar que usernames existen, pero NO contar el intento (evita el
-            // DoS de lockout con usernames inexistentes).
+            // filtrar que usernames existen.
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 return LoginResponse {
                     success: false,
                     message: "Credenciales inválidas".to_string(),
                     usuario: None,
-                    password_change_required: false,
                 };
             }
-Err(_e) => {
+            Err(_e) => {
                 return LoginResponse {
                     success: false,
                     message: "Error interno al verificar credenciales".to_string(),
                     usuario: None,
-                    password_change_required: false,
                 };
             }
         }
@@ -213,19 +185,19 @@ Err(_e) => {
     drop(db);
 
     if !verify_password(&password, &stored_hash) {
-        if let Ok(mut attempts) = state.login_attempts.lock() {
-            let entry = attempts.entry(username_clone.clone()).or_insert((0, Instant::now()));
-            entry.0 += 1;
-            if entry.0 >= crate::db::LOGIN_MAX_ATTEMPTS {
-                entry.1 = Instant::now() + std::time::Duration::from_secs(crate::db::LOGIN_BLOCK_SECS);
-            }
+        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+            crate::db::rate_limit_fail(&mut attempts, &lock_key);
         }
         return LoginResponse {
             success: false,
             message: "Credenciales inválidas".to_string(),
             usuario: None,
-            password_change_required: false,
         };
+    }
+
+    // Éxito: limpiar el contador de intentos fallidos de este usuario.
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, &lock_key);
     }
 
     // Upgrade legacy SHA-256 hash to argon2 (re-adquiere el lock solo para escribir).
@@ -242,9 +214,6 @@ Err(_e) => {
     }
 
     let user_clone = usuario.clone();
-    if let Ok(mut attempts) = state.login_attempts.lock() {
-        attempts.remove(&username_clone);
-    }
     let mut current = match state.current_user.lock() {
         Ok(c) => c,
         Err(_) => {
@@ -252,7 +221,6 @@ Err(_e) => {
                 success: false,
                 message: "Error interno".to_string(),
                 usuario: None,
-                password_change_required: false,
             }
         }
     };
@@ -261,7 +229,6 @@ Err(_e) => {
         success: true,
         message: "Inicio de sesión exitoso".to_string(),
         usuario: Some(user_clone),
-        password_change_required: pwd_change_required,
     }
 }
 
@@ -332,7 +299,6 @@ pub fn list_usuarios(state: State<AppState>) -> Result<Vec<Usuario>, String> {
                 id: row.get(0)?,
                 username: row.get(1)?,
                 rol: row.get(2)?,
-                password_change_required: row.get::<_, i64>(3)? != 0,
             })
         })
         .map_err(|e| e.to_string())?
@@ -386,12 +352,6 @@ pub fn change_password(
         .clone()
         .ok_or("No autenticado")?;
 
-    let rate_key = format!("change_password_{}", user.id);
-    crate::db::check_action_rate_limit(
-        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
-        &rate_key,
-    )?;
-
     let mut db = state.lock_db()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 
@@ -405,24 +365,17 @@ pub fn change_password(
 
     if !verify_password(&request.old_password, &stored_hash) {
         drop(tx);
-        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            crate::db::rate_limit_fail(&mut attempts, &rate_key);
-        }
         return Err("La contrasena actual no es correcta".to_string());
     }
 
     let new_hashed = hash_password(&request.new_password)?;
     tx.execute(
-        "UPDATE usuarios SET password = ?1, password_change_required = 0 WHERE id = ?2",
+        "UPDATE usuarios SET password = ?1 WHERE id = ?2",
         params![new_hashed, user.id],
     )
     .map_err(|e| format!("Error al cambiar contrasena: {}", e))?;
 
     tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
-
-    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        crate::db::rate_limit_success(&mut attempts, &rate_key);
-    }
 
     Ok("Contrasena cambiada exitosamente".to_string())
 }
@@ -451,11 +404,6 @@ pub fn admin_change_password(
         ));
     }
 
-    crate::db::check_action_rate_limit(
-        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
-        "admin_change_password",
-    )?;
-
     let db = state.lock_db()?;
     if let Err(e) = crate::audit::log_action(&db, &admin_username, &format!("Cambió password del usuario id={}", usuario_id)) {
         eprintln!("[audit] Error al registrar acción: {}", e);
@@ -463,18 +411,12 @@ pub fn admin_change_password(
 
     let new_hashed = hash_password(&new_password)?;
     let affected = db
-        .execute("UPDATE usuarios SET password = ?1, password_change_required = 0 WHERE id = ?2", params![new_hashed, usuario_id])
+        .execute("UPDATE usuarios SET password = ?1 WHERE id = ?2", params![new_hashed, usuario_id])
         .map_err(|e| format!("Error al cambiar contraseña: {}", e))?;
 
     if affected == 0 {
-        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            crate::db::rate_limit_fail(&mut attempts, "admin_change_password");
-        }
         Err("Usuario no encontrado".to_string())
     } else {
-        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            crate::db::rate_limit_success(&mut attempts, "admin_change_password");
-        }
         Ok("Contraseña cambiada exitosamente".to_string())
     }
 }
@@ -484,20 +426,30 @@ pub fn reset_usuarios(state: State<AppState>) -> Result<String, String> {
     crate::auth::admin_guard(&state, "reset_usuarios", "Reset usuarios a solo superadmin")?;
     // Argon2 costoso: hashear fuera del lock.
     let hashed = hash_password(constants::DEFAULT_ADMIN_PASSWORD)?;
-    let db = state.lock_db()?;
+    let mut db = state.lock_db()?;
 
-    if let Err(e) = db.execute("DELETE FROM usuarios", []) {
-        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            crate::db::rate_limit_fail(&mut attempts, "reset_usuarios");
+    // M6: transacción — si falla el INSERT del superadmin, el DELETE previo se
+    // revierte (nunca queda la BD sin admin por una rotura a mitad).
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    match (|| -> Result<(), String> {
+        tx.execute("DELETE FROM usuarios", [])
+            .map_err(|e| format!("Error al eliminar usuarios: {}", e))?;
+        tx.execute(
+            "INSERT INTO usuarios (username, password, rol) VALUES (?1, ?2, ?3)",
+            params![constants::DEFAULT_ADMIN_USERNAME, hashed, constants::ROL_ADMIN],
+        )
+        .map_err(|e| format!("Error al crear superadmin: {}", e))?;
+        Ok(())
+    })() {
+        Ok(()) => {}
+        Err(e) => {
+            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+                crate::db::rate_limit_fail(&mut attempts, "reset_usuarios");
+            }
+            return Err(e);
         }
-        return Err(format!("Error al eliminar usuarios: {}", e));
     }
-
-    db.execute(
-        "INSERT INTO usuarios (username, password, rol, password_change_required) VALUES (?1, ?2, ?3, 1)",
-        params![constants::DEFAULT_ADMIN_USERNAME, hashed, constants::ROL_ADMIN],
-    )
-    .map_err(|e| format!("Error al crear superadmin: {}", e))?;
+    tx.commit().map_err(|e| format!("Error al confirmar reset: {}", e))?;
 
     if let Ok(mut attempts) = state.admin_action_attempts.lock() {
         crate::db::rate_limit_success(&mut attempts, "reset_usuarios");

@@ -5,6 +5,8 @@ pub(crate) mod users;
 pub(crate) mod conflicts;
 pub(crate) mod orchestrator;
 pub(crate) mod preview;
+pub(crate) mod alertas;
+pub(crate) mod solicitudes;
 
 pub use products::*;
 pub use clients::*;
@@ -75,6 +77,37 @@ pub(crate) fn supabase_get(url: &str, key: &str) -> Result<Vec<serde_json::Value
         }
         Err(e) => Err(format!("Error de conexión: {}", e)),
     }
+}
+
+/// Tamaño de página para descargas paginadas. PostgREST corta cada request a
+/// `db-max-rows` (default 1000) SIN avisar; descargar sin paginar pierde las
+/// filas que quedan fuera del corte pero el watermark avanza igual.
+pub(crate) const SYNC_PAGE_SIZE: usize = 1000;
+
+/// Descarga paginada completa: itera `order=updated_at.asc&limit={SYNC_PAGE_SIZE}`
+/// con `offset` creciente hasta obtener un batch menor al máximo. Si falla
+/// cualquier página, propaga el error (el caller hace rollback y NO avanza el
+/// watermark). Ordenar por `updated_at` mantiene estable el cursor entre batches.
+pub(crate) fn supabase_get_paginated(
+    base_url: &str,
+    key: &str,
+) -> Result<Vec<serde_json::Value>, String> {
+    let mut all: Vec<serde_json::Value> = Vec::new();
+    let mut offset = 0usize;
+    loop {
+        let page_url = format!(
+            "{}&order=updated_at.asc&limit={}&offset={}",
+            base_url, SYNC_PAGE_SIZE, offset
+        );
+        let page = supabase_get(&page_url, key)?;
+        let n = page.len();
+        all.extend(page);
+        if n < SYNC_PAGE_SIZE {
+            break;
+        }
+        offset += n;
+    }
+    Ok(all)
 }
 
 pub(crate) fn supabase_config(db: &rusqlite::Connection) -> Result<(String, String), String> {

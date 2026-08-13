@@ -95,6 +95,14 @@ const METODO_CREDITO = 'credito';
 const METODO_MIXTO = 'mixto';
 const ROL_ADMIN = 'admin';
 
+// Vistas de acceso restringido a administradores (se aplica al restaurar
+// `last_view` y como guard defensivo en showView).
+const ADMIN_ONLY_VIEWS = [VIEW.SYNC];
+function viewAllowedForRole(name, user) {
+  const isAdmin = !!(user && user.rol === ROL_ADMIN);
+  return !ADMIN_ONLY_VIEWS.includes(name) || isAdmin;
+}
+
 // Pseudo-producto "Efectivo": el efectivo físico disponible en Bs. Su "stock"
 // es `efectivo_disponible_bs` y solo cambia al venderlo o al recibir efectivo.
 const CODIGO_EFECTIVO = 'EFECTIVO';
@@ -163,7 +171,6 @@ const PRINT = {
 const SYNC = {
   AUTO_MIN: 10,
   AUTO_MAX: 480,
-  SALE_DEBOUNCE_MS: 10 * 60 * 1000,
 };
 
 // General Constants
@@ -337,6 +344,7 @@ const SEL = {
   tasaCalendarWrap: '#tasa-calendar-wrap',
   tasaActualLabel: '#tasa-actual-label',
   inventoryInariBtn: '#inventory-inari-btn',
+  inventoryCategoriaFilterWrap: '#inventory-categoria-filter-wrap',
   inariConfigToggle: '#inari-config-toggle',
   inariSubcatBar: '#inari-subcat-bar',
   inariCreateComboBtn: '#inari-create-combo-btn',
@@ -366,6 +374,17 @@ const SEL = {
   productCosto: '#product-costo',
   productCategoria: '#product-categoria',
   productSubcategoria: '#product-subcategoria',
+  categoriasBtn: '#inventory-categorias-btn',
+  categoriasModal: '#categorias-modal',
+  categoriasModalClose: '#categorias-modal-close',
+  categoriasModalOkBtn: '#categorias-modal-ok-btn',
+  categoriaForm: '#categoria-form',
+  categoriaNombre: '#categoria-nombre',
+  categoriaNombreError: '#categoria-nombre-error',
+  categoriaColor: '#categoria-color',
+  categoriaSaveBtn: '#categoria-save-btn',
+  categoriaSaveText: '#categoria-save-text',
+  categoriasList: '#categorias-list',
   productDetailModal: '#product-detail-modal',
   detailNombre: '#detail-nombre',
   detailPrecio: '#detail-precio',
@@ -377,6 +396,7 @@ const SEL = {
   detailStockLabel: '#detail-stock-label',
   detailStockMinimo: '#detail-stock-minimo',
   detailStockMinimoLabel: '#detail-stock-minimo-label',
+  detailCategoria: '#detail-categoria',
   detailCreated: '#detail-created',
 
   // --- Creditos / Clientes ---
@@ -390,6 +410,8 @@ const SEL = {
   quickDebtCancel: '#quick-debt-cancel-btn',
   quickDebtClose: '#quick-debt-close',
   quickDebtMontoBs: '#quick-debt-monto-bs',
+  quickDebtMonedaToggle: '#quick-debt-moneda-toggle',
+  quickDebtMontoBsGroup: '#quick-debt-monto-bs-group',
   clientModal: '#client-modal',
   clientModalTitle: '#client-modal-title',
   clientNombre: '#client-nombre',
@@ -407,6 +429,8 @@ const SEL = {
   abonoDeudaBs: '#abono-deuda-bs',
   abonoMonto: '#abono-monto',
   abonoMontoBs: '#abono-monto-bs',
+  abonoMonedaToggle: '#abono-moneda-toggle',
+  abonoMontoBsGroup: '#abono-monto-bs-group',
   abonoSaldoRestante: '#abono-saldo-restante',
   abonoReferencia: '#abono-referencia',
   abonoReferenciaGroup: '#abono-referencia-group',
@@ -425,6 +449,7 @@ const SEL = {
   dailySalesBody: '#daily-sales-body',
   cajaStatusBar: '#caja-status-bar',
   cajaStatusText: '#caja-status-text',
+  salesCashierBanner: '#sales-cashier-banner',
   openCashierBtn: '#open-cashier-btn',
   closeCashierBtn: '#close-cashier-btn',
   closeCashierModal: '#close-cashier-modal',
@@ -437,9 +462,44 @@ const SEL = {
   historialCierreDetalleModal: '#historial-cierre-detalle-modal',
   historialCierreDetalleBody: '#historial-cierre-detalle-body',
 
+  // --- Alertas de crédito ---
+  creditoNavAlert: '#credito-nav-alert',
+  alertasCreditoBtn: '#alertas-credito-btn',
+  alertasCreditoBtnCount: '#alertas-credito-btn-count',
+  alertasCreditoModal: '#alertas-credito-modal',
+  alertasCreditoBody: '#alertas-credito-body',
+  alertasCreditoClose: '#alertas-credito-close',
+  alertasCreditoOkBtn: '#alertas-credito-ok-btn',
+  alertasCreditoMarkBtn: '#alertas-credito-mark-btn',
+
+  // --- Solicitudes de anulación ---
+  solicitudesBtn: '#solicitudes-btn',
+  solicitudesBtnCount: '#solicitudes-btn-count',
+  solicitudesModal: '#solicitudes-modal',
+  solicitudesBody: '#solicitudes-body',
+  solicitudesClose: '#solicitudes-close',
+  solicitudesOkBtn: '#solicitudes-ok-btn',
+  solicitudMotivoModal: '#solicitud-motivo-modal',
+  solicitudMotivoInput: '#solicitud-motivo-input',
+  solicitudMotivoClose: '#solicitud-motivo-close',
+  solicitudMotivoCancel: '#solicitud-motivo-cancel',
+  solicitudMotivoOkBtn: '#solicitud-motivo-ok-btn',
+
+  // --- Cierre pendiente (corte de energía) ---
+  pendienteCierreModal: '#pendiente-cierre-modal',
+  pendienteCierreMensaje: '#pendiente-cierre-mensaje',
+  pendienteCierreDetalle: '#pendiente-cierre-detalle',
+  pendienteCierreClose: '#pendiente-cierre-close',
+  pendienteCierreLater: '#pendiente-cierre-later',
+  pendienteCierreGo: '#pendiente-cierre-go',
+
   // --- Audit ---
   auditBody: '#audit-body',
   auditLoadMore: '#audit-load-more',
+  auditSearch: '#audit-search',
+  auditStartDate: '#audit-start-date',
+  auditEndDate: '#audit-end-date',
+  auditFilterBtn: '#audit-filter-btn',
 
   // --- Settings ---
   fontIncBtn: '#font-inc-btn',
@@ -519,6 +579,7 @@ const SEL = {
   saleDetailMetodo: '#sale-detail-metodo',
   saleDetailUsuario: '#sale-detail-usuario',
   saleDetailFecha: '#sale-detail-fecha',
+  saleDetailTasa: '#sale-detail-tasa',
   saleDetailList: '#sale-detail-list',
   saleDetailClose: '#sale-detail-close',
   saleDetailOkBtn: '#sale-detail-ok-btn',
@@ -579,6 +640,8 @@ const SEL = {
 
   // --- Sync buttons ---
   backupDbBtn: '#backup-db-btn',
+  clearDataRow: '#clear-data-row',
+  clearDataBtn: '#clear-data-btn',
   backupMaxInput: '#backup-max-input',
   backupMaxSave: '#backup-max-save',
   viewDeviceIdBtn: '#view-device-id-btn',
@@ -621,12 +684,6 @@ const SEL = {
   clientModalClose: '#client-modal-close',
   clientCancelBtn: '#client-cancel-btn',
   clientSaveBtn: '#client-save-btn',
-  clientEsTemporal: '#client-es-temporal',
-  tempHistoryBtn: '#temp-history-btn',
-  tempHistoryModal: '#temp-history-modal',
-  tempHistoryBody: '#temp-history-body',
-  tempHistoryClose: '#temp-history-close',
-  tempHistoryOkBtn: '#temp-history-ok-btn',
   closeCashierClose: '#close-cashier-close',
   closeCashierCancelBtn: '#close-cashier-cancel-btn',
   closeCashierConfirmBtn: '#close-cashier-confirm-btn',

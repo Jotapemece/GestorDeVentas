@@ -23,6 +23,8 @@ async function loadCreditos() {
 }
 
 let creditoFilterTimer = null;
+let abonoMonedaToggler = null;
+let quickDebtMonedaToggler = null;
 function applyCreditoFilter() {
   clearTimeout(creditoFilterTimer);
   creditoFilterTimer = setTimeout(function() {
@@ -54,10 +56,6 @@ function openCreditoModal(cliente) {
   qs(SEL.clientNombre).value = cliente ? cliente.nombre : '';
   qs(SEL.clientModalTitle).textContent = cliente ? 'Editar Cliente' : 'Registrar Persona para Cr\u00e9dito';
   qs(SEL.clientSaveBtn).textContent = cliente ? 'Guardar Cambios' : 'Guardar';
-  if (qs(SEL.clientEsTemporal)) {
-    qs(SEL.clientEsTemporal).checked = cliente ? !!cliente.es_temporal : false;
-    qs(SEL.clientEsTemporal).disabled = !!cliente;
-  }
   clearClientErrors();
   showModal(qs(SEL.clientModal));
   setTimeout(() => qs(SEL.clientNombre).focus(), 100);
@@ -93,9 +91,8 @@ async function saveClient() {
       if (await invokeOrError(invoke('update_cliente', { clienteId: editingClienteId, nombre })) === undefined) return;
       showToast('Cliente actualizado');
     } else {
-      const esTemporal = qs(SEL.clientEsTemporal) ? qs(SEL.clientEsTemporal).checked : false;
-      if (await invokeOrError(invoke('create_cliente', { nombre, esTemporal })) === undefined) return;
-      showToast(esTemporal ? 'Cliente temporal creado' : 'Cliente creado');
+      if (await invokeOrError(invoke('create_cliente', { nombre })) === undefined) return;
+      showToast('Cliente creado');
     }
     editingClienteId = null;
     closeClientModal(); loadCreditos();
@@ -135,6 +132,7 @@ function closeDebtDetail() {
 /* ========== ABONO MODAL ========== */
 function openAbonoModal(id) {
   abonoClienteId = id;
+  if (abonoMonedaToggler) abonoMonedaToggler.setUsd();
   qs(SEL.abonoMonto).value = '';
   qs(SEL.abonoMontoBs).value = '';
   qs(SEL.abonoReferencia).value = '';
@@ -199,15 +197,15 @@ function confirmAbono() {
     referencia = qs(SEL.abonoReferencia).value.trim();
     if (!esRefPagoMovilValida(referencia)) { showToast('Ingrese los \u00faltimos 4 d\u00edgitos', 'error'); return; }
   }
-  if (metodo === METODO_MIXTO) {
-    pago_detalle = getMixtoData('abono-mixto-items');
-    if (!validarMixto(pago_detalle, monto, 'abono-mixto-error')) return;
-  }
   withButtonLock(qs(SEL.abonoConfirmBtn), async () => {
     try {
       var tasa = await getTasaConFallback();
       if (montoBs > 0 && monto <= 0) monto = bsToUsd(montoBs, tasa);
       if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
+      if (metodo === METODO_MIXTO) {
+        pago_detalle = getMixtoData('abono-mixto-items');
+        if (!validarMixto(pago_detalle, monto, 'abono-mixto-error')) return;
+      }
       const res = await invokeOrError(invoke('pay_debt', {
         request: { cliente_id: abonoClienteId, monto_usd: monto, metodo_pago: metodo, referencia_pago_movil: referencia, pago_detalle }
       }));
@@ -330,7 +328,9 @@ function applyTasaHistorial() {
   tasaInventario = item.tasa;
   tasaInventarioFecha = selectedTasaFecha;
   var d = new Date(selectedTasaFecha + 'T00:00:00');
-  var label = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  var now = new Date();
+  var todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  var label = selectedTasaFecha === todayStr ? 'Hoy' : d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
   qs(SEL.tasaActualLabel).textContent = label;
   closeModal(qs(SEL.tasaHistorialModal));
   loadInventory();
@@ -386,33 +386,4 @@ function updateCreditoStats(clientes) {
 }
 
 /* ========== TEMP CLIENTS HISTORY ========== */
-async function openTempHistoryModal() {
-  const tbody = qs(SEL.tempHistoryBody);
-  tbody.innerHTML = loadingTableRow(5);
-  showModal(qs(SEL.tempHistoryModal));
-  try {
-    const items = await invoke('list_clientes_eliminados');
-    tbody.innerHTML = '';
-    if (items.length === 0) {
-      tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-history"></i>', 'Sin historial', 'Los clientes temporales eliminados aparecer\u00e1n aqu\u00ed');
-      return;
-    }
-    appendRows(tbody, items, function(item) {
-      const motivo = item.motivo === 'deuda_pagada'
-        ? '<span class="badge badge-success" style="font-size:10px">Deuda pagada</span>'
-        : (item.motivo === 'eliminacion_manual'
-            ? '<span class="badge badge-danger" style="font-size:10px">Eliminado manual</span>'
-            : escapeHtml(item.motivo));
-      return '<td>' + escapeHtml(item.nombre) + '</td>' +
-        '<td>' + escapeHtml(item.creado_en) + '</td>' +
-        '<td>' + escapeHtml(item.eliminado_en) + '</td>' +
-        '<td>' + formatUSD(item.saldo_pagado_usd) + '</td>' +
-        '<td>' + motivo + '</td>';
-    });
-  } catch (e) { tbody.innerHTML = errorTableRow(5, e); }
-}
-
-function closeTempHistoryModal() {
-  closeModal(qs(SEL.tempHistoryModal));
-}
 

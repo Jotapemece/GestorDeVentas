@@ -1,5 +1,5 @@
 use super::conflicts::{check_and_record_conflict, is_conflict};
-use super::{api_url, now_iso, run_download, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, now_iso, run_download, supabase_get_paginated, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
@@ -22,7 +22,7 @@ pub(crate) fn upload_clientes_inner(
     let mut stmt = db
         .prepare(
             "SELECT id, nombre, credito_activo, saldo_deuda_usd, sync_id, updated_at, COALESCE(activo,1) \
-             FROM clientes WHERE COALESCE(es_temporal, 0) = 0 AND ( \
+             FROM clientes WHERE ( \
                updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR updated_at > ?1 \
              ) ORDER BY id ASC",
         )
@@ -79,7 +79,7 @@ pub(crate) fn upload_clientes_inner(
             "nombre": nombre,
             "credito_activo": credito_activo,
             "saldo_deuda_usd": saldo,
-            "activo": activo,
+            "deleted": if *activo == 0 { 1 } else { 0 },
             "dispositivo_origen": dispositivo_id,
             "updated_at": updated_at,
         }));
@@ -121,7 +121,7 @@ pub(crate) fn download_clientes_inner(
     );
 
     let cloud_clientes: Vec<serde_json::Value> =
-        supabase_get(&get_url, supabase_key)?;
+        supabase_get_paginated(&get_url, supabase_key)?;
 
     let count = cloud_clientes.len();
     if count == 0 {
@@ -168,7 +168,9 @@ pub(crate) fn download_clientes_inner(
         let nombre = cli["nombre"].as_str().unwrap_or("").to_string();
         let credito_activo = cli["credito_activo"].as_i64().unwrap_or(1);
         let saldo = cli["saldo_deuda_usd"].as_f64().unwrap_or(0.0);
-        let activo = cli["activo"].as_i64().unwrap_or(1);
+        // Supabase usa `deleted` (0=activo, 1=borrado) en vez de `activo`.
+        let deleted = cli["deleted"].as_i64().unwrap_or(0);
+        let activo: i64 = if deleted == 1 { 0 } else { 1 };
         let remote_ts = cli["updated_at"].as_str();
 
         let remote_json = json!({

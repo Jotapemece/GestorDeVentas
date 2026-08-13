@@ -1,5 +1,6 @@
 /* ========== AUDIT ========== */
 let auditObserver = null;
+let auditLoading = false;
 
 async function loadAudit() {
   auditOffset = 0;
@@ -29,21 +30,36 @@ function initAuditObserver() {
 }
 
 async function loadAuditMore() {
-  const logs = await invokeOrError(invoke('get_audit_logs', { limit: auditLimit, offset: auditOffset }));
-  if (logs === undefined) return;
-  const tbody = qs(SEL.auditBody);
-  if (auditOffset === 0) tbody.innerHTML = '';
-  if (logs.length === 0 && auditOffset === 0) {
-    tbody.innerHTML = emptyTableRow(4, '<i class="nf nf-fa-history"></i>', 'No hay registros de auditor\u00eda', 'Las acciones del sistema aparecer\u00e1n aqu\u00ed');
-    qs(SEL.auditLoadMore).style.display = 'none';
-    return;
+  // F4-f: anti-doble-disparo — el observer + el clic del botón pueden disparar
+  // cargas concurrentes que duplican filas (lectura del mismo `auditOffset`).
+  if (auditLoading) return;
+  auditLoading = true;
+  try {
+    const search = qs(SEL.auditSearch) ? qs(SEL.auditSearch).value.trim() : '';
+    const startDate = qs(SEL.auditStartDate) ? qs(SEL.auditStartDate).value : '';
+    const endDate = qs(SEL.auditEndDate) ? qs(SEL.auditEndDate).value : '';
+    const args = { limit: auditLimit, offset: auditOffset };
+    if (search) args.search = search;
+    if (startDate) args.startDate = startDate;
+    if (endDate) args.endDate = endDate;
+    const logs = await invokeOrError(invoke('get_audit_logs', args));
+    if (logs === undefined) return;
+    const tbody = qs(SEL.auditBody);
+    if (auditOffset === 0) tbody.innerHTML = '';
+    if (logs.length === 0 && auditOffset === 0) {
+      tbody.innerHTML = emptyTableRow(4, '<i class="nf nf-fa-history"></i>', 'No hay registros de auditor\u00eda', 'Las acciones del sistema aparecer\u00e1n aqu\u00ed');
+      qs(SEL.auditLoadMore).style.display = 'none';
+      return;
+    }
+    appendRows(tbody, logs, createAuditRow);
+    auditOffset += logs.length;
+    var hasMore = logs.length >= auditLimit;
+    qs(SEL.auditLoadMore).style.display = hasMore ? 'inline-flex' : 'none';
+    if (hasMore) initAuditObserver();
+    else disconnectAuditObserver();
+  } finally {
+    auditLoading = false;
   }
-  appendRows(tbody, logs, createAuditRow);
-  auditOffset += logs.length;
-  var hasMore = logs.length >= auditLimit;
-  qs(SEL.auditLoadMore).style.display = hasMore ? 'inline-flex' : 'none';
-  if (hasMore) initAuditObserver();
-  else disconnectAuditObserver();
 }
 
 /* ========== CONFIG ========== */
@@ -231,7 +247,6 @@ async function handleChangePassword() {
   try {
     if (await invokeOrError(invoke('change_password', { request: { old_password: old, new_password: newPwd } })) === undefined) return;
     showToast('Contrase\u00f1a cambiada exitosamente');
-    if (currentUser) currentUser.password_change_required = false;
     qs(SEL.changePwdOld).value = '';
     qs(SEL.changePwdNew).value = '';
     qs(SEL.changePwdConfirm).value = '';

@@ -110,6 +110,10 @@ function createInventoryRow(p, editBtn) {
   var tasa = tasaInventario > 0 ? tasaInventario : tasaActual;
   var inariBadge = p.es_inari ? ' <span class="badge badge-inari">Inari</span>' : '';
   var pesableBadge = p.es_pesable ? ' <span class="badge badge-info" title="Pesable por kilo">kg</span>' : '';
+  var catColor = p.categoria_color || '#CCCCCC';
+  var catChip = p.categoria
+    ? ' <span class="cat-chip" style="background:' + escapeHtml(catColor) + ';color:' + contrastTextColor(catColor) + '" title="Categor\u00eda: ' + escapeHtml(p.categoria) + '">' + escapeHtml(p.categoria) + '</span>'
+    : '';
   var inariToggleBtn = (currentUser && currentUser.rol === ROL_ADMIN)
     ? (p.es_inari
         ? '<button data-action="toggle-inari" data-codigo="' + escapeHtml(p.codigo) + '" data-inari="false"><i class="nf nf-fa-fire"></i> Quitar Inari</button>'
@@ -124,15 +128,19 @@ function createInventoryRow(p, editBtn) {
   var stockDisplay = formatStock(p.stock);
   var stockMinDisplay = formatStock(p.stock_minimo);
   var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron_down"></i></button></td>';
-  return '<td class="cell-key cell-name" data-label="Producto">' + escapeHtml(p.nombre) + inariBadge + pesableBadge + '</td><td class="cell-key cell-price" data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td><td data-label="Costo">' + formatUSD(costo) + '</td><td data-label="Margen">' + margen + '</td><td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td class="cell-key cell-stock' + stockClass + '" data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button><button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>' + editBtn + adjustBtn + inariToggleBtn + deleteComboBtn + '</div></div></td>' + toggleCell;
+  var isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
+  var costCell = isAdmin ? '<td data-label="Costo">' + formatUSD(costo) + '</td>' : '<td class="admin-only" data-label="Costo" style="display:none"></td>';
+  var marginCell = isAdmin ? '<td data-label="Margen">' + margen + '</td>' : '<td class="admin-only" data-label="Margen" style="display:none"></td>';
+  var priceHistoryBtn = isAdmin
+    ? '<button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>'
+    : '';
+  return '<td class="cell-key cell-name" data-label="Producto">' + escapeHtml(p.nombre) + catChip + inariBadge + pesableBadge + '</td><td class="cell-key cell-price" data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td>' + costCell + marginCell + '<td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td class="cell-key cell-stock' + stockClass + '" data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + priceHistoryBtn + editBtn + adjustBtn + inariToggleBtn + deleteComboBtn + '</div></div></td>' + toggleCell;
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
-  var activoBadge = c.es_temporal
-    ? '<span class="badge badge-temporal" style="font-size:10px" title="Cliente temporal: se elimina al saldar su deuda">Temporal</span>'
-    : (c.credito_activo
-        ? '<span class="badge badge-success" style="font-size:10px">Activo</span>'
-        : '<span class="badge badge-danger" style="font-size:10px">Inactivo</span>');
+  var activoBadge = c.credito_activo
+    ? '<span class="badge badge-success" style="font-size:10px">Activo</span>'
+    : '<span class="badge badge-danger" style="font-size:10px">Inactivo</span>';
   var ultimaCompra = c.ultima_compra
     ? escapeHtml(c.ultima_compra.split(' ')[0])
     : '<span class="text-muted">—</span>';
@@ -155,7 +163,7 @@ function createClientRow(c) {
   return '<td class="cell-key cell-name" data-label="Cliente">' + escapeHtml(c.nombre) + '</td><td class="cell-key cell-status" data-label="Cr\u00e9dito">' + activoBadge + '</td><td class="cell-key cell-debt' + deudaCls + '" data-label="Deuda">' + formatUSD(c.saldo_deuda_usd) + '</td><td data-label="Última compra">' + ultimaCompra + '</td><td data-label="Acciones">' + dropdown + '</td>' + toggleCell;
 }
 function createAuditRow(log) {
-  return '<td data-label="ID">' + log.id + '</td><td data-label="Fecha">' + escapeHtml(log.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(log.usuario) + '</td><td data-label="Acción">' + escapeHtml(log.accion) + '</td>';
+  return '<td data-label="ID">' + log.id + '</td><td data-label="Fecha">' + escapeHtml(formatDateTime(log.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(log.usuario) + '</td><td data-label="Acción">' + escapeHtml(log.accion) + '</td>';
 }
 function createDailySaleRow(v, metodoLabel) {
   const nota = v.nota_anulacion ? escapeHtml(v.nota_anulacion) : '';
@@ -164,16 +172,20 @@ function createDailySaleRow(v, metodoLabel) {
         ? '<span class="badge badge-danger" title="' + nota + '"><i class="nf nf-fa-ban"></i> Anulada</span>'
         : '<span class="badge badge-danger"><i class="nf nf-fa-ban"></i> Anulada</span>')
     : '';
-  const detailAttrs = 'data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '"';
+  const detailAttrs = 'data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-tasa="' + (v.tasa_aplicada || '') + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '"';
   const detailItem = '<button class="sale-detail-btn" ' + detailAttrs + '><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
-  const voidItem = v.anulada
+  const canVoid = currentUser && currentUser.rol === ROL_ADMIN;
+  const voidItem = (v.anulada || !canVoid)
     ? ''
     : '<button class="void-sale-btn" data-id="' + v.id + '" title="Anular venta"><i class="nf nf-fa-ban"></i> Anular</button>';
-  const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailItem + voidItem + '</div></div>';
-  return '<td data-label="#">' + v.id + '</td><td data-label="Hora">' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td data-label="Usuario">' + escapeHtml(v.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td data-label="Total (Bs.)">' + formatBS(v.total_bs) + '</td><td data-label="Acción">' + (v.anulada ? anuladaBadge : menu) + '</td>';
+  const requestVoidItem = (!v.anulada && !canVoid)
+    ? '<button class="request-void-btn" data-id="' + v.id + '" title="Solicitar anulación al administrador"><i class="nf nf-fa-paper_plane"></i> Solicitar anulación</button>'
+    : '';
+  const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailItem + voidItem + requestVoidItem + '</div></div>';
+  return '<td data-label="#">' + v.id + '</td><td data-label="Hora">' + escapeHtml(formatDateTime(v.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(v.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td data-label="Total (Bs.)">' + formatBS(v.total_bs) + '</td><td data-label="Acción">' + (v.anulada ? anuladaBadge : menu) + '</td>';
 }
 function createDebtSaleCard(v, prodHtml) {
-  return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
+  return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + formatDateTime(v.fecha_hora) + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
 }
 
 function createUserRow(u) {
@@ -203,9 +215,9 @@ function createReportRow(v) {
   var ganancia = v.venta.total_usd - costoTotal;
   const vv = v.venta;
   const obs = vv.nota ? escapeHtml(vv.nota) : '';
-  const detailBtn = '<button class="sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
+  const detailBtn = '<button class="sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-tasa="' + (vv.tasa_aplicada || '') + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
   const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailBtn + '</div></div>';
-  return '<td data-label="#">' + vv.id + '</td><td data-label="Fecha">' + escapeHtml(vv.fecha_hora) + '</td><td data-label="Usuario">' + escapeHtml(vv.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(vv.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(vv.total_bs) + badge + '</td><td data-label="Acción">' + menu + '</td>';
+  return '<td data-label="#">' + vv.id + '</td><td data-label="Fecha">' + escapeHtml(formatDateTime(vv.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(vv.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(vv.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(vv.total_bs) + badge + '</td><td data-label="Acción">' + menu + '</td>';
 }
 
 const TPL_CLOSE_REPORT_STYLE = 'body{font-family:monospace;font-size:12px;padding:24px}h2{text-align:center;margin-bottom:4px}h4{margin:12px 0 4px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;margin:4px 0}th,td{padding:3px 6px;text-align:left;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000}.total{font-weight:700;text-align:right;margin-top:4px}';
@@ -588,7 +600,7 @@ async function getTasaConFallback() { return tasaActual || await invoke('get_tas
 let activeModal = null;
 
 function isProtectedModal(id) {
-  return ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'quick-debt-modal', 'stock-adjust-modal', 'ajustar-efectivo-modal'].indexOf(id) !== -1;
+  return ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'quick-debt-modal', 'stock-adjust-modal', 'ajustar-efectivo-modal', 'solicitud-motivo-modal'].indexOf(id) !== -1;
 }
 function trapFocus(modalEl) {
   activeModal = modalEl;
@@ -704,6 +716,28 @@ function initModalResize() {
 
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
+
+/* Formatea una fecha/hora a "dd/mm/aaaa hh:mm" en hora local, sin sufijos
+   +00:00 ni Z. Acepta ISO UTC ("...T...Z") y naive local ("aaaa-mm-dd hh:mm:ss"). */
+function formatDateTime(iso, opts) {
+  if (!iso) return '-';
+  var hasTz = /T.*(Z|[+-]\d{2}:\d{2})$/.test(iso);
+  var d;
+  if (hasTz) {
+    d = new Date(iso);
+  } else {
+    d = new Date(iso.replace(' ', 'T'));
+  }
+  if (isNaN(d.getTime())) return iso;
+  var o = opts || {};
+  var parts = [];
+  parts.push(String(d.getDate()).padStart(2, '0'));
+  parts.push(String(d.getMonth() + 1).padStart(2, '0'));
+  parts.push(String(d.getFullYear()).padStart(4, '0'));
+  var time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  if (o.withSeconds) time += ':' + String(d.getSeconds()).padStart(2, '0');
+  return parts.join('/') + (o.time === false ? '' : ' ' + time);
+}
 
 /* ========== COUNT-UP ANIMATION ========== */
 function animateCountUp(el, to, formatFn, duration) {
@@ -913,27 +947,81 @@ function initTableSorting(tableId) {
   if (!table || table.dataset.sortInit) return;
   table.dataset.sortInit = '1';
   const headers = table.querySelectorAll('th[data-sortable]');
-  let currentSort = { col: null, asc: true };
+  const sortKey = 'sort-' + tableId;
+  let saved = null;
+  try {
+    const raw = localStorage.getItem(sortKey);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed.col === 'string') saved = { col: parsed.col, asc: !!parsed.asc };
+  } catch (e) {}
+  let currentSort = saved || { col: null, asc: true };
+
+  function sortRows() {
+    const tbody = table.querySelector('tbody');
+    if (!tbody || !currentSort.col) return;
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const th = Array.from(headers).find(h => h.getAttribute('data-sortable') === currentSort.col);
+    if (!th) return;
+    const isAsc = currentSort.asc;
+    rows.sort((a, b) => {
+      const aVal = a.getAttribute('data-sort-' + currentSort.col) || a.children[Array.from(th.parentNode.children).indexOf(th)]?.textContent?.trim() || '';
+      const bVal = b.getAttribute('data-sort-' + currentSort.col) || b.children[Array.from(th.parentNode.children).indexOf(th)]?.textContent?.trim() || '';
+      const aNum = parseFloat(aVal);
+      const bNum = parseFloat(bVal);
+      if (!isNaN(aNum) && !isNaN(bNum)) return isAsc ? aNum - bNum : bNum - aNum;
+      return isAsc ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+    });
+    // Solo muta el DOM si el orden cambió realmente: si ya están ordenadas,
+    // no se toca nada y se evita que el observer re-dispare sortRows en bucle.
+    const current = Array.from(tbody.children);
+    let changed = rows.length !== current.length;
+    if (!changed) {
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i] !== current[i]) { changed = true; break; }
+      }
+    }
+    if (changed) rows.forEach(r => tbody.appendChild(r));
+  }
+
+  // Aplica el estado visual de los headers según el orden guardado/reciente
+  function applyHeaderState() {
+    headers.forEach(h => {
+      h.classList.remove('sort-asc', 'sort-desc');
+      if (h.getAttribute('data-sortable') === currentSort.col) {
+        h.classList.add(currentSort.asc ? 'sort-asc' : 'sort-desc');
+      }
+    });
+  }
+
   headers.forEach(th => {
     th.addEventListener('click', function() {
       const key = this.getAttribute('data-sortable');
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr'));
       const isAsc = currentSort.col === key ? !currentSort.asc : true;
       currentSort = { col: key, asc: isAsc };
+      try { localStorage.setItem(sortKey, JSON.stringify(currentSort)); } catch (e) {}
       headers.forEach(h => { h.classList.remove('sort-asc', 'sort-desc'); });
       this.classList.add(isAsc ? 'sort-asc' : 'sort-desc');
-      rows.sort((a, b) => {
-        const aVal = a.getAttribute('data-sort-' + key) || a.children[Array.from(th.parentNode.children).indexOf(th)]?.textContent?.trim() || '';
-        const bVal = b.getAttribute('data-sort-' + key) || b.children[Array.from(th.parentNode.children).indexOf(th)]?.textContent?.trim() || '';
-        const aNum = parseFloat(aVal);
-        const bNum = parseFloat(bVal);
-        if (!isNaN(aNum) && !isNaN(bNum)) return isAsc ? aNum - bNum : bNum - aNum;
-        return isAsc ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
-      });
-      rows.forEach(r => tbody.appendChild(r));
+      sortRows();
     });
   });
+
+  // Si hay un orden guardado, aplica el estado visual al montar
+  applyHeaderState();
+
+  // Las tablas se vuelven a llenar tras loadInventory/loadReportes/etc.
+  // Re-aplicar el orden guardado cada vez que cambien las filas.
+  // Se desconecta el observer durante sortRows para evitar reentrada: sus
+  // entregas son asíncronas (microtask), así que un flag booleano no basta.
+  const tbody = table.querySelector('tbody');
+  if (tbody) {
+    const mo = new MutationObserver(function() {
+      if (!currentSort.col) return;
+      mo.disconnect();
+      sortRows();
+      mo.observe(tbody, { childList: true });
+    });
+    mo.observe(tbody, { childList: true });
+  }
 }
 
 /* ========== CONNECTION MONITOR ========== */
@@ -1050,9 +1138,9 @@ async function openConflictModal() {
     var remoteTs = remoteData.remote_updated_at || '';
     var tsInfo = '';
     if (localTs && remoteTs) {
-      tsInfo = '<div class="text-muted text-sm" style="margin-bottom:6px">Local: ' + escapeHtml(localTs) + ' &middot; Remoto: ' + escapeHtml(remoteTs) + '</div>';
+      tsInfo = '<div class="text-muted text-sm" style="margin-bottom:6px">Local: ' + escapeHtml(formatDateTime(localTs)) + ' &middot; Remoto: ' + escapeHtml(formatDateTime(remoteTs)) + '</div>';
     } else {
-      tsInfo = '<div class="text-muted text-sm" style="margin-bottom:6px">Detectado: ' + escapeHtml(c.created_at) + '</div>';
+      tsInfo = '<div class="text-muted text-sm" style="margin-bottom:6px">Detectado: ' + escapeHtml(formatDateTime(c.created_at)) + '</div>';
     }
 
     var diffHtml;
@@ -1087,5 +1175,164 @@ function renderPagination(container, currentPage, total, pageSize, label, onPage
       onPageChange(parseInt(this.dataset.page));
     });
   });
+}
+
+/* ========== TOGGLE EXCLUYENTE USD / Bs. ==========
+ * Permite ingresar el monto en una sola moneda: al escribir en un campo se
+ * vacía el otro y se marca el toggle correspondiente. Evita el caso en que
+ * llenando ambos campos el Bs. se ignoraba en silencio. Al cambiar el toggle
+ * se convierte el monto actual a la otra moneda (mantiene el valor).
+ * cfg: { toggle, usdInput, bsInput, bsGroup, onUsdChange, onBsChange }
+ */
+function setupMonedaToggle(cfg) {
+  const toggle = cfg.toggle;
+  const usdInput = cfg.usdInput;
+  const bsInput = cfg.bsInput;
+  const bsGroup = cfg.bsGroup;
+  const onUsdChange = cfg.onUsdChange || function() {};
+  const onBsChange = cfg.onBsChange || function() {};
+  let activeMoneda = 'usd';
+
+  function setActive(moneda) {
+    activeMoneda = moneda;
+    toggle.querySelectorAll('.moneda-toggle-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.moneda === moneda);
+    });
+    const isBs = moneda === 'bs';
+    if (bsGroup) bsGroup.classList.toggle('hidden', !isBs);
+  }
+
+  function switchTo(moneda) {
+    if (moneda === activeMoneda) return;
+    const fromBs = activeMoneda === 'bs';
+    const curVal = fromBs ? parseInput(bsInput.value) : parseInput(usdInput.value);
+    setActive(moneda);
+    if (curVal > 0 && tasaActual > 0) {
+      if (moneda === 'bs') {
+        bsInput.value = (curVal * tasaActual).toFixed(2);
+        usdInput.value = '';
+      } else {
+        usdInput.value = (curVal / tasaActual).toFixed(2);
+        bsInput.value = '';
+      }
+    } else {
+      usdInput.value = '';
+      bsInput.value = '';
+    }
+    onUsdChange();
+    onBsChange();
+  }
+
+  toggle.querySelectorAll('.moneda-toggle-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { switchTo(this.dataset.moneda); });
+  });
+  usdInput.addEventListener('input', function() {
+    if (activeMoneda !== 'usd') setActive('usd');
+    bsInput.value = '';
+    onUsdChange();
+  });
+  bsInput.addEventListener('input', function() {
+    if (activeMoneda !== 'bs') setActive('bs');
+    usdInput.value = '';
+    onBsChange();
+  });
+  setActive('usd');
+  return {
+    setUsd: function() { switchTo('usd'); },
+    setBs: function() { switchTo('bs'); },
+    getMoneda: function() { return activeMoneda; }
+  };
+}
+
+/* ========== CUSTOM SELECT REUTILIZABLE ========== */
+function closeAllCustomSelects() {
+  qsa('.custom-select.open').forEach(function(w) { w.classList.remove('open'); });
+}
+
+function buildCustomSelect(opts) {
+  opts = opts || {};
+  var options = opts.options || [];
+  var wrap = document.createElement('div');
+  wrap.className = 'custom-select' + (opts.className ? ' ' + opts.className : '');
+  wrap.innerHTML =
+    '<button type="button" class="custom-select-btn"><span class="custom-select-value"></span><i class="nf nf-fa-chevron_down"></i></button>' +
+    '<div class="custom-select-menu"></div>';
+  var btn = wrap.querySelector('.custom-select-btn');
+  var valSpan = wrap.querySelector('.custom-select-value');
+  var menu = wrap.querySelector('.custom-select-menu');
+  wrap._options = options;
+
+  function buildMenu() {
+    menu.innerHTML = '';
+    options.forEach(function(o) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.value = o.value;
+      if (o.color) {
+        var sw = document.createElement('span');
+        sw.className = 'cs-swatch';
+        sw.style.background = o.color;
+        b.appendChild(sw);
+        b.className = 'has-swatch';
+      }
+      b.appendChild(document.createTextNode(o.label));
+      if (o.disabled) b.disabled = true;
+      b.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (o.disabled) return;
+        wrap.setValue(o.value);
+        wrap.classList.remove('open');
+        if (opts.onChange) opts.onChange(o.value);
+      });
+      menu.appendChild(b);
+    });
+  }
+
+  wrap.setValue = function(value) {
+    wrap.dataset.value = value;
+    var opt = null;
+    for (var i = 0; i < options.length; i++) {
+      if (String(options[i].value) === String(value)) { opt = options[i]; break; }
+    }
+    valSpan.innerHTML = '';
+    if (opt && opt.color) {
+      var sw = document.createElement('span');
+      sw.className = 'cs-swatch';
+      sw.style.background = opt.color;
+      valSpan.appendChild(sw);
+    }
+    valSpan.appendChild(document.createTextNode(opt ? opt.label : (opts.placeholder || '')));
+    menu.querySelectorAll('button').forEach(function(b) {
+      b.classList.toggle('selected', String(b.dataset.value) === String(value));
+    });
+  };
+  wrap.getValue = function() { return wrap.dataset.value; };
+
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var isOpen = wrap.classList.contains('open');
+    closeAllCustomSelects();
+    wrap.classList.toggle('open', !isOpen);
+  });
+
+  buildMenu();
+  wrap.setValue(opts.value !== undefined ? opts.value : (options[0] ? options[0].value : ''));
+  return wrap;
+}
+
+document.addEventListener('click', function(e) {
+  qsa('.custom-select.open').forEach(function(w) {
+    if (!w.contains(e.target)) w.classList.remove('open');
+  });
+});
+
+function contrastTextColor(hex) {
+  var h = (hex || '#CCCCCC').replace('#', '').trim();
+  if (h.length !== 6) return '#111';
+  var r = parseInt(h.substr(0, 2), 16);
+  var g = parseInt(h.substr(2, 2), 16);
+  var b = parseInt(h.substr(4, 2), 16);
+  var lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  return lum > 150 ? '#111111' : '#FFFFFF';
 }
 

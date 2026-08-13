@@ -1,4 +1,5 @@
 mod auth;
+mod alertas;
 mod audit;
 mod cashier;
 mod clients;
@@ -14,6 +15,7 @@ mod openrouter;
 mod pdf;
 mod products;
 mod sales;
+mod solicitudes;
 mod sync;
 mod tasa_bcv;
 
@@ -40,7 +42,6 @@ pub fn run() {
                 db: std::sync::Mutex::new(conn),
                 db_path: std::sync::Mutex::new(db_path),
                 current_user: std::sync::Mutex::new(None),
-                login_attempts: std::sync::Mutex::new(std::collections::HashMap::new()),
                 admin_action_attempts: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
             Ok(())
@@ -82,15 +83,16 @@ pub fn run() {
             clients::update_cliente,
             clients::delete_cliente,
             clients::add_quick_debt,
-            clients::list_clientes_eliminados,
             // Cashier
             cashier::get_daily_summary,
             cashier::close_cashier,
+            cashier::close_pendiente_cashier,
             cashier::get_close_report_data,
             cashier::list_cierres,
             cashier::get_cierre_detalle,
             cashier::abrir_caja,
             cashier::get_caja_abierta,
+            cashier::get_pendiente_cierre,
             cashier::get_dashboard_summary,
             cashier::get_dashboard_payment_methods,
             cashier::get_profit_series,
@@ -100,6 +102,15 @@ pub fn run() {
             // Audit
             audit::get_audit_logs,
             audit::clear_audit,
+            // Alertas de crédito
+            alertas::get_alertas_credito,
+            alertas::get_alertas_credito_nuevas,
+            alertas::marcar_alertas_credito_vistas,
+            // Solicitudes de anulación
+            solicitudes::solicitar_anulacion,
+            solicitudes::get_solicitudes_anulacion,
+            solicitudes::get_solicitudes_anulacion_pendientes,
+            solicitudes::resolver_solicitud_anulacion,
             // Config
             config::get_config_value,
             config::set_config_value,
@@ -114,6 +125,7 @@ pub fn run() {
             // DB
             db::backup_database,
             db::backup_database_b64,
+            db::clear_all_data,
             db::restore_backup,
             db::get_backup_key,
             db::save_exported_file,
@@ -126,6 +138,9 @@ pub fn run() {
             products::set_product_inari,
             products::update_product_categoria,
             products::list_categorias,
+            products::create_categoria,
+            products::update_categoria,
+            products::delete_categoria,
             products::registrar_ajuste_stock,
             products::toggle_producto_favorito,
             products::get_precio_historial,

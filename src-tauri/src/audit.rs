@@ -1,7 +1,6 @@
 use crate::constants;
 use crate::db::AppState;
 use crate::models::HistorialAccion;
-use rusqlite::params;
 use tauri::State;
 
 fn row_to_historial(row: &rusqlite::Row) -> rusqlite::Result<HistorialAccion> {
@@ -27,28 +26,63 @@ pub(crate) fn log_action(
     Ok(())
 }
 
-const SQL_AUDIT_LOGS: &str =
-    "SELECT id, fecha_hora, usuario, accion FROM historial_acciones ORDER BY id DESC LIMIT ?1 OFFSET ?2";
-
 #[tauri::command]
 pub fn get_audit_logs(
     state: State<AppState>,
     limit: Option<i64>,
     offset: Option<i64>,
+    search: Option<String>,
+    start_date: Option<String>,
+    end_date: Option<String>,
 ) -> Result<Vec<HistorialAccion>, String> {
+    crate::auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let lim = limit.unwrap_or(constants::AUDIT_LOG_DEFAULT_LIMIT);
     let off = offset.unwrap_or(0);
 
-    let mut stmt = db.prepare(SQL_AUDIT_LOGS).map_err(|e| e.to_string())?;
+    let mut sql = String::from(
+        "SELECT id, fecha_hora, usuario, accion FROM historial_acciones WHERE 1=1",
+    );
+    let mut p: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            sql.push_str(" AND (usuario LIKE ? ESCAPE '\\' OR accion LIKE ? ESCAPE '\\')");
+            let pattern = format!("%{}%", escape_like(&s.trim()));
+            p.push(Box::new(pattern.clone()));
+            p.push(Box::new(pattern));
+        }
+    }
+    if let Some(sd) = start_date {
+        if !sd.trim().is_empty() {
+            sql.push_str(" AND date(fecha_hora) >= ?");
+            p.push(Box::new(sd.trim().to_string()));
+        }
+    }
+    if let Some(ed) = end_date {
+        if !ed.trim().is_empty() {
+            sql.push_str(" AND date(fecha_hora) <= ?");
+            p.push(Box::new(ed.trim().to_string()));
+        }
+    }
+
+    sql.push_str(" ORDER BY id DESC LIMIT ? OFFSET ?");
+    p.push(Box::new(lim));
+    p.push(Box::new(off));
+
+    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
 
     let logs: Vec<HistorialAccion> = stmt
-        .query_map(params![lim, off], row_to_historial)
+        .query_map(rusqlite::params_from_iter(p.iter().map(|b| &**b)), row_to_historial)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
 
     Ok(logs)
+}
+
+fn escape_like(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
 }
 
 #[tauri::command]

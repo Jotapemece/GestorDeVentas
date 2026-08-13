@@ -27,17 +27,17 @@ const SQL_CLIENTES_CREDITO: &str = "
     GROUP BY c.id
     ORDER BY c.nombre";
 const SQL_INSERT_CIERRE: &str = "
-    INSERT INTO cierres_caja (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+    INSERT INTO cierres_caja (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre, desde, hasta)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
 const SQL_INSERT_CIERRE_DETALLE: &str =
     "INSERT INTO cierres_detalle (cierre_id, detalle_json) VALUES (?1, ?2)";
 const SQL_LIST_CIERRES: &str = "
-    SELECT c.id, c.fecha_hora, u.username, c.total_ventas, c.total_usd, c.total_bs, c.tasa_cierre
+    SELECT c.id, c.fecha_hora, u.username, c.total_ventas, c.total_usd, c.total_bs, c.tasa_cierre, c.desde, c.hasta
     FROM cierres_caja c
     LEFT JOIN usuarios u ON c.usuario_id = u.id
     ORDER BY c.id DESC";
 const SQL_CIERRE_BY_ID: &str = "
-    SELECT fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre
+    SELECT fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre, desde, hasta
     FROM cierres_caja WHERE id = ?1";
 const SQL_DETALLE_JSON: &str =
     "SELECT detalle_json FROM cierres_detalle WHERE cierre_id = ?1";
@@ -205,6 +205,7 @@ fn compute_report_data_range(
         por_metodo,
         productos_vendidos,
         clientes_credito,
+        dias: Vec::new(),
     })
 }
 
@@ -262,8 +263,80 @@ pub fn get_caja_abierta(state: State<AppState>) -> Result<bool, String> {
     Ok(val == "true")
 }
 
+/// Detecta un cierre de caja pendiente por corte de energía: la caja quedó
+/// abierta con ventas de días anteriores que nunca se cerraron. Devuelve el
+/// día más reciente sin cierre (y sus totales) si existe, o None.
 #[tauri::command]
-pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
+pub fn get_pendiente_cierre(state: State<AppState>) -> Result<Option<PendienteCierre>, String> {
+    crate::auth::check_employee_role(&state)?;
+    let db = state.lock_db()?;
+    detectar_pendiente_cierre(&db)
+}
+
+fn detectar_pendiente_cierre(db: &rusqlite::Connection) -> Result<Option<PendienteCierre>, String> {
+    let caja_abierta = crate::db::get_config_value(db, constants::CFG_CAJA_ABIERTA)
+        .unwrap_or_default()
+        .unwrap_or_else(|| "false".to_string());
+    if caja_abierta != "true" {
+        return Ok(None);
+    }
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    // Todas las fechas con ventas (no anuladas) anteriores a hoy SIN un cierre
+    // que cubra ese día (un cierre multi-día cubre desde..hasta).
+    let mut stmt = db
+        .prepare(
+            "SELECT DISTINCT substr(v.fecha_hora, 1, 10) AS dia \
+             FROM ventas v \
+             WHERE v.anulada = 0 AND dia < ?1 \
+               AND NOT EXISTS (\
+                   SELECT 1 FROM cierres_caja c \
+                   WHERE COALESCE(c.desde, substr(c.fecha_hora, 1, 10)) <= dia \
+                     AND COALESCE(c.hasta, substr(c.fecha_hora, 1, 10)) >= dia\
+               ) \
+             ORDER BY dia ASC",
+        )
+        .map_err(|e| format!("Error al preparar detección de cierre pendiente: {}", e))?;
+    let dias: Vec<String> = stmt
+        .query_map(params![today], |row| row.get(0))
+        .map_err(|e| format!("Error al detectar cierre pendiente: {}", e))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    if dias.is_empty() {
+        return Ok(None);
+    }
+    let mut per_dia = Vec::new();
+    let mut total_ventas = 0;
+    let mut total_usd = 0.0;
+    let mut total_bs = 0.0;
+    for dia in &dias {
+        let next = crate::helpers::siguiente_dia(dia);
+        let (cnt, usd, bs) = sumar_ventas_rango(db, dia, &next)?;
+        total_ventas += cnt;
+        total_usd += usd;
+        total_bs += bs;
+        per_dia.push(PendienteDia {
+            fecha: dia.clone(),
+            total_ventas: cnt,
+            total_usd: usd,
+            total_bs: bs,
+        });
+    }
+    Ok(Some(PendienteCierre {
+        desde: dias[0].clone(),
+        hasta: dias[dias.len() - 1].clone(),
+        total_ventas,
+        total_usd,
+        total_bs,
+        dias: per_dia,
+    }))
+}
+
+#[tauri::command]
+pub fn close_cashier(
+    state: State<AppState>,
+    fecha: Option<String>,
+) -> Result<CloseReport, String> {
     let username = state.get_username()?;
     let user_id = state
         .current_user
@@ -278,8 +351,20 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
-    let tomorrow = crate::helpers::siguiente_dia(&today);
-    let now = crate::helpers::fecha_hora_local();
+    let day = match fecha {
+        Some(f) if !f.trim().is_empty() => {
+            let f = f.trim().to_string();
+            if f.len() >= 10 { f[..10].to_string() } else { today.clone() }
+        }
+        _ => today.clone(),
+    };
+    let tomorrow = crate::helpers::siguiente_dia(&day);
+    let mut now = crate::helpers::fecha_hora_local();
+    if day != today {
+        // Cierre de un día anterior (corte de energía): el registro del cierre
+        // debe quedar fechado el día que se está cerrando, no "hoy".
+        now = format!("{} {}", day, &now[11..]);
+    }
 
     let tx = db
         .transaction()
@@ -292,15 +377,15 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
         return Err("La caja no está abierta. Ábrela primero.".to_string());
     }
 
-    let (total_ventas, total_usd, total_bs, tasa) = obtener_totales_del_dia(&tx, &today, &tomorrow)?;
+    let (total_ventas, total_usd, total_bs, tasa) = obtener_totales_del_dia(&tx, &day, &tomorrow)?;
 
-    let report_data = compute_report_data_range(&tx, &today, &tomorrow, &now)?;
+    let report_data = compute_report_data_range(&tx, &day, &tomorrow, &now)?;
     let detalle_json =
         serde_json::to_string(&report_data).map_err(|e| format!("Error al serializar reporte: {}", e))?;
 
     tx.execute(
         SQL_INSERT_CIERRE,
-        params![now, user_id, total_ventas, total_usd, total_bs, tasa],
+        params![now, user_id, total_ventas, total_usd, total_bs, tasa, day, day],
     )
     .map_err(|e| e.to_string())?;
 
@@ -342,14 +427,132 @@ pub fn close_cashier(state: State<AppState>) -> Result<CloseReport, String> {
 }
 
 #[tauri::command]
-pub fn get_close_report_data(state: State<AppState>) -> Result<CloseReportData, String> {
+pub fn get_close_report_data(
+    state: State<AppState>,
+    fecha: Option<String>,
+) -> Result<CloseReportData, String> {
     let db = state.lock_db()?;
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
         .to_string();
-    let tomorrow = crate::helpers::siguiente_dia(&today);
+    let day = match fecha {
+        Some(f) if !f.trim().is_empty() => {
+            let f = f.trim().to_string();
+            if f.len() >= 10 { f[..10].to_string() } else { today.clone() }
+        }
+        _ => today.clone(),
+    };
+    let tomorrow = crate::helpers::siguiente_dia(&day);
+    let mut now = crate::helpers::fecha_hora_local();
+    if day != today {
+        now = format!("{} {}", day, &now[11..]);
+    }
+    compute_report_data_range(&db, &day, &tomorrow, &now)
+}
+
+/// Cierre pendiente multi-día (corte de energía): crea UN solo `cierres_caja`
+/// que cubre el rango [desde, hasta] de días sin cerrar, con desglose por día
+/// en el reporte. A diferencia de `close_cashier`, la caja NO se cierra (puede
+/// haber ventas del día actual que siguen abiertas).
+#[tauri::command]
+pub fn close_pendiente_cashier(state: State<AppState>) -> Result<ClosePendingResult, String> {
+    let username = state.get_username()?;
+    let user_id = state
+        .current_user
+        .lock()
+        .map_err(|e| format!("Error interno: {}", e))?
+        .as_ref()
+        .map(|u| u.id)
+        .ok_or("No autenticado")?;
+
+    let mut db = state.lock_db()?;
+
+    let Some(pend) = detectar_pendiente_cierre(&db)? else {
+        return Err("No hay días pendientes de cierre por compensar.".to_string());
+    };
+
     let now = crate::helpers::fecha_hora_local();
-    compute_report_data_range(&db, &today, &tomorrow, &now)
+    let fin = crate::helpers::siguiente_dia(&pend.hasta);
+
+    let tx = db
+        .transaction()
+        .map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+
+    // Datos agregados del rango completo [desde, siguiente(hasta)).
+    let report_data = compute_report_data_range(&tx, &pend.desde, &fin, &now)?;
+
+    // Desglose por día.
+    let mut dias: Vec<DiaCierre> = Vec::new();
+    for dia in &pend.dias {
+        let next = crate::helpers::siguiente_dia(&dia.fecha);
+        let d = compute_report_data_range(&tx, &dia.fecha, &next, &dia.fecha)?;
+        dias.push(DiaCierre {
+            fecha: dia.fecha.clone(),
+            total_ventas: d.total_ventas,
+            total_usd: d.total_usd,
+            total_bs: d.total_bs,
+            por_metodo: d.por_metodo,
+            productos_vendidos: d.productos_vendidos,
+            clientes_credito: d.clientes_credito,
+        });
+    }
+
+    let mut data = report_data;
+    data.dias = dias;
+    let detalle_json =
+        serde_json::to_string(&data).map_err(|e| format!("Error al serializar reporte: {}", e))?;
+
+    tx.execute(
+        SQL_INSERT_CIERRE,
+        params![
+            now,
+            user_id,
+            data.total_ventas,
+            data.total_usd,
+            data.total_bs,
+            data.tasa_cierre,
+            pend.desde,
+            pend.hasta
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let cierre_id = tx.last_insert_rowid();
+    tx.execute(SQL_INSERT_CIERRE_DETALLE, params![cierre_id, detalle_json])
+        .map_err(|e| format!("Error al guardar detalle del cierre: {}", e))?;
+
+    // La caja NO se cierra: hay ventas del día actual que siguen abiertas.
+    let accion = format!(
+        "Cierre pendiente {} -> {} - Días: {}, Ventas: {}, Total USD: ${:.2}, Total Bs.: Bs. {:.2}",
+        pend.desde, pend.hasta, pend.dias.len(), data.total_ventas, data.total_usd, data.total_bs
+    );
+    if let Err(e) = crate::audit::log_action(&tx, &username, &accion) {
+        eprintln!("[audit] Error al registrar acción: {}", e);
+    }
+
+    tx.commit()
+        .map_err(|e| format!("Error al confirmar cierre: {}", e))?;
+
+    drop(db);
+
+    let backup_msg = match crate::db::ensure_daily_backup(&state) {
+        Ok(Some(msg)) => Some(msg),
+        Ok(None) => None,
+        Err(e) => Some(format!("Aviso: backup automático no realizado — {}", e)),
+    };
+
+    Ok(ClosePendingResult {
+        report: CloseReport {
+            fecha_cierre: now,
+            total_ventas: data.total_ventas,
+            total_usd: data.total_usd,
+            total_bs: data.total_bs,
+            usuario: username,
+            tasa_cierre: data.tasa_cierre,
+            backup_msg,
+        },
+        data,
+    })
 }
 
 #[tauri::command]
@@ -358,6 +561,7 @@ pub fn list_cierres(
     page: Option<i64>,
     page_size: Option<i64>,
 ) -> Result<Vec<CierreListItem>, String> {
+    crate::auth::admin_guard(&state, "list_cierres", "Consultó el historial de cierres")?;
     let db = state.lock_db()?;
     let query = if let (Some(p), Some(ps)) = (page, page_size) {
         let offset = (p.max(1) - 1) * ps;
@@ -380,6 +584,8 @@ pub fn list_cierres(
                 total_usd: row.get(4)?,
                 total_bs: crate::helpers::fallback_total_bs(bs, row.get(4)?, tasa_cierre),
                 tasa_cierre,
+                desde: row.get(7).unwrap_or_default(),
+                hasta: row.get(8).unwrap_or_default(),
             })
         })
         .map_err(|e| e.to_string())?
@@ -396,13 +602,15 @@ pub fn get_cierre_detalle(
 ) -> Result<CierreDetalle, String> {
     let db = state.lock_db()?;
 
-    let (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre): (
+    let (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre, desde, hasta): (
         String,
         i64,
         i64,
         f64,
         f64,
         f64,
+        Option<String>,
+        Option<String>,
     ) = db
         .query_row(SQL_CIERRE_BY_ID, params![cierre_id], |row| {
             Ok((
@@ -412,6 +620,8 @@ pub fn get_cierre_detalle(
                 row.get(3)?,
                 row.get(4)?,
                 row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
             ))
         })
         .map_err(|_| "Cierre no encontrado".to_string())?;
@@ -438,6 +648,8 @@ pub fn get_cierre_detalle(
             total_usd,
             total_bs,
             tasa_cierre,
+            desde,
+            hasta,
         },
         detalle,
     })
@@ -613,6 +825,9 @@ pub fn register_movimiento(state: State<AppState>, tipo: String, monto_bs: f64, 
     let usuario = state.get_employee()?;
     if tipo != "ingreso" && tipo != "egreso" {
         return Err("Tipo de movimiento inválido".to_string());
+    }
+    if !monto_bs.is_finite() || !monto_usd.is_finite() {
+        return Err("Los montos no pueden ser NaN o infinitos".to_string());
     }
     if monto_bs <= 0.0 && monto_usd <= 0.0 {
         return Err("El monto debe ser mayor a cero".to_string());
@@ -824,6 +1039,88 @@ mod tests {
         assert!((result[0].total_usd - 30.0).abs() < f64::EPSILON);
         assert_eq!(result[1].metodo, "punto");
         assert!((result[1].total_usd - 20.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_pendiente_cierre_detecta_dia_sin_cierre() {
+        let conn = crate::db::test_support::test_conn();
+        crate::db::set_config_value(&conn, constants::CFG_CAJA_ABIERTA, "true").unwrap();
+        conn.execute_batch(
+            "INSERT INTO ventas (fecha_hora, usuario_id, total_usd, total_bs, metodo_pago, tasa_aplicada, anulada, sync_id, dispositivo_origen, updated_at) VALUES \
+             ('2026-01-01 10:00:00', 1, 100.0, 1000.0, 'efectivo_usd', 10.0, 0, 'a', 'local', '2026-01-01T10:00:00Z'), \
+             ('2026-01-02 09:30:00', 1, 50.0, 500.0, 'efectivo_usd', 10.0, 0, 'b', 'local', '2026-01-02T09:30:00Z');",
+        )
+        .unwrap();
+        let p = detectar_pendiente_cierre(&conn).unwrap();
+        let p = p.expect("debe detectar un cierre pendiente");
+        // Sin cierres registrados, los dos días con ventas quedan pendientes.
+        assert_eq!(p.desde, "2026-01-01");
+        assert_eq!(p.hasta, "2026-01-02");
+        assert_eq!(p.dias.len(), 2);
+        assert_eq!(p.total_ventas, 2);
+        assert!((p.total_usd - 150.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_pendiente_cierre_caja_cerrada_no_detecta() {
+        let conn = crate::db::test_support::test_conn();
+        crate::db::set_config_value(&conn, constants::CFG_CAJA_ABIERTA, "false").unwrap();
+        conn.execute_batch(
+            "INSERT INTO ventas (fecha_hora, usuario_id, total_usd, total_bs, metodo_pago, tasa_aplicada, anulada, sync_id, dispositivo_origen, updated_at) VALUES \
+             ('2026-01-01 10:00:00', 1, 100.0, 1000.0, 'efectivo_usd', 10.0, 0, 'a', 'local', '2026-01-01T10:00:00Z');",
+        )
+        .unwrap();
+        let p = detectar_pendiente_cierre(&conn).unwrap();
+        assert!(p.is_none());
+    }
+
+    #[test]
+    fn test_pendiente_cierre_ignora_dia_ya_cerrado() {
+        let conn = crate::db::test_support::test_conn();
+        crate::db::set_config_value(&conn, constants::CFG_CAJA_ABIERTA, "true").unwrap();
+        conn.execute_batch(
+            "INSERT INTO ventas (fecha_hora, usuario_id, total_usd, total_bs, metodo_pago, tasa_aplicada, anulada, sync_id, dispositivo_origen, updated_at) VALUES \
+             ('2026-01-01 10:00:00', 1, 100.0, 1000.0, 'efectivo_usd', 10.0, 0, 'a', 'local', '2026-01-01T10:00:00Z'); \
+             INSERT INTO cierres_caja (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre) \
+             VALUES ('2026-01-01 18:00:00', 1, 1, 100.0, 1000.0, 10.0);",
+        )
+        .unwrap();
+        let p = detectar_pendiente_cierre(&conn).unwrap();
+        assert!(p.is_none());
+    }
+
+    #[test]
+    fn test_pendiente_cierre_cierre_rango_cubre_varios_dias() {
+        let conn = crate::db::test_support::test_conn();
+        crate::db::set_config_value(&conn, constants::CFG_CAJA_ABIERTA, "true").unwrap();
+        conn.execute_batch(
+            "INSERT INTO ventas (fecha_hora, usuario_id, total_usd, total_bs, metodo_pago, tasa_aplicada, anulada, sync_id, dispositivo_origen, updated_at) VALUES \
+             ('2026-01-01 10:00:00', 1, 100.0, 1000.0, 'efectivo_usd', 10.0, 0, 'a', 'local', '2026-01-01T10:00:00Z'), \
+             ('2026-01-02 09:30:00', 1, 50.0, 500.0, 'efectivo_usd', 10.0, 0, 'b', 'local', '2026-01-02T09:30:00Z'), \
+             ('2026-01-03 11:00:00', 1, 20.0, 200.0, 'efectivo_usd', 10.0, 0, 'c', 'local', '2026-01-03T11:00:00Z'); \
+             INSERT INTO cierres_caja (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre, desde, hasta) \
+             VALUES ('2026-01-03 18:00:00', 1, 3, 170.0, 1700.0, 10.0, '2026-01-01', '2026-01-02');",
+        )
+        .unwrap();
+        let p = detectar_pendiente_cierre(&conn).unwrap();
+        let p = p.expect("el día 03 sigue pendiente (el cierre multi-día cubrió 01 y 02)");
+        assert_eq!(p.desde, "2026-01-03");
+        assert_eq!(p.hasta, "2026-01-03");
+        assert_eq!(p.dias.len(), 1);
+        assert_eq!(p.total_ventas, 1);
+    }
+
+    #[test]
+    fn test_pendiente_cierre_ignora_ventas_anuladas() {
+        let conn = crate::db::test_support::test_conn();
+        crate::db::set_config_value(&conn, constants::CFG_CAJA_ABIERTA, "true").unwrap();
+        conn.execute_batch(
+            "INSERT INTO ventas (fecha_hora, usuario_id, total_usd, total_bs, metodo_pago, tasa_aplicada, anulada, sync_id, dispositivo_origen, updated_at) VALUES \
+             ('2026-01-01 10:00:00', 1, 100.0, 1000.0, 'efectivo_usd', 10.0, 1, 'a', 'local', '2026-01-01T10:00:00Z');",
+        )
+        .unwrap();
+        let p = detectar_pendiente_cierre(&conn).unwrap();
+        assert!(p.is_none());
     }
 }
 

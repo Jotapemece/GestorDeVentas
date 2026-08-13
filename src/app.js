@@ -7,12 +7,25 @@ document.addEventListener('DOMContentLoaded', async function() {
   initModalDrag();
   initModalResize();
   initBsUsdConversion(SEL.movimientosMontoBs, SEL.movimientosMontoUsd);
-  initBsUsdConversion(SEL.abonoMontoBs, SEL.abonoMonto);
-  initBsUsdConversion(SEL.quickDebtMontoBs, SEL.quickDebtMonto);
+  abonoMonedaToggler = setupMonedaToggle({
+    toggle: qs(SEL.abonoMonedaToggle),
+    usdInput: qs(SEL.abonoMonto),
+    bsInput: qs(SEL.abonoMontoBs),
+    bsGroup: qs(SEL.abonoMontoBsGroup),
+    onUsdChange: updateAbonoSaldoRestante,
+    onBsChange: updateAbonoSaldoRestante
+  });
+  quickDebtMonedaToggler = setupMonedaToggle({
+    toggle: qs(SEL.quickDebtMonedaToggle),
+    usdInput: qs(SEL.quickDebtMonto),
+    bsInput: qs(SEL.quickDebtMontoBs),
+    bsGroup: qs(SEL.quickDebtMontoBsGroup)
+  });
   initTableScrollIndicators();
   initLoginGreeting();
   initHoverCard();
   initCompactToggle();
+  if (typeof initDatePickers === 'function') initDatePickers();
   window.addEventListener('beforeunload', function() { saveCartSnapshot(); });
   // Collapse all config cards by default
   qsa(SEL.configCardHeader).forEach(h => h.classList.add('collapsed'));
@@ -165,13 +178,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   // Smart Enter in product search: exact code -> add to cart;
-  // otherwise if filtered results exist add the first one; a bare number fixes the qty for the next add.
+  // otherwise if filtered results exist add the first one.
   qs(SEL.productSearch).addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     const input = qs(SEL.productSearch);
     const val = input.value.trim();
-    const num = parseFloat(val);
     const isCodeMatch = productCache.some(p => p.codigo === val);
     if (isCodeMatch) {
       // Exact product / code match: add it straight to the cart.
@@ -181,25 +193,16 @@ document.addEventListener('DOMContentLoaded', async function() {
       input.focus();
       return;
     }
-    if (isNaN(num) || String(num) !== val) {
-      // Text query: pick first visible (no inari hidden) result.
-      const results = filterProducts(val.toLowerCase());
-      if (results.length > 0) {
-        const p = results[0];
-        addToCart(p.codigo);
-        input.value = '';
-        handleProductSearch();
-        input.focus();
-        showToast('A\u00f1adido: ' + p.nombre, 'info');
-      }
-      return;
+    // Text query: pick first visible (no inari hidden) result.
+    const results = filterProducts(val.toLowerCase());
+    if (results.length > 0) {
+      const p = results[0];
+      addToCart(p.codigo);
+      input.value = '';
+      handleProductSearch();
+      input.focus();
+      showToast('A\u00f1adido: ' + p.nombre, 'info');
     }
-    // Bare number -> set the quantity prefix for the next add.
-    pendingCartQty = Math.max(1, Math.round(num));
-    input.value = '';
-    input.placeholder = 'Cantidad: ' + pendingCartQty + ' — busca el producto o escribe c\u00f3digo';
-    handleProductSearch();
-    showToast('Cantidad fijada: ' + pendingCartQty, 'info');
   });
 
   // Currency toggle for cart totals column
@@ -395,6 +398,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   qs(SEL.inventoryExportBtn).addEventListener('click', exportProducts);
   qs(SEL.inventoryImportBtn).addEventListener('click', openImportModal);
+  qs(SEL.categoriasBtn).addEventListener('click', openCategoriasModal);
+  qs(SEL.categoriasModalClose).addEventListener('click', closeCategoriasModal);
+  qs(SEL.categoriasModalOkBtn).addEventListener('click', closeCategoriasModal);
+  initCategoriasHandlers();
+  loadCategoriasSelect();
+  buildInventoryCategoriaFilter();
   qs(SEL.inventoryInariBtn).addEventListener('click', () => {
     var hoy = new Date().getDay();
     var allowed = INARI_DIAS.includes(hoy);
@@ -592,8 +601,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  // Temp clients history
-  qs(SEL.tempHistoryBtn).addEventListener('click', openTempHistoryModal);
+  // Creditos dropdown
   qs(SEL.creditosHeader)?.addEventListener('click', function(e) {
     const moreBtn = e.target.closest('[data-action="toggle-dropdown"]');
     if (moreBtn) {
@@ -601,8 +609,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       toggleDropdown(moreBtn);
     }
   });
-  qs(SEL.tempHistoryClose).addEventListener('click', closeTempHistoryModal);
-  qs(SEL.tempHistoryOkBtn).addEventListener('click', closeTempHistoryModal);
 
   // Creditos search
   const creditosSearch = qs(SEL.creditosSearch);
@@ -664,6 +670,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       const id = parseInt(quickDebtBtn.dataset.id);
       const nombre = quickDebtBtn.dataset.nombre;
       qs(SEL.quickDebtClienteNombre).textContent = nombre;
+      if (typeof quickDebtMonedaToggler !== 'undefined' && quickDebtMonedaToggler) quickDebtMonedaToggler.setUsd();
       qs(SEL.quickDebtMonto).value = '';
       qs(SEL.quickDebtMontoBs).value = '';
       qs(SEL.quickDebtMonto).dataset.clienteId = id;
@@ -775,8 +782,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (header) header.classList.toggle('collapsed');
   });
   qs(SEL.viewReports)?.addEventListener('click', function(e) {
+    const interactive = e.target.closest('button, select, input, a, label');
+    if (interactive) return;
     const header = e.target.closest('.config-card-header');
-    if (header) header.classList.toggle('collapsed');
+    if (!header) return;
+    const expanded = header.classList.contains('collapsed');
+    header.classList.toggle('collapsed');
+    if (expanded && header.nextElementSibling && header.nextElementSibling.id === 'dashboard-body') {
+      if (typeof loadDashboard === 'function') loadDashboard();
+    }
   });
   qs(SEL.viewSync)?.addEventListener('click', function(e) {
     const header = e.target.closest('.config-card-header');
@@ -845,6 +859,38 @@ document.addEventListener('DOMContentLoaded', async function() {
       } finally {
         backupBtn.disabled = false;
         backupBtn.innerHTML = '<i class="nf nf-fa-save"></i> Descargar respaldo';
+      }
+    });
+  }
+
+  /* Clear all data (Android) */
+  const clearDataRow = qs(SEL.clearDataRow);
+  if (!IS_ANDROID && clearDataRow) clearDataRow.style.display = 'none';
+  const clearDataBtn = qs(SEL.clearDataBtn);
+  if (clearDataBtn) {
+    clearDataBtn.addEventListener('click', async function() {
+      try {
+        const confirmed = await confirmModal(
+          'Se har\u00e1 un respaldo cifrado en Descargas y luego TODOS los datos de la aplicaci\u00f3n ser\u00e1n borrados (ventas, productos, clientes, combos, cierres, movimientos, auditor\u00eda). Se conservar\u00e1n los usuarios y la configuraci\u00f3n. \u00bfContinuar?',
+          'Borrar todos los datos',
+          'S\u00ed, respaldar y borrar'
+        );
+        if (!confirmed) return;
+        clearDataBtn.disabled = true;
+        clearDataBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Respaldando...';
+        const r = await invoke('backup_database_b64');
+        await invoke('plugin:gestor-downloads|save_to_downloads', {
+          payload: { file_name: r.file_name, content: r.base64 },
+        });
+        showToast('Respaldo guardado en Descargas');
+        clearDataBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Borrando...';
+        const msg = await invoke('clear_all_data');
+        showToast(msg, 'success');
+      } catch (e) {
+        showToast('Error: ' + e, 'error');
+      } finally {
+        clearDataBtn.disabled = false;
+        clearDataBtn.innerHTML = '<i class="nf nf-fa-trash"></i> Exportar BD y borrar datos';
       }
     });
   }
@@ -1051,6 +1097,23 @@ document.addEventListener('DOMContentLoaded', async function() {
   async function openDownloadPreview() {
     await openDownloadPreviewModal();
   }
+  // Autocompleta el rango de fechas del preview: "hasta" = hoy y "desde" =
+  // la fecha de la última descarga de ventas (ultimo_download_ventas), si hay.
+  async function autoFillDownloadPreviewDates(desdeEl, hastaEl) {
+    const now = new Date();
+    hastaEl.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    if (!desdeEl.value) {
+      try {
+        const stats = await invoke('get_sync_stats');
+        if (stats && stats.ultimo_download_ventas) {
+          const d = String(stats.ultimo_download_ventas).slice(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(d)) desdeEl.value = d;
+        }
+      } catch (e) {
+        console.log('autoFillDownloadPreviewDates:', e);
+      }
+    }
+  }
   async function openDownloadPreviewModal() {
     const modal = qs(SEL.downloadPreviewModal);
     qs(SEL.downloadPreviewLoading).classList.remove('hidden');
@@ -1058,8 +1121,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     qs(SEL.downloadPreviewEmpty).classList.add('hidden');
     showModal(modal);
     try {
-      const ventasDesde = qs(SEL.downloadPreviewVentasDesde).value || null;
-      const ventasHasta = qs(SEL.downloadPreviewVentasHasta).value || null;
+      const desdeEl = qs(SEL.downloadPreviewVentasDesde);
+      const hastaEl = qs(SEL.downloadPreviewVentasHasta);
+      if (desdeEl && hastaEl && !hastaEl.value) {
+        await autoFillDownloadPreviewDates(desdeEl, hastaEl);
+      }
+      const ventasDesde = desdeEl ? (desdeEl.value || null) : null;
+      const ventasHasta = hastaEl ? (hastaEl.value || null) : null;
       const result = await invoke('preview_download', { ventasDesde, ventasHasta });
       if (result.total === 0) {
         qs(SEL.downloadPreviewLoading).classList.add('hidden');
@@ -1195,8 +1263,15 @@ statusEl.style.color = cssVar('--text-secondary');
   });
   const topLimitSelect = qs(SEL.topProductsLimit);
   if (topLimitSelect) topLimitSelect.addEventListener('change', loadTopProducts);
-  qs(SEL.reportPrevBtn).addEventListener('click', function() { if (reportPage > 1) { reportPage--; loadReportsAndTopProducts(); } });
-  qs(SEL.reportNextBtn).addEventListener('click', function() { reportPage++; loadReportsAndTopProducts(); });
+  qs(SEL.reportPrevBtn)?.addEventListener('click', function() { if (reportPage > 1) { reportPage--; loadReportsAndTopProducts(); } });
+  qs(SEL.reportNextBtn)?.addEventListener('click', function() {
+    // F7-f: no avanzar si el botón está deshabilitado (última página) o no se
+    // pintó la paginación aún — evita pedir páginas fuera de rango.
+    const btn = qs(SEL.reportNextBtn);
+    if (btn && btn.disabled) return;
+    reportPage++;
+    loadReportsAndTopProducts();
+  });
 
   /* ========== EXPORT REPORT ========== */
   qs(SEL.reportsFilters)?.addEventListener('click', function(e) {
@@ -1231,6 +1306,14 @@ statusEl.style.color = cssVar('--text-secondary');
     if (btn) handleVoidSale(parseInt(btn.dataset.id), btn);
     const detailBtn = e.target.closest('.sale-detail-btn');
     if (detailBtn) showSaleDetail(parseInt(detailBtn.dataset.id), detailBtn);
+    const reqBtn = e.target.closest('.request-void-btn');
+    if (reqBtn) openSolicitudMotivo(parseInt(reqBtn.dataset.id, 10));
+    const resBtn = e.target.closest('.resolve-solicitud-btn');
+    if (resBtn) {
+      const id = parseInt(resBtn.dataset.id, 10);
+      const aprobar = resBtn.dataset.aprobar === '1';
+      resolveSolicitud(id, aprobar);
+    }
   });
 
   // Ventas del reporte (botón "Ver" antes muerto: no había delegación en reportSalesBody).
@@ -1268,8 +1351,10 @@ statusEl.style.color = cssVar('--text-secondary');
   }
   // Reports: set default dates + dashboard on show
   observeView(qs(SEL.viewReports), function() { loadChartPrefs(); setDefaultReportDates(); loadDashboard(); });
-  // Config: load user list on show
-  observeView(qs(SEL.viewConfig), function() { loadUserList(); });
+  // Config: load user list on show (admin only; list_usuarios es admin-only)
+  observeView(qs(SEL.viewConfig), function() {
+    if (currentUser && currentUser.rol === ROL_ADMIN) loadUserList();
+  });
 
   // Go to reports (cashier header button)
   const gotoReportsBtn = qs(SEL.gotoReportsBtn);
@@ -1672,6 +1757,18 @@ statusEl.style.color = cssVar('--text-secondary');
   // Audit load more
   qs(SEL.auditLoadMore).addEventListener('click', loadAuditMore);
 
+  // Audit filters
+  const auditFilterBtn = qs(SEL.auditFilterBtn);
+  if (auditFilterBtn) auditFilterBtn.addEventListener('click', function() { loadAudit(); });
+  const auditSearchInput = qs(SEL.auditSearch);
+  if (auditSearchInput) auditSearchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') loadAudit();
+  });
+  const auditStartDateInput = qs(SEL.auditStartDate);
+  if (auditStartDateInput) auditStartDateInput.addEventListener('change', function() { loadAudit(); });
+  const auditEndDateInput = qs(SEL.auditEndDate);
+  if (auditEndDateInput) auditEndDateInput.addEventListener('change', function() { loadAudit(); });
+
   // Device registration
   qs(SEL.regDeviceBtn).addEventListener('click', handleDeviceRegister);
 
@@ -1987,6 +2084,34 @@ statusEl.style.color = cssVar('--text-secondary');
 
   /* ========== SOUND TOGGLE (Ctrl+M) ========== */
   /* handled in shortcuts.js */
+
+  /* ========== ALERTAS DE CRÉDITO (admin) ========== */
+  qs(SEL.alertasCreditoBtn)?.addEventListener('click', openAlertasCredito);
+  qs(SEL.alertasCreditoClose)?.addEventListener('click', closeAlertasCredito);
+  qs(SEL.alertasCreditoOkBtn)?.addEventListener('click', closeAlertasCredito);
+  qs(SEL.alertasCreditoMarkBtn)?.addEventListener('click', markAllAlertasVistas);
+  // El badge del nav también abre el panel
+  qs(SEL.creditoNavAlert)?.addEventListener('click', openAlertasCredito);
+  // Refresco inicial del badge tras login
+  refreshCreditoAlertBadge();
+
+  /* ========== SOLICITUDES DE ANULACIÓN (vendedor pide, admin resuelve) ========== */
+  qs(SEL.solicitudesBtn)?.addEventListener('click', openSolicitudes);
+  qs(SEL.solicitudesClose)?.addEventListener('click', closeSolicitudes);
+  qs(SEL.solicitudesOkBtn)?.addEventListener('click', closeSolicitudes);
+  qs(SEL.solicitudMotivoClose)?.addEventListener('click', closeSolicitudMotivo);
+  qs(SEL.solicitudMotivoCancel)?.addEventListener('click', closeSolicitudMotivo);
+  qs(SEL.solicitudMotivoOkBtn)?.addEventListener('click', confirmSolicitudMotivo);
+  refreshSolicitudesBadge();
+
+  /* ========== CIERRE PENDIENTE (corte de energía) ========== */
+  qs(SEL.pendienteCierreClose)?.addEventListener('click', closePendienteCierre);
+  qs(SEL.pendienteCierreLater)?.addEventListener('click', closePendienteCierre);
+  qs(SEL.pendienteCierreGo)?.addEventListener('click', function() {
+    closeModal(qs(SEL.pendienteCierreModal));
+    showView(VIEW.CASHIER);
+    setTimeout(function() { openCloseCashier(); }, 50);
+  });
 });
 
 /* ========== ANDROID BACK NAVIGATION ========== */

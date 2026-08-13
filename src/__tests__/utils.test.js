@@ -4,13 +4,32 @@ import { describe, it, expect, beforeEach } from 'vitest';
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
+function formatDateTime(iso, opts) {
+  if (!iso) return '-';
+  var hasTz = /T.*(Z|[+-]\d{2}:\d{2})$/.test(iso);
+  var d;
+  if (hasTz) {
+    d = new Date(iso);
+  } else {
+    d = new Date(iso.replace(' ', 'T'));
+  }
+  if (isNaN(d.getTime())) return iso;
+  var o = opts || {};
+  var parts = [];
+  parts.push(String(d.getDate()).padStart(2, '0'));
+  parts.push(String(d.getMonth() + 1).padStart(2, '0'));
+  parts.push(String(d.getFullYear()).padStart(4, '0'));
+  var time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  if (o.withSeconds) time += ':' + String(d.getSeconds()).padStart(2, '0');
+  return parts.join('/') + (o.time === false ? '' : ' ' + time);
+}
 function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
 function isBsMethod(m) { return m === 'efectivo_bs' || m === 'biopago' || m === 'punto' || m === 'pago_movil'; }
 function emptyState(icon, text, sub) {
   return '<div class="empty-state"><span class="empty-icon">' + icon + '</span><div class="empty-text">' + text + '</div>' + (sub ? '<div class="empty-sub">' + sub + '</div>' : '') + '</div>';
 }
 
-function totalBsRedondeado(totalUsd, tasaActual, redondeoBs, redondeoTotal) {
+function totalBsRedondeado(totalUsd) {
   const bs = totalUsd * tasaActual;
   if (redondeoTotal) return Math.round(bs);
   return redondeoBs ? Math.round(bs) : bs;
@@ -92,22 +111,31 @@ describe('parseInput', () => {
 });
 
 describe('totalBsRedondeado', () => {
+  beforeEach(() => {
+    globalThis.tasaActual = 40;
+    globalThis.redondeoBs = false;
+    globalThis.redondeoTotal = false;
+  });
+
   it('sin redondeo', () => {
-    expect(totalBsRedondeado(10, 40, false, false)).toBe(400);
-    expect(totalBsRedondeado(10.5, 40, false, false)).toBe(420);
+    expect(totalBsRedondeado(10)).toBe(400);
+    expect(totalBsRedondeado(10.5)).toBe(420);
   });
 
   it('redondeo BS', () => {
-    expect(totalBsRedondeado(10.03, 40, true, false)).toBe(401);
-    expect(totalBsRedondeado(10.03, 40, true, false)).not.toBe(401.2);
+    globalThis.redondeoBs = true;
+    expect(totalBsRedondeado(10.03)).toBe(401);
+    expect(totalBsRedondeado(10.03)).not.toBe(401.2);
   });
 
   it('redondeo total', () => {
-    expect(totalBsRedondeado(10.03, 40, false, true)).toBe(401);
+    globalThis.redondeoTotal = true;
+    expect(totalBsRedondeado(10.03)).toBe(401);
   });
 
   it('BS con decimales exactos', () => {
-    const result = totalBsRedondeado(10.25, 36.50, false, false);
+    globalThis.tasaActual = 36.5;
+    const result = totalBsRedondeado(10.25);
     expect(result).toBe(374.125);
   });
 });
@@ -125,6 +153,34 @@ describe('isBsMethod', () => {
     expect(isBsMethod('credito')).toBe(false);
     expect(isBsMethod('mixto')).toBe(false);
     expect(isBsMethod('')).toBe(false);
+  });
+});
+
+describe('formatDateTime', () => {
+  it('formatea ISO UTC sin sufijo +00:00 ni Z', () => {
+    const out = formatDateTime('2026-08-12T19:05:00Z');
+    expect(out).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+    expect(out).not.toContain('+00:00');
+    expect(out).not.toContain('Z');
+  });
+  it('formatea naive local con espacio', () => {
+    const out = formatDateTime('2026-08-12 10:30:45');
+    expect(out).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+  });
+  it('solo fecha si time:false', () => {
+    const out = formatDateTime('2026-08-12 10:30:45', { time: false });
+    expect(out).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+  });
+  it('con segundos si withSeconds', () => {
+    const out = formatDateTime('2026-08-12 10:30:45', { withSeconds: true });
+    expect(out).toMatch(/\d{2}:\d{2}:\d{2}$/);
+  });
+  it('devuelve "-" si vacio', () => {
+    expect(formatDateTime('')).toBe('-');
+    expect(formatDateTime(null)).toBe('-');
+  });
+  it('devuelve el original si no es fecha valida', () => {
+    expect(formatDateTime('texto')).toBe('texto');
   });
 });
 

@@ -16,14 +16,19 @@ fn row_to_producto(row: &rusqlite::Row) -> rusqlite::Result<Producto> {
         es_pesable: row.get::<_, i64>(9)? != 0,
         subcategoria: row.get(10)?,
         favorito: row.get::<_, i64>(11)? != 0,
+        categoria_id: row.get(12)?,
+        categoria: row.get(13)?,
+        categoria_color: row.get(14)?,
     })
 }
 
 const SQL_BASE_PRODUCTOS: &str =
     "SELECT p.codigo, p.nombre, p.precio_usd, COALESCE(p.costo,0), p.stock, COALESCE(p.stock_minimo,0), \
      COALESCE(p.created_at,''), p.updated_at, COALESCE(p.es_inari,0), COALESCE(p.es_pesable,0), p.subcategoria, \
-     COALESCE(p.favorito,0) \
-     FROM productos p WHERE p.activo = 1";
+     COALESCE(p.favorito,0), p.categoria_id, c.nombre, c.color \
+     FROM productos p \
+     LEFT JOIN categorias c ON c.id = p.categoria_id \
+     WHERE p.activo = 1";
 
 const SQL_NEXT_CODIGO: &str =
     "SELECT COALESCE(MAX(CAST(SUBSTR(codigo, 2) AS INTEGER)), 0) + 1 \
@@ -61,12 +66,14 @@ pub fn list_products(
     page_size: Option<i64>,
     inari: Option<bool>,
     subcategoria: Option<String>,
+    categoria_id: Option<i64>,
 ) -> Result<PaginatedResult<Producto>, String> {
     let db = state.lock_db()?;
 
     let has_query = search.as_ref().is_some_and(|s| !s.is_empty());
     let has_inari_filter = inari.is_some();
     let has_subcat = subcategoria.as_ref().is_some_and(|s| !s.is_empty());
+    let has_cat = categoria_id.is_some_and(|id| id > 0);
     let inari_val = inari.unwrap_or(false);
     let q = search.unwrap_or_default();
     let pattern = format!("%{}%", q);
@@ -84,9 +91,14 @@ pub fn list_products(
         where_clauses.push("p.subcategoria = ?1".to_string());
         params_vec.push(Box::new(subcat_val));
     }
+    if has_cat {
+        let param_idx = params_vec.len() + 1;
+        where_clauses.push(format!("p.categoria_id = ?{}", param_idx));
+        params_vec.push(Box::new(categoria_id.unwrap_or(0)));
+    }
     if has_query {
-        // param_idx is a safe integer (1 or 2), NOT user input — no injection risk
-        let param_idx = if has_subcat { 2 } else { 1 };
+        // param_idx is a safe integer computed from pushed params, NOT user input — no injection risk
+        let param_idx = params_vec.len() + 1;
         where_clauses.push(format!("(p.codigo LIKE ?{} OR p.nombre LIKE ?{})", param_idx, param_idx));
         params_vec.push(Box::new(pattern.clone()));
     }
@@ -153,11 +165,24 @@ pub fn create_product(
         &format!("Creó producto '{}' (Código: {})", nombre, codigo),
     )?;
     let costo_real = if costo > 0.0 { costo } else { 0.0 };
+    // Si el código ya existe y está ACTIVO, es un intento de crear un duplicado:
+    // no debe sobrescribir precio/stock/nombre de un producto en uso.
+    let existe_activo: i64 = tx
+        .query_row(
+            "SELECT COUNT(*) FROM productos WHERE codigo = ?1 AND activo = 1",
+            params![codigo],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Error al verificar producto existente: {}", e))?;
+    if existe_activo > 0 {
+        return Err(format!("El código '{}' ya existe como producto activo. Usa Editar para modificarlo.", codigo));
+    }
+    // Solo reactiva códigos que antes fueron desactivados (soft-delete).
     tx.execute(
         SQL_UPDATE_REACTIVATE,
         params![nombre, precio_usd, costo_real, stock, ts, es_pesable, codigo],
     )
-    .ok();
+    .map_err(|e| format!("Error al preparar producto: {}", e))?;
 
     match tx.execute(
         SQL_INSERT_PRODUCTO,
@@ -259,6 +284,7 @@ pub fn get_precio_historial(
     state: State<AppState>,
     producto_codigo: String,
 ) -> Result<Vec<PrecioHistorialItem>, String> {
+    crate::auth::admin_guard(&state, "get_precio_historial", "Consultó historial de precios")?;
     let db = state.lock_db()?;
     let mut stmt = db
         .prepare(
@@ -504,11 +530,7 @@ pub fn import_products_from_file(
         }
     }
 
-    if errors.is_empty() {
-        tx.commit().map_err(|e| format!("Error al confirmar importación: {}", e))?;
-    } else {
-        drop(tx);
-    }
+    tx.commit().map_err(|e| format!("Error al confirmar importación: {}", e))?;
 
     Ok(format_import_result(count, &errors))
 }
@@ -636,9 +658,10 @@ pub fn get_top_products(
     let db = state.lock_db()?;
 
     let mut sql = String::from(
-        "SELECT d.producto_codigo, d.producto_nombre, SUM(d.cantidad), SUM(d.subtotal_usd)
+        "SELECT d.producto_codigo, COALESCE(p.nombre, ''), SUM(d.cantidad), SUM(d.cantidad * d.precio_usd_unitario)
          FROM detalles_ventas d
          JOIN ventas v ON v.id = d.venta_id
+         LEFT JOIN productos p ON p.codigo = d.producto_codigo
          WHERE v.anulada = 0"
     );
 
@@ -653,7 +676,7 @@ pub fn get_top_products(
         }
     }
 
-    sql.push_str(" GROUP BY d.producto_codigo ORDER BY SUM(d.subtotal_usd) DESC");
+    sql.push_str(" GROUP BY d.producto_codigo ORDER BY SUM(d.cantidad * d.precio_usd_unitario) DESC");
 
     if let Some(l) = limit {
         if l > 0 {
@@ -700,6 +723,105 @@ pub fn list_categorias(state: State<AppState>) -> Result<Vec<Categoria>, String>
         .filter_map(|r| r.ok())
         .collect();
     Ok(categorias)
+}
+
+#[tauri::command]
+pub fn create_categoria(state: State<AppState>, nombre: String, color: String) -> Result<i64, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "create_categoria",
+    )?;
+    let db = state.lock_db()?;
+    crate::auth::require_admin(&state, &db, &format!("Creó categoría '{}'", nombre.trim()))?;
+    let nombre = nombre.trim().to_string();
+    if nombre.is_empty() {
+        return Err("El nombre de la categoría es obligatorio".to_string());
+    }
+    let color = sanitize_color(&color);
+    let ts = crate::helpers::now_iso();
+    db.execute(
+        "INSERT INTO categorias (nombre, color, updated_at) VALUES (?1, ?2, ?3) \
+         ON CONFLICT(nombre) DO UPDATE SET color = ?2, updated_at = ?3",
+        params![nombre, color, ts],
+    )
+    .map_err(|e| format!("Error al crear categoría: {}", e))?;
+    let id: i64 = db.query_row("SELECT id FROM categorias WHERE nombre = ?1", params![nombre], |row| row.get(0))
+        .map_err(|e| format!("Error al recuperar categoría: {}", e))?;
+    let _ = crate::db::rate_limit_success(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "create_categoria",
+    );
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn update_categoria(state: State<AppState>, id: i64, nombre: String, color: String) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "update_categoria",
+    )?;
+    let db = state.lock_db()?;
+    crate::auth::require_admin(&state, &db, &format!("Renombró categoría #{} a '{}'", id, nombre.trim()))?;
+    let nombre = nombre.trim().to_string();
+    if nombre.is_empty() {
+        return Err("El nombre de la categoría es obligatorio".to_string());
+    }
+    let color = sanitize_color(&color);
+    let ts = crate::helpers::now_iso();
+    let affected = db
+        .execute(
+            "UPDATE categorias SET nombre = ?1, color = ?2, updated_at = ?3 WHERE id = ?4 \
+             AND NOT EXISTS (SELECT 1 FROM categorias WHERE nombre = ?1 AND id <> ?4)",
+            params![nombre, color, ts, id],
+        )
+        .map_err(|e| format!("Error al actualizar categoría: {}", e))?;
+    if affected == 0 {
+        return Err("Ya existe una categoría con ese nombre".to_string());
+    }
+    let _ = crate::db::rate_limit_success(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "update_categoria",
+    );
+    Ok("Categoría actualizada".to_string())
+}
+
+#[tauri::command]
+pub fn delete_categoria(state: State<AppState>, id: i64) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "delete_categoria",
+    )?;
+    let db = state.lock_db()?;
+    crate::auth::require_admin(&state, &db, &format!("Eliminó categoría #{}", id))?;
+    let nombre: String = db
+        .query_row("SELECT COALESCE(nombre,'') FROM categorias WHERE id = ?1", params![id], |row| row.get(0))
+        .map_err(|_| "Categoría no encontrada".to_string())?;
+    let ts = crate::helpers::now_iso();
+    let mut db = db;
+    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+    tx.execute(
+        "UPDATE productos SET categoria_id = NULL, updated_at = ?1 WHERE categoria_id = ?2",
+        params![ts, id],
+    )
+    .map_err(|e| format!("Error al desvincular productos: {}", e))?;
+    tx.execute("DELETE FROM categorias WHERE id = ?1", params![id])
+        .map_err(|e| format!("Error al eliminar categoría: {}", e))?;
+    tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
+    let _ = crate::db::rate_limit_success(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "delete_categoria",
+    );
+    Ok(format!("Categoría '{}' eliminada", nombre))
+}
+
+fn sanitize_color(color: &str) -> String {
+    let c = color.trim();
+    let c = c.strip_prefix('#').unwrap_or(c);
+    if c.len() == 6 && c.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        format!("#{}", c.to_uppercase())
+    } else {
+        "#CCCCCC".to_string()
+    }
 }
 
 #[cfg(test)]

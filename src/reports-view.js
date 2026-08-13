@@ -165,7 +165,7 @@ async function loadDashboard() {
               '<div class="dashboard-stat"><span>Total USD</span><strong data-count="' + d.total_usd + '" data-fmt="usd">' + formatUSD(d.total_usd) + '</strong></div>' +
               '<div class="dashboard-stat"><span>Costo</span><strong data-count="' + (d.total_costo_usd || 0) + '" data-fmt="usd">' + formatUSD(d.total_costo_usd || 0) + '</strong></div>' +
               '<div class="dashboard-stat"><span>Ganancia</span><strong data-count="' + (d.total_ganancia_usd || 0) + '" data-fmt="usd">' + formatUSD(d.total_ganancia_usd || 0) + '</strong></div>' +
-              '<div class="dashboard-stat"><span>Mov. neto</span><strong data-count="' + (d.neto_movimientos_usd || 0) + '" data-fmt="usd">' + formatUSD(d.neto_movimientos_usd || 0) + '</strong></div>' +
+              '<div class="dashboard-stat"><span>Ingresos/egresos</span><strong data-count="' + (d.neto_movimientos_usd || 0) + '" data-fmt="usd">' + formatUSD(d.neto_movimientos_usd || 0) + '</strong></div>' +
               '<div class="dashboard-stat"><span>Total Bs.</span><strong data-count="' + d.total_bs + '" data-fmt="bs">' + formatBS(d.total_bs) + '</strong></div>' +
             '</div>';
           }).join('') +
@@ -224,8 +224,13 @@ function drillDownDashboard(periodKey) {
   const sd = qs(SEL.reportStartDate), ed = qs(SEL.reportEndDate);
   if (sd) sd.value = start;
   if (ed) ed.value = end;
-  showView('reports');
-  loadReportsAndTopProducts(true);
+  reportPage = 1;
+  const viewReports = qs(SEL.viewReports);
+  if (viewReports && viewReports.classList.contains('active')) {
+    loadReportsAndTopProducts(true);
+  } else {
+    showView('reports');
+  }
 }
 
 var piePeriod = 'day';
@@ -317,6 +322,7 @@ function drawDashboardBarChart(body, data, periods) {
   const canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
   const rect = canvas.parentElement.getBoundingClientRect();
+  if (rect.width < 50) return;
   const isMobile = rect.width < BREAKPOINT.MOBILE;
   const w = Math.min(rect.width - 16, CHART.CANVAS_MAX_WIDTH);
   const h = isMobile ? CHART.BAR_HEIGHT_MOBILE : CHART.BAR_HEIGHT;
@@ -337,7 +343,7 @@ function drawDashboardBarChart(body, data, periods) {
   const metrics = [
     { label: 'Ventas', key: 'total_ventas', values: [data.today.total_ventas, data.week.total_ventas, data.month.total_ventas] },
     { label: 'USD', key: 'total_usd', values: [data.today.total_usd, data.week.total_usd, data.month.total_usd] },
-    { label: 'Caja', key: 'caja', values: [
+    { label: 'Total caja', key: 'caja', values: [
       (data.today.total_usd || 0) + (data.today.neto_movimientos_usd || 0),
       (data.week.total_usd || 0) + (data.week.neto_movimientos_usd || 0),
       (data.month.total_usd || 0) + (data.month.neto_movimientos_usd || 0)
@@ -469,6 +475,7 @@ function drawDashboardPieChart(body, paymentMethods) {
   const canvas = qs(SEL.dashboardCanvas);
   if (!canvas) return;
   const rect = canvas.parentElement.getBoundingClientRect();
+  if (rect.width < 50) return;
   const isMobile = rect.width < BREAKPOINT.MOBILE;
   const w = Math.min(rect.width - 16, CHART.CANVAS_MAX_WIDTH);
   const dpr = window.devicePixelRatio || 1;
@@ -656,6 +663,7 @@ async function drawProfitLineChart(body) {
   var dpr = window.devicePixelRatio || 1;
   var container = canvas.parentElement;
   var rect = container.getBoundingClientRect();
+  if (rect.width < 50) return;
   var w = rect.width || CHART.CANVAS_MAX_WIDTH;
   var maxW = CHART.CANVAS_MAX_WIDTH;
   if (w > maxW) w = maxW;
@@ -666,9 +674,10 @@ async function drawProfitLineChart(body) {
   canvas.style.height = h + 'px';
   ctx.scale(dpr, dpr);
 
-  var now = new Date();
-  var endDate = now.toISOString().slice(0, 10);
-  var startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  var startInput = qs(SEL.reportStartDate);
+  var endInput = qs(SEL.reportEndDate);
+  var endDate = endInput && endInput.value ? endInput.value : new Date().toISOString().slice(0, 10);
+  var startDate = startInput && startInput.value ? startInput.value : endDate;
 
   try {
     var points = await invoke('get_profit_series', {
@@ -800,7 +809,7 @@ function attachLineHover(canvas, dpr, data) {
         showChartTooltip(e.clientX, e.clientY,
           p.date + ' | Ingreso: $' + p.revenue_usd.toFixed(2) +
           ' | Costo: $' + p.cost_usd.toFixed(2) +
-          ' | Mov. neto: $' + (p.neto_movimientos_usd || 0).toFixed(2) +
+          ' | Ingresos/egresos: $' + (p.neto_movimientos_usd || 0).toFixed(2) +
           ' | Ganancia: $' + p.profit_usd.toFixed(2));
         canvas.style.cursor = 'pointer';
         return;
@@ -834,7 +843,7 @@ async function showProductHistory(codigo, nombre) {
         tbody.innerHTML = emptyTableRow(7, '<i class="nf nf-fa-history"></i>', 'Sin ventas registradas', 'El historial de movimientos aparecer\u00e1 aqu\u00ed');
       } else {
         appendRows(tbody, items, function(item) {
-          return '<td>' + item.venta_id + '</td><td>' + escapeHtml(item.fecha_hora) + '</td><td>' + item.cantidad + '</td><td>' + formatUSD(item.precio_usd_unitario) + '</td><td>' + formatUSD(item.subtotal_usd) + '</td><td>' + escapeHtml(item.metodo_pago) + '</td><td>' + escapeHtml(item.username) + '</td>';
+          return '<td>' + item.venta_id + '</td><td>' + escapeHtml(formatDateTime(item.fecha_hora)) + '</td><td>' + item.cantidad + '</td><td>' + formatUSD(item.precio_usd_unitario) + '</td><td>' + formatUSD(item.subtotal_usd) + '</td><td>' + escapeHtml(item.metodo_pago) + '</td><td>' + escapeHtml(item.username) + '</td>';
         });
       }
     } catch (e) { tbody.innerHTML = errorTableRow(7, e); }
@@ -899,7 +908,10 @@ async function showSaleDetail(ventaId, btn) {
       qs(SEL.saleDetailTotal).textContent = formatUSD(parseFloat(btn.dataset.total));
       qs(SEL.saleDetailMetodo).textContent = btn.dataset.metodo;
       qs(SEL.saleDetailUsuario).textContent = btn.dataset.usuario;
-      qs(SEL.saleDetailFecha).textContent = btn.dataset.fecha;
+      qs(SEL.saleDetailFecha).textContent = formatDateTime(btn.dataset.fecha);
+      const tasaEl = qs(SEL.saleDetailTasa);
+      const tasaRaw = parseFloat(btn.dataset.tasa);
+      if (tasaEl) tasaEl.textContent = (!isNaN(tasaRaw) && tasaRaw > 0) ? 'Bs. ' + tasaRaw.toFixed(2) : '—';
       const nota = btn.dataset.nota || '';
       if (nota) {
         notaEl.textContent = nota;
@@ -934,7 +946,8 @@ async function showSaleDetail(ventaId, btn) {
     detalles.forEach(function(d) {
       const tr = document.createElement('tr');
       if (d.anulado) tr.style.textDecoration = 'line-through';
-      const voidBtn = d.anulado
+      const canVoid = currentUser && currentUser.rol === ROL_ADMIN;
+      const voidBtn = (d.anulado || !canVoid)
         ? ''
         : '<button class="btn btn-sm btn-danger void-item-btn" data-detalle-id="' + d.id + '" data-venta-id="' + ventaId + '" ' + (allVoided ? 'disabled' : '') + '>Anular</button>';
       const statusBadge = d.anulado

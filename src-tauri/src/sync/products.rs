@@ -1,5 +1,5 @@
 use super::conflicts::{check_and_record_conflict, is_conflict};
-use super::{api_url, now_iso, run_download, supabase_get, supabase_post, upsert_config, urlencoding};
+use super::{api_url, now_iso, run_download, supabase_get_paginated, supabase_post, upsert_config, urlencoding};
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::{params, Connection};
@@ -55,10 +55,11 @@ pub(crate) fn upload_products_inner(
 
     let mut stmt = db
         .prepare(
-            "SELECT codigo, nombre, precio_usd, COALESCE(costo,0), stock, COALESCE(stock_minimo,0), \
-             COALESCE(categoria_id,0), COALESCE(es_inari,0), COALESCE(subcategoria,''), COALESCE(activo,1), \
-             COALESCE(updated_at,'') \
-             FROM productos WHERE updated_at IS NULL OR updated_at = '' OR updated_at > ?1",
+            "SELECT p.codigo, p.nombre, p.precio_usd, COALESCE(p.costo,0), p.stock, COALESCE(p.stock_minimo,0), \
+             COALESCE(p.categoria_id,0), COALESCE(p.es_inari,0), COALESCE(p.subcategoria,''), COALESCE(p.activo,1), \
+             COALESCE(p.updated_at,''), COALESCE(c.nombre,'') \
+             FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id \
+             WHERE p.updated_at IS NULL OR p.updated_at = '' OR p.updated_at > ?1",
         )
         .map_err(|e| e.to_string())?;
     let products: Vec<serde_json::Value> = stmt
@@ -75,6 +76,7 @@ pub(crate) fn upload_products_inner(
                 "stock_minimo": row.get::<_, i64>(5)?,
                 "activo": row.get::<_, i64>(9)?,
                 "categoria_id": if cat_id == 0 { serde_json::Value::Null } else { json!(cat_id) },
+                "categoria_nombre": row.get::<_, String>(11)?,
                 "es_inari": row.get::<_, i64>(7)?,
                 "subcategoria": row.get::<_, String>(8)?,
                 "dispositivo_origen": dispositivo_id,
@@ -86,16 +88,17 @@ pub(crate) fn upload_products_inner(
         .collect();
     drop(stmt);
 
-    if products.is_empty() {
-        return Ok("No hay productos para subir".to_string());
+    // F5: el watermark DEBE avanzar aunque no haya productos que subir, si las
+    // categorías sí cambiaron. Antes el early-return se saltaba el bump y las
+    // categorías se re-subían en cada sync (última subida sin avance).
+    if !products.is_empty() {
+        let body = serde_json::to_string(&products).map_err(|e| e.to_string())?;
+        supabase_post(
+            &api_url(supabase_url, "/productos?on_conflict=codigo"),
+            supabase_key,
+            &body,
+        )?;
     }
-
-    let body = serde_json::to_string(&products).map_err(|e| e.to_string())?;
-    supabase_post(
-        &api_url(supabase_url, "/productos?on_conflict=codigo"),
-        supabase_key,
-        &body,
-    )?;
 
     upsert_config(db, constants::CFG_ULTIMO_UPLOAD, &ts);
 
@@ -104,6 +107,34 @@ pub(crate) fn upload_products_inner(
         cats.len(),
         products.len()
     ))
+}
+
+/// Resuelve el nombre de una categoría remota al id local, creándola localmente
+/// si no existe (fix C1). Devuelve `None` si el nombre viene vacío.
+pub(crate) fn resolver_categoria_por_nombre(
+    db: &Connection,
+    nombre: &str,
+) -> Result<Option<i64>, String> {
+    let nombre = nombre.trim();
+    if nombre.is_empty() {
+        return Ok(None);
+    }
+    let existing: Option<i64> = db
+        .query_row("SELECT id FROM categorias WHERE nombre = ?1", params![nombre], |row| row.get(0))
+        .ok();
+    if let Some(id) = existing {
+        return Ok(Some(id));
+    }
+    db.execute(
+        "INSERT INTO categorias (nombre, color, updated_at) VALUES (?1, '#CCCCCC', ?2) \
+         ON CONFLICT(nombre) DO UPDATE SET updated_at = ?2",
+        params![nombre, now_iso()],
+    )
+    .map_err(|e| format!("Error al crear categoría '{}': {}", nombre, e))?;
+    let id: i64 = db
+        .query_row("SELECT id FROM categorias WHERE nombre = ?1", params![nombre], |row| row.get(0))
+        .map_err(|e| format!("Error al recuperar categoría '{}': {}", nombre, e))?;
+    Ok(Some(id))
 }
 
 pub(crate) fn download_products_inner(
@@ -123,14 +154,14 @@ pub(crate) fn download_products_inner(
     let get_url = api_url(
         supabase_url,
         &format!(
-            "/productos?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,es_inari,subcategoria,updated_at,dispositivo_origen",
+            "/productos?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,categoria_nombre,es_inari,subcategoria,updated_at,dispositivo_origen",
             since,
             urlencoding(dispositivo_id),
         ),
     );
 
     let cloud_products: Vec<serde_json::Value> =
-        supabase_get(&get_url, supabase_key)?;
+        supabase_get_paginated(&get_url, supabase_key)?;
 
     let count = cloud_products.len();
     if count == 0 {
@@ -197,6 +228,7 @@ pub(crate) fn download_products_inner(
         let stock_minimo = prod["stock_minimo"].as_i64().unwrap_or(0);
         let activo = prod["activo"].as_i64().unwrap_or(1);
         let cat_id = prod["categoria_id"].as_i64();
+        let cat_nombre = prod["categoria_nombre"].as_str().unwrap_or("").to_string();
         let es_inari = prod["es_inari"].as_i64().unwrap_or(0);
         let subcategoria = prod["subcategoria"].as_str().unwrap_or("").to_string();
         let remote_ts = prod["updated_at"].as_str();
@@ -209,11 +241,20 @@ pub(crate) fn download_products_inner(
             "stock_minimo": stock_minimo,
             "activo": activo,
             "categoria_id": cat_id,
+            "categoria_nombre": &cat_nombre,
             "es_inari": es_inari,
             "subcategoria": &subcategoria,
             "local_updated_at": remote_ts,
             "remote_updated_at": remote_ts,
         });
+
+        // La categoría viaja por nombre (fix C1): resolver a id local, creándola
+        // si no existe. Fallback al id remoto para filas legacy sin el nombre.
+        let cat_id_uso: Option<i64> = if cat_nombre.trim().is_empty() {
+            cat_id
+        } else {
+            resolver_categoria_por_nombre(db, &cat_nombre)?
+        };
 
         if let Some((local_ts, local_nombre, local_precio, local_costo, local_stock_min, local_activo, local_cat_id, local_es_inari, local_subcategoria)) = local_map.get(&codigo) {
             let local_ts = if local_ts.is_empty() { None } else { Some(local_ts.as_str()) };
@@ -247,12 +288,12 @@ pub(crate) fn download_products_inner(
                 }
             }
             upd.execute(params![
-                nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id, es_inari, subcategoria,
+                nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id_uso, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts), codigo,
             ]).map(|affected| updated += affected as i64).map_err(|e| format!("Error actualizando producto remoto: {}", e))?;
         } else {
             ins.execute(params![
-                codigo, nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id, es_inari, subcategoria,
+                codigo, nombre, precio_usd, costo, stock, stock_minimo, activo, cat_id_uso, es_inari, subcategoria,
                 remote_ts.unwrap_or(&ts),
             ]).map(|affected| inserted += affected as i64).map_err(|e| format!("Error insertando producto remoto: {}", e))?;
         }
@@ -292,4 +333,57 @@ pub fn download_products(state: State<AppState>) -> Result<String, String> {
     run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {
         download_products_inner(tx, supabase_url, supabase_key, dispositivo_id)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn in_memory_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL UNIQUE, \
+             color TEXT NOT NULL DEFAULT '#CCCCCC', updated_at TEXT DEFAULT '')",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn test_resolver_categoria_por_nombre_existente() {
+        let db = in_memory_db();
+        db.execute("INSERT INTO categorias (nombre) VALUES ('Bebidas')", []).unwrap();
+        let id = resolver_categoria_por_nombre(&db, "Bebidas").unwrap();
+        assert_eq!(id, Some(1));
+    }
+
+    #[test]
+    fn test_resolver_categoria_por_nombre_crea() {
+        let db = in_memory_db();
+        let id = resolver_categoria_por_nombre(&db, "Carnes").unwrap();
+        assert_eq!(id, Some(1));
+        let nombres: Vec<String> = db
+            .prepare("SELECT nombre FROM categorias")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert_eq!(nombres, vec!["Carnes".to_string()]);
+    }
+
+    #[test]
+    fn test_resolver_categoria_por_nombre_vacio() {
+        let db = in_memory_db();
+        assert_eq!(resolver_categoria_por_nombre(&db, "  ").unwrap(), None);
+    }
+
+    #[test]
+    fn test_resolver_categoria_por_nombre_trim_y_estable() {
+        let db = in_memory_db();
+        let a = resolver_categoria_por_nombre(&db, " Lácteos ").unwrap();
+        let b = resolver_categoria_por_nombre(&db, " Lácteos ").unwrap();
+        assert_eq!(a, b, "el segundo lookup debe reutilizar la fila creada");
+    }
 }

@@ -13,7 +13,7 @@ pub struct PingResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct SaveRequest {
   pub file_name: String,
   pub content: String,

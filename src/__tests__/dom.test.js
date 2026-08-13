@@ -4,6 +4,7 @@ function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
 function redondeado2(v) { const n = parseFloat(String(v).replace(',', '.')) || 0; return (Math.round(n * 100) / 100); }
+function contrastTextColor(hex) { var h = (hex || '#CCCCCC').replace('#', '').trim(); if (h.length !== 6) return '#111'; var r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16); return (0.299 * r + 0.587 * g + 0.114 * b > 150) ? '#111111' : '#FFFFFF'; }
 
 describe('createProductRow (DOM)', () => {
   let tasaActual = 40;
@@ -155,12 +156,16 @@ describe('createInventoryRow (DOM)', () => {
     var margen = (costo > 0 && p.precio_usd > 0) ? ((p.precio_usd - costo) / p.precio_usd * 100).toFixed(1) + '%' : '—';
     var tasa = tasaInventario > 0 ? tasaInventario : tasaActual;
     var inariBadge = p.es_inari ? ' <span class="badge badge-inari">Inari</span>' : '';
+    var catColor = p.categoria_color || '#CCCCCC';
+    var catChip = p.categoria
+      ? ' <span class="cat-chip" style="background:' + escapeHtml(catColor) + ';color:' + contrastTextColor(catColor) + '">' + escapeHtml(p.categoria) + '</span>'
+      : '';
     var inariToggleBtn = (currentUser && currentUser.rol === ROL_ADMIN)
       ? (p.es_inari
           ? '<button data-action="toggle-inari" data-codigo="' + escapeHtml(p.codigo) + '" data-inari="false"><i class="nf nf-fa-fire"></i> Quitar Inari</button>'
           : '<button data-action="toggle-inari" data-codigo="' + escapeHtml(p.codigo) + '" data-inari="true"><i class="nf nf-fa-fire"></i> Marcar Inari</button>')
       : '';
-    return '<td>' + escapeHtml(p.nombre) + inariBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + inariToggleBtn + '</div></div></td>';
+    return '<td>' + escapeHtml(p.nombre) + catChip + inariBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + inariToggleBtn + '</div></div></td>';
   }
 
   it('renderiza datos básicos del producto', () => {
@@ -194,10 +199,25 @@ describe('createInventoryRow (DOM)', () => {
     expect(html).toContain('Quitar Inari');
   });
 
-  it('botón Marcar Inari para no-inari', () => {
+it('botón Marcar Inari para no-inari', () => {
     const p = { codigo: 'N001', nombre: 'Normal', precio_usd: 8, costo: 3, stock: 10, stock_minimo: 2, es_inari: false };
     const html = createInventoryRow(p, '');
+    expect(html).toContain('toggle-inari');
     expect(html).toContain('Marcar Inari');
+  });
+
+  it('incluye chip de categoría con color', () => {
+    const p = { codigo: 'C001', nombre: 'Galleta', precio_usd: 8, costo: 3, stock: 10, stock_minimo: 2, categoria: 'Snacks', categoria_color: '#3B82F6' };
+    const html = createInventoryRow(p, '');
+    expect(html).toContain('cat-chip');
+    expect(html).toContain('Snacks');
+    expect(html).toContain('#3B82F6');
+  });
+
+  it('sin categoría no genera chip', () => {
+    const p = { codigo: 'C002', nombre: 'Galleta', precio_usd: 8, costo: 3, stock: 10, stock_minimo: 2 };
+    const html = createInventoryRow(p, '');
+    expect(html).not.toContain('cat-chip');
   });
 });
 
@@ -281,17 +301,33 @@ describe('createReportRow', () => {
   const METODO_LABELS = { efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago', punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto' };
   function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
   function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
+  function formatDateTime(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso.replace(' ', 'T'));
+    if (isNaN(d.getTime())) return iso;
+    const p = function(n) { return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
 
   function createReportRow(v) {
     const metodoLabel = formatMetodoLabel(v.venta.metodo_pago);
     const prodCount = v.productos ? v.productos.reduce(function(s, p) { return s + p.cantidad; }, 0) : 0;
-    const badge = v.venta.anulada ? ' <span class="text-muted">(Anulada)</span>' : '';
+    const notaEsc = v.venta.nota_anulacion ? escapeHtml(v.venta.nota_anulacion) : '';
+    const badge = v.venta.anulada
+      ? (notaEsc
+          ? ' <span class="badge badge-danger" title="' + notaEsc + '">Anulada</span>'
+          : ' <span class="badge badge-danger">Anulada</span>')
+      : '';
     var costoTotal = 0;
     if (v.productos) {
       v.productos.forEach(function(d) { costoTotal += (d.costo || 0) * d.cantidad; });
     }
     var ganancia = v.venta.total_usd - costoTotal;
-    return '<td>' + v.venta.id + '</td><td>' + escapeHtml(v.venta.fecha_hora) + '</td><td>' + escapeHtml(v.venta.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + prodCount + '</td><td>' + formatUSD(v.venta.total_usd) + '</td><td>' + formatUSD(costoTotal) + '</td><td>' + formatUSD(Math.max(0, ganancia)) + '</td><td>' + formatBS(v.venta.total_bs) + badge + '</td>';
+    const vv = v.venta;
+    const obs = vv.nota ? escapeHtml(vv.nota) : '';
+    const detailBtn = '<button class="sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-tasa="' + (vv.tasa_aplicada || '') + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
+    const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailBtn + '</div></div>';
+    return '<td data-label="#">' + vv.id + '</td><td data-label="Fecha">' + escapeHtml(formatDateTime(vv.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(vv.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(vv.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(vv.total_bs) + badge + '</td><td data-label="Acción">' + menu + '</td>';
   }
 
   it('renderiza venta normal', () => {
@@ -357,29 +393,406 @@ describe('createDailySaleRow', () => {
   function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
   function formatUSD(v) { return '$' + v.toFixed(2); }
   function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
+  function formatDateTime(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso.replace(' ', 'T'));
+    if (isNaN(d.getTime())) return iso;
+    const p = function(n) { return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
 
   function createDailySaleRow(v, metodoLabel) {
-    const isAdmin = 'admin';
-    const voidBtn = v.anulada ? '<span class="text-muted">Anulada</span>' : '<button class="btn btn-sm btn-danger void-sale-btn" data-id="' + v.id + '" title="Anular venta"><i class="nf nf-fa-ban"></i></button>';
-    const detailBtn = '<button class="btn btn-sm btn-outline sale-detail-btn" data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i></button>';
-    return '<td>' + v.id + '</td><td>' + escapeHtml(v.fecha_hora.split(' ')[1]) + '</td><td>' + escapeHtml(v.username) + '</td><td>' + escapeHtml(metodoLabel) + '</td><td>' + formatUSD(v.total_usd) + '</td><td>' + formatBS(v.total_bs) + '</td><td>' + detailBtn + ' ' + voidBtn + '</td>';
+    const nota = v.nota_anulacion ? escapeHtml(v.nota_anulacion) : '';
+    const anuladaBadge = v.anulada
+      ? (nota
+          ? '<span class="badge badge-danger" title="' + nota + '"><i class="nf nf-fa-ban"></i> Anulada</span>'
+          : '<span class="badge badge-danger"><i class="nf nf-fa-ban"></i> Anulada</span>')
+      : '';
+    const detailAttrs = 'data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-tasa="' + (v.tasa_aplicada || '') + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '"';
+    const detailItem = '<button class="sale-detail-btn" ' + detailAttrs + '><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
+    const canVoid = currentUser && currentUser.rol === ROL_ADMIN;
+    const voidItem = (v.anulada || !canVoid)
+      ? ''
+      : '<button class="void-sale-btn" data-id="' + v.id + '" title="Anular venta"><i class="nf nf-fa-ban"></i> Anular</button>';
+    const requestVoidItem = (!v.anulada && !canVoid)
+      ? '<button class="request-void-btn" data-id="' + v.id + '" title="Solicitar anulación al administrador"><i class="nf nf-fa-paper_plane"></i> Solicitar anulación</button>'
+      : '';
+    const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailItem + voidItem + requestVoidItem + '</div></div>';
+    return '<td data-label="#">' + v.id + '</td><td data-label="Hora">' + escapeHtml(formatDateTime(v.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(v.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td data-label="Total (Bs.)">' + formatBS(v.total_bs) + '</td><td data-label="Acción">' + (v.anulada ? anuladaBadge : menu) + '</td>';
   }
+  let currentUser = { rol: ROL_ADMIN, username: 'admin' };
 
   it('renderiza venta diaria no anulada', () => {
     const v = { id: 10, fecha_hora: '2025-06-15 14:30:00', username: 'admin', total_usd: 25, total_bs: 1000, anulada: false };
     const html = createDailySaleRow(v, 'Efectivo Bs.');
     expect(html).toContain('>10<');
-    expect(html).toContain('14:30:00');
+    expect(html).toContain('14:30');
     expect(html).toContain('admin');
     expect(html).toContain('Efectivo Bs.');
     expect(html).toContain('$25.00');
     expect(html).toContain('void-sale-btn');
   });
 
-  it('anulada muestra texto en vez de botón', () => {
+  it('anulada muestra badge en vez de menú', () => {
     const v = { id: 11, fecha_hora: '2025-06-15 15:00', username: 'admin', total_usd: 30, total_bs: 1200, anulada: true };
     const html = createDailySaleRow(v, 'Punto');
     expect(html).toContain('Anulada');
+    expect(html).toContain('badge-danger');
     expect(html).not.toContain('void-sale-btn');
+    expect(html).not.toContain('dropdown-menu');
+  });
+
+  it('vendedor no ve botón de anular (void admin-only) y sí solicitar anulación', () => {
+    currentUser = { rol: 'vendedor', username: 'vendedor1' };
+    const v = { id: 12, fecha_hora: '2025-06-15 15:30:00', username: 'vendedor1', total_usd: 12, total_bs: 480, anulada: false };
+    const html = createDailySaleRow(v, 'Efectivo Bs.');
+    expect(html).not.toContain('void-sale-btn');
+    expect(html).toContain('request-void-btn');
+    currentUser = { rol: ROL_ADMIN, username: 'admin' };
+  });
+});
+
+describe('setupMonedaToggle (toggle excluyente USD/Bs.)', () => {
+  let tasaActual = 40;
+
+  function parseInput(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
+
+  function setupMonedaToggle(cfg) {
+    const toggle = cfg.toggle;
+    const usdInput = cfg.usdInput;
+    const bsInput = cfg.bsInput;
+    const bsGroup = cfg.bsGroup;
+    const onUsdChange = cfg.onUsdChange || function() {};
+    const onBsChange = cfg.onBsChange || function() {};
+    let activeMoneda = 'usd';
+
+    function setActive(moneda) {
+      activeMoneda = moneda;
+      toggle.querySelectorAll('.moneda-toggle-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.moneda === moneda);
+      });
+      const isBs = moneda === 'bs';
+      if (bsGroup) bsGroup.classList.toggle('hidden', !isBs);
+    }
+
+    function switchTo(moneda) {
+      if (moneda === activeMoneda) return;
+      const fromBs = activeMoneda === 'bs';
+      const curVal = fromBs ? parseInput(bsInput.value) : parseInput(usdInput.value);
+      setActive(moneda);
+      if (curVal > 0 && tasaActual > 0) {
+        if (moneda === 'bs') {
+          bsInput.value = (curVal * tasaActual).toFixed(2);
+          usdInput.value = '';
+        } else {
+          usdInput.value = (curVal / tasaActual).toFixed(2);
+          bsInput.value = '';
+        }
+      } else {
+        usdInput.value = '';
+        bsInput.value = '';
+      }
+      onUsdChange();
+      onBsChange();
+    }
+
+    toggle.querySelectorAll('.moneda-toggle-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { switchTo(this.dataset.moneda); });
+    });
+    usdInput.addEventListener('input', function() {
+      if (activeMoneda !== 'usd') setActive('usd');
+      bsInput.value = '';
+      onUsdChange();
+    });
+    bsInput.addEventListener('input', function() {
+      if (activeMoneda !== 'bs') setActive('bs');
+      usdInput.value = '';
+      onBsChange();
+    });
+    setActive('usd');
+    return { setUsd: function() { switchTo('usd'); }, setBs: function() { switchTo('bs'); }, getMoneda: function() { return activeMoneda; } };
+  }
+
+  function makeHarness() {
+    const btns = [
+      document.createElement('button'),
+      document.createElement('button')
+    ];
+    btns[0].dataset.moneda = 'usd';
+    btns[1].dataset.moneda = 'bs';
+    const usdInput = document.createElement('input');
+    const bsInput = document.createElement('input');
+    const bsGroup = document.createElement('div');
+    const toggle = document.createElement('div');
+    btns.forEach(b => toggle.appendChild(b));
+    return { toggle, usdInput, bsInput, bsGroup };
+  }
+
+  function bsGroupHidden(g) { return g.classList.contains('hidden'); }
+
+  it('por defecto el grupo Bs. está oculto y moneda activa es USD', () => {
+    const tasaActual = 40;
+    const h = makeHarness();
+    const t = setupMonedaToggle({ toggle: h.toggle, usdInput: h.usdInput, bsInput: h.bsInput, bsGroup: h.bsGroup });
+    expect(t.getMoneda()).toBe('usd');
+    expect(bsGroupHidden(h.bsGroup)).toBe(true);
+  });
+
+  it('escribir en Bs. vacía el campo USD y marca el toggle Bs.', () => {
+    const tasaActual = 40;
+    const h = makeHarness();
+    setupMonedaToggle({ toggle: h.toggle, usdInput: h.usdInput, bsInput: h.bsInput, bsGroup: h.bsGroup });
+    h.usdInput.value = '100';
+    h.bsInput.value = '4000';
+    h.bsInput.dispatchEvent(new Event('input'));
+    expect(h.usdInput.value).toBe('');
+    expect(bsGroupHidden(h.bsGroup)).toBe(false);
+  });
+
+  it('cambiar a Bs. convierte el monto USD actual', () => {
+    const tasaActual = 40;
+    const h = makeHarness();
+    const t = setupMonedaToggle({ toggle: h.toggle, usdInput: h.usdInput, bsInput: h.bsInput, bsGroup: h.bsGroup });
+    h.usdInput.value = '100';
+    t.setBs();
+    expect(h.bsInput.value).toBe('4000.00');
+    expect(h.usdInput.value).toBe('');
+  });
+
+  it('cambiar a USD convierte el monto Bs. actual', () => {
+    const tasaActual = 40;
+    const h = makeHarness();
+    const t = setupMonedaToggle({ toggle: h.toggle, usdInput: h.usdInput, bsInput: h.bsInput, bsGroup: h.bsGroup });
+    t.setBs();
+    h.bsInput.value = '4000';
+    t.setUsd();
+    expect(h.usdInput.value).toBe('100.00');
+    expect(h.bsInput.value).toBe('');
+  });
+});
+
+describe('buildCustomSelect (DOM)', () => {
+  function qsa(sel) {
+    return Array.prototype.slice.call(document.querySelectorAll(sel));
+  }
+  function buildCustomSelect(opts) {
+    opts = opts || {};
+    var options = opts.options || [];
+    var wrap = document.createElement('div');
+    wrap.className = 'custom-select' + (opts.className ? ' ' + opts.className : '');
+    wrap.innerHTML = '<button type="button" class="custom-select-btn"><span class="custom-select-value"></span><i class="nf nf-fa-chevron_down"></i></button><div class="custom-select-menu"></div>';
+    var btn = wrap.querySelector('.custom-select-btn');
+    var valSpan = wrap.querySelector('.custom-select-value');
+    var menu = wrap.querySelector('.custom-select-menu');
+    function buildMenu() {
+      menu.innerHTML = '';
+      options.forEach(function(o) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.value = o.value;
+        if (o.color) {
+          var sw = document.createElement('span');
+          sw.className = 'cs-swatch';
+          sw.style.background = o.color;
+          b.appendChild(sw);
+          b.className = 'has-swatch';
+        }
+        b.appendChild(document.createTextNode(o.label));
+        if (o.disabled) b.disabled = true;
+        b.addEventListener('click', function() {
+          if (o.disabled) return;
+          wrap.setValue(o.value);
+          wrap.classList.remove('open');
+          if (opts.onChange) opts.onChange(o.value);
+        });
+        menu.appendChild(b);
+      });
+    }
+    wrap.setValue = function(value) {
+      wrap.dataset.value = value;
+      var opt = null;
+      for (var i = 0; i < options.length; i++) {
+        if (String(options[i].value) === String(value)) { opt = options[i]; break; }
+      }
+      valSpan.innerHTML = '';
+      if (opt && opt.color) {
+        var sw = document.createElement('span');
+        sw.className = 'cs-swatch';
+        sw.style.background = opt.color;
+        valSpan.appendChild(sw);
+      }
+      valSpan.appendChild(document.createTextNode(opt ? opt.label : ''));
+      menu.querySelectorAll('button').forEach(function(b) {
+        b.classList.toggle('selected', String(b.dataset.value) === String(value));
+      });
+    };
+    wrap.getValue = function() { return wrap.dataset.value; };
+    btn.addEventListener('click', function() {
+      var isOpen = wrap.classList.contains('open');
+      wrap.classList.toggle('open', !isOpen);
+    });
+    buildMenu();
+    wrap.setValue(opts.value !== undefined ? opts.value : (options[0] ? options[0].value : ''));
+    return wrap;
+  }
+
+  it('setValue/getValue y opción con color', () => {
+    const w = buildCustomSelect({
+      options: [
+        { value: '', label: 'Sin categor\u00eda' },
+        { value: '1', label: 'Snacks', color: '#3B82F6' }
+      ],
+      value: ''
+    });
+    expect(w.getValue()).toBe('');
+    w.setValue('1');
+    expect(w.getValue()).toBe('1');
+    expect(w.querySelector('.custom-select-value').querySelector('.cs-swatch')).toBeTruthy();
+  });
+
+  it('marca opción seleccionada', () => {
+    const w = buildCustomSelect({
+      options: [
+        { value: '0', label: 'A' },
+        { value: '1', label: 'B' }
+      ],
+      value: '1'
+    });
+    const selBtns = w.querySelectorAll('.custom-select-menu button.selected');
+    expect(selBtns.length).toBe(1);
+    expect(selBtns[0].dataset.value).toBe('1');
+  });
+
+  it('opción deshabilitada no cambia el valor', () => {
+    const w = buildCustomSelect({
+      options: [
+        { value: 'a', label: 'A' },
+        { value: 'b', label: 'B', disabled: true }
+      ],
+      value: 'a'
+    });
+    const disabledBtn = w.querySelector('.custom-select-menu button[disabled]');
+    disabledBtn.click();
+    expect(w.getValue()).toBe('a');
+  });
+});
+
+describe('contrastTextColor', () => {
+  function contrastTextColor(hex) {
+    var h = (hex || '#CCCCCC').replace('#', '').trim();
+    if (h.length !== 6) return '#111';
+    var r = parseInt(h.substr(0, 2), 16);
+    var g = parseInt(h.substr(2, 2), 16);
+    var b = parseInt(h.substr(4, 2), 16);
+    var lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    return lum > 150 ? '#111111' : '#FFFFFF';
+  }
+
+  it('color claro → texto oscuro', () => {
+    expect(contrastTextColor('#FFFFFF')).toBe('#111111');
+  });
+  it('color oscuro → texto blanco', () => {
+    expect(contrastTextColor('#111111')).toBe('#FFFFFF');
+  });
+  it('inválido → texto oscuro por defecto', () => {
+    expect(contrastTextColor('no')).toBe('#111');
+  });
+});
+
+describe('initTableSorting — sin bucle infinito', () => {
+  // Reproduce la lógica de initTableSorting (utils.js) con el fix: el observer
+  // se desconecta durante sortRows y las filas ya ordenadas NO se re-mueven.
+  // Antes, sortRows re-appendeaba todo → mutación → observer → sortRows → ∞
+  // (bug: la app se colgaba al restaurar una columna / recargar con orden guardado).
+  function initTableSorting(table, tableId, savedSort) {
+    if (table.dataset.sortInit) return;
+    table.dataset.sortInit = '1';
+    const headers = table.querySelectorAll('th[data-sortable]');
+    const sortKey = 'sort-' + tableId;
+    let currentSort = savedSort || { col: null, asc: true };
+
+    function sortRows() {
+      const tbody = table.querySelector('tbody');
+      if (!tbody || !currentSort.col) return;
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const th = Array.from(headers).find(h => h.getAttribute('data-sortable') === currentSort.col);
+      if (!th) return;
+      const isAsc = currentSort.asc;
+      rows.sort((a, b) => {
+        const aVal = a.getAttribute('data-sort-' + currentSort.col) || a.children[Array.from(th.parentNode.children).indexOf(th)]?.textContent?.trim() || '';
+        const bVal = b.getAttribute('data-sort-' + currentSort.col) || b.children[Array.from(th.parentNode.children).indexOf(th)]?.textContent?.trim() || '';
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
+        if (!isNaN(aNum) && !isNaN(bNum)) return isAsc ? aNum - bNum : bNum - aNum;
+        return isAsc ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+      });
+      const current = Array.from(tbody.children);
+      let changed = rows.length !== current.length;
+      if (!changed) {
+        for (let i = 0; i < rows.length; i++) {
+          if (rows[i] !== current[i]) { changed = true; break; }
+        }
+      }
+      if (changed) rows.forEach(r => tbody.appendChild(r));
+    }
+
+    const tbody = table.querySelector('tbody');
+    if (tbody) {
+      const mo = new MutationObserver(function() {
+        if (!currentSort.col) return;
+        mo.disconnect();
+        sortRows();
+        mo.observe(tbody, { childList: true });
+      });
+      mo.observe(tbody, { childList: true });
+    }
+  }
+
+  it('ordena al repoblar el tbody y no entra en bucle infinito', async () => {
+    const table = document.createElement('table');
+    table.id = 't';
+    table.dataset.sortInit = '';
+    table.innerHTML = '<thead><tr><th data-sortable="nombre">Nombre</th></tr></thead><tbody></tbody>';
+    initTableSorting(table, 't', { col: 'nombre', asc: true });
+    document.body.appendChild(table);
+
+    const tbody = table.querySelector('tbody');
+    const order = ['Zeta', 'Alfa', 'Milo'];
+    order.forEach(n => {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.textContent = n;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    });
+
+    await new Promise(r => setTimeout(r, 0));
+    const vals = Array.from(tbody.querySelectorAll('tr td')).map(td => td.textContent);
+    expect(vals).toEqual(['Alfa', 'Milo', 'Zeta']);
+  });
+
+  it('filas ya ordenadas no se re-mueven (evita mutación→observer en cadena)', async () => {
+    const table = document.createElement('table');
+    table.id = 't2';
+    table.dataset.sortInit = '';
+    table.innerHTML = '<thead><tr><th data-sortable="nombre">Nombre</th></tr></thead><tbody></tbody>';
+    initTableSorting(table, 't2', { col: 'nombre', asc: true });
+    document.body.appendChild(table);
+
+    const tbody = table.querySelector('tbody');
+    ['Alfa', 'Milo', 'Zeta'].forEach(n => {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.textContent = n;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    });
+    await new Promise(r => setTimeout(r, 0));
+    // Ya está en el orden correcto: repoblar de nuevo no debe colgar la app.
+    const first = tbody.children[0];
+    tbody.appendChild(first);
+    await new Promise(r => setTimeout(r, 0));
+    const order = Array.from(tbody.children).map(r => r.textContent);
+    expect(order).toEqual(['Alfa', 'Milo', 'Zeta']);
   });
 });

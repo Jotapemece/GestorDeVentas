@@ -24,7 +24,7 @@ function updateSyncIndicator(text, isSyncActive) {
 async function loadSyncStats() {
   try {
     const stats = await invoke('get_sync_stats');
-    var fmt = function(v) { return v ? v : '-'; };
+    var fmt = function(v) { return v ? formatDateTime(v) : '-'; };
     qs(SEL.statProducts).textContent = stats.active_products;
     qs(SEL.statClients).textContent = stats.total_clientes;
     qs(SEL.statSales).textContent = stats.total_sales;
@@ -49,10 +49,13 @@ async function loadSyncStats() {
     var latest = timestamps.length ? timestamps.sort().pop() : null;
     var label = 'Sin sincronizar';
     if (latest) {
-      var parts = latest.split(' ');
-      label = parts.length > 1 ? parts[1].slice(0, 5) : latest;
+      var dt = formatDateTime(latest);
+      label = dt.indexOf(' ') > -1 ? dt.split(' ')[1] : dt;
     }
     updateSyncIndicator(label, false);
+    // Refresco del badge de alertas de crédito alineado al ciclo de sync (10 min auto-sync)
+    if (typeof refreshCreditoAlertBadge === 'function') refreshCreditoAlertBadge();
+    if (typeof refreshSolicitudesBadge === 'function') refreshSolicitudesBadge();
   } catch (e) { showToast('Error al cargar estadísticas de sincronización: ' + e, 'error'); }
 }
 
@@ -121,6 +124,10 @@ function startSyncAutoInterval(minutes) {
 }
 
 function showView(name) {
+  if (name === VIEW.SYNC && currentUser && currentUser.rol !== ROL_ADMIN) {
+    showToast('Solo el administrador puede acceder a la sincronización', 'warning');
+    return;
+  }
   lastViewName = name;
   if (typeof androidTrackView === 'function') androidTrackView(name);
   // En móvil el carrito es un bottom-sheet: cerrarlo al cambiar de vista para
@@ -163,12 +170,13 @@ function showView(name) {
     [VIEW.CREDITOS]: loadCreditos,
     [VIEW.CASHIER]: loadDailySummary,
     [VIEW.AUDIT]: loadAudit,
-    [VIEW.REPORTS]: () => { setDefaultReportDates(); },
+    [VIEW.REPORTS]: () => { setDefaultReportDates(); loadReportsAndTopProducts(false); },
     [VIEW.CONFIG]: () => { loadThemeConfig(); loadConflictCount(); },
     [VIEW.SYNC]: () => { loadSyncConfig(); loadConflictCount(); },
   };
   if (loaders[name]) loaders[name]();
   if (name === VIEW.SALES) {
+    if (typeof updateSalesCashierBanner === 'function') updateSalesCashierBanner();
     if (!IS_ANDROID) qs(SEL.productSearch).focus();
     renderProductSearch();
     renderCart();
@@ -180,4 +188,62 @@ function showView(name) {
       panel.classList.add('hidden');
     }
   }
+}
+
+/* ========== CIERRE PENDIENTE POR CORTE DE ENERGÍA ========== */
+// Objeto PendienteCierre del día/días pendientes de cierre (corte de energía).
+// Se usa al cerrar caja para que el cierre apunte a los días sin cerrar.
+let lastPendienteFecha = null;
+let lastPendienteCierre = null;
+
+// Tras el login: si la caja quedó abierta con ventas de días anteriores sin
+// cierre (corte de energía), descarga ventas de otros dispositivos y muestra
+// un modal que lleva a Caja para hacer el cierre faltante.
+async function checkPendienteCierre() {
+  try {
+    const pend = await invoke('get_pendiente_cierre');
+    if (!pend) return;
+    // Descargar primero las ventas de otros dispositivos para que el cierre
+    // tenga el total real (mismo comportamiento que abrir la app tras corte).
+    try {
+      await invoke('sync_all');
+      loadSyncStats();
+    } catch (e) {
+      console.log('sync_all en cierre pendiente:', e);
+    }
+    const pendFinal = await invoke('get_pendiente_cierre');
+    if (!pendFinal) return;
+    lastPendienteFecha = pendFinal.hasta;
+    lastPendienteCierre = pendFinal;
+    const det = qs(SEL.pendienteCierreDetalle);
+    if (det) {
+      let html = '';
+      (pendFinal.dias || []).forEach(d => {
+        html +=
+          '<div class="summary-card"><div class="summary-value">' + formatUSD(d.total_usd) + '</div>' +
+          '<div class="summary-label">' + d.fecha + ' · ' + d.total_ventas + ' ventas</div></div>';
+      });
+      html +=
+        '<div class="summary-card"><div class="summary-value">' + formatUSD(pendFinal.total_usd) + '</div>' +
+        '<div class="summary-label">Total ' + (pendFinal.dias || []).length + ' d\u00edas</div></div>';
+      det.innerHTML = html;
+    }
+    const msg = qs(SEL.pendienteCierreMensaje);
+    if (msg) {
+      const rango = pendFinal.desde === pendFinal.hasta
+        ? 'del ' + pendFinal.desde
+        : 'del ' + pendFinal.desde + ' al ' + pendFinal.hasta;
+      msg.textContent = 'La caja qued\u00f3 abierta y hay ventas ' + rango +
+        ' que nunca se cerraron (posible corte de energ\u00eda). Completa el cierre para que el saldo quede correcto.';
+    }
+    showModal(qs(SEL.pendienteCierreModal));
+  } catch (e) {
+    console.log('error en checkPendienteCierre:', e);
+  }
+}
+
+function closePendienteCierre() {
+  closeModal(qs(SEL.pendienteCierreModal));
+  lastPendienteFecha = null;
+  lastPendienteCierre = null;
 }

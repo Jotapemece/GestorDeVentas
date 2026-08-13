@@ -403,6 +403,24 @@ fn execute_sale_transaction(
         if let Some(cliente_id) = request.cliente_id {
             tx.execute(SQL_UPDATE_CLIENTE_DEUDA, params![total_usd, cliente_id, crate::helpers::now_iso()])
                 .map_err(|e| format!("Error al actualizar deuda del cliente: {}", e))?;
+            // Alerta de crédito para el admin (solo operaciones de vendedores).
+            let cliente_nombre: String = tx
+                .query_row(
+                    "SELECT COALESCE(nombre, '') FROM clientes WHERE id = ?1",
+                    params![cliente_id],
+                    |r| r.get(0),
+                )
+                .unwrap_or_default();
+            let _ = crate::alertas::insertar_alerta_si_vendedor(
+                &tx,
+                current_username,
+                crate::alertas::TIPO_VENTA_CREDITO,
+                total_usd,
+                Some(cliente_id),
+                &cliente_nombre,
+                constants::METODO_CREDITO,
+                "Venta a crédito",
+            );
         }
     }
 
@@ -539,9 +557,10 @@ pub fn set_tasa(state: State<AppState>, tasa: f64) -> Result<(), String> {
     crate::db::set_config_value(&tx, constants::CFG_TASA_UPDATED_AT, &now)
         .map_err(|e| format!("Error al guardar fecha de tasa: {}", e))?;
     tx.execute(
-        "INSERT OR REPLACE INTO historial_tasas (fecha, tasa) VALUES (?1, ?2)",
+        "INSERT INTO historial_tasas (fecha, tasa) VALUES (?1, ?2) \
+         ON CONFLICT(fecha) DO UPDATE SET tasa = excluded.tasa",
         params![now, tasa],
-    ).ok();
+    ).map_err(|e| format!("Error al registrar tasa en historial: {}", e))?;
     tx.commit().map_err(|e| format!("Error al confirmar tasa: {}", e))?;
     if let Ok(mut attempts) = state.admin_action_attempts.lock() {
         crate::db::rate_limit_success(&mut attempts, "set_tasa");
@@ -565,7 +584,7 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
     if nota.len() > 500 {
         return Err("La nota de anulación no puede superar los 500 caracteres".to_string());
     }
-    let current_username = crate::auth::employee_guard(
+    let current_username = crate::auth::admin_guard(
         &state,
         "void_sale",
         &format!("Anuló venta #{}: {}", venta_id, nota),
@@ -573,7 +592,30 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
     let mut db = state.lock_db()?;
 
     let tx = db.transaction().map_err(|e| e.to_string())?;
+    let restored = void_sale_tx(&tx, venta_id, &nota, &current_username)?;
+    tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
 
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        crate::db::rate_limit_success(&mut attempts, "void_sale");
+    }
+
+    Ok(format!(
+        "Venta #{} anulada exitosamente. {} producto(s) restaurado(s).",
+        venta_id, restored
+    ))
+}
+
+/// Núcleo de la anulación de una venta completa, ejecutado DENTRO de una
+/// transacción ya abierta. Restaura stock (efectivo/combo/producto normal),
+/// revierte deuda de crédito, devuelve el efectivo físico recibido, marca la
+/// venta como anulada y registra auditoría. Devuelve el número de ítems restaurados.
+/// Reutilizado por `void_sale` y por el resolver de solicitudes de anulación.
+pub(crate) fn void_sale_tx(
+    tx: &rusqlite::Transaction,
+    venta_id: i64,
+    nota: &str,
+    current_username: &str,
+) -> Result<usize, String> {
     let (metodo, cliente_id, total_usd, tasa, pago_detalle): (String, Option<i64>, f64, f64, String) = tx
         .query_row(
             "SELECT metodo_pago, cliente_id, total_usd, tasa_aplicada, COALESCE(pago_detalle, '') \
@@ -604,8 +646,8 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
     for (codigo, cantidad) in &rows {
         if codigo == constants::CODIGO_EFECTIVO {
             // El efectivo entregado vuelve al "stock" de EFECTIVO.
-            let disp = crate::efectivo::efectivo_disponible(&tx)?;
-            crate::efectivo::set_efectivo(&tx, disp + cantidad)?;
+            let disp = crate::efectivo::efectivo_disponible(tx)?;
+            crate::efectivo::set_efectivo(tx, disp + cantidad)?;
             continue;
         }
         if let Some(combo_id_str) = codigo.strip_prefix("COMBO-") {
@@ -631,12 +673,12 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
                 drop(cstmt);
                 for (cc, cant_uni, es_inari) in &comps {
                     if !es_inari {
-                        crate::db::add_stock(&tx, cc, cant_uni * cantidad)?;
+                        crate::db::add_stock(tx, cc, cant_uni * cantidad)?;
                     }
                 }
             }
         } else {
-            crate::db::add_stock(&tx, codigo, *cantidad)?;
+            crate::db::add_stock(tx, codigo, *cantidad)?;
         }
     }
 
@@ -650,6 +692,24 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
                 params![total_usd, cliente_id, crate::helpers::now_iso()],
             )
             .map_err(|e| format!("Error al revertir deuda: {}", e))?;
+            // Alerta de crédito: anulación de venta a crédito revierte deuda.
+            let cliente_nombre: String = tx
+                .query_row(
+                    "SELECT COALESCE(nombre, '') FROM clientes WHERE id = ?1",
+                    params![cliente_id],
+                    |r| r.get(0),
+                )
+                .unwrap_or_default();
+            let _ = crate::alertas::insertar_alerta_si_vendedor(
+                tx,
+                current_username,
+                crate::alertas::TIPO_ANULACION,
+                total_usd,
+                Some(cliente_id),
+                &cliente_nombre,
+                constants::METODO_CREDITO,
+                &format!("Anulación venta #{} - {}", venta_id, nota),
+            );
         }
     }
 
@@ -657,8 +717,8 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
     // ese billete ya no quedó en la caja como parte del "stock" de EFECTIVO).
     let cash_recibido = efectivo_recibido_bs(&metodo, &pago_detalle, total_usd, tasa);
     if cash_recibido > 0.0 {
-        let disp = crate::efectivo::efectivo_disponible(&tx)?;
-        crate::efectivo::set_efectivo(&tx, disp - cash_recibido)?;
+        let disp = crate::efectivo::efectivo_disponible(tx)?;
+        crate::efectivo::set_efectivo(tx, disp - cash_recibido)?;
     }
 
     let void_ts = crate::helpers::now_iso();
@@ -669,17 +729,11 @@ pub fn void_sale(state: State<AppState>, venta_id: i64, nota: String) -> Result<
     )
     .map_err(|e| e.to_string())?;
 
-    if let Err(e) = crate::audit::log_action(&tx, &current_username, &format!("Anuló venta #{} con nota: {}", venta_id, nota)) {
+    if let Err(e) = crate::audit::log_action(tx, current_username, &format!("Anuló venta #{} con nota: {}", venta_id, nota)) {
     eprintln!("[audit] Error al registrar acción: {}", e);
 }
 
-    tx.commit().map_err(|e| format!("Error al confirmar: {}", e))?;
-
-    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-        crate::db::rate_limit_success(&mut attempts, "void_sale");
-    }
-
-    Ok(format!("Venta #{} anulada exitosamente. {} producto(s) restaurado(s).", venta_id, rows.len()))
+    Ok(rows.len())
 }
 
 #[tauri::command]
@@ -894,6 +948,24 @@ fn get_sales_report_inner(
         .query_row(count_refs.as_slice(), |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
         .map_err(|e| e.to_string())?;
 
+    // Costo agregado sobre TODAS las ventas filtradas (no solo la página): el
+    // JOIN con detalles_ventas puede multiplicar filas si una venta tiene varios
+    // ítems, así que el costo usa SUM sobre el JOIN; el total de ventas se toma
+    // del count_sql (sin JOIN) para no duplicar.
+    let costo_sql = format!(
+        "SELECT COALESCE(SUM(dv.cantidad * COALESCE(p.costo,0)), 0) \
+         FROM ventas v \
+         JOIN detalles_ventas dv ON dv.venta_id = v.id \
+         LEFT JOIN productos p ON p.codigo = dv.producto_codigo \
+         WHERE {}",
+        where_sql
+    );
+    let mut costo_stmt = db.prepare(&costo_sql).map_err(|e| e.to_string())?;
+    let costo_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+    let total_costo_usd: f64 = costo_stmt
+        .query_row(costo_refs.as_slice(), |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
     // Pagination
     let page = filter.page.unwrap_or(1).max(1);
     let page_size = filter.page_size.unwrap_or(constants::VENTAS_LIMIT_DEFAULT).clamp(1, constants::PAGE_SIZE_MAX);
@@ -964,10 +1036,6 @@ fn get_sales_report_inner(
         SalesReportItem { venta: v, productos }
     }).collect();
 
-    let total_costo_usd: f64 = items.iter()
-        .flat_map(|item| &item.productos)
-        .map(|d| d.costo * d.cantidad)
-        .sum();
     let total_ganancia_usd = total_usd - total_costo_usd;
 
     Ok(SalesReportResult { total_ventas, total_usd, total_bs, total_costo_usd, total_ganancia_usd, ventas: items, page, page_size })
@@ -1060,7 +1128,7 @@ pub fn void_sale_items(
     if nota.len() > 500 {
         return Err("La nota de anulación no puede superar los 500 caracteres".to_string());
     }
-    let current_username = crate::auth::employee_guard(
+    let current_username = crate::auth::admin_guard(
         &state,
         "void_sale_items",
         &format!("Anuló {} item(s) de venta #{}: {}", request.detalle_ids.len(), request.venta_id, nota),
@@ -1121,7 +1189,7 @@ pub fn void_sale_items(
             .map_err(|e| format!("Error al anular detalle: {}", e))?;
     }
 
-    recalculate_sale_after_void(&tx, request.venta_id, &nota)?;
+    recalculate_sale_after_void(&tx, request.venta_id, &nota, &current_username)?;
 
     if let Err(e) = crate::audit::log_action(&tx, &current_username,
         &format!("Anuló {} item(s) de venta #{}", request.detalle_ids.len(), request.venta_id))
@@ -1138,7 +1206,12 @@ pub fn void_sale_items(
     Ok(format!("{} item(es) anulado(s) de venta #{}. Stock restaurado.", request.detalle_ids.len(), request.venta_id))
 }
 
-fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64, nota: &str) -> Result<(), String> {
+fn recalculate_sale_after_void(
+    tx: &rusqlite::Transaction,
+    venta_id: i64,
+    nota: &str,
+    current_username: &str,
+) -> Result<(), String> {
     let old_total_usd: f64 = tx
         .query_row("SELECT total_usd FROM ventas WHERE id = ?1", params![venta_id], |row| row.get(0))
         .map_err(|e| format!("Error al obtener total de venta: {}", e))?;
@@ -1201,6 +1274,24 @@ fn recalculate_sale_after_void(tx: &rusqlite::Transaction, venta_id: i64, nota: 
                     params![old_total_usd, cliente_id, void_ts],
                 )
                 .map_err(|e| format!("Error al revertir deuda: {}", e))?;
+                // Alerta de crédito: anulación total de venta a crédito revierte deuda.
+                let cliente_nombre: String = tx
+                    .query_row(
+                        "SELECT COALESCE(nombre, '') FROM clientes WHERE id = ?1",
+                        params![cliente_id],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or_default();
+                let _ = crate::alertas::insertar_alerta_si_vendedor(
+                    tx,
+                    current_username,
+                    crate::alertas::TIPO_ANULACION,
+                    old_total_usd,
+                    Some(cliente_id),
+                    &cliente_nombre,
+                    constants::METODO_CREDITO,
+                    &format!("Anulación venta #{} - {}", venta_id, nota),
+                );
             }
         }
     } else {
@@ -1708,7 +1799,7 @@ mod tests {
         ).unwrap();
         conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
         let tx = conn.transaction().unwrap();
-        recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total", "tester").unwrap();
         let saldo: f64 = tx.query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert_eq!(saldo, 0.0);
         let anulada: i64 = tx.query_row("SELECT anulada FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
@@ -1734,7 +1825,7 @@ mod tests {
         ).unwrap();
         conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
         let tx = conn.transaction().unwrap();
-        recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total", "tester").unwrap();
         let saldo: f64 = tx.query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert!((saldo - -40.0).abs() < 0.001);
         let anulada: i64 = tx.query_row("SELECT anulada FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
@@ -1760,7 +1851,7 @@ mod tests {
         ).unwrap();
         conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
         let tx = conn.transaction().unwrap();
-        recalculate_sale_after_void(&tx, 1, "anulación parcial").unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación parcial", "tester").unwrap();
         let saldo: f64 = tx.query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert!((saldo - 30.0).abs() < 0.001);
         let anulada: i64 = tx.query_row("SELECT anulada FROM ventas WHERE id = 1", [], |r| r.get(0)).unwrap();
@@ -1985,7 +2076,7 @@ mod tests {
         ).unwrap();
         conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
         let tx = conn.transaction().unwrap();
-        recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total", "tester").unwrap();
         // El billete de Bs 300 recibido se devolvió: 1000 - 300 = 700.
         assert!((crate::efectivo::efectivo_disponible(&tx).unwrap() - 700.0).abs() < 0.001);
     }
@@ -2006,7 +2097,7 @@ mod tests {
         ).unwrap();
         conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
         let tx = conn.transaction().unwrap();
-        recalculate_sale_after_void(&tx, 1, "anulación total").unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total", "tester").unwrap();
         assert!((crate::efectivo::efectivo_disponible(&tx).unwrap() - 1000.0).abs() < 0.001);
     }
 
@@ -2030,7 +2121,7 @@ mod tests {
         }
         conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
         let tx = conn.transaction().unwrap();
-        recalculate_sale_after_void(&tx, 1, "anulación parcial").unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación parcial", "tester").unwrap();
         assert!((crate::efectivo::efectivo_disponible(&tx).unwrap() - 900.0).abs() < 0.001);
         // Nuevo total $20, resto del efectivo intacto si no se anula el resto.
         let (total, anulada): (f64, i64) = tx
@@ -2038,5 +2129,149 @@ mod tests {
             .unwrap();
         assert!((total - 20.0).abs() < 0.001);
         assert_eq!(anulada, 0);
+    }
+
+    /* ========== ALERTAS DE CRÉDITO (integración) ========== */
+
+    fn count_alertas(conn: &rusqlite::Connection, tipo: &str) -> i64 {
+        conn.query_row(
+            "SELECT COUNT(*) FROM alertas_credito WHERE tipo = ?1",
+            params![tipo],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    fn insertar_cliente(conn: &rusqlite::Connection, id: i64, nombre: &str) {
+        conn.execute(
+            "INSERT INTO clientes (id, nombre, saldo_deuda_usd) VALUES (?1, ?2, 0)",
+            params![id, nombre],
+        )
+        .unwrap();
+    }
+
+    fn insertar_vendedor(conn: &rusqlite::Connection, username: &str) {
+        conn.execute(
+            "INSERT INTO usuarios (username, password, rol) VALUES (?1, 'x', ?2)",
+            params![username, constants::ROL_VENDEDOR],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_venta_credito_vendedor_genera_alerta() {
+        let mut conn = setup_bd();
+        insertar_vendedor(&conn, "vendedor1");
+        insertar_cliente(&conn, 1, "Juan Pérez");
+        let tx = conn.transaction().unwrap();
+        let request = CreateSaleRequest {
+            metodo_pago: constants::METODO_CREDITO.into(),
+            cliente_id: Some(1),
+            productos: vec![ProductoVenta { codigo: "P1".into(), cantidad: 2.0, ..Default::default() }],
+            tasa: 10.0,
+            ..req_basico(vec![])
+        };
+        execute_sale_transaction(
+            tx, &request, "vendedor1", 2, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_VENTA_CREDITO), 1);
+        let (monto, usuario, cliente): (f64, String, String) = conn
+            .query_row(
+                "SELECT monto_usd, usuario, cliente_nombre FROM alertas_credito WHERE tipo = ?1",
+                params![crate::alertas::TIPO_VENTA_CREDITO],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert!((monto - 20.0).abs() < 0.001);
+        assert_eq!(usuario, "vendedor1");
+        assert_eq!(cliente, "Juan Pérez");
+    }
+
+    #[test]
+    fn test_venta_credito_admin_no_genera_alerta() {
+        let mut conn = setup_bd();
+        insertar_cliente(&conn, 1, "Cliente");
+        let tx = conn.transaction().unwrap();
+        let request = CreateSaleRequest {
+            metodo_pago: constants::METODO_CREDITO.into(),
+            cliente_id: Some(1),
+            productos: vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() }],
+            tasa: 10.0,
+            ..req_basico(vec![])
+        };
+        execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_VENTA_CREDITO), 0);
+    }
+
+    #[test]
+    fn test_venta_efectivo_no_genera_alerta() {
+        let mut conn = setup_bd();
+        insertar_vendedor(&conn, "vendedor1");
+        let tx = conn.transaction().unwrap();
+        let request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() }]);
+        execute_sale_transaction(
+            tx, &request, "vendedor1", 2, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_VENTA_CREDITO), 0);
+    }
+
+    #[test]
+    fn test_void_items_todos_vendedor_revierte_deuda_y_genera_alerta_anulacion() {
+        let mut conn = setup_bd();
+        insertar_vendedor(&conn, "vendedor1");
+        conn.execute(
+            "INSERT INTO clientes (id, nombre, saldo_deuda_usd) VALUES (1, 'Cliente', 30)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (id, fecha_hora, usuario_id, metodo_pago, cliente_id, total_usd, tasa_aplicada, total_bs) \
+             VALUES (1, '2026-07-18 10:00:00', 2, 'credito', 1, 30, 10, 300)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+             VALUES (1, 1, 'P1', 3, 10)",
+            [],
+        ).unwrap();
+        conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
+        let tx = conn.transaction().unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total", "vendedor1").unwrap();
+        let saldo: f64 = tx.query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(saldo, 0.0);
+        assert_eq!(count_alertas(&tx, crate::alertas::TIPO_ANULACION), 1);
+        let (usuario, monto): (String, f64) = tx
+            .query_row(
+                "SELECT usuario, monto_usd FROM alertas_credito WHERE tipo = ?1",
+                params![crate::alertas::TIPO_ANULACION],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(usuario, "vendedor1");
+        assert!((monto - 30.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_void_items_todos_admin_revierte_deuda_sin_alerta() {
+        let mut conn = setup_bd();
+        conn.execute(
+            "INSERT INTO clientes (id, nombre, saldo_deuda_usd) VALUES (1, 'Cliente', 30)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO ventas (id, fecha_hora, usuario_id, metodo_pago, cliente_id, total_usd, tasa_aplicada, total_bs) \
+             VALUES (1, '2026-07-18 10:00:00', 1, 'credito', 1, 30, 10, 300)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO detalles_ventas (id, venta_id, producto_codigo, cantidad, precio_usd_unitario) \
+             VALUES (1, 1, 'P1', 3, 10)",
+            [],
+        ).unwrap();
+        conn.execute("UPDATE detalles_ventas SET anulado = 1 WHERE id = 1", []).unwrap();
+        let tx = conn.transaction().unwrap();
+        recalculate_sale_after_void(&tx, 1, "anulación total", "tester").unwrap();
+        assert_eq!(count_alertas(&tx, crate::alertas::TIPO_ANULACION), 0);
     }
 }

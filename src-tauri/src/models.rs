@@ -19,6 +19,12 @@ pub struct Producto {
     pub subcategoria: Option<String>,
     #[serde(default)]
     pub favorito: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub categoria_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub categoria: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub categoria_color: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -37,8 +43,6 @@ pub struct Usuario {
     pub id: i64,
     pub username: String,
     pub rol: String,
-    #[serde(default)]
-    pub password_change_required: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -53,19 +57,6 @@ pub struct Cliente {
     pub updated_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ultima_compra: Option<String>,
-    #[serde(default)]
-    pub es_temporal: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ClienteEliminado {
-    pub id: i64,
-    pub cliente_id: i64,
-    pub nombre: String,
-    pub saldo_pagado_usd: f64,
-    pub creado_en: String,
-    pub eliminado_en: String,
-    pub motivo: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -133,6 +124,33 @@ pub struct HistorialAccion {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AlertaCredito {
+    pub id: i64,
+    pub tipo: String,
+    pub monto_usd: f64,
+    pub cliente_id: Option<i64>,
+    pub cliente_nombre: String,
+    pub metodo_pago: String,
+    pub nota: String,
+    pub usuario: String,
+    pub fecha_hora: String,
+    pub visto: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SolicitudAnulacion {
+    pub id: i64,
+    pub venta_id: i64,
+    pub venta_sync_id: String,
+    pub motivo: String,
+    pub solicitante: String,
+    pub fecha_hora: String,
+    pub estado: String,
+    pub resuelto_por: String,
+    pub nota_resolucion: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DailySummary {
     pub total_ventas: i64,
     pub total_usd: f64,
@@ -189,8 +207,6 @@ pub struct LoginResponse {
     pub success: bool,
     pub message: String,
     pub usuario: Option<Usuario>,
-    #[serde(default)]
-    pub password_change_required: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -219,6 +235,44 @@ pub struct CloseReportData {
     pub por_metodo: Vec<MetodoTotal>,
     pub productos_vendidos: Vec<ProductoReporte>,
     pub clientes_credito: Vec<ClienteCreditoReporte>,
+    /// Desglose por día cuando el cierre abarca varios días (corte de energía).
+    #[serde(default)]
+    pub dias: Vec<DiaCierre>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PendienteCierre {
+    pub desde: String,
+    pub hasta: String,
+    pub total_ventas: i64,
+    pub total_usd: f64,
+    pub total_bs: f64,
+    pub dias: Vec<PendienteDia>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PendienteDia {
+    pub fecha: String,
+    pub total_ventas: i64,
+    pub total_usd: f64,
+    pub total_bs: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DiaCierre {
+    pub fecha: String,
+    pub total_ventas: i64,
+    pub total_usd: f64,
+    pub total_bs: f64,
+    pub por_metodo: Vec<MetodoTotal>,
+    pub productos_vendidos: Vec<ProductoReporte>,
+    pub clientes_credito: Vec<ClienteCreditoReporte>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ClosePendingResult {
+    pub report: CloseReport,
+    pub data: CloseReportData,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -230,6 +284,11 @@ pub struct CierreListItem {
     pub total_usd: f64,
     pub total_bs: f64,
     pub tasa_cierre: f64,
+    /// Rango de días que cubre el cierre (corte de energía). None = un solo día.
+    #[serde(default)]
+    pub desde: Option<String>,
+    #[serde(default)]
+    pub hasta: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -174,7 +174,17 @@ pub fn chat_with_ai(
         .collect();
 
     let body = build_request(&model, msg_values);
-    call_openrouter(&api_key, &body)
+    // S3: registrar éxito/fallo para que el rate limit sea efectivo (antes la
+    // entrada nunca crecía → el límite nunca se disparaba).
+    let result = call_openrouter(&api_key, &body);
+    if let Ok(mut attempts) = state.admin_action_attempts.lock() {
+        if result.is_ok() {
+            crate::db::rate_limit_success(&mut attempts, "chat_with_ai");
+        } else {
+            crate::db::rate_limit_fail(&mut attempts, "chat_with_ai");
+        }
+    }
+    result
 }
 
 #[cfg(test)]
