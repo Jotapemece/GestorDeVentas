@@ -150,6 +150,7 @@ pub fn run() {
             sync::upload_usuarios,
             sync::download_usuarios,
             sync::register_device,
+            sync::is_device_registered,
             sync::list_dispositivos,
             sync::get_conflictos,
             sync::resolve_conflicto,

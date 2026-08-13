@@ -1772,10 +1772,11 @@ statusEl.style.color = cssVar('--text-secondary');
   // Device registration
   qs(SEL.regDeviceBtn).addEventListener('click', handleDeviceRegister);
 
-  // Check if device is already registered
+  // Check if device is already registered (pre-login: usar comando público,
+  // get_sync_stats exige sesión y fallaría antes de autenticar)
   try {
-    const stats = await invoke('get_sync_stats');
-    if (stats.dispositivo_id) {
+    const registered = await invoke('is_device_registered');
+    if (registered) {
       qs(SEL.deviceRegScreen).style.display = 'none';
       qs(SEL.loginScreen).style.display = 'flex';
     } else {

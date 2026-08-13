@@ -175,6 +175,18 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
     Ok(format!("Dispositivo registrado: {}", new_id))
 }
 
+/// Check pre-login (público, como register_device): solo lee config con lock
+/// corto. Usado por el arranque de la UI para decidir si mostrar la pantalla
+/// de registro. No confiar en get_sync_stats aquí porque exige sesión.
+#[tauri::command]
+pub fn is_device_registered(state: State<AppState>) -> Result<bool, String> {
+    let db = state.lock_db()?;
+    Ok(crate::db::get_config_value(&db, constants::CFG_DISPOSITIVO_ID)
+        .unwrap_or_default()
+        .unwrap_or_default()
+        .len() > 0)
+}
+
 #[tauri::command]
 pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     crate::auth::check_admin_role(&state)?;
