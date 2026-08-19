@@ -276,6 +276,11 @@ pub(crate) fn apply_remote_sales(
 ) -> Result<String, String> {
     let ts = now_iso();
 
+    // Primera descarga del dispositivo: forzar el remoto (LWW off) para sanar la BD local.
+    let first_sync = super::get_config(db, constants::CFG_FIRST_SYNC_DONE)
+        .unwrap_or_default()
+        .is_empty();
+
     let user_rev: std::collections::HashMap<String, i64> = {
         let mut m = std::collections::HashMap::new();
         if let Ok(mut s) = db.prepare("SELECT sync_id, id FROM usuarios WHERE sync_id IS NOT NULL AND sync_id != ''") {
@@ -285,6 +290,20 @@ pub(crate) fn apply_remote_sales(
         }
         m
     };
+
+    // Si un `usuario_sync_id` remoto no existe localmente (p.ej. el modal de
+    // descarga selectiva NO trae usuarios, o el usuario fue borrado), insertar
+    // con usuario_id=0 violaría la FK `ventas.usuario_id NOT NULL REFERENCES
+    // usuarios(id)`. Fallback: asignar el usuario local de menor id (normalmente
+    // el admin raíz) para no romper la descarga. El autor real queda preservado
+    // en la columna `usuario_sync_id`.
+    let fallback_uid: i64 = db
+        .query_row(
+            "SELECT id FROM usuarios ORDER BY id LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(1);
 
     let client_rev: std::collections::HashMap<String, i64> = {
         let mut s = db.prepare("SELECT sync_id, id FROM clientes WHERE sync_id IS NOT NULL AND sync_id != ''")
@@ -402,7 +421,7 @@ pub(crate) fn apply_remote_sales(
 
         let usr_sync_id = venta_json["usuario_sync_id"].as_str().unwrap_or("");
         let cli_sync_id = venta_json["cliente_sync_id"].as_str();
-        let local_uid = user_rev.get(usr_sync_id).copied().unwrap_or(0);
+        let local_uid = user_rev.get(usr_sync_id).copied().unwrap_or(fallback_uid);
         let local_cid = cli_sync_id.and_then(|sid| client_rev.get(sid).copied());
         let remote_anulada = venta_json["anulada"].as_i64().unwrap_or(0) != 0;
         let remote_ts = venta_json["updated_at"].as_str().unwrap_or(&ts).to_string();
@@ -412,7 +431,8 @@ pub(crate) fn apply_remote_sales(
             // LWW: solo aplica la versión remota si es más reciente que la local
             // (mismo criterio que productos/clientes). Evita que una remota más
             // vieja des-haga una anulación o un total local más nuevo.
-            if !remota_mas_nueva(&remote_ts, &local_ts) {
+            // En el primer sync el remoto SIEMPRE gana (LWW off).
+            if !first_sync && !remota_mas_nueva(&remote_ts, &local_ts) {
                 continue;
             }
             // Venta ya existente y remota más nueva: aplicar totales/anulación remota.
@@ -564,6 +584,9 @@ pub(crate) fn apply_remote_sales(
 
     if use_watermark {
         upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+        if first_sync {
+            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+        }
     }
 
     let mut parts: Vec<String> = Vec::new();

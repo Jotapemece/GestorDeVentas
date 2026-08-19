@@ -129,9 +129,11 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (msg === undefined) return;
       showToast(msg, 'success');
       await loadProductCache();
+      refreshCashierAfterSync();
     });
   });
   qs(SEL.inventoryTasaBtn)?.addEventListener('click', openTasaHistorialModal);
+  qs(SEL.inventorySetTasaBtn)?.addEventListener('click', openCambiarTasa);
   qs(SEL.tasaHistorialApply)?.addEventListener('click', applyTasaHistorial);
   qs(SEL.tasaHistorialClear)?.addEventListener('click', clearTasaHistorial);
   qs(SEL.tasaHistorialClose)?.addEventListener('click', function() { closeModal(qs(SEL.tasaHistorialModal)); });
@@ -568,6 +570,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Ajustar efectivo (admin)
   qs(SEL.ajustarEfectivoBtn).addEventListener('click', openAjustarEfectivoModal);
+  qs(SEL.ajustarEfectivoBtnMobile)?.addEventListener('click', openAjustarEfectivoModal);
   qs(SEL.ajustarEfectivoClose).addEventListener('click', closeAjustarEfectivoModal);
   qs(SEL.ajustarEfectivoCancelBtn).addEventListener('click', closeAjustarEfectivoModal);
   qs(SEL.ajustarEfectivoConfirmBtn).addEventListener('click', confirmAjustarEfectivo);
@@ -733,10 +736,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.closeReportClose).addEventListener('click', closeReport);
   qs(SEL.closeReportOkBtn).addEventListener('click', closeReport);
 
-  // Event delegation: close report print button
+  // Event delegation: close report print/share button
   qs(SEL.closeReportBody).addEventListener('click', e => {
-    const btn = e.target.closest('[data-action="print-close-report"]');
-    if (btn) printCloseReport();
+    const printBtn = e.target.closest('[data-action="print-close-report"]');
+    if (printBtn) printCloseReport();
+    const shareBtn = e.target.closest('[data-action="share-close-report"]');
+    if (shareBtn) shareCloseReport();
   });
 
   /* ========== USER MANAGEMENT ========== */
@@ -796,6 +801,26 @@ document.addEventListener('DOMContentLoaded', async function() {
     const header = e.target.closest('.config-card-header');
     if (header) header.classList.toggle('collapsed');
   });
+
+  /* ========== NOMBRE DEL NEGOCIO ========== */
+  qs(SEL.nombreNegocioSave)?.addEventListener('click', saveNombreNegocio);
+
+  /* ========== CIERRE PENDIENTE (manual, Config → Caja) ========== */
+  const checkPendienteBtn = qs(SEL.checkPendienteCierreBtn);
+  if (checkPendienteBtn) {
+    checkPendienteBtn.addEventListener('click', async function() {
+      if (typeof checkPendienteCierre !== 'function') return;
+      checkPendienteBtn.disabled = true;
+      const original = checkPendienteBtn.innerHTML;
+      checkPendienteBtn.innerHTML = '<i class="nf nf-fa-spinner nf-fa-pulse"></i> Verificando...';
+      try {
+        await checkPendienteCierre();
+      } finally {
+        checkPendienteBtn.disabled = false;
+        checkPendienteBtn.innerHTML = original;
+      }
+    });
+  }
 
   /* ========== CHANGE PASSWORD ========== */
   const changePwdBtn = qs(SEL.changePwdBtn);
@@ -1012,12 +1037,22 @@ document.addEventListener('DOMContentLoaded', async function() {
       showToast(opts.successMsg || r || 'Sincronizaci\u00f3n completa');
       if (opts.onSuccess) opts.onSuccess();
       loadSyncStats();
+      refreshCashierAfterSync();
     } catch (e) {
       hideSyncProgress();
       updateSyncIndicator('Error en sync', false);
       showToast('Error: ' + e, 'error');
       loadSyncStats();
     }
+  }
+
+  /* Tras un sync/download, refresca los datos de la vista Caja (ventas del día,
+   * saldo, banner). En teléfonos no hay auto-sync ni descarga al login: si no
+   * se refresca aquí, las ventas descargadas de otros dispositivos no aparecen
+   * en la caja hasta navegar o recargar. */
+  function refreshCashierAfterSync() {
+    if (typeof loadDailySummary === 'function') loadDailySummary();
+    if (typeof updateSalesCashierBanner === 'function') updateSalesCashierBanner();
   }
 
   /* Subir todo */
@@ -1097,23 +1132,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   async function openDownloadPreview() {
     await openDownloadPreviewModal();
   }
-  // Autocompleta el rango de fechas del preview: "hasta" = hoy y "desde" =
-  // la fecha de la última descarga de ventas (ultimo_download_ventas), si hay.
-  async function autoFillDownloadPreviewDates(desdeEl, hastaEl) {
-    const now = new Date();
-    hastaEl.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-    if (!desdeEl.value) {
-      try {
-        const stats = await invoke('get_sync_stats');
-        if (stats && stats.ultimo_download_ventas) {
-          const d = String(stats.ultimo_download_ventas).slice(0, 10);
-          if (/^\d{4}-\d{2}-\d{2}$/.test(d)) desdeEl.value = d;
-        }
-      } catch (e) {
-        console.log('autoFillDownloadPreviewDates:', e);
-      }
-    }
-  }
   async function openDownloadPreviewModal() {
     const modal = qs(SEL.downloadPreviewModal);
     qs(SEL.downloadPreviewLoading).classList.remove('hidden');
@@ -1123,9 +1141,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     try {
       const desdeEl = qs(SEL.downloadPreviewVentasDesde);
       const hastaEl = qs(SEL.downloadPreviewVentasHasta);
-      if (desdeEl && hastaEl && !hastaEl.value) {
-        await autoFillDownloadPreviewDates(desdeEl, hastaEl);
-      }
       const ventasDesde = desdeEl ? (desdeEl.value || null) : null;
       const ventasHasta = hastaEl ? (hastaEl.value || null) : null;
       const result = await invoke('preview_download', { ventasDesde, ventasHasta });
@@ -1179,6 +1194,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       loadProductCache();
       loadSyncStats();
       loadConflictCount();
+      refreshCashierAfterSync();
     } catch (e) {
       showToast('Error al aplicar: ' + e, 'error');
     } finally {
@@ -1308,6 +1324,10 @@ statusEl.style.color = cssVar('--text-secondary');
     if (detailBtn) showSaleDetail(parseInt(detailBtn.dataset.id), detailBtn);
     const reqBtn = e.target.closest('.request-void-btn');
     if (reqBtn) openSolicitudMotivo(parseInt(reqBtn.dataset.id, 10));
+  });
+
+  /* ========== SOLICITUDES (resolve buttons live in the modal) ========== */
+  qs(SEL.solicitudesBody)?.addEventListener('click', function(e) {
     const resBtn = e.target.closest('.resolve-solicitud-btn');
     if (resBtn) {
       const id = parseInt(resBtn.dataset.id, 10);
@@ -1391,6 +1411,7 @@ statusEl.style.color = cssVar('--text-secondary');
   qs(SEL.movimientosBtn)?.addEventListener('click', openMovimientosModal);
   qs(SEL.movimientosClose)?.addEventListener('click', function() { closeModal(qs(SEL.movimientosModal)); });
   qs(SEL.movimientosSaveBtn)?.addEventListener('click', saveMovimiento);
+  qs(SEL.movimientosFiltroTipo)?.addEventListener('change', renderMovimientos);
   qs(SEL.movimientosTasaRefresh)?.addEventListener('click', function() { refreshTasaFromInfo('movimientos'); });
   qs(SEL.abonoTasaRefresh)?.addEventListener('click', function() { refreshTasaFromInfo('abono'); });
 
@@ -1774,8 +1795,10 @@ statusEl.style.color = cssVar('--text-secondary');
 
   // Check if device is already registered (pre-login: usar comando público,
   // get_sync_stats exige sesión y fallaría antes de autenticar)
+  // recover_device intenta recuperar la huella de una instalación previa en
+  // Supabase; solo muestra la pantalla de registro si la huella no existe aún.
   try {
-    const registered = await invoke('is_device_registered');
+    const registered = await invoke('recover_device');
     if (registered) {
       qs(SEL.deviceRegScreen).style.display = 'none';
       qs(SEL.loginScreen).style.display = 'flex';
@@ -1793,64 +1816,6 @@ statusEl.style.color = cssVar('--text-secondary');
     qs(SEL.rememberMe).checked = true;
     qs(SEL.loginPassword).focus();
   }
-
-  // Swipe between main views on mobile
-  var MAIN_VIEWS = [VIEW.SALES, VIEW.INVENTORY, VIEW.CREDITOS, VIEW.CASHIER];
-  var swipeStartX = 0, swipeStartY = 0, swipeDistX = 0, swiping = false;
-  function isSwipableTarget(el) {
-    while (el && el !== document.body) {
-      if (el.classList && (
-        el.classList.contains('modal') ||
-        el.classList.contains('dropdown-menu') ||
-        el.classList.contains('more-menu') ||
-        el.classList.contains('custom-select-menu') ||
-        el.classList.contains('chat-fab') ||
-        el.classList.contains('chat-panel') ||
-        el.classList.contains('calc-dock-bar') ||
-        el.classList.contains('calc-dock-btn')
-      )) return false;
-      if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') return false;
-      if (el.tagName === 'TABLE') return false;
-      if (el.scrollWidth > el.clientWidth) return false;
-      el = el.parentElement;
-    }
-    return true;
-  }
-  document.addEventListener('touchstart', function(e) {
-    if (!('ontouchstart' in window)) return;
-    if (!isSwipableTarget(e.target)) return;
-    var active = qs(SEL.viewActive);
-    if (!active || MAIN_VIEWS.indexOf(active.id.replace('view-', '')) === -1) return;
-    var touch = e.touches[0];
-    swipeStartX = touch.clientX;
-    swipeStartY = touch.clientY;
-    swipeDistX = 0;
-    swiping = true;
-  }, { passive: true });
-  document.addEventListener('touchmove', function(e) {
-    if (!swiping) return;
-    var touch = e.touches[0];
-    swipeDistX = touch.clientX - swipeStartX;
-    var distY = Math.abs(touch.clientY - swipeStartY);
-    if (Math.abs(swipeDistX) < 30 || distY > Math.abs(swipeDistX) * 1.5) return;
-    e.preventDefault();
-  }, { passive: false });
-  document.addEventListener('touchend', function(e) {
-    if (!swiping) return;
-    swiping = false;
-    if (Math.abs(swipeDistX) < 50) return;
-    var active = qs(SEL.viewActive);
-    if (!active) return;
-    var idx = MAIN_VIEWS.indexOf(active.id.replace('view-', ''));
-    if (idx === -1) return;
-    var target;
-    if (swipeDistX < 0) {
-      target = MAIN_VIEWS[(idx + 1) % MAIN_VIEWS.length];
-    } else {
-      target = MAIN_VIEWS[(idx - 1 + MAIN_VIEWS.length) % MAIN_VIEWS.length];
-    }
-    showView(target);
-  }, { passive: true });
 
   // Mobile lifecycle
   window.addEventListener('tauri://focus', () => {
@@ -1875,20 +1840,27 @@ statusEl.style.color = cssVar('--text-secondary');
         // el footer (Confirmar Pago/Guardar) no quede bajo el teclado.
         var modal = null;
         qsa('.modal').forEach(function(m) { if (!m.classList.contains('hidden')) modal = modal || m; });
-        if (modal) {
+        var el = document.activeElement;
+        // La barra de búsqueda de Ventas es sticky: si el elemento enfocado está
+        // dentro del .sales-header, NO desplazarlo al centro ni empujar el main,
+        // porque el teclado lo sacaría de la vista (bug móvil). Solo se aplica el
+        // push-up de padding cuando hay un modal bottom-sheet abierto.
+        var inSalesHeader = el && el.closest && el.closest('.sales-header');
+        if (modal && !inSalesHeader) {
           var content = modal.querySelector('.modal-content');
           if (content) {
             content.style.paddingBottom = (diff - KEYBOARD.PAD_OFFSET) + 'px';
             _kbModal = content;
           }
         }
-        var el = document.activeElement;
-        if (el) {
+        if (el && !inSalesHeader) {
           setTimeout(function() {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }, KEYBOARD.SCROLL_DELAY_MS);
         }
-        main.style.paddingBottom = (diff - KEYBOARD.PAD_OFFSET) + 'px';
+        if (!inSalesHeader) {
+          main.style.paddingBottom = (diff - KEYBOARD.PAD_OFFSET) + 'px';
+        }
       } else if (diff < -KEYBOARD.THRESHOLD) {
         // Keyboard closed
         document.body.classList.remove('keyboard-open');
@@ -2099,6 +2071,7 @@ statusEl.style.color = cssVar('--text-secondary');
   /* ========== SOLICITUDES DE ANULACIÓN (vendedor pide, admin resuelve) ========== */
   qs(SEL.solicitudesBtn)?.addEventListener('click', openSolicitudes);
   qs(SEL.solicitudesClose)?.addEventListener('click', closeSolicitudes);
+  qs(SEL.solicitudesRefreshBtn)?.addEventListener('click', refreshSolicitudesOnly);
   qs(SEL.solicitudesOkBtn)?.addEventListener('click', closeSolicitudes);
   qs(SEL.solicitudMotivoClose)?.addEventListener('click', closeSolicitudMotivo);
   qs(SEL.solicitudMotivoCancel)?.addEventListener('click', closeSolicitudMotivo);
@@ -2120,6 +2093,7 @@ statusEl.style.color = cssVar('--text-secondary');
 // un stack de navegación (vistas + modales) para que el back del sistema cierre el
 // modal abierto o, si no, retroceda a la vista anterior. Solo activo en la app móvil.
 var _androidNavStack = { stack: ['main'], max: 20 };
+var _lastAndroidBackAtRoot = 0;
 
 function initAndroidBack() {
   if (!IS_ANDROID) return;
@@ -2159,6 +2133,14 @@ function androidBackStep() {
     androidBackPushState();
     return;
   }
+  // 0) Cerrar primero los dropdowns abiertos (p. ej. el menú "Más" de las
+  // bottom-tabs) antes de navegar entre vistas.
+  if (qsa('.dropdown-menu.show').length) {
+    if (typeof closeAllDropdowns === 'function') closeAllDropdowns();
+    else qsa('.dropdown-menu.show').forEach(function(m) { m.classList.remove('show'); });
+    androidBackPushState();
+    return;
+  }
   var modal = androidCurrentModal();
   if (modal) {
     // 1) Cerrar el modal abierto antes que navegar entre vistas.
@@ -2182,20 +2164,33 @@ function androidBackStep() {
     return;
   }
 
-  // 2) Sin modal: retroceder a la última vista registrada.
+  // 2) Sin modal ni dropdown: retroceder a la vista anterior registrada.
   var st = _androidNavStack.stack;
-  for (var i = st.length - 1; i >= 0; i--) {
-    if (st[i].indexOf('view:') !== 0) continue;
-    var name = st[i].slice(5);
-    st.splice(i); // quitar esta vista y todo lo posterior
-    if (typeof window.showView === 'function') {
-      try {
-        if (name !== (lastViewName || '')) window.showView(name);
-      } catch (_) {}
-    }
-    break;
+  var views = [];
+  for (var i = 0; i < st.length; i++) {
+    if (st[i].indexOf('view:') === 0) views.push(st[i].slice(5));
   }
-  if (st.length === 0) st.push('main');
+  // Vista raíz (solo hay una vista o ninguna en el stack): doble Atrás para salir.
+  if (views.length <= 1) {
+    var now = Date.now();
+    if (_lastAndroidBackAtRoot && (now - _lastAndroidBackAtRoot) <= 2000) {
+      _lastAndroidBackAtRoot = 0;
+      try { invoke('exit_app'); } catch (_) {}
+      return;
+    }
+    _lastAndroidBackAtRoot = now;
+    showToast('Pulsa Atr\u00e1s otra vez para salir');
+    androidBackPushState();
+    return;
+  }
+  var prev = views[views.length - 2];
+  var idx = st.indexOf('view:' + prev);
+  st.splice(idx + 1); // quitar la vista actual y todo lo posterior
+  if (typeof window.showView === 'function') {
+    try {
+      if (prev !== (lastViewName || '')) window.showView(prev);
+    } catch (_) {}
+  }
   androidBackPushState();
 }
 

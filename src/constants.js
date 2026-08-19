@@ -49,6 +49,7 @@ const FONT_SIZE_DEFAULT = 100;
 const CFG_TASA_UPDATED_AT = 'tasa_updated_at';
 const CFG_TEMA = 'tema';
 const CFG_FONT_SIZE = 'font_size';
+const CFG_NOMBRE_NEGOCIO = 'nombre_negocio';
 const CFG_SONIDO_HABILITADO = 'sonido_habilitado';
 const CFG_SONIDO_VOLUMEN = 'sonido_volumen';
 const CFG_HISTORIAL_LIMPIEZA_DIAS = 'historial_limpieza_dias';
@@ -97,7 +98,9 @@ const ROL_ADMIN = 'admin';
 
 // Vistas de acceso restringido a administradores (se aplica al restaurar
 // `last_view` y como guard defensivo en showView).
-const ADMIN_ONLY_VIEWS = [VIEW.SYNC];
+// Decisión 2026-08-14: la sincronización quedó abierta a todos los roles
+// (vendedor y admin suben/descargan). Solo la gestión de usuarios sigue admin.
+const ADMIN_ONLY_VIEWS = [];
 function viewAllowedForRole(name, user) {
   const isAdmin = !!(user && user.rol === ROL_ADMIN);
   return !ADMIN_ONLY_VIEWS.includes(name) || isAdmin;
@@ -317,6 +320,7 @@ const SEL = {
   efectivoModalClose: '#efectivo-modal-close',
   efectivoOpenFromCart: '#efectivo-open-from-cart',
   ajustarEfectivoBtn: '#ajustar-efectivo-btn',
+  ajustarEfectivoBtnMobile: '#ajustar-efectivo-btn-mobile',
   ajustarEfectivoModal: '#ajustar-efectivo-modal',
   ajustarEfectivoClose: '#ajustar-efectivo-close',
   ajustarEfectivoActual: '#ajustar-efectivo-actual',
@@ -335,6 +339,7 @@ const SEL = {
   inventoryExportBtn: '#inventory-export-btn',
   inventoryImportBtn: '#inventory-import-btn',
   inventoryTasaBtn: '#inventory-tasa-btn',
+  inventorySetTasaBtn: '#inventory-set-tasa-btn',
   tasaHistorialModal: '#tasa-historial-modal',
   tasaHistorialList: '#tasa-historial-list',
   tasaHistorialApply: '#tasa-historial-apply',
@@ -478,6 +483,7 @@ const SEL = {
   solicitudesModal: '#solicitudes-modal',
   solicitudesBody: '#solicitudes-body',
   solicitudesClose: '#solicitudes-close',
+  solicitudesRefreshBtn: '#solicitudes-refresh-btn',
   solicitudesOkBtn: '#solicitudes-ok-btn',
   solicitudMotivoModal: '#solicitud-motivo-modal',
   solicitudMotivoInput: '#solicitud-motivo-input',
@@ -580,6 +586,7 @@ const SEL = {
   saleDetailUsuario: '#sale-detail-usuario',
   saleDetailFecha: '#sale-detail-fecha',
   saleDetailTasa: '#sale-detail-tasa',
+  saleDetailPagos: '#sale-detail-pagos',
   saleDetailList: '#sale-detail-list',
   saleDetailClose: '#sale-detail-close',
   saleDetailOkBtn: '#sale-detail-ok-btn',
@@ -602,6 +609,10 @@ const SEL = {
   changePwdNew: '#change-pwd-new',
   changePwdConfirm: '#change-pwd-confirm',
   changePwdBtn: '#change-pwd-btn',
+  checkPendienteCierreBtn: '#check-pendiente-cierre-btn',
+  salesBrandTitle: '#sales-brand-title',
+  nombreNegocioInput: '#nombre-negocio-input',
+  nombreNegocioSave: '#nombre-negocio-save',
   adminPwdModal: '#admin-pwd-modal',
   adminPwdInput: '#admin-pwd-input',
   adminPwdUserInfo: '#admin-pwd-user-info',
@@ -635,6 +646,13 @@ const SEL = {
   promptOkBtn: '#prompt-ok-btn',
   promptCancelBtn: '#prompt-cancel-btn',
   promptClose: '#prompt-close',
+  voidSaleModal: '#void-sale-modal',
+  voidSaleTitle: '#void-sale-title',
+  voidSaleMessage: '#void-sale-message',
+  voidSaleNota: '#void-sale-nota',
+  voidSaleOkBtn: '#void-sale-ok-btn',
+  voidSaleCancelBtn: '#void-sale-cancel-btn',
+  voidSaleClose: '#void-sale-close',
   loadingText: '#loading-text',
   loadingModal: '#loading-modal',
 
@@ -824,6 +842,7 @@ const SEL = {
   movimientosSaldo: '#movimientos-saldo',
   movimientosTotalIngresos: '#movimientos-total-ingresos',
   movimientosTotalEgresos: '#movimientos-total-egresos',
+  movimientosFiltroTipo: '#movimientos-filtro-tipo',
   movimientosSaveBtn: '#movimientos-save-btn',
   movimientosTasaRefresh: '#movimientos-tasa-refresh',
   abonoTasaRefresh: '#abono-tasa-refresh',

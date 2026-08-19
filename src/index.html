@@ -63,7 +63,7 @@
         <div class="login-greeting-date" id="login-greeting-date"></div>
       </div>
       <div class="login-card">
-        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.1</button>
+        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.2</button>
         <div class="login-brand">
           <div class="login-icon">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -150,7 +150,7 @@
             <span class="nav-icon"><i class="nf nf-fa-history"></i></span>
             <span class="nav-text">Auditor&iacute;a</span>
           </button>
-          <button class="nav-btn admin-only" data-view="sync">
+          <button class="nav-btn" data-view="sync">
             <span class="nav-icon"><i class="nf nf-fa-cloud_upload"></i></span>
             <span class="nav-text">Sincronizaci&oacute;n</span>
             <span id="sync-nav-conflicts" class="nav-badge hidden" title="Conflictos pendientes">0</span>
@@ -169,6 +169,9 @@
       </aside>
       <main id="main-content">
         <section id="view-sales" class="view active">
+          <div class="sales-brand">
+            <h1 id="sales-brand-title" class="sales-brand-title">Inari Market</h1>
+          </div>
           <div class="sales-header">
             <div class="sales-header-left">
               <div class="search-clear-wrap">
@@ -183,7 +186,6 @@
               <button id="tasa-fetch-btn" class="btn tasa-fetch-btn" title="Obtener tasa autom\u00e1tica del BCV">$</button>
               <button id="calc-btn" class="btn tasa-fetch-btn" title="Calculadora"><i class="nf nf-fa-calculator"></i></button>
             </div>
-            <button id="solicitudes-btn" class="btn btn-outline btn-sm admin-only" title="Solicitudes de anulación de ventas"><i class="nf nf-fa-paper_plane"></i> Solicitudes <span id="solicitudes-btn-count" class="nav-badge hidden">0</span></button>
 
           </div>
           <div id="sales-cashier-banner" class="cashier-banner hidden" role="alert">
@@ -289,10 +291,11 @@
             <div id="inventory-categoria-filter-wrap" class="inv-cat-filter-wrap" style="position:relative;flex-shrink:0"></div>
             <button id="inventory-add-btn" class="btn btn-primary admin-only inv-header-btn"><i class="nf nf-fa-plus"></i> <span class="btn-label">Agregar Producto</span></button>
             <button id="inventory-inari-btn" class="btn btn-outline btn-sm inv-header-btn" title="Filtrar productos Inari" style="flex-shrink:0"><i class="nf nf-fa-fire"></i> <span class="btn-label">Inari</span></button>
-            <button id="inventory-tasa-btn" class="btn btn-outline btn-sm inv-header-btn" title="Tasa hist&oacute;rica" style="flex-shrink:0"><i class="nf nf-fa-calendar"></i> <span class="btn-label" id="tasa-actual-label">Hoy</span></button>
             <div class="dropdown" style="flex-shrink:0">
               <button class="dropdown-btn" data-action="toggle-dropdown" title="M&aacute;s acciones" style="font-size:16px;padding:4px 8px"><i class="nf nf-fa-ellipsis_v"></i></button>
               <div class="dropdown-menu" id="inventory-more-menu">
+                <button id="inventory-tasa-btn" title="Tasa hist&oacute;rica"><i class="nf nf-fa-calendar"></i> Tasa hist&oacute;rica <span id="tasa-actual-label">(Hoy)</span></button>
+                <button id="inventory-set-tasa-btn"><i class="nf nf-fa-arrow_right_arrow_left"></i> Cambiar tasa</button>
                 <button id="inventory-categorias-btn" class="admin-only"><i class="nf nf-fa-tags"></i> Categor&iacute;as</button>
                 <button id="inventory-export-btn"><i class="nf nf-fa-download"></i> Exportar</button>
                 <button id="inventory-import-btn" class="admin-only"><i class="nf nf-fa-upload"></i> Importar TSV</button>
@@ -375,7 +378,8 @@
                   <button id="historial-cierres-btn" class="admin-only"><i class="nf nf-fa-history"></i> Cierres anteriores</button>
                   <button id="goto-reports-btn"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
                   <button id="movimientos-btn"><i class="nf nf-fa-money"></i> Movimientos</button>
-                  <button id="sync-download-btn" class="admin-only" title="Descargar productos, ventas y clientes"><i class="nf nf-fa-cloud_download"></i> Sincronizar</button>
+                  <button id="sync-download-btn" title="Descargar productos, ventas y clientes"><i class="nf nf-fa-cloud_download"></i> Sincronizar</button>
+                  <button id="solicitudes-btn" class="admin-only" title="Solicitudes de anulación de ventas"><i class="nf nf-fa-paper_plane"></i> Solicitudes <span id="solicitudes-btn-count" class="nav-badge hidden">0</span></button>
                 </div>
               </div>
             </div>
@@ -409,6 +413,11 @@
               <div class="summary-label">Saldo Caja</div>
               <div class="summary-value" id="movimientos-saldo">$0.00</div>
               <button id="ajustar-efectivo-btn" class="btn btn-sm btn-outline admin-only" type="button" style="margin-top:8px"><i class="nf nf-fa-money"></i> Ajustar efectivo</button>
+            </div>
+            <div class="summary-card admin-only ajustar-efectivo-card" id="ajustar-efectivo-card">
+              <i class="nf nf-fa-money summary-icon" style="color:var(--danger)"></i>
+              <div class="summary-label">Ajustar Efectivo</div>
+              <button id="ajustar-efectivo-btn-mobile" class="btn btn-sm btn-outline" type="button"><i class="nf nf-fa-money"></i> Ajustar</button>
             </div>
           </div>
           <h3>Ventas del D&iacute;a</h3>
@@ -692,6 +701,40 @@
 
           <div class="config-card">
             <div class="config-card-header">
+              <i class="nf nf-fa-money"></i> Caja
+              <span class="config-card-desc">Cierres pendientes y saldo</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-hourglass_half"></i> Cierre pendiente</span>
+                <button id="check-pendiente-cierre-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-search"></i> Verificar cierre pendiente</button>
+              </div>
+              <div class="config-info" style="margin-top:4px">
+                <p class="text-sm">Comprueba si la caja qued&oacute; abierta con ventas de d&iacute;as anteriores sin cerrar (por ejemplo tras un corte de energ&iacute;a). Si hay un cierre pendiente, te llevar&aacute; al m&oacute;dulo Caja para completarlo.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <div class="config-card-header">
+              <i class="nf nf-fa-store"></i> Negocio
+              <span class="config-card-desc">Nombre que se muestra en la parte superior de Ventas</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div class="config-row">
+                <span class="config-label"><i class="nf nf-fa-tag"></i> Nombre del negocio</span>
+                <div class="historial-limpieza-row">
+                  <input type="text" id="nombre-negocio-input" maxlength="40" placeholder="Inari Market" aria-label="Nombre del negocio">
+                  <button id="nombre-negocio-save" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Guardar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <div class="config-card-header">
               <i class="nf nf-fa-music"></i> Sonidos
               <span class="config-card-desc">Activa o desactiva los efectos de sonido de la aplicaci&oacute;n</span>
               <i class="nf nf-fa-chevron_down config-toggle"></i>
@@ -933,7 +976,7 @@
             </div>
             <div class="config-card-body">
               <div class="config-info">
-                <p><strong>Versi&oacute;n:</strong> 1.2.1</p>
+                <p><strong>Versi&oacute;n:</strong> 1.2.2</p>
                 <p><strong>Base de datos:</strong> SQLite local</p>
                 <p><strong>Framework:</strong> Tauri v2 + Rust</p>
               </div>
@@ -1009,8 +1052,8 @@
                         <button id="upload-all-btn" class="sync-btn-adv sync-btn-primary"><i class="nf nf-fa-cloud_upload sync-btn-icon-block"></i> Subir todo</button>
                         <button id="download-all-btn" class="sync-btn-adv sync-btn-accent"><i class="nf nf-fa-cloud_download sync-btn-icon-block"></i> Descargar todo</button>
                         <div class="dropdown-divider" style="margin:4px 0"></div>
-                        <button id="upload-usuarios-btn" class="sync-btn-adv sync-btn-outline"><i class="nf nf-fa-cloud_upload sync-btn-icon-block"></i> Subir usuarios</button>
-                        <button id="download-usuarios-btn" class="sync-btn-adv sync-btn-outline"><i class="nf nf-fa-cloud_download sync-btn-icon-block"></i> Descargar usuarios</button>
+                        <button id="upload-usuarios-btn" class="sync-btn-adv sync-btn-outline admin-only"><i class="nf nf-fa-cloud_upload sync-btn-icon-block"></i> Subir usuarios</button>
+                        <button id="download-usuarios-btn" class="sync-btn-adv sync-btn-outline admin-only"><i class="nf nf-fa-cloud_download sync-btn-icon-block"></i> Descargar usuarios</button>
                       </div>
                     </details>
                   </div>
@@ -1037,7 +1080,7 @@
                     </div>
                     <div class="sync-auto-info">
                       <i class="nf nf-fa-info_circle sync-icon-primary" style="font-size:12px;flex-shrink:0"></i>
-                      <span>Despu&eacute;s de cada venta se sube autom&aacute;ticamente. Este timer descarga datos de otros dispositivos en segundo plano.</span>
+                      <span>Este timer sincroniza en segundo plano (sube y baja cambios de otros dispositivos). En tel&eacute;fonos est&aacute; desactivado hasta nuevo aviso: sincroniza manualmente con el bot&oacute;n "Sincronizar todo".</span>
                     </div>
                   </div>
                 </div>
@@ -1097,7 +1140,7 @@
         <div id="more-menu" class="more-menu hidden">
           <button class="more-menu-item" data-view="reports"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
           <button class="more-menu-item" data-view="audit"><i class="nf nf-fa-history"></i> Auditor&iacute;a</button>
-          <button class="more-menu-item admin-only" data-view="sync"><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</button>
+          <button class="more-menu-item" data-view="sync"><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</button>
           <button class="more-menu-item" data-view="config"><i class="nf nf-fa-cog"></i> Config.</button>
           <div class="more-menu-divider"></div>
           <button id="mobile-logout-btn" class="more-menu-item danger-text"><i class="nf nf-fa-sign_out"></i> Salir</button>
@@ -1405,6 +1448,7 @@
           <span>Fecha: <strong id="sale-detail-fecha"></strong></span>
           <span>Tasa: <strong id="sale-detail-tasa"></strong></span>
         </div>
+        <div id="sale-detail-pagos" class="sale-detail-pagos" style="display:none"></div>
         <div id="sale-detail-nota-wrap" class="void-note" style="display:none">
           <i class="nf nf-fa-ban"></i> <strong>Motivo de anulaci&oacute;n:</strong> <span id="sale-detail-nota"></span>
         </div>
@@ -1665,7 +1709,22 @@
         <span class="modal-close" id="alertas-credito-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body">
-        <div id="alertas-credito-body"></div>
+        <div class="table-container">
+          <table class="table table-cards" id="alertas-credito-table">
+            <thead>
+              <tr>
+                <th>Fecha / Hora</th>
+                <th>Usuario</th>
+                <th>Tipo</th>
+                <th>Cliente</th>
+                <th>Monto</th>
+                <th>M&eacute;todo</th>
+                <th>Nota</th>
+              </tr>
+            </thead>
+            <tbody id="alertas-credito-body"></tbody>
+          </table>
+        </div>
       </div>
       <div class="modal-footer">
         <button id="alertas-credito-mark-btn" class="btn btn-primary"><i class="nf nf-fa-check"></i> Marcar todas como vistas</button>
@@ -1683,9 +1742,24 @@
       </div>
       <div class="modal-body">
         <div class="text-muted" style="margin-bottom:10px">Los vendedores piden anular una venta cuando no tienen permisos. Aprueba para anular la venta localmente (la anulaci&oacute;n se sincroniza) o rechaza indicando el motivo.</div>
-        <div id="solicitudes-body"></div>
+        <div class="table-container">
+          <table class="table table-cards" id="solicitudes-table">
+            <thead>
+              <tr>
+                <th>Fecha / Hora</th>
+                <th>#Venta</th>
+                <th>Solicitante</th>
+                <th>Motivo</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="solicitudes-body"></tbody>
+          </table>
+        </div>
       </div>
       <div class="modal-footer">
+        <button id="solicitudes-refresh-btn" class="btn btn-outline"><i class="nf nf-fa-refresh"></i> Refrescar</button>
         <button id="solicitudes-ok-btn" class="btn btn-outline">Cerrar</button>
       </div>
     </div>
@@ -1812,6 +1886,24 @@
       <div class="modal-footer">
         <button id="prompt-cancel-btn" class="btn btn-outline">Cancelar</button>
         <button id="prompt-ok-btn" class="btn btn-danger"><i class="nf nf-fa-check"></i> Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="void-sale-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Anular venta">
+    <div class="modal-content">
+      <div class="void-modal-icon"><i class="nf nf-fa-ban"></i></div>
+      <div class="modal-header">
+        <h3 id="void-sale-title">Anular venta</h3>
+        <span class="modal-close" id="void-sale-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p id="void-sale-message" class="text-muted" style="margin-bottom:10px"></p>
+        <textarea id="void-sale-nota" class="form-input" rows="3" placeholder="Motivo de la anulaci&oacute;n (obligatorio)"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="void-sale-cancel-btn" class="btn btn-outline">Cancelar</button>
+        <button id="void-sale-ok-btn" class="btn btn-danger"><i class="nf nf-fa-ban"></i> Anular</button>
       </div>
     </div>
   </div>
@@ -1943,7 +2035,7 @@
                 <li><strong>Recibo:</strong> al cobrar se genera un recibo imprimible. En tel&eacute;fono puedes compartirlo por WhatsApp desde el detalle de la venta.</li>
               </ul>
             </div>
-            <div class="guide-tip">
+            <div class="guide-tip guide-shortcuts">
               <i class="nf nf-fa-keyboard"></i>
               <span><strong>Atajos:</strong> <kbd>F1</kbd> Ventas · <kbd>F2</kbd> Inventario · <kbd>F3</kbd> Cr&eacute;dito · <kbd>F4</kbd> Caja · <kbd>F5</kbd> Recargar vista · <kbd>F7</kbd> Configuraci&oacute;n · <kbd>F8</kbd> Buscar producto · <kbd>F12</kbd> Cobrar · <kbd>Ctrl+1..8</kbd> Vistas · <kbd>Ctrl+F</kbd> Buscar · <kbd>Ctrl+K</kbd> B&uacute;squeda global · <kbd>Ctrl+M</kbd> Silenciar · <kbd>?</kbd> Ayuda</span>
             </div>
@@ -2075,6 +2167,15 @@
                 <li><strong>Sincronizaci&oacute;n:</strong> sube y descarga datos con Supabase. Activa el sync autom&aacute;tico con intervalo configurable.</li>
                 <li><strong>Respaldos:</strong> crea copias de seguridad de la base de datos manualmente.</li>
                 <li><strong>Limpieza:</strong> retenci&oacute;n autom&aacute;tica del historial de acciones (1-365 d&iacute;as).</li>
+              </ul>
+            </div>
+            <div class="guide-section">
+              <p><strong>D&oacute;nde viven tus datos y c&oacute;mo borrar los viejos:</strong></p>
+              <ul>
+                <li><strong>Base de datos y configuraci&oacute;n:</strong> en Android viven en la carpeta privada de la app (<code>/data/data/com.gestor-ventas.app/</code>); en PC, en la carpeta del ejecutable. No se borran al actualizar la app.</li>
+                <li><strong>Respaldos cifrados:</strong> los botones "Descargar respaldo" y "Exportar BD y borrar datos" guardan copias <code>.enc</code> en la carpeta Descargas del dispositivo. Son archivos tuyos: puedes conservarlos, moverlos o eliminarlos libremente.</li>
+                <li><strong>Borrar los datos de la app en Android:</strong> Ajustes &rarr; Apps &rarr; Gestor de Ventas &rarr; Almacenamiento &rarr; Borrar datos. Esto elimina la base de datos local y la configuraci&oacute;n (haz un respaldo antes si quieres conservar algo).</li>
+                <li><strong>Eliminar por completo:</strong> desinstalar la app en Android tambi&eacute;n borra sus datos. Si quieres empezar de cero, desinstala y vuelve a instalarla.</li>
               </ul>
             </div>
             <div class="guide-tip">
@@ -2261,10 +2362,86 @@
   <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
     <div class="modal-content changelog-content">
       <div class="modal-header">
-        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.1</h3>
+        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.2</h3>
         <span class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body changelog-body">
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-sync" style="color:var(--accent)"></i> Sincronizaci&oacute;n no destructiva</h4>
+          <ul>
+            <li>Iniciar sesi&oacute;n ya no sube datos: ahora solo <strong>descarga</strong>. La subida ocurre tras cada venta y con el sincronizador autom&aacute;tico, as&iacute; un equipo con datos viejos nunca pisa los correctos en la nube.</li>
+            <li>Despu&eacute;s de cada venta la app sube en segundo plano la venta, el detalle, el stock y los clientes nuevos: el otro dispositivo la ve sin esperar al auto-sync.</li>
+            <li>El contador de pendientes del men&uacute; solo muestra las ventas hechas en este equipo (las de otros dispositivos ya no lo inflan).</li>
+            <li>El bot&oacute;n "Verificar cierre pendiente" (Configuraci&oacute;n &rarr; Caja) ahora solo descarga, sin subir nada.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-paper_plane" style="color:var(--accent)"></i> Solicitudes de anulaci&oacute;n</h4>
+          <ul>
+            <li>Los botones Aprobar y Rechazar ahora funcionan: se muestran como iconos con explicaci&oacute;n al pasar el cursor.</li>
+            <li>Nuevo bot&oacute;n <strong>Refrescar</strong> en el modal: sube y descarga solo las solicitudes (sin esperar al sync completo).</li>
+            <li>El listado se muestra en tabla con fecha, n&uacute;mero de venta, solicitante, motivo, estado y acciones.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-cloud_download" style="color:var(--accent)"></i> Descarga y preview</h4>
+          <ul>
+            <li>El preview de descarga ("Descargar todo") ahora muestra <strong>todas</strong> las ventas de otros dispositivos: se corrigi&oacute; el filtro que ocultaba las ventas sin dispositivo de origen y se quitaron los filtros de fecha autom&aacute;ticos (quedan como opcionales).</li>
+            <li>En la primera descarga de un dispositivo, el dato remoto siempre gana para sanar la base de datos local.</li>
+            <li>Al descargar ventas cuyo usuario no existe en este equipo, se asigna el usuario local de menor id (el autor real queda guardado para la siguiente sincronizaci&oacute;n).</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-store" style="color:var(--accent)"></i> Negocio y ventas</h4>
+          <ul>
+            <li>Nuevo <strong>nombre del negocio</strong> configurable en Configuraci&oacute;n &rarr; Negocio: se muestra en la parte superior de Ventas (por defecto "Inari Market").</li>
+            <li>El bot&oacute;n "Solicitudes" se movi&oacute; del encabezado de Ventas al men&uacute; "M&aacute;s" de Caja (solo administradores), dejando el encabezado m&aacute;s limpio.</li>
+            <li>El detalle de una venta mixta muestra el desglose de cada m&eacute;todo de pago con su monto y referencia.</li>
+            <li>La venta cancelada o completada descarta el carrito vendido y pasa al siguiente carrito en espera correctamente.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-credit_card" style="color:var(--accent)"></i> Caja</h4>
+          <ul>
+            <li>Nueva tarjeta <strong>Caja</strong> en Configuraci&oacute;n: bot&oacute;n "Verificar cierre pendiente" para detectar cajas abiertas de d&iacute;as anteriores sin cerrar (por ejemplo tras un corte de energ&iacute;a).</li>
+            <li>El listado de movimientos ahora se puede filtrar por ingresos o egresos.</li>
+            <li>En Android, el reporte de cierre se <strong>comparte</strong> (WhatsApp, etc.) en lugar de imprimir; en PC sigue exportando a PDF.</li>
+            <li>Los abonos mixtos muestran el desglose de cada m&eacute;todo en el concepto del movimiento.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-mobile" style="color:var(--accent)"></i> Android</h4>
+          <ul>
+            <li>Doble pulsaci&oacute;n de "Atr&aacute;s" en la pantalla principal cierra la app (con aviso); una pulsaci&oacute;n cierra modales o retrocede de vista.</li>
+            <li>El bot&oacute;n "Atr&aacute;s" ahora cierra primero los men&uacute;s desplegables abiertos.</li>
+            <li>Respaldo en Android arreglado: usa la carpeta de cach&eacute; de la app (antes fallaba siempre) y avisa si la base de datos es demasiado grande para exportar.</li>
+            <li>Los modales ya no abren el teclado autom&aacute;ticamente; el teclado empuja el contenido (ajuste de ventana) y los campos de stock usan teclado num&eacute;rico decimal.</li>
+            <li>El sincronizador autom&aacute;tico queda desactivado en el tel&eacute;fono (hasta nuevo aviso): se sincroniza manualmente.</li>
+            <li>Se elimin&oacute; el gesto de deslizar entre vistas (chocaba con el desplazamiento en el tel&eacute;fono).</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-shield" style="color:var(--success)"></i> Permisos y robustez</h4>
+          <ul>
+            <li>La secci&oacute;n Sincronizaci&oacute;n del men&uacute; queda visible para todos los roles; subir y descargar usuarios sigue siendo solo de administradores.</li>
+            <li>Recuperaci&oacute;n de dispositivo: al reinstalar o restaurar, la app detecta la instalaci&oacute;n anterior en la nube y no vuelve a pedir el registro.</li>
+            <li>Se corrige el "last-write-wins" contra relojes desviados: los timestamps en el futuro se rebajan (migraci&oacute;n 041).</li>
+            <li>Eliminar un producto sin ventas ahora hace borrado l&oacute;gico (no f&iacute;sico), as&iacute; la desactivaci&oacute;n viaja a los otros dispositivos.</li>
+            <li>La gu&iacute;a explica d&oacute;nde viven los datos en Android y en PC, y c&oacute;mo borrarlos por completo.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-paint_brush" style="color:var(--accent)"></i> Correcciones y limpieza</h4>
+          <ul>
+            <li>El modal de anulaci&oacute;n de venta tiene su propia ventana con motivo obligatorio (antes un cuadro gen&eacute;rico).</li>
+            <li>El listado de alertas de cr&eacute;dito se muestra en tabla.</li>
+            <li>Los botones "Tasa hist&oacute;rica" y "Cambiar tasa" se movieron al men&uacute; "M&aacute;s" del inventario.</li>
+            <li>El auto-guardado del carrito en espera se espaci&oacute; (30 segundos) para no interferir con la escritura.</li>
+          </ul>
+        </div>
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-history" style="color:var(--accent)"></i> v1.2.1 — Anterior</h4>
+        </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-paint_brush" style="color:var(--accent)"></i> Correcciones y robustez</h4>
           <ul>
@@ -2520,6 +2697,14 @@
         <div class="movimientos-totals">
           <span>Total ingresos: <strong id="movimientos-total-ingresos">$0.00</strong></span>
           <span>Total egresos: <strong id="movimientos-total-egresos">$0.00</strong></span>
+        </div>
+        <div class="movimientos-filter">
+          <label class="movimientos-filter-label">Filtrar:</label>
+          <select id="movimientos-filtro-tipo" class="form-input form-input-sm">
+            <option value="">Todos</option>
+            <option value="ingreso">Ingresos</option>
+            <option value="egreso">Egresos</option>
+          </select>
         </div>
         <div id="movimientos-list" class="movimientos-list"></div>
       </div>

@@ -67,34 +67,79 @@ function toggleDropdown(btn) {
   closeAllDropdowns();
   if (!isOpen) {
     menu.classList.add('show');
-    const btnRect = btn.getBoundingClientRect();
-    const mw = menu.offsetWidth;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    menu.style.position = 'fixed';
-    menu.style.right = 'auto';
-    menu.style.bottom = 'auto';
+    // Reset any previous JS positioning (desktop)
+    menu.style.position = '';
+    menu.style.left = '';
+    menu.style.top = '';
+    menu.style.right = '';
+    menu.style.bottom = '';
     menu.style.maxHeight = 'none';
     menu.style.overflowY = '';
-    // Horizontal: align right edge with button right, clamped to viewport
-    let left = btnRect.right - mw;
-    if (left < 4) left = 4;
-    if (left + mw > vw - 4) left = Math.max(4, vw - mw - 4);
-    menu.style.left = left + 'px';
-    // Vertical: prefer below; flip up only if it would overflow the bottom
-    let top = btnRect.bottom + 4;
-    const menuH = menu.offsetHeight;
-    if (top + menuH > vh - 4) {
-      top = btnRect.top - menuH - 4;
+    if (window.innerWidth > BREAKPOINT.DESKTOP) {
+      // Desktop: las tablas viven dentro de `.table-container` con
+      // `overflow: hidden`, que recortaría el menú absoluto. Usamos
+      // `position: fixed` relativo al containing block real de fixed
+      // (ancestro transformado, p. ej. modal con slideUp/fadeScaleIn).
+      const btnRect = btn.getBoundingClientRect();
+      const mw = menu.offsetWidth;
+      const menuH = menu.offsetHeight;
+      const cb = getFixedContainingBlock(menu);
+      const cw = cb ? cb.clientWidth : window.innerWidth;
+      const ch = cb ? cb.clientHeight : window.innerHeight;
+      const cbTop = cb ? cb.getBoundingClientRect().top : 0;
+      const cbLeft = cb ? cb.getBoundingClientRect().left : 0;
+      menu.style.position = 'fixed';
+      menu.style.right = 'auto';
+      menu.style.bottom = 'auto';
+      // Horizontal: align right edge with button right, clamped to the containing block
+      let left = (btnRect.right - mw) - cbLeft;
+      if (left < 4) left = 4;
+      if (left + mw > cw - 4) left = Math.max(4, cw - mw - 4);
+      menu.style.left = left + 'px';
+      // Vertical: prefer below; flip up only if it would overflow the bottom
+      let top = (btnRect.bottom + 4) - cbTop;
+      if (top + menuH > ch - 4) {
+        top = (btnRect.top - menuH - 4) - cbTop;
+      }
+      // If still off-screen (very tall menu / button at top), anchor to top and scroll
+      if (top < 4) {
+        top = 4;
+        menu.style.maxHeight = (ch - 8) + 'px';
+        menu.style.overflowY = 'auto';
+      }
+      menu.style.top = top + 'px';
     }
-    // If still off-screen (very tall menu / button at top), anchor to top and scroll
-    if (top < 4) {
-      top = 4;
-      menu.style.maxHeight = (vh - 8) + 'px';
-      menu.style.overflowY = 'auto';
-    }
-    menu.style.top = top + 'px';
+    // Mobile: el CSS natural del `.dropdown-menu` es `position: absolute;
+    // right: 0; top: 100%` relativo al `.dropdown` (position: relative), que
+    // SIEMPRE posiciona el menú justo debajo del botón, alineado a la derecha,
+    // sin depender del viewport ni de ancestros transformados. `position: fixed`
+    // en móvil (Android WebView) se anclaba a un ancestro con transform o
+    // -webkit-overflow-scrolling y el menú aparecía desplazado.
   }
+}
+
+// Devuelve el ancestro que actúa como containing block de `position: fixed`
+// para `el` (el más cercano con transform/perspective/filter/will-change), o
+// null si es el viewport. Solo ancestros, no `el` mismo.
+function getFixedContainingBlock(el) {
+  let node = el.parentElement;
+  while (node && node !== document.body) {
+    const cs = getComputedStyle(node);
+    if (
+      (cs.transform && cs.transform !== 'none') ||
+      (cs.perspective && cs.perspective !== 'none') ||
+      (cs.filter && cs.filter !== 'none') ||
+      (cs.willChange && cs.willChange.indexOf('transform') !== -1) ||
+      // Bug conocido de Android WebView: `position: fixed` dentro de un
+      // contenedor con -webkit-overflow-scrolling: touch se ancla a ese
+      // contenedor (las tablas móviles lo usan). Tratarlo como containing block.
+      (cs.webkitOverflowScrolling === 'touch')
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
 }
 
 function closeAllDropdowns() {
@@ -214,8 +259,14 @@ function openNewProductModal() {
   updateProductFormLabels(false);
   clearProductErrors();
   loadCategoriasSelect();
+  // En móvil no enfocar para no disparar el teclado; en desktop sí (nuevo producto).
+  if (IS_ANDROID) {
+    qs(SEL.productModal).dataset.noAutofocus = '1';
+  } else {
+    delete qs(SEL.productModal).dataset.noAutofocus;
+  }
   showModal(qs(SEL.productModal));
-  setTimeout(() => qs(SEL.productNombre).focus(), 100);
+  if (!IS_ANDROID) setTimeout(() => qs(SEL.productNombre).focus(), 100);
 }
 
 function updateProductFormLabels(pesable) {
@@ -234,8 +285,11 @@ function updateProductFormLabels(pesable) {
 }
 function updateStockStep(pesable) {
   const step = pesable ? '0.001' : '1';
+  const mode = pesable ? 'decimal' : 'numeric';
   qs(SEL.productStock).step = step;
+  qs(SEL.productStock).inputMode = mode;
   qs(SEL.productStockMinimo).step = step;
+  qs(SEL.productStockMinimo).inputMode = mode;
 }
 
 function editProduct(codigo) {
@@ -256,8 +310,10 @@ function editProduct(codigo) {
   updateProductFormLabels(!!p.es_pesable);
   qs(SEL.productDeleteBtn).style.display = 'inline-flex';
   loadCategoriasSelect();
+  // Al editar nunca enfocar el nombre (ni en desktop ni móvil): el usuario
+  // puede querer modificar precio/stock/etc. sin tocar el teclado.
+  qs(SEL.productModal).dataset.noAutofocus = '1';
   showModal(qs(SEL.productModal));
-  setTimeout(() => qs(SEL.productNombre).focus(), 100);
 }
 
 function closeProductModal() {

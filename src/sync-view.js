@@ -70,6 +70,12 @@ function loadSyncAutoConfig() {
   const toggle = qs(SEL.syncAutoEnabled);
   const badge = qs(SEL.syncAutoBadge);
   if (!input) return;
+  // En teléfonos el auto-sync está desactivado hasta nuevo aviso (solo manual):
+  // bloquear los controles para que la UI no muestre una configuración engañosa.
+  if (IS_ANDROID) {
+    if (input) input.disabled = true;
+    if (toggle) toggle.disabled = true;
+  }
   invoke('get_config_value', { key: CFG_SYNC_AUTO_INTERVAL }).then(val => {
     const minutes = parseInt(val) || SYNC.AUTO_MIN;
     input.value = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
@@ -83,6 +89,7 @@ function loadSyncAutoConfig() {
   if (!syncAutoListenerAttached) {
     syncAutoListenerAttached = true;
     input.addEventListener('change', () => {
+      if (IS_ANDROID) return;
       let minutes = parseInt(input.value) || SYNC.AUTO_MIN;
       minutes = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
       input.value = minutes;
@@ -90,6 +97,7 @@ function loadSyncAutoConfig() {
       applySyncAutoConfig();
     });
     if (toggle) toggle.addEventListener('change', () => {
+      if (IS_ANDROID) return;
       invoke('set_config_value', { key: CFG_SYNC_AUTO_ENABLED, value: String(toggle.checked) }).catch(() => {});
       applySyncAutoConfig();
     });
@@ -99,9 +107,10 @@ function loadSyncAutoConfig() {
 function applySyncAutoConfig() {
   const enabled = qs(SEL.syncAutoEnabled);
   const badge = qs(SEL.syncAutoBadge);
-  const on = !enabled || enabled.checked;
+  // En teléfonos el auto-sync está desactivado hasta nuevo aviso (solo manual).
+  const on = !IS_ANDROID && (!enabled || enabled.checked);
   if (badge) {
-    badge.textContent = on ? 'Activo' : 'Desactivado';
+    badge.textContent = on ? 'Activo' : (IS_ANDROID ? 'Desactivado (teléfono)' : 'Desactivado');
     badge.classList.toggle('sync-auto-off', !on);
   }
   const minutes = parseInt(qs(SEL.syncAutoInterval)?.value) || SYNC.AUTO_MIN;
@@ -109,6 +118,14 @@ function applySyncAutoConfig() {
 }
 
 function startSyncAutoInterval(minutes) {
+  // En teléfonos el auto-sync está desactivado hasta nuevo aviso: el timer
+  // nunca arranca aunque el toggle esté marcado.
+  if (IS_ANDROID) {
+    currentAutoMinutes = 0;
+    if (syncAutoIntervalId) clearInterval(syncAutoIntervalId);
+    syncAutoIntervalId = null;
+    return;
+  }
   if (minutes === currentAutoMinutes && syncAutoIntervalId) return;
   currentAutoMinutes = minutes;
   if (syncAutoIntervalId) clearInterval(syncAutoIntervalId);
@@ -118,16 +135,16 @@ function startSyncAutoInterval(minutes) {
     if (!isSyncing) {
       isSyncing = true;
       updateSyncIndicator('Sincronizando...', true);
-      invoke('sync_all').then(() => { isSyncing = false; loadSyncStats(); }).catch(() => { isSyncing = false; loadSyncStats(); });
+      invoke('sync_all')
+        .then(() => { isSyncing = false; loadSyncStats(); if (typeof refreshCashierAfterSync === 'function') refreshCashierAfterSync(); })
+        .catch(() => { isSyncing = false; loadSyncStats(); });
     }
   }, minutes * 60 * 1000);
 }
 
 function showView(name) {
-  if (name === VIEW.SYNC && currentUser && currentUser.rol !== ROL_ADMIN) {
-    showToast('Solo el administrador puede acceder a la sincronización', 'warning');
-    return;
-  }
+  // Decisión 2026-08-14: la sincronización está abierta a todos los roles
+  // (vendedor y admin suben/descargan). Los guards de rol viven en el backend.
   lastViewName = name;
   if (typeof androidTrackView === 'function') androidTrackView(name);
   // En móvil el carrito es un bottom-sheet: cerrarlo al cambiar de vista para
@@ -205,11 +222,13 @@ async function checkPendienteCierre() {
     if (!pend) return;
     // Descargar primero las ventas de otros dispositivos para que el cierre
     // tenga el total real (mismo comportamiento que abrir la app tras corte).
+    // Solo se baja: la subida de este dispositivo va por auto-sync/tras venta.
     try {
-      await invoke('sync_all');
+      await invoke('download_all');
       loadSyncStats();
+      if (typeof refreshCashierAfterSync === 'function') refreshCashierAfterSync();
     } catch (e) {
-      console.log('sync_all en cierre pendiente:', e);
+      console.log('download_all en cierre pendiente:', e);
     }
     const pendFinal = await invoke('get_pendiente_cierre');
     if (!pendFinal) return;

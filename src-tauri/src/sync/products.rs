@@ -148,6 +148,12 @@ pub(crate) fn download_products_inner(
     let last_sync = super::get_config(db, constants::CFG_ULTIMO_DOWNLOAD)
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
 
+    // Primera descarga del dispositivo (reinstalación/restauración con datos
+    // viejos): forzar el remoto siempre (LWW off) para sanar la BD local.
+    let first_sync = super::get_config(db, constants::CFG_FIRST_SYNC_DONE)
+        .unwrap_or_default()
+        .is_empty();
+
     let since = urlencoding(&last_sync);
     // No re-descargar productos que subió ESTE dispositivo (fix 3). Se incluye
     // `dispositivo_origen.is.null` para que filas legacy (sin la columna) sigan llegando.
@@ -165,6 +171,9 @@ pub(crate) fn download_products_inner(
 
     let count = cloud_products.len();
     if count == 0 {
+        if first_sync {
+            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+        }
         return Ok("No hay cambios nuevos para descargar".to_string());
     }
 
@@ -282,9 +291,12 @@ pub(crate) fn download_products_inner(
             }
             // LWW: solo aplicar el remoto si es más nuevo que el local (no sobrescribir
             // una edición local posterior). Los clientes ya implementan esta simetría.
-            if let (Some(loc), Some(rem)) = (local_ts, remote_ts) {
-                if rem <= loc {
-                    continue;
+            // En el primer sync (flag vacío) el remoto SIEMPRE gana para sanar la BD local.
+            if !first_sync {
+                if let (Some(loc), Some(rem)) = (local_ts, remote_ts) {
+                    if rem <= loc {
+                        continue;
+                    }
                 }
             }
             upd.execute(params![
@@ -302,6 +314,9 @@ pub(crate) fn download_products_inner(
     drop(ins);
 
     upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD, &ts);
+    if first_sync {
+        upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+    }
 
     let parts: Vec<String> = [
         (updated > 0, format!("{} actualizados", updated)),

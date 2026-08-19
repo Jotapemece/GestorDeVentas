@@ -48,11 +48,7 @@ const SQL_UPDATE_PRODUCTO: &str =
 const SQL_SET_INARI: &str =
     "UPDATE productos SET es_inari = ?1 WHERE codigo = ?2";
 
-const SQL_HAS_SALES: &str = "SELECT COUNT(*) > 0 FROM detalles_ventas WHERE producto_codigo = ?1";
-
 const SQL_SOFT_DELETE: &str = "UPDATE productos SET activo = 0, stock = 0, updated_at = ?2 WHERE codigo = ?1";
-
-const SQL_DELETE_PRODUCTO: &str = "DELETE FROM productos WHERE codigo = ?1";
 
 const SQL_IMPORT_PRODUCTO: &str =
     "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, costo, stock, stock_minimo, created_at, updated_at) \
@@ -345,33 +341,29 @@ pub fn toggle_producto_favorito(
 
 #[tauri::command]
 pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, String> {
-    let mut db = state.lock_db()?;
+    let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
         &db,
         &format!("Eliminó producto código '{}'", codigo),
     )?;
+    delete_product_inner(&db, &codigo)
+}
 
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
-
-    let has_sales: bool = tx
-        .query_row(SQL_HAS_SALES, params![codigo], |row| row.get(0))
-        .map_err(|e| format!("Error al verificar ventas del producto: {}", e))?;
-
-    if has_sales {
-        let now = crate::helpers::now_iso();
-        tx.execute(SQL_SOFT_DELETE, params![codigo, now])
-            .map_err(|e| e.to_string())?;
-        tx.commit().map_err(|e| e.to_string())?;
-        return Ok("Producto desactivado (tiene historial de ventas). Stock puesto a 0.".to_string());
+/// Soft-delete SIEMPRE (tombstone `activo=0` + `updated_at` bumpado). Un DELETE
+/// físico dejaría al producto huérfano en Supabase: el upload consulta la tabla
+/// local y una fila borrada ya no existe, así que el tombstone nunca viaja a los
+/// otros dispositivos. Con soft-delete el `updated_at` bumpado sube `activo=0`
+/// y el resto de dispositivos lo marca inactivo al descargar.
+fn delete_product_inner(db: &rusqlite::Connection, codigo: &str) -> Result<String, String> {
+    let now = crate::helpers::now_iso();
+    let affected = db
+        .execute(SQL_SOFT_DELETE, params![codigo, now])
+        .map_err(|e| format!("Error al eliminar producto: {}", e))?;
+    if affected == 0 {
+        return Err(format!("Producto '{}' no encontrado", codigo));
     }
-    match tx.execute(SQL_DELETE_PRODUCTO, params![codigo]) {
-        Ok(_) => {
-            tx.commit().map_err(|e| e.to_string())?;
-            Ok("Producto eliminado exitosamente".to_string())
-        }
-        Err(e) => Err(format!("Error al eliminar producto: {}", e)),
-    }
+    Ok("Producto eliminado exitosamente".to_string())
 }
 
 #[tauri::command]
@@ -979,6 +971,58 @@ mod tests {
     fn test_registrar_ajuste_stock_producto_inexistente() {
         let mut conn = crate::db::test_support::test_conn();
         let res = registrar_ajuste_stock_inner(&mut conn, "admin", "NO_EXISTE", 3.0, "motivo");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("no encontrado"));
+    }
+
+    #[test]
+    fn test_delete_product_inner_sin_ventas_hace_soft_delete() {
+        let conn = crate::db::test_support::test_conn();
+        insert_test_producto(&conn, "P001", 10.0);
+        let res = delete_product_inner(&conn, "P001");
+        assert!(res.is_ok());
+        // La fila NO se borra físicamente (tombstone): debe seguir existiendo
+        // con activo=0 y stock=0 para que el upload suba `activo=0` a Supabase.
+        let (activo, stock): (i64, f64) = conn
+            .query_row(
+                "SELECT activo, stock FROM productos WHERE codigo = ?1",
+                params!["P001"],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(activo, 0);
+        assert!((stock - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_delete_product_inner_bumpa_updated_at() {
+        let conn = crate::db::test_support::test_conn();
+        insert_test_producto(&conn, "P001", 10.0);
+        // Simula un producto creado ANTES del watermark (updated_at viejo fijo):
+        // solo el bump del soft-delete debe hacer que el upload lo recoja.
+        conn.execute(
+            "UPDATE productos SET updated_at = '2020-01-01T00:00:00.000Z' WHERE codigo = 'P001'",
+            [],
+        )
+        .unwrap();
+        let before: String = conn
+            .query_row("SELECT updated_at FROM productos WHERE codigo = ?1", params!["P001"], |r| r.get(0))
+            .unwrap_or_default();
+        let res = delete_product_inner(&conn, "P001");
+        assert!(res.is_ok());
+        let after: String = conn
+            .query_row("SELECT updated_at FROM productos WHERE codigo = ?1", params!["P001"], |r| r.get(0))
+            .unwrap_or_default();
+        assert!(!after.is_empty());
+        // El updated_at debe haber cambiado (o estar al menos no vacío) para que
+        // el watermark del upload lo recoja como tombstone.
+        assert_ne!(before, after);
+    }
+
+    #[test]
+    fn test_delete_product_inner_inexistente_error() {
+        let conn = crate::db::test_support::test_conn();
+        let res = delete_product_inner(&conn, "NO_EXISTE");
         assert!(res.is_err());
         assert!(res.unwrap_err().contains("no encontrado"));
     }

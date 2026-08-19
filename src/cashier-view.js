@@ -201,7 +201,7 @@ function showCartUndoPill() {
   cartUndoTimer = setTimeout(function() {
     pill.classList.add('fade-out');
     setTimeout(function() { pill.classList.add('hidden'); }, 250);
-  }, 5000);
+  }, 30000);
 }
 
 function resetCartHistory() {
@@ -219,10 +219,11 @@ function restoreCartSnapshot() {
     var parsed = JSON.parse(saved);
     if (!Array.isArray(parsed) || parsed.length === 0) { localStorage.removeItem('cart_snapshot'); return; }
     if (parsed[0] && parsed[0].items && Array.isArray(parsed[0].items)) {
-      carts = parsed;
+      carts = parsed.filter(function(c) { return c && Array.isArray(c.items) && (c.items.length > 0 || !c.folded); });
     } else {
       carts = [{ id: 1, items: parsed, folded: false }];
     }
+    if (carts.length === 0) carts = [{ id: 1, items: [], folded: false }];
     var active = carts.find(function(c) { return !c.folded; }) || carts[0];
     if (active) activateCart(active);
     cartIdCounter = carts.reduce(function(m, c) { return Math.max(m, c.id + 1); }, 1);
@@ -503,19 +504,29 @@ function clearCart() {
   cartHistoryPush();
   qs(SEL.productSearch).placeholder = 'Buscar por nombre o c\u00f3digo...';
   closeCartSheet();
-  cart.splice(0, cart.length);
+  disposeActiveCart();
   playSound('cancel');
   renderCart();
   updateCheckoutBtn();
-  /* Switch to next held cart if available */
+  showToast('Venta cancelada', 'info');
+  saveCartSnapshot();
+}
+
+function disposeActiveCart() {
+  var active = carts.find(function(c) { return !c.folded; });
+  if (active) {
+    carts.splice(carts.indexOf(active), 1);
+  }
+  if (carts.length === 0) {
+    cartIdCounter++;
+    carts.push({ id: cartIdCounter, items: [], folded: false });
+  }
   var held = carts.find(function(c) { return c.folded && c.items.length > 0; });
   if (held) {
     activateCart(held);
-    renderCart();
-    updateCheckoutBtn();
+  } else {
+    activateCart(carts[0]);
   }
-  showToast('Venta cancelada', 'info');
-  saveCartSnapshot();
 }
 
 function updateCartBadge() {
@@ -584,10 +595,11 @@ function holdCart() {
     carts.push(newCart);
     cart = newCart.items;
   } else {
-    var first = carts.find(function(c) { return c !== active; });
+    var first = carts.find(function(c) { return c !== active && c.items.length > 0; }) || carts.find(function(c) { return c !== active; });
     if (first) { first.folded = false; cart = first.items; }
   }
   resetCartHistory();
+  closeCartSheet();
   renderCart();
   updateCheckoutBtn();
   saveCartSnapshot();
@@ -632,10 +644,11 @@ function renderCart() {
   const tbody = qs(SEL.cartBody);
   const empty = qs(SEL.cartEmpty);
   tbody.innerHTML = '';
+  var hasHeldWithItems = carts.some(function(c) { return c.folded && c.items.length > 0; });
   if (cart.length === 0) {
     empty.innerHTML = emptyState('<i class="nf nf-fa-shopping_cart"></i>', 'El carrito est\u00e1 vac\u00edo', 'Agregue productos desde la lista');
     empty.style.display = 'block';
-    qs(SEL.salesBody).classList.add('cart-hidden');
+    qs(SEL.salesBody).classList.toggle('cart-hidden', !hasHeldWithItems);
   } else {
     empty.innerHTML = '';
     empty.style.display = 'none';
@@ -704,10 +717,6 @@ function openPaymentModal() {
   const cambioGroup = qs(SEL.cambioGroup);
   if (cambioGroup) { cambioGroup.style.display = 'none'; qs(SEL.cambioRecibido).value = ''; qs(SEL.cambioResultado).classList.add('hidden'); }
   loadClientesForSelect();
-  // Preseleccionar "Efectivo Bs." (método más común) para agilizar el cobro.
-  // Si el pseudo-producto Efectivo está en el carrito, Efectivo Bs. queda
-  // deshabilitado y el modal espera una selección manual.
-  if (!disallowCash) selectPaymentMethod(METODO_EFECTIVO_BS);
 }
 
 function closePaymentModal() {
@@ -1232,14 +1241,11 @@ async function confirmPayment() {
     qs(SEL.productSearch).placeholder = 'Buscar por nombre o c\u00f3digo...';
     closeCartSheet();
     showToast('Venta #' + venta.id + ' registrada - ' + formatUSD(venta.total_usd));
-    /* Switch to next held cart if available */
-    var held = carts.find(function(c) { return c.folded && c.items.length > 0; });
-    if (held) {
-      cart.splice(0, cart.length);
-      activateCart(held);
-    } else {
-      cart.splice(0, cart.length);
-    }
+    /* Animación de éxito ANTES de los await: loadProductCache() hace 3 invokes
+     * y en móvil tardaba, dejando la UI colgada con el toast primero. */
+    showPaymentSuccess(venta);
+    /* El carrito vendido se descarta; se activa el siguiente en espera (o uno nuevo) */
+    disposeActiveCart();
     saveCartSnapshot();
     resetCartHistory();
     await loadProductCache();
@@ -1250,14 +1256,20 @@ async function confirmPayment() {
       if (productCache.some(function(p) { return p.codigo === i.codigo; })) addRecentProduct(i.codigo);
     });
     renderProductSearch();
-    showPaymentSuccess(venta);
+    /* Sube la venta (y su detalle, el stock decrementado y clientes nuevos) a
+     * Supabase en background: así el otro dispositivo la ve sin esperar al
+     * auto-sync. Fire-and-forget; el guard evita chocar con el timer/manual.
+     * Se retrasa ~300ms para que la animación de éxito y el re-render del
+     * carrito pinten primero sin competir con el round-trip de red. */
+    setTimeout(uploadAfterSale, 300);
     /* Focus search for the next customer (desktop) */
     if (!IS_ANDROID) {
       var searchEl = qs(SEL.productSearch);
       if (searchEl) searchEl.focus();
     }
-    /* Share receipt on mobile */
-    shareReceipt(venta);
+    /* El share automático tras la venta se eliminó: tras los `await` ya no hay
+     * user-activation, navigator.share() rechaza y caía en "Recibo copiado"
+     * (toast engañoso en cada venta). El share está en el modal de detalle. */
   } catch (e) { showToast('Error: ' + e, 'error'); playSound('error'); }
   finally {
     processingPayment = false;
@@ -1265,6 +1277,21 @@ async function confirmPayment() {
     confirmBtn.classList.remove('loading');
     confirmBtn.textContent = 'Confirmar Pago';
   }
+}
+
+let _saleUploadRunning = false;
+function uploadAfterSale() {
+  if (typeof isSyncing === 'boolean' && isSyncing) return;
+  if (_saleUploadRunning) return;
+  _saleUploadRunning = true;
+  if (typeof updateSyncIndicator === 'function') updateSyncIndicator('Subiendo venta...', true);
+  invoke('upload_all')
+    .then(() => { if (typeof loadSyncStats === 'function') loadSyncStats(); })
+    .catch(e => console.log('upload tras venta:', e))
+    .finally(() => {
+      _saleUploadRunning = false;
+      if (typeof updateSyncIndicator === 'function') updateSyncIndicator('', false);
+    });
 }
 
 /* ========== CASHIER ========== */
@@ -1301,6 +1328,8 @@ async function loadDailySummary() {
           metodoLabel += ' (' + v.referencia_pago_movil + ')';
         }
         return createDailySaleRow(v, metodoLabel);
+      }, function(tr) {
+        tr.classList.add('card-collapsible', 'collapsed');
       });
     }
 
@@ -1440,7 +1469,9 @@ async function confirmCloseCashier() {
       html += '<p>' + escapeHtml(c.nombre) + ': ' + formatUSD(c.total_usd) + '</p>';
     });
   }
-  html += '<div class="close-report-actions"><button class="btn btn-primary" data-action="print-close-report">Exportar PDF</button></div>';
+  const shareBtnLabel = IS_ANDROID ? 'Compartir' : 'Exportar PDF';
+  const shareBtnAction = IS_ANDROID ? 'share-close-report' : 'print-close-report';
+  html += '<div class="close-report-actions"><button class="btn btn-primary" data-action="' + shareBtnAction + '">' + shareBtnLabel + '</button></div>';
   html += '</div>';
   qs(SEL.closeReportBody).innerHTML = html;
   showModal(qs(SEL.closeReportModal));
@@ -1560,13 +1591,51 @@ function printCloseReport() {
   iframe.contentWindow.print();
 }
 
+// En Android el `iframe.print()` no funciona: el reporte se comparte como texto
+// (navigator.share con fallback al portapapeles).
+function shareCloseReport() {
+  const d = lastCloseReportData;
+  if (!d) return;
+  let text = 'Gestor de Ventas - Reporte de Cierre\n' + d.fecha_cierre + '\n\n' +
+    'Ventas realizadas: ' + d.total_ventas + '\n' +
+    'Total USD: ' + formatUSD(d.total_usd) + '\n' +
+    'Total Bs.: ' + formatBS(d.total_bs) + '\n\n' +
+    'Totales por Método de Pago:\n';
+  d.por_metodo.forEach(m => {
+    let label = formatMetodoLabel(m.metodo);
+    if (m.referencias && m.referencias.length) label += ' (' + m.referencias.join(', ') + ')';
+    text += '- ' + label + ': ' + formatUSD(m.total_usd) + '\n';
+  });
+  text += '\nProductos Vendidos:\n';
+  d.productos_vendidos.forEach(p => {
+    text += '- ' + p.nombre + ': ' + p.cantidad + ' x ' + formatUSD(p.total_usd) + '\n';
+  });
+  if (d.clientes_credito && d.clientes_credito.length) {
+    text += '\nClientes a Crédito:\n';
+    d.clientes_credito.forEach(c => {
+      text += '- ' + c.nombre + ': ' + formatUSD(c.total_usd) + '\n';
+    });
+  }
+  if (navigator.share) {
+    navigator.share({ title: 'Reporte de Cierre', text: text }).catch(function() {});
+    return;
+  }
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Reporte copiado al portapapeles', 'success');
+  }).catch(function() {
+    showToast('No se pudo copiar el reporte', 'error');
+  });
+}
+
 function closeReport() { closeModal(qs(SEL.closeReportModal)); }
 
 /* ========== HISTORIAL CIERRES ========== */
 async function openHistorialCierres() {
+  const container = qs(SEL.historialCierresList);
+  container.innerHTML = '<div class="movimientos-empty" style="padding:24px;text-align:center"><i class="nf nf-fa-spinner fa-spin"></i> Cargando...</div>';
+  showModal(qs(SEL.historialCierresModal));
   const cierres = await invokeOrError(invoke('list_cierres'));
   if (cierres === undefined) return;
-  const container = qs(SEL.historialCierresList);
   if (!cierres.length) {
     container.innerHTML = emptyState('<i class="nf nf-fa-history"></i>', 'No hay cierres registrados', 'Los cierres de caja aparecer\u00e1n aqu\u00ed');
   } else {
@@ -1652,26 +1721,18 @@ async function refreshTasaFromInfo(prefix) {
 }
 
 /* ========== MOVIMIENTOS CAJA ========== */
+let _movimientosData = [];
+
 async function loadMovimientos() {
+  var list = qs(SEL.movimientosList);
+  list.innerHTML = '<div class="movimientos-empty" style="padding:24px;text-align:center"><i class="nf nf-fa-spinner fa-spin"></i> Cargando...</div>';
   try {
     var [movimientos, saldo] = await Promise.all([
       invoke('list_movimientos'),
       invoke('get_saldo_caja')
     ]);
-    var list = qs(SEL.movimientosList);
-    if (movimientos.length === 0) {
-      list.innerHTML = '<div class="movimientos-empty">' + emptyState('<i class="nf nf-fa-money"></i>', 'No hay movimientos hoy', 'Registra gastos o ingresos con el bot\u00f3n de arriba') + '</div>';
-    } else {
-      list.innerHTML = movimientos.map(function(m) {
-        var sign = m.tipo === 'egreso' ? '-' : '+';
-        return '<div class="movimiento-item">' +
-          '<span class="movimiento-tipo ' + m.tipo + '">' + (m.tipo === 'egreso' ? '&#8593;' : '&#8595;') + '</span>' +
-          '<span class="movimiento-monto">' + sign + formatUSD(m.monto_usd) + ' <span class="movimiento-monto-bs">(' + formatBS(m.monto_bs) + ')</span></span>' +
-          '<span class="movimiento-concepto">' + escapeHtml(m.concepto) + '</span>' +
-          '<span class="movimiento-meta">' + escapeHtml(m.username) + ' ' + formatDateTime(m.created_at).split(' ')[1] + '</span>' +
-        '</div>';
-      }).join('');
-    }
+    _movimientosData = movimientos || [];
+    renderMovimientos();
     qs(SEL.movimientosTotalIngresos).textContent = formatUSD(saldo.total_ingresos_usd);
     qs(SEL.movimientosTotalEgresos).textContent = formatUSD(saldo.total_egresos_usd);
     /* Update saldo in summary card */
@@ -1680,6 +1741,26 @@ async function loadMovimientos() {
       saldoEl.textContent = formatUSD(saldo.saldo_usd) + ' / ' + formatBS(saldo.saldo_bs);
     }
   } catch (e) { showToast('Error al cargar movimientos: ' + e, 'error'); }
+}
+
+function renderMovimientos() {
+  var filtro = qs(SEL.movimientosFiltroTipo);
+  var tipo = filtro ? filtro.value : '';
+  var data = _movimientosData.filter(function(m) { return !tipo || m.tipo === tipo; });
+  var list = qs(SEL.movimientosList);
+  if (data.length === 0) {
+    list.innerHTML = '<div class="movimientos-empty">' + emptyState('<i class="nf nf-fa-money"></i>', 'No hay movimientos', 'Registra gastos o ingresos con el bot\u00f3n de arriba') + '</div>';
+  } else {
+    list.innerHTML = data.map(function(m) {
+      var sign = m.tipo === 'egreso' ? '-' : '+';
+      return '<div class="movimiento-item">' +
+        '<span class="movimiento-tipo ' + m.tipo + '">' + (m.tipo === 'egreso' ? '&#8593;' : '&#8595;') + '</span>' +
+        '<span class="movimiento-monto">' + sign + formatUSD(m.monto_usd) + ' <span class="movimiento-monto-bs">(' + formatBS(m.monto_bs) + ')</span></span>' +
+        '<span class="movimiento-concepto">' + escapeHtml(m.concepto) + '</span>' +
+        '<span class="movimiento-meta">' + escapeHtml(m.username) + ' ' + formatDateTime(m.created_at).split(' ')[1] + '</span>' +
+      '</div>';
+    }).join('');
+  }
 }
 
 function openMovimientosModal() {

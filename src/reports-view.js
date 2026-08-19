@@ -884,7 +884,7 @@ async function handleVoidSale(ventaId, btn) {
   try {
     const ok = await confirmModal('\u00bfEst\u00e1 seguro de anular la venta #' + ventaId + '? Se devolver\u00e1 el stock al inventario.', 'Anular Venta', 'S\u00ed, anular');
     if (!ok) return;
-    const nota = await promptModal('Indique el motivo de la anulaci\u00f3n de la venta #' + ventaId + ':', 'Motivo de Anulaci\u00f3n', 'Anular venta');
+    const nota = await voidSaleModal('La venta #' + ventaId + ' quedar\u00e1 anulada y el stock volver\u00e1 al inventario. Indique el motivo.', 'Motivo de Anulaci\u00f3n', 'Anular venta');
     if (!nota) return;
     const msg = await invokeOrError(invoke('void_sale', { ventaId, nota }));
     if (msg === undefined) return;
@@ -930,6 +930,12 @@ async function showSaleDetail(ventaId, btn) {
         obsEl.textContent = '';
         obsWrap.style.display = 'none';
       }
+      const pagosEl = qs(SEL.saleDetailPagos);
+      const pagosHtml = buildMixtoDetailHtml(btn.dataset.pagoDetalle, parseFloat(btn.dataset.tasa));
+      if (pagosEl) {
+        pagosEl.innerHTML = pagosHtml;
+        pagosEl.style.display = pagosHtml ? 'block' : 'none';
+      }
     }
     const list = qs(SEL.saleDetailList);
     list.innerHTML = '';
@@ -966,7 +972,7 @@ async function showSaleDetail(ventaId, btn) {
 async function handleVoidItem(ventaId, detalleId) {
   const ok = await confirmModal('\u00bfAnular este \u00edtem de la venta? Se devolver\u00e1 el stock al inventario.', 'Anular \u00cdtem', 'S\u00ed, anular');
   if (!ok) return;
-  const nota = await promptModal('Indique el motivo de la anulaci\u00f3n de este \u00edtem:', 'Motivo de Anulaci\u00f3n', 'Anular \u00edtem');
+  const nota = await voidSaleModal('Este \u00edtem quedar\u00e1 anulado y el stock volver\u00e1 al inventario. Indique el motivo.', 'Motivo de Anulaci\u00f3n', 'Anular \u00edtem');
   if (!nota) return;
   if (await invokeOrError(invoke('void_sale_items', { request: { venta_id: ventaId, detalle_ids: [detalleId], nota } })) === undefined) return;
   showToast('Item anulado correctamente');

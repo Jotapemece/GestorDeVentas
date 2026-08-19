@@ -95,7 +95,7 @@ pub fn resolve_conflicto(
     conflicto_id: i64,
     use_remote: bool,
 ) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
+    crate::auth::check_employee_role(&state)?;
     let mut db = state.lock_db()?;
     let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
 

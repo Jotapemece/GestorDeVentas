@@ -163,7 +163,13 @@ function createClientRow(c) {
   return '<td class="cell-key cell-name" data-label="Cliente">' + escapeHtml(c.nombre) + '</td><td class="cell-key cell-status" data-label="Cr\u00e9dito">' + activoBadge + '</td><td class="cell-key cell-debt' + deudaCls + '" data-label="Deuda">' + formatUSD(c.saldo_deuda_usd) + '</td><td data-label="Última compra">' + ultimaCompra + '</td><td data-label="Acciones">' + dropdown + '</td>' + toggleCell;
 }
 function createAuditRow(log) {
-  return '<td data-label="ID">' + log.id + '</td><td data-label="Fecha">' + escapeHtml(formatDateTime(log.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(log.usuario) + '</td><td data-label="Acción">' + escapeHtml(log.accion) + '</td>';
+  var fecha = escapeHtml(formatDateTime(log.fecha_hora));
+  var toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron_down"></i></button></td>';
+  return '<td data-label="ID">' + log.id + '</td>' +
+    '<td class="cell-key cell-status" data-label="Fecha">' + fecha + '</td>' +
+    '<td data-label="Usuario">' + escapeHtml(log.usuario) + '</td>' +
+    '<td class="cell-key cell-name" data-label="Acci\u00f3n">' + escapeHtml(log.accion) + '</td>' +
+    toggleCell;
 }
 function createDailySaleRow(v, metodoLabel) {
   const nota = v.nota_anulacion ? escapeHtml(v.nota_anulacion) : '';
@@ -172,7 +178,7 @@ function createDailySaleRow(v, metodoLabel) {
         ? '<span class="badge badge-danger" title="' + nota + '"><i class="nf nf-fa-ban"></i> Anulada</span>'
         : '<span class="badge badge-danger"><i class="nf nf-fa-ban"></i> Anulada</span>')
     : '';
-  const detailAttrs = 'data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-tasa="' + (v.tasa_aplicada || '') + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '"';
+  const detailAttrs = 'data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-tasa="' + (v.tasa_aplicada || '') + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '" data-pago-detalle="' + escapeHtml(v.pago_detalle || '') + '"';
   const detailItem = '<button class="sale-detail-btn" ' + detailAttrs + '><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
   const canVoid = currentUser && currentUser.rol === ROL_ADMIN;
   const voidItem = (v.anulada || !canVoid)
@@ -182,7 +188,9 @@ function createDailySaleRow(v, metodoLabel) {
     ? '<button class="request-void-btn" data-id="' + v.id + '" title="Solicitar anulación al administrador"><i class="nf nf-fa-paper_plane"></i> Solicitar anulación</button>'
     : '';
   const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailItem + voidItem + requestVoidItem + '</div></div>';
-  return '<td data-label="#">' + v.id + '</td><td data-label="Hora">' + escapeHtml(formatDateTime(v.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(v.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td data-label="Total (Bs.)">' + formatBS(v.total_bs) + '</td><td data-label="Acción">' + (v.anulada ? anuladaBadge : menu) + '</td>';
+  const toggleCell = '<td class="cell-toggle" data-label=""><button class="card-collapse-btn" data-action="toggle-card-collapse" type="button" aria-label="Expandir o plegar tarjeta"><i class="nf nf-fa-chevron_down"></i></button></td>';
+  const anuladaCls = v.anulada ? ' sale-anulada' : '';
+  return '<td data-label="#">' + v.id + '</td><td class="cell-key cell-name' + anuladaCls + '" data-label="Hora">' + escapeHtml(formatDateTime(v.fecha_hora)) + '</td><td class="cell-key" data-label="Usuario">' + escapeHtml(v.username) + '</td><td class="cell-key cell-status" data-label="Método">' + escapeHtml(metodoLabel) + '</td><td class="cell-key cell-price" data-label="Total ($)">' + formatUSD(v.total_usd) + '</td><td class="cell-key cell-debt" data-label="Total (Bs.)">' + formatBS(v.total_bs) + '</td><td data-label="Acción">' + (v.anulada ? anuladaBadge : menu) + '</td>' + toggleCell;
 }
 function createDebtSaleCard(v, prodHtml) {
   return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + formatDateTime(v.fecha_hora) + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
@@ -215,7 +223,7 @@ function createReportRow(v) {
   var ganancia = v.venta.total_usd - costoTotal;
   const vv = v.venta;
   const obs = vv.nota ? escapeHtml(vv.nota) : '';
-  const detailBtn = '<button class="sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-tasa="' + (vv.tasa_aplicada || '') + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
+  const detailBtn = '<button class="sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-tasa="' + (vv.tasa_aplicada || '') + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" data-pago-detalle="' + escapeHtml(vv.pago_detalle || '') + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
   const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailBtn + '</div></div>';
   return '<td data-label="#">' + vv.id + '</td><td data-label="Fecha">' + escapeHtml(formatDateTime(vv.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(vv.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(vv.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(vv.total_bs) + badge + '</td><td data-label="Acción">' + menu + '</td>';
 }
@@ -483,6 +491,33 @@ function promptModal(msg, title, okText) {
   });
 }
 
+function voidSaleModal(msg, title, okText) {
+  return new Promise(resolve => {
+    const modal = qs(SEL.voidSaleModal);
+    qs(SEL.voidSaleTitle).textContent = title || 'Anular venta';
+    qs(SEL.voidSaleMessage).textContent = msg || '';
+    const input = qs(SEL.voidSaleNota);
+    input.value = '';
+    input.classList.remove('input-error');
+    const okBtn = qs(SEL.voidSaleOkBtn);
+    okBtn.innerHTML = '<i class="nf nf-fa-ban"></i> ' + (okText || 'Anular');
+    const finish = (val) => { closeModal(modal); resolve(val); };
+    okBtn.onclick = () => {
+      const val = input.value.trim();
+      if (!val) { input.classList.add('input-error'); input.focus(); return; }
+      finish(val);
+    };
+    qs(SEL.voidSaleCancelBtn).onclick = () => finish(null);
+    qs(SEL.voidSaleClose).onclick = () => finish(null);
+    modal.addEventListener('click', function handler(e) {
+      if (e.target === modal) { finish(null); modal.removeEventListener('click', handler); }
+    });
+    input.onkeydown = (e) => { if (e.key === 'Enter') okBtn.onclick(); };
+    showModal(modal);
+    setTimeout(() => input.focus(), 50);
+  });
+}
+
 /* ========== LOADING / EMPTY STATES ========== */
 function forcePaint() {
   void document.body.offsetHeight;
@@ -604,6 +639,12 @@ function isProtectedModal(id) {
 }
 function trapFocus(modalEl) {
   activeModal = modalEl;
+  // `data-no-autofocus` evita mover el foco al abrir el modal (p.ej. editar
+  // producto en desktop, o cualquier modal en móvil para no disparar el teclado).
+  // En Android se omite el auto-foco siempre: abrir el teclado al mostrar un
+  // modal de solo lectura es un comportamiento no deseado.
+  if (modalEl.dataset && modalEl.dataset.noAutofocus === '1') return;
+  if (IS_ANDROID) return;
   const focusable = modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
   if (focusable.length) focusable[0].focus();
 }
@@ -716,6 +757,25 @@ function initModalResize() {
 
 function formatUSD(v) { return '$' + v.toFixed(2); }
 function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
+
+/* Renderiza el desglose de un pago mixto (JSON de PagoItem) para el modal de
+   detalle de venta. Muestra cada método con su monto en USD y su equivalente
+   en Bs. (con la tasa aplicada) y la referencia del pago móvil. */
+function buildMixtoDetailHtml(pagoDetalleJson, tasa) {
+  if (!pagoDetalleJson) return '';
+  var items = null;
+  try { items = JSON.parse(pagoDetalleJson); } catch (e) { return ''; }
+  if (!Array.isArray(items) || items.length === 0) return '';
+  var tasaOk = isFinite(tasa) && tasa > 0;
+  var rows = items.map(function(item) {
+    var label = formatMetodoLabel(item.metodo);
+    var usd = formatUSD(item.monto_usd || 0);
+    var bs = tasaOk ? ' (' + formatBS((item.monto_usd || 0) * tasa) + ')' : '';
+    var ref = item.referencia ? ' <span class="text-muted">ref ' + escapeHtml(item.referencia) + '</span>' : '';
+    return '<div class="mixto-method"><span class="mixto-method-label">' + escapeHtml(label) + ':</span> ' + usd + bs + ref + '</div>';
+  });
+  return '<div class="mixto-pago-desglose"><strong>Pago:</strong>' + rows.join('') + '</div>';
+}
 
 /* Formatea una fecha/hora a "dd/mm/aaaa hh:mm" en hora local, sin sufijos
    +00:00 ni Z. Acepta ISO UTC ("...T...Z") y naive local ("aaaa-mm-dd hh:mm:ss"). */

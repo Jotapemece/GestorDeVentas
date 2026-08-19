@@ -32,8 +32,8 @@ function createSolicitudRow(s) {
   var acciones = '';
   if (s.estado === 'pendiente') {
     acciones =
-      '<button class="btn btn-sm btn-success resolve-solicitud-btn" data-id="' + s.id + '" data-aprobar="1" title="Anular la venta"><i class="nf nf-fa-check"></i> Aprobar y anular</button>' +
-      '<button class="btn btn-sm btn-danger resolve-solicitud-btn" data-id="' + s.id + '" data-aprobar="0" title="Rechazar la solicitud"><i class="nf nf-fa-ban"></i> Rechazar</button>';
+      '<button class="btn btn-sm btn-success resolve-solicitud-btn" data-id="' + s.id + '" data-aprobar="1" title="Aprobar y anular la venta (restaura el stock)"><i class="nf nf-fa-circle_check"></i></button>' +
+      '<button class="btn btn-sm btn-danger resolve-solicitud-btn" data-id="' + s.id + '" data-aprobar="0" title="Rechazar la solicitud (pide el motivo)"><i class="nf nf-fa-circle_xmark"></i></button>';
   } else if (s.resuelto_por) {
     acciones = '<span class="text-muted">Resuelta por ' + escapeHtml(s.resuelto_por) + '</span>';
   }
@@ -41,9 +41,7 @@ function createSolicitudRow(s) {
   var notaRes = s.nota_resolucion
     ? '<div class="text-muted" style="margin-top:4px">Nota: ' + escapeHtml(s.nota_resolucion) + '</div>'
     : '';
-  var tr = document.createElement('tr');
-  tr.innerHTML =
-    '<td>' + formatSolicitudFecha(s.fecha_hora) + '</td>' +
+  var tr = '<td>' + formatSolicitudFecha(s.fecha_hora) + '</td>' +
     '<td>#' + s.venta_id + '</td>' +
     '<td>' + escapeHtml(s.solicitante) + '</td>' +
     '<td>' + motivo + notaRes + '</td>' +
@@ -86,6 +84,18 @@ async function openSolicitudes() {
 
 async function closeSolicitudes() {
   closeModal(qs(SEL.solicitudesModal));
+  refreshSolicitudesBadge();
+}
+
+async function refreshSolicitudesOnly() {
+  if (!currentUserIsAdminS()) return;
+  var btn = qs(SEL.solicitudesRefreshBtn);
+  if (btn) btn.disabled = true;
+  var res = await invokeOrError(invoke('refresh_solicitudes'));
+  if (btn) btn.disabled = false;
+  if (res === undefined) return;
+  showToast(res);
+  await loadSolicitudes();
   refreshSolicitudesBadge();
 }
 

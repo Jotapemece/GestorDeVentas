@@ -51,7 +51,9 @@ async function loadAuditMore() {
       qs(SEL.auditLoadMore).style.display = 'none';
       return;
     }
-    appendRows(tbody, logs, createAuditRow);
+    appendRows(tbody, logs, createAuditRow, function(tr) {
+      tr.classList.add('card-collapsible', 'collapsed');
+    });
     auditOffset += logs.length;
     var hasMore = logs.length >= auditLimit;
     qs(SEL.auditLoadMore).style.display = hasMore ? 'inline-flex' : 'none';
@@ -127,18 +129,7 @@ async function handleThemeClick(theme) {
   } catch (e) { showToast('Error al guardar tema', 'error'); }
 }
 
-/* Share receipt via Web Share API */
-function shareReceipt(venta) {
-  var text = buildReceiptText(venta);
-  if (navigator.share) {
-    navigator.share({ title: 'Recibo Venta #' + venta.id, text: text }).catch(function(e) {
-      if (e && e.name !== 'AbortError') copyReceiptToClipboard(venta);
-    });
-    return;
-  }
-  copyReceiptToClipboard(venta);
-}
-
+/* Share receipt via Web Share API (desde el modal de detalle de venta) */
 function copyReceiptToClipboard(venta) {
   var text = buildReceiptText(venta);
   navigator.clipboard.writeText(text).then(function() {

@@ -222,6 +222,24 @@ function confirmAbono() {
 let historialTasaData = [];
 let selectedTasaFecha = '';
 
+async function openCambiarTasa() {
+  const actual = tasaActual || 0;
+  const nueva = await promptModal('Ingresa la nueva tasa de cambio (Bs. por USD):', 'Cambiar tasa', 'Guardar');
+  if (nueva === null) return;
+  const num = parseFloat(nueva);
+  if (!isFinite(num) || num <= 0) { showToast('Tasa inválida', 'error'); return; }
+  await invokeOrError(invoke('set_tasa', { tasa: num }));
+  tasaActual = num;
+  const input = qs(SEL.tasaInput);
+  if (input) { input.value = num; }
+  const tasaLabel = qs('#tasa-actual-label');
+  if (tasaLabel) tasaLabel.textContent = '(Hoy)';
+  refreshTasaFromInfo();
+  renderCart();
+  loadInventory();
+  showToast('Tasa actualizada a ' + formatBS(num));
+}
+
 async function openTasaHistorialModal() {
   historialTasaData = [];
   selectedTasaFecha = tasaInventarioFecha || '';
@@ -331,7 +349,7 @@ function applyTasaHistorial() {
   var now = new Date();
   var todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
   var label = selectedTasaFecha === todayStr ? 'Hoy' : d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-  qs(SEL.tasaActualLabel).textContent = label;
+  qs(SEL.tasaActualLabel).textContent = '(' + label + ')';
   closeModal(qs(SEL.tasaHistorialModal));
   loadInventory();
   showToast('Usando tasa del ' + label + ': Bs. ' + tasaInventario.toFixed(2), 'info');
@@ -341,7 +359,7 @@ function clearTasaHistorial() {
   tasaInventario = 0;
   tasaInventarioFecha = '';
   selectedTasaFecha = '';
-  qs(SEL.tasaActualLabel).textContent = 'Hoy';
+  qs(SEL.tasaActualLabel).textContent = '(Hoy)';
   closeModal(qs(SEL.tasaHistorialModal));
   loadInventory();
   showToast('Usando tasa actual del d\u00eda', 'info');

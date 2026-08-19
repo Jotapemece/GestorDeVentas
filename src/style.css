@@ -543,6 +543,18 @@ body.no-animations *::after {
 /* --- SALES VIEW --- */
 #view-sales.active { display: flex; flex-direction: column; overflow: hidden; }
 
+.sales-brand {
+  padding: 18px 24px 6px;
+  text-align: center;
+}
+.sales-brand-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--primary);
+  text-transform: uppercase;
+}
 .sales-header {
   height: auto; min-height: 56px;
   display: flex; justify-content: space-between; align-items: flex-start;
@@ -987,6 +999,9 @@ th .col-toggle-btn { float: none; display: inline; }
 .summary-icon { font-size: 24px; margin-bottom: 8px; display: inline-block; }
 .summary-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); margin-bottom: 8px; }
 .summary-value { font-size: 24px; font-weight: 700; color: var(--text); }
+/* Card "Ajustar efectivo" (móvil): solo visible en teléfono; en desktop el
+   botón vive dentro de #saldo-card. */
+.ajustar-efectivo-card { display: none; }
 
 /* CAJA STATUS */
 .caja-status {
@@ -1019,6 +1034,15 @@ th .col-toggle-btn { float: none; display: inline; }
 .modal-lg { width: 700px; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); }
 .modal-header h3 { font-size: 18px; }
+/* Modal de anulación: icono grande arriba + nota obligatoria */
+.void-modal-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; margin: 16px auto 0; border-radius: 50%;
+  background: rgba(var(--danger-rgb, 220, 53, 69), 0.12); color: var(--danger);
+  font-size: 24px;
+}
+.void-modal-icon .nf { margin: 0; }
+#void-sale-modal .modal-header { padding-top: 4px; }
 .modal-close { font-size: 24px; cursor: pointer; color: var(--text-light); transition: color 0.2s; }
 .modal-close:hover { color: var(--text); }
 .modal-body { padding: 20px 24px; }
@@ -1424,7 +1448,9 @@ th .col-toggle-btn { float: none; display: inline; }
 .compact .reports-filter-row .form-group { min-width: 100px; }
 .compact .report-summary-cards { gap: 8px; }
 @media (max-width: 480px) {
-  .report-summary-cards { grid-template-columns: 1fr; gap: 10px; }
+  .compact .report-summary-cards { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .compact .report-summary-cards .summary-card { padding: 8px 4px; }
+  .compact .report-summary-cards .summary-value { font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
 }
 
 /* PAGINATION */
@@ -1762,6 +1788,7 @@ th .col-toggle-btn { float: none; display: inline; }
   .btn { padding: 10px 16px; }
   .btn-sm { padding: 8px 12px; font-size: 13px; min-height: 44px; }
   .cart-qty-input { min-height: 44px; font-size: 16px; width: 60px; }
+  .cart-qty-btn { min-width: 44px; min-height: 44px; font-size: 18px; }
 
  
   /* Sales body: flex column with resizable panels */
@@ -1773,6 +1800,8 @@ th .col-toggle-btn { float: none; display: inline; }
   .sales-divider::before { width: 36px; height: 4px; }
 
   /* Sales header: search stacked + tasa side */
+  .sales-brand { padding: 12px 12px 2px; }
+  .sales-brand-title { font-size: 20px; }
   .sales-header { flex-direction: row; flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 6px; }
   .sales-header-left { flex: 1; min-width: 0; order: 1; }
   .tasa-input-group { order: 2; margin-left: auto; flex-shrink: 0; }
@@ -1829,16 +1858,26 @@ th .col-toggle-btn { float: none; display: inline; }
   .theme-selector { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
   .theme-btn { padding: 10px 8px; min-width: 0; gap: 2px; font-size: 11px; }
 
-  /* Summary cards: stack */
-  .summary-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .summary-card { padding: 12px; }
-  .summary-value { font-size: 18px; }
+  /* Summary cards: cuadrados compactos */
+  .compact .summary-cards { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .compact .summary-card { aspect-ratio: 1 / 1; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .compact .summary-icon { font-size: 20px; margin-bottom: 6px; }
+  .compact .summary-label { font-size: 10px; margin-bottom: 4px; }
+  .compact .summary-value { font-size: 17px; }
 
   /* View headers: stack */
   .view-header { flex-direction: column; align-items: flex-start; gap: 8px; }
   #view-config .view-header { flex-direction: row; align-items: center; }
   #view-config .view-header h2 { flex: 1; }
   .view-header h2 { font-size: 17px; }
+  /* Auditoría: título y botón "Limpiar" en la misma fila, filtros en 2 columnas */
+  #view-audit .view-header { flex-direction: row; align-items: center; }
+  #view-audit .view-header h2 { flex: 1; }
+  #view-audit .audit-actions { margin-left: 0; }
+  #view-audit .audit-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+  #view-audit .audit-filters .form-group { min-width: 0; width: 100%; }
+  #view-audit .audit-filters .form-group:first-child { grid-column: 1 / -1; }
+  #view-audit .audit-filters .form-group:last-child { grid-column: 1 / -1; }
 
   /* Search/filter: input full width, buttons in a horizontal row */
   #view-inventory .search-box { flex-direction: row; flex-wrap: wrap; align-items: center; }
@@ -1889,7 +1928,10 @@ th .col-toggle-btn { float: none; display: inline; }
 
   /* Login/registro: scroll cuando el teclado reduce la altura */
   #login-screen, #device-reg-screen { overflow-y: auto; }
-  #login-screen .login-card, #device-reg-screen .login-card { margin: auto; }
+  /* Centra el grupo (greeting + card) como en PC; con teclado abierto los auto-margins colapsan y scrollea */
+  #login-screen .login-greeting { margin-top: auto; }
+  #login-screen .login-card { margin: 0 auto auto; }
+  #device-reg-screen .login-card { margin: auto; }
 
   /* Larger cart controls on mobile */
   .cart-qty-btn { width: 44px; height: 44px; font-size: 20px; }
@@ -1924,7 +1966,18 @@ th .col-toggle-btn { float: none; display: inline; }
 
 @media (max-width: 480px) {
   .theme-selector { grid-template-columns: 1fr 1fr 1fr; }
-  .summary-cards { grid-template-columns: 1fr; }
+  .compact .summary-cards { grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 14px; }
+  .compact .summary-card { aspect-ratio: 1 / 1; padding: 8px 4px; overflow: hidden; }
+  .compact .summary-icon { font-size: 16px; margin-bottom: 4px; }
+  .compact .summary-label { font-size: 8px; margin-bottom: 2px; }
+  .compact .summary-value { font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
+  #saldo-card #ajustar-efectivo-btn { display: none !important; }
+  .ajustar-efectivo-card { display: flex; }
+  .ajustar-efectivo-card .summary-label { font-size: 8px; }
+  .ajustar-efectivo-card #ajustar-efectivo-btn-mobile {
+    font-size: 11px; padding: 5px 8px; min-height: 0; margin-top: 2px;
+  }
+  #saldo-card .summary-value { font-size: 14px; }
   .payment-totals { grid-template-columns: 1fr; gap: 6px; }
   .payment-methods { grid-template-columns: 1fr 1fr; }
   .payment-method-btn { padding: 10px 6px; font-size: 12px; }
@@ -2442,6 +2495,18 @@ th .col-toggle-btn { float: none; display: inline; }
 }
 .sale-note strong { color: var(--primary-dark); }
 
+.sale-detail-pagos {
+  background: color-mix(in srgb, var(--primary) 14%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  color: var(--text);
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;
+  font-size: 13px; line-height: 1.5;
+}
+.sale-detail-pagos strong { color: var(--primary-dark); }
+.sale-detail-pagos .mixto-method { margin: 2px 0; }
+.sale-detail-pagos .mixto-method-label { font-weight: 600; }
+
+
 /* ========== TABLE SORTING ========== */
 th[data-sortable] { cursor: pointer; user-select: none; white-space: nowrap; }
 th[data-sortable]:hover { opacity: 0.85; }
@@ -2588,6 +2653,10 @@ th[data-sortable].sort-asc .sort-arrow, th[data-sortable].sort-desc .sort-arrow 
 .movimientos-totals span { display: flex; align-items: center; gap: 4px; }
 .movimientos-totals strong { color: var(--primary); }
 .movimientos-list { max-height: 300px; overflow-y: auto; }
+.movimientos-filter { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.movimientos-filter-label { font-size: 12px; color: var(--text-light); font-weight: 600; }
+.movimientos-filter .form-input { width: 130px; }
+#historial-cierres-list { max-height: 55vh; overflow-y: auto; }
 .movimiento-item {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px;
   border-bottom: 1px solid var(--border); font-size: 13px;
@@ -2864,7 +2933,7 @@ body.no-animations .product-hover-card {
   .sales-center {
     position: fixed; left: 0; right: 0; bottom: 0; top: auto;
     width: 100%; height: 56vh; height: 56dvh; max-height: 88dvh;
-    z-index: 995; flex: none;
+    z-index: 1001; flex: none;
     border-radius: 16px 16px 0 0; background: var(--card);
     box-shadow: 0 -8px 32px rgba(0,0,0,.28);
     transform: translateY(105%); transition: transform .25s ease-out;
@@ -2909,11 +2978,14 @@ body.no-animations .product-hover-card {
   }
   .cart-fab.no-items { display: none; }
   .cart-fab .cart-badge { position: absolute; top: -4px; right: -4px; }
-  .cart-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 990; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .cart-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; opacity: 0; pointer-events: none; transition: opacity .2s; }
   body.cart-open .cart-backdrop { opacity: 1; pointer-events: auto; }
 
   /* --- Tables → cards --- */
-  .table-container:has(.table-cards) { overflow-x: visible; }
+  /* En móvil los table-cards apilan como tarjetas y el contenedor crece; no
+     hay scroll horizontal/vertical. `overflow: visible` deja que los menús
+     desplegables de los 3 puntos (position: absolute) salgan sin recortarse. */
+  .table-container:has(.table-cards) { overflow: visible; }
   .table-cards thead { display: none; }
   .table-cards { border-collapse: separate; border-spacing: 0 8px; display: block; }
   .table-cards tbody { display: block; }
@@ -2947,6 +3019,11 @@ body.no-animations .product-hover-card {
   .table-cards td[data-label="Total ($)"], .table-cards td[data-label="Total (Bs.)"] { color: var(--primary); font-weight: 700; }
 
   /* --- Collapsible cards (inventory + creditos) --- */
+  /* El menú de acciones (3 puntos) debe pintarse POR ENCIMA de la flecha de
+   * colapso: el chevron con rotate() crea un stacking context propio que antes
+   * tapaba el dropdown. Se sube el menú y se aísla el toggle. */
+  .table-cards .dropdown-menu { z-index: 1000; }
+  .table-cards tr.card-collapsible td.cell-toggle { position: relative; z-index: 1; }
   .table-cards tr.card-collapsible td.cell-toggle {
     display: flex; align-items: center; justify-content: center;
     padding: 4px 0; border: none;
@@ -2999,6 +3076,7 @@ body.no-animations .product-hover-card {
     content: "\f1b2"; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 12px;
   }
   .table-cards tr.card-collapsible.collapsed td.cell-status { font-size: 11px; }
+  .table-cards tr.card-collapsible.collapsed td.cell-name.sale-anulada { color: var(--danger); }
   .table-cards tr.card-collapsible.collapsed td.cell-toggle { margin-left: auto; }
 
   /* Reports: hide low-priority cost/margin columns on phone */

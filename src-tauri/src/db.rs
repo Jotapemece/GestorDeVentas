@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 use tauri::AppHandle;
-#[cfg(target_os = "android")]
 use tauri::Manager;
 
 #[cfg(not(target_os = "android"))]
@@ -326,8 +325,20 @@ fn decrypt_file(src: &Path, key: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|_| "Error al descifrar: clave incorrecta o archivo dañado".to_string())
 }
 
-fn sanitize_backup_path(path: &Path, db_path: &Path) -> Result<(), String> {
-    let canonical = path
+/// Valida que el destino del backup esté en un directorio permitido (directorio
+/// de la BD, temporal o de caché). `extra_allowed` permite añadir directorios
+/// adicionales (p. ej. el app_cache_dir de Android). Se valida contra el
+/// **directorio padre** del archivo destino (que sí existe), porque el archivo
+/// puede ser un nombre nuevo que todavía no existe en disco.
+fn sanitize_backup_path(
+    path: &Path,
+    db_path: &Path,
+    extra_allowed: &[&Path],
+) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Ruta no válida: {}", path.display()))?;
+    let canonical_parent = parent
         .canonicalize()
         .map_err(|_| format!("Ruta no válida: {}", path.display()))?;
     let db_dir = db_path
@@ -336,7 +347,12 @@ fn sanitize_backup_path(path: &Path, db_path: &Path) -> Result<(), String> {
         .canonicalize()
         .map_err(|_| "No se pudo resolver el directorio de la BD".to_string())?;
     let temp_dir = std::env::temp_dir().canonicalize().unwrap_or_default();
-    if canonical.starts_with(&db_dir) || canonical.starts_with(&temp_dir) {
+    if canonical_parent.starts_with(&db_dir)
+        || canonical_parent.starts_with(&temp_dir)
+        || extra_allowed.iter().any(|d| {
+            d.canonicalize().map_or(false, |cd| canonical_parent.starts_with(&cd))
+        })
+    {
         return Ok(());
     }
     Err("La ruta del backup debe estar en el directorio de la BD o en el directorio temporal".to_string())
@@ -347,24 +363,36 @@ pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<Stri
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
     let db = state.lock_db()?;
     let _admin = crate::auth::require_admin(&state, &db, "Respaldó la base de datos")?;
-    do_backup(&db, &db_path, if dest_path.is_empty() { None } else { Some(&dest_path) })
+    do_backup(&db, &db_path, if dest_path.is_empty() { None } else { Some(&dest_path) }, &[])
 }
 
-/// Genera un backup cifrado en el directorio temporal y devuelve su contenido en
-/// base64 con el nombre de archivo sugerido. Pensado para Android, donde el
-/// frontend entrega el resultado a la carpeta Descargas vía plugin.
+/// Genera un backup cifrado en el directorio de caché de la app y devuelve su
+/// contenido en base64 con el nombre de archivo sugerido. Pensado para Android,
+/// donde el frontend entrega el resultado a la carpeta Descargas vía plugin.
 #[tauri::command]
-pub fn backup_database_b64(state: State<AppState>) -> Result<serde_json::Value, String> {
+pub fn backup_database_b64(app: tauri::AppHandle, state: State<AppState>) -> Result<serde_json::Value, String> {
     use base64::Engine;
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
     let db = state.lock_db()?;
     let _admin = crate::auth::require_admin(&state, &db, "Respaldó la base de datos")?;
 
-    let dest = std::env::temp_dir().join("gestor_ventas_backup_download.enc");
-    let _msg = do_backup(&db, &db_path, Some(dest.to_str().unwrap_or_default()))?;
+    let cache_dir = app.path().app_cache_dir().map_err(|e| format!("Error al resolver caché: {}", e))?;
+    std::fs::create_dir_all(&cache_dir).map_err(|e| format!("Error al crear directorio de caché: {}", e))?;
+    let dest = cache_dir.join("gestor_ventas_backup_download.enc");
+    let allowed: [&Path; 1] = [cache_dir.as_path()];
+    let _msg = do_backup(&db, &db_path, Some(dest.to_str().unwrap_or_default()), &allowed)?;
 
     let bytes = std::fs::read(&dest).map_err(|e| format!("Error al leer backup: {}", e))?;
     let _ = std::fs::remove_file(&dest);
+    // El payload se entrega al WebView por IPC (no por archivo): limitar su
+    // tamaño para evitar OOM/truncado en teléfonos con BDs grandes.
+    const MAX_BACKUP_B64_BYTES: usize = 50 * 1024 * 1024;
+    if bytes.len() > MAX_BACKUP_B64_BYTES {
+        return Err(format!(
+            "La base de datos es demasiado grande para exportar desde el teléfono ({} MB). Usa un backup en la PC.",
+            bytes.len() / (1024 * 1024)
+        ));
+    }
     let file_name = format!(
         "gestor_ventas_backup_{}.enc",
         chrono::Local::now().format("%Y%m%d_%H%M%S")
@@ -447,6 +475,7 @@ pub fn do_backup(
     db: &rusqlite::Connection,
     db_path: &std::path::Path,
     dest_path: Option<&str>,
+    extra_allowed_dirs: &[&Path],
 ) -> Result<String, String> {
     let key = ensure_backup_key(db)?;
 
@@ -457,7 +486,7 @@ pub fn do_backup(
 
     let backup_path = if let Some(dest) = dest_path.filter(|d| !d.is_empty()) {
         let p = std::path::PathBuf::from(dest);
-        sanitize_backup_path(&p, db_path)?;
+        sanitize_backup_path(&p, db_path, extra_allowed_dirs)?;
         p
     } else {
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
@@ -521,7 +550,7 @@ pub fn ensure_daily_backup(state: &AppState) -> Result<Option<String>, String> {
     if last == today {
         return Ok(None);
     }
-    let msg = do_backup(&db, &db_path, None)?;
+    let msg = do_backup(&db, &db_path, None, &[])?;
     crate::db::set_config_value(&db, constants::CFG_ULTIMO_BACKUP_DIARIO, &today)?;
     Ok(Some(msg))
 }
@@ -534,7 +563,7 @@ pub fn restore_backup(state: State<AppState>, backup_path: String) -> Result<Str
     )?;
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
     let src = PathBuf::from(&backup_path);
-    sanitize_backup_path(&src, &db_path)?;
+    sanitize_backup_path(&src, &db_path, &[])?;
     if !src.exists() {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
             crate::db::rate_limit_fail(&mut attempts, "restore_backup");

@@ -269,9 +269,37 @@ fn validate_pay_debt_request(request: &PayDebtRequest) -> Result<(), String> {
 /// Concepto legible del movimiento de caja generado por un pago/abono de deuda.
 /// El método se muestra como "Crédito (Biopago)" para cualquier método excepto
 /// pago móvil, donde se usa "Pago Móvil: ref" (mantiene la referencia de 4 dígitos).
-fn abono_concepto(cliente_id: i64, metodo_pago: &str, referencia_movil: Option<&str>) -> String {
+/// Para pagos mixtos se desglosa cada método con su monto y la referencia (si la hay).
+fn abono_concepto(
+    cliente_id: i64,
+    metodo_pago: &str,
+    referencia_movil: Option<&str>,
+    pago_detalle: Option<&[PagoItem]>,
+) -> String {
     let mut concepto = format!("Abono deuda - Cliente #{} - ", cliente_id);
-    if metodo_pago == constants::METODO_PAGO_MOVIL {
+    if metodo_pago == constants::METODO_MIXTO {
+        if let Some(items) = pago_detalle {
+            if !items.is_empty() {
+                let partes: Vec<String> = items
+                    .iter()
+                    .map(|item| {
+                        let mut parte = format!("{} ${:.2}", constants::metodo_label(&item.metodo), item.monto_usd);
+                        if item.metodo == constants::METODO_PAGO_MOVIL {
+                            if let Some(ref r) = item.referencia {
+                                if !r.is_empty() {
+                                    parte.push_str(&format!(" (ref {})", r));
+                                }
+                            }
+                        }
+                        parte
+                    })
+                    .collect();
+                concepto.push_str(&format!("Mixto ({})", partes.join(", ")));
+                return concepto;
+            }
+        }
+        concepto.push_str("Mixto");
+    } else if metodo_pago == constants::METODO_PAGO_MOVIL {
         concepto.push_str("Pago Móvil");
         if let Some(ref_movil) = referencia_movil {
             if !ref_movil.is_empty() {
@@ -352,7 +380,12 @@ fn pay_debt_inner(
     // movimiento tipo 'ingreso' indicando el método de pago usado.
     let tasa = crate::db::get_tasa_from_db(tx).unwrap_or(0.0);
     let monto_bs = request.monto_usd * tasa;
-    let concepto = abono_concepto(request.cliente_id, &request.metodo_pago, request.referencia_pago_movil.as_deref());
+    let concepto = abono_concepto(
+        request.cliente_id,
+        &request.metodo_pago,
+        request.referencia_pago_movil.as_deref(),
+        request.pago_detalle.as_deref(),
+    );
     tx.execute(
         "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username) \
          VALUES ('ingreso', ?1, ?2, ?3, ?4, ?5)",
@@ -592,27 +625,43 @@ mod tests {
 
     #[test]
     fn test_abono_concepto_efectivo() {
-        let c = abono_concepto(7, "efectivo_usd", None);
+        let c = abono_concepto(7, "efectivo_usd", None, None);
         assert_eq!(c, "Abono deuda - Cliente #7 - Crédito (Efectivo USD)");
     }
 
     #[test]
     fn test_abono_concepto_biopago() {
-        let c = abono_concepto(7, "biopago", None);
+        let c = abono_concepto(7, "biopago", None, None);
         assert_eq!(c, "Abono deuda - Cliente #7 - Crédito (Biopago)");
     }
 
     #[test]
     fn test_abono_concepto_pago_movil_con_ref() {
-        let c = abono_concepto(7, "pago_movil", Some("1234"));
+        let c = abono_concepto(7, "pago_movil", Some("1234"), None);
         assert_eq!(c, "Abono deuda - Cliente #7 - Pago Móvil: 1234");
     }
 
     #[test]
     fn test_abono_concepto_pago_movil_sin_ref() {
-        let c = abono_concepto(7, "pago_movil", None);
+        let c = abono_concepto(7, "pago_movil", None, None);
         assert_eq!(c, "Abono deuda - Cliente #7 - Pago Móvil");
         assert!(!c.contains("Ref:"));
+    }
+
+    #[test]
+    fn test_abono_concepto_mixto_con_detalle() {
+        let detalle = vec![
+            PagoItem { metodo: constants::METODO_EFECTIVO_BS.to_string(), monto_usd: 5.0, referencia: None },
+            PagoItem { metodo: constants::METODO_PAGO_MOVIL.to_string(), monto_usd: 20.0, referencia: Some("7890".to_string()) },
+        ];
+        let c = abono_concepto(7, constants::METODO_MIXTO, None, Some(&detalle));
+        assert_eq!(c, "Abono deuda - Cliente #7 - Mixto (Efectivo Bs. $5.00, Pago Móvil $20.00 (ref 7890))");
+    }
+
+    #[test]
+    fn test_abono_concepto_mixto_sin_detalle() {
+        let c = abono_concepto(7, constants::METODO_MIXTO, None, None);
+        assert_eq!(c, "Abono deuda - Cliente #7 - Mixto");
     }
 
     fn insertar_usuario_rol(conn: &rusqlite::Connection, id: i64, username: &str, rol: &str) {
@@ -730,6 +779,43 @@ mod tests {
             .unwrap();
         assert_eq!(tipo, "ingreso");
         assert_eq!(concepto, "Abono deuda - Cliente #1 - Pago Móvil: 7890");
+    }
+
+    #[test]
+    fn test_pay_debt_mixto_registra_ingreso_caja_con_desglose() {
+        let mut conn = crate::db::test_support::test_conn();
+        insertar_cliente_con_deuda(&conn, 1, "Cliente", 80.0);
+        crate::db::set_config_value(&conn, "tasa_dolar", "10.0").unwrap();
+        let req = PayDebtRequest {
+            cliente_id: 1,
+            monto_usd: 50.0,
+            metodo_pago: constants::METODO_MIXTO.to_string(),
+            referencia_pago_movil: None,
+            pago_detalle: Some(vec![
+                PagoItem {
+                    metodo: constants::METODO_EFECTIVO_BS.to_string(),
+                    monto_usd: 30.0,
+                    referencia: None,
+                },
+                PagoItem {
+                    metodo: constants::METODO_PAGO_MOVIL.to_string(),
+                    monto_usd: 20.0,
+                    referencia: Some("5566".to_string()),
+                },
+            ]),
+        };
+        let tx = conn.transaction().unwrap();
+        pay_debt_inner(&tx, &req, constants::DEFAULT_ADMIN_USERNAME, 1).unwrap();
+        tx.commit().unwrap();
+        // El concepto del ingreso de caja desglosa cada método del pago mixto,
+        // con su monto en USD y la referencia del pago móvil.
+        let concepto: String = conn
+            .query_row("SELECT concepto FROM movimientos_caja WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            concepto,
+            "Abono deuda - Cliente #1 - Mixto (Efectivo Bs. $30.00, Pago Móvil $20.00 (ref 5566))"
+        );
     }
 
     #[test]

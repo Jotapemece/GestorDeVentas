@@ -325,7 +325,7 @@ describe('createReportRow', () => {
     var ganancia = v.venta.total_usd - costoTotal;
     const vv = v.venta;
     const obs = vv.nota ? escapeHtml(vv.nota) : '';
-    const detailBtn = '<button class="sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-tasa="' + (vv.tasa_aplicada || '') + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
+    const detailBtn = '<button class="sale-detail-btn" data-id="' + vv.id + '" data-total="' + vv.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(vv.username) + '" data-fecha="' + escapeHtml(vv.fecha_hora) + '" data-tasa="' + (vv.tasa_aplicada || '') + '" data-nota="' + notaEsc + '" data-obs="' + obs + '" data-pago-detalle="' + escapeHtml(vv.pago_detalle || '') + '" title="Ver detalles"><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
     const menu = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + detailBtn + '</div></div>';
     return '<td data-label="#">' + vv.id + '</td><td data-label="Fecha">' + escapeHtml(formatDateTime(vv.fecha_hora)) + '</td><td data-label="Usuario">' + escapeHtml(vv.username) + '</td><td data-label="Método">' + escapeHtml(metodoLabel) + '</td><td data-label="Prod.">' + prodCount + '</td><td data-label="Total ($)">' + formatUSD(vv.total_usd) + '</td><td data-label="Costo ($)">' + formatUSD(costoTotal) + '</td><td data-label="Ganancia ($)">' + formatUSD(Math.max(0, ganancia)) + '</td><td data-label="Total (Bs.)">' + formatBS(vv.total_bs) + badge + '</td><td data-label="Acción">' + menu + '</td>';
   }
@@ -408,7 +408,7 @@ describe('createDailySaleRow', () => {
           ? '<span class="badge badge-danger" title="' + nota + '"><i class="nf nf-fa-ban"></i> Anulada</span>'
           : '<span class="badge badge-danger"><i class="nf nf-fa-ban"></i> Anulada</span>')
       : '';
-    const detailAttrs = 'data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-tasa="' + (v.tasa_aplicada || '') + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '"';
+    const detailAttrs = 'data-id="' + v.id + '" data-total="' + v.total_usd + '" data-metodo="' + escapeHtml(metodoLabel) + '" data-usuario="' + escapeHtml(v.username) + '" data-fecha="' + escapeHtml(v.fecha_hora) + '" data-tasa="' + (v.tasa_aplicada || '') + '" data-nota="' + nota + '" data-obs="' + (v.nota ? escapeHtml(v.nota) : '') + '" data-pago-detalle="' + escapeHtml(v.pago_detalle || '') + '"';
     const detailItem = '<button class="sale-detail-btn" ' + detailAttrs + '><i class="nf nf-fa-receipt"></i> Ver detalle</button>';
     const canVoid = currentUser && currentUser.rol === ROL_ADMIN;
     const voidItem = (v.anulada || !canVoid)
@@ -794,5 +794,60 @@ describe('initTableSorting — sin bucle infinito', () => {
     await new Promise(r => setTimeout(r, 0));
     const order = Array.from(tbody.children).map(r => r.textContent);
     expect(order).toEqual(['Alfa', 'Milo', 'Zeta']);
+  });
+});
+
+describe('buildMixtoDetailHtml (desglose de pago mixto en detalle de venta)', () => {
+  const METODO_LABELS = { efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago', punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto' };
+  function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
+  function formatUSD(v) { return '$' + v.toFixed(2); }
+  function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
+  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
+
+  function buildMixtoDetailHtml(pagoDetalleJson, tasa) {
+    if (!pagoDetalleJson) return '';
+    var items = null;
+    try { items = JSON.parse(pagoDetalleJson); } catch (e) { return ''; }
+    if (!Array.isArray(items) || items.length === 0) return '';
+    var tasaOk = isFinite(tasa) && tasa > 0;
+    var rows = items.map(function(item) {
+      var label = formatMetodoLabel(item.metodo);
+      var usd = formatUSD(item.monto_usd || 0);
+      var bs = tasaOk ? ' (' + formatBS((item.monto_usd || 0) * tasa) + ')' : '';
+      var ref = item.referencia ? ' <span class="text-muted">ref ' + escapeHtml(item.referencia) + '</span>' : '';
+      return '<div class="mixto-method"><span class="mixto-method-label">' + escapeHtml(label) + ':</span> ' + usd + bs + ref + '</div>';
+    });
+    return '<div class="mixto-pago-desglose"><strong>Pago:</strong>' + rows.join('') + '</div>';
+  }
+
+  it('desglosa métodos con USD y Bs usando la tasa', () => {
+    const json = JSON.stringify([
+      { metodo: 'efectivo_bs', monto_usd: 1.4, referencia: null },
+      { metodo: 'punto', monto_usd: 25, referencia: null }
+    ]);
+    const html = buildMixtoDetailHtml(json, 100);
+    expect(html).toContain('Efectivo Bs.:');
+    expect(html).toContain('$1.40');
+    expect(html).toContain('(Bs. 140,00)');
+    expect(html).toContain('Punto:');
+    expect(html).toContain('$25.00');
+    expect(html).toContain('(Bs. 2500,00)');
+  });
+
+  it('incluye la referencia del pago móvil', () => {
+    const json = JSON.stringify([
+      { metodo: 'efectivo_usd', monto_usd: 5, referencia: null },
+      { metodo: 'pago_movil', monto_usd: 10, referencia: '1234' }
+    ]);
+    const html = buildMixtoDetailHtml(json, 40);
+    expect(html).toContain('ref 1234');
+    expect(html).toContain('$10.00');
+  });
+
+  it('sin pago_detalle o JSON inválido devuelve string vacío', () => {
+    expect(buildMixtoDetailHtml(null, 40)).toBe('');
+    expect(buildMixtoDetailHtml('', 40)).toBe('');
+    expect(buildMixtoDetailHtml('{no-json', 40)).toBe('');
+    expect(buildMixtoDetailHtml('[]', 40)).toBe('');
   });
 });

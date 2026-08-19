@@ -1,5 +1,6 @@
 mod auth;
 mod alertas;
+mod app;
 mod audit;
 mod cashier;
 mod clients;
@@ -151,12 +152,14 @@ pub fn run() {
             sync::download_usuarios,
             sync::register_device,
             sync::is_device_registered,
+            sync::recover_device,
             sync::list_dispositivos,
             sync::get_conflictos,
             sync::resolve_conflicto,
             sync::upload_all,
             sync::download_all,
             sync::sync_all,
+            sync::refresh_solicitudes,
             sync::get_sync_stats,
             sync::test_supabase_connection,
             sync::preview_download,
@@ -168,6 +171,8 @@ pub fn run() {
             // OpenRouter
             openrouter::generate_purchase_suggestion,
             openrouter::chat_with_ai,
+            // App
+            app::exit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

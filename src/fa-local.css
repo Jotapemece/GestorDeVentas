@@ -21,6 +21,7 @@
 .nf-fa-archive::before { content: "\f187"; }
 .nf-fa-credit_card::before { content: "\f09d"; }
 .nf-fa-money::before { content: "\f0d6"; }
+.nf-fa-arrow_right_arrow_left::before { content: "\f2f1"; }
 .nf-fa-users::before { content: "\f0c0"; }
 .nf-fa-user::before { content: "\f007"; }
 .nf-fa-history::before { content: "\f1da"; }
@@ -68,6 +69,8 @@
 .nf-fa-keyboard::before { content: "\f11c"; }
 .nf-fa-calculator::before { content: "\f1ec"; }
 .nf-fa-circle::before { content: "\f111"; }
+.nf-fa-circle_check::before { content: "\f058"; }
+.nf-fa-circle_xmark::before { content: "\f057"; }
 .nf-fa-chevron_down::before { content: "\f078"; }
 .nf-fa-edit::before { content: "\f044"; }
 .nf-fa-cloud_upload::before { content: "\f0ee"; }

@@ -187,9 +187,53 @@ pub fn is_device_registered(state: State<AppState>) -> Result<bool, String> {
         .len() > 0)
 }
 
+/// Auto-recuperación pre-login (público): si no hay dispositivo local, busca la
+/// huella del hardware en Supabase y, si existe (instalación previa), la guarda
+/// en config local para no volver a mostrar la pantalla de registro. Devuelve
+/// `false` si la huella NO existe aún o si hay error de red (la UI entonces
+/// muestra la pantalla de registro normal).
+#[tauri::command]
+pub fn recover_device(state: State<AppState>) -> Result<bool, String> {
+    let (supabase_url, supabase_key) = {
+        let db = state.lock_db()?;
+        if let Ok(id) = super::get_config(&db, constants::CFG_DISPOSITIVO_ID) {
+            return Ok(!id.is_empty());
+        }
+        supabase_config(&db)?
+    };
+
+    let huella = match get_fingerprint() {
+        Ok(h) => h,
+        Err(_) => return Ok(false),
+    };
+
+    let search_url = api_url(
+        &supabase_url,
+        &format!("/dispositivos?huella=eq.{}&select=id", urlencoding(&huella)),
+    );
+
+    // F6: propagar el error de red (NO `unwrap_or_default`): si la búsqueda
+    // falla, devolver false para que la UI muestre la pantalla de registro
+    // (que reintentará). No crear duplicados.
+    let existing = match supabase_get(&search_url, &supabase_key) {
+        Ok(resp) => resp,
+        Err(_) => return Ok(false),
+    };
+
+    if let Some(device) = existing.first() {
+        if let Some(existing_id) = device["id"].as_str() {
+            let db = state.lock_db()?;
+            upsert_config(&db, constants::CFG_DISPOSITIVO_ID, existing_id);
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
 #[tauri::command]
 pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
+    crate::auth::check_employee_role(&state)?;
     let (supabase_url, supabase_key, dispositivo_id) = {
         let db = state.secondary_conn()?;
         let (u, k) = supabase_config(&db)?;
@@ -222,7 +266,7 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
 
 #[tauri::command]
 pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
+    crate::auth::check_employee_role(&state)?;
     let (supabase_url, supabase_key, dispositivo_id) = {
         let db = state.secondary_conn()?;
         { let (u,k)=supabase_config(&db)?; (u, k, get_config(&db, constants::CFG_DISPOSITIVO_ID)?) }
@@ -231,8 +275,8 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
     let steps: Vec<(&str, fn(&Connection, &str, &str, &str) -> Result<String, String>)> = vec![
         ("productos", download_products_inner),
         ("clientes", download_clientes_inner),
-        ("ventas", download_sales_inner),
         ("usuarios", download_usuarios_inner),
+        ("ventas", download_sales_inner),
         ("alertas", download_alertas_inner),
         ("solicitudes", download_solicitudes_inner),
     ];
@@ -267,8 +311,8 @@ pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<
         ("solicitudes", upload_solicitudes_inner),
         ("productos", download_products_inner),
         ("clientes", download_clientes_inner),
-        ("ventas", download_sales_inner),
         ("usuarios", download_usuarios_inner),
+        ("ventas", download_sales_inner),
         ("alertas", download_alertas_inner),
         ("solicitudes", download_solicitudes_inner),
     ];
@@ -281,6 +325,35 @@ pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<
         let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
         let r = f(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
         tx.commit().map_err(|e| format!("Error al confirmar sincronización: {}", e))?;
+        parts.push(r);
+    }
+    Ok(parts.join("\n"))
+}
+
+/// Sube y descarga SOLO las solicitudes de anulación (botón "Refrescar" del
+/// modal de solicitudes). Admin-only. Tx cortas por etapa, sin bloquear la BD
+/// durante la red.
+#[tauri::command]
+pub fn refresh_solicitudes(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
+    let (supabase_url, supabase_key, dispositivo_id) = {
+        let db = state.secondary_conn()?;
+        { let (u, k) = supabase_config(&db)?; (u, k, get_config(&db, constants::CFG_DISPOSITIVO_ID)?) }
+    };
+
+    let mut parts = Vec::new();
+    let steps: Vec<(&str, fn(&Connection, &str, &str, &str) -> Result<String, String>)> = vec![
+        ("solicitudes", upload_solicitudes_inner),
+        ("solicitudes", download_solicitudes_inner),
+    ];
+    let total = steps.len() as u32;
+    for (i, (label, f)) in steps.iter().enumerate() {
+        let verb = if i == 0 { "Subiendo" } else { "Descargando" };
+        emit_progress(&app_handle, &format!("{} {}...", verb, label), i as u32 + 1, total);
+        let mut db = state.secondary_conn()?;
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+        let r = f(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+        tx.commit().map_err(|e| format!("Error al confirmar solicitudes: {}", e))?;
         parts.push(r);
     }
     Ok(parts.join("\n"))
@@ -351,11 +424,27 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
         "SELECT COUNT(*) FROM clientes WHERE (updated_at IS NULL OR updated_at = '' OR sync_id IS NULL OR sync_id = '' OR updated_at > ?1)",
         constants::CFG_ULTIMO_UPLOAD_CLIENTES,
     );
-    let pending_ventas = count_pending(
-        "SELECT COUNT(*) FROM ventas WHERE sync_id IS NOT NULL AND sync_id != '' AND updated_at > ?1",
-        constants::CFG_ULTIMO_UPLOAD_VENTAS,
-    );
-    let pending_total = pending_products + pending_clientes + pending_ventas;
+    let pending_ventas = {
+        // Solo ventas HECHAS en este dispositivo (o sin origen, las de antes de
+        // la columna): las descargadas de otros dispositivos traen su
+        // `dispositivo_origen` y NO deben inflar el badge de "pendientes de
+        // subir" (ya están en Supabase).
+        let wm = crate::db::get_config_value(&db, constants::CFG_ULTIMO_UPLOAD_VENTAS)
+            .ok()
+            .flatten()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_string());
+        let local_id = gc(constants::CFG_DISPOSITIVO_ID);
+        db.prepare_cached(
+            "SELECT COUNT(*) FROM ventas WHERE sync_id IS NOT NULL AND sync_id != '' AND updated_at > ?1 AND (dispositivo_origen = '' OR dispositivo_origen = ?2)",
+        )
+            .ok()
+            .and_then(|mut s| s.query_row(rusqlite::params![wm, local_id], |r| r.get(0)).ok())
+            .unwrap_or(0)
+    };
+    // El badge solo refleja ventas locales pendientes de subir; productos y
+    // clientes se mantienen como campos informativos (contexto del chat).
+    let pending_total = pending_ventas;
 
     Ok(SyncStats {
         active_products,
@@ -379,7 +468,7 @@ pub fn get_sync_stats(state: State<AppState>) -> Result<SyncStats, String> {
 
 #[tauri::command]
 pub fn list_dispositivos(state: State<AppState>) -> Result<Vec<serde_json::Value>, String> {
-    crate::auth::check_admin_role(&state)?;
+    crate::auth::check_employee_role(&state)?;
     // Lock corto solo para leer config; soltar antes del HTTP.
     let (supabase_url, supabase_key) = {
         let db = state.lock_db()?;

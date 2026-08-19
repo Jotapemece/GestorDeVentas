@@ -310,7 +310,7 @@ pub fn preview_download(
     let vent_url = api_url(
         &supabase_url,
         &format!(
-            "/ventas?dispositivo_origen=neq.{}{}&select=id,fecha_hora,metodo_pago,total_usd,total_bs,anulada,updated_at",
+            "/ventas?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{}){}&select=id,fecha_hora,metodo_pago,total_usd,total_bs,anulada,updated_at",
             urlencoding(&dispositivo_id),
             vent_filters,
         ),
@@ -415,7 +415,7 @@ pub fn preview_download(
 /// `changes` es la lista de {tipo, sync_id} marcados en el modal de descarga selectiva.
 #[tauri::command]
 pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: bool) -> Result<String, String> {
-    crate::auth::check_admin_role(&state)?;
+    crate::auth::check_employee_role(&state)?;
     let mut db = state.secondary_conn()?;
     let (supabase_url, supabase_key) = super::supabase_config(&db)?;
     let dispositivo_id = super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?;

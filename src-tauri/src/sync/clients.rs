@@ -109,6 +109,11 @@ pub(crate) fn download_clientes_inner(
     let last_sync = super::get_config(db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES)
         .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
 
+    // Primera descarga del dispositivo: forzar el remoto (LWW off).
+    let first_sync = super::get_config(db, constants::CFG_FIRST_SYNC_DONE)
+        .unwrap_or_default()
+        .is_empty();
+
     let since = urlencoding(&last_sync);
     // No re-descargar clientes que subió ESTE dispositivo (fix 3), incluyendo legacy NULL.
     let get_url = api_url(
@@ -125,6 +130,9 @@ pub(crate) fn download_clientes_inner(
 
     let count = cloud_clientes.len();
     if count == 0 {
+        if first_sync {
+            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+        }
         return Ok("No hay cambios nuevos para descargar".to_string());
     }
 
@@ -205,7 +213,8 @@ pub(crate) fn download_clientes_inner(
             }
             // LWW por fecha: solo sobrescribir si la versión remota es más reciente,
             // así los debos/cobros en paralelo no se pisan a ciegas.
-            let remote_newer = match (local_ts_opt, remote_ts) {
+            // En el primer sync el remoto SIEMPRE gana (LWW off).
+            let remote_newer = first_sync || match (local_ts_opt, remote_ts) {
                 (Some(l), Some(r)) => r > l,
                 _ => true,
             };
@@ -232,6 +241,9 @@ pub(crate) fn download_clientes_inner(
     }
 
     upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES, &ts);
+    if first_sync {
+        upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+    }
 
     let parts: Vec<String> = [
         (inserted > 0, format!("{} nuevos insertados", inserted)),

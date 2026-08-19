@@ -132,6 +132,7 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("038_convert_temporales_a_normales", convert_temporales_a_normales),
     ("039_add_rango_cierres", add_rango_cierres),
     ("040_fix_utc_offset_031", fix_utc_offset_031),
+    ("041_fix_future_timestamps", fix_future_timestamps),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -789,6 +790,28 @@ fn fix_utc_offset_031(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Protege el LWW del sync contra timestamps EN EL FUTURO (reloj desviado o
+/// restauración de una copia vieja, caso real: un teléfono con datos viejos
+/// que siempre ganaba porque su `updated_at` era posterior al real). Rebaja a
+/// `now` cualquier `updated_at` ISO mayor que ahora, en las tablas que se
+/// sincronizan. Idempotente: tras rebajar, ya no hay valores futuros.
+fn fix_future_timestamps(conn: &Connection) -> Result<(), String> {
+    for table in ["productos", "ventas", "clientes", "usuarios", "categorias"] {
+        if !column_exists(conn, table, "updated_at") {
+            continue;
+        }
+        let sql = format!(
+            "UPDATE {table} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') \
+             WHERE updated_at IS NOT NULL AND updated_at != '' \
+             AND instr(updated_at, 'T') != 0 AND instr(updated_at, 'Z') != 0 \
+             AND updated_at > strftime('%Y-%m-%dT%H:%M:%fZ','now', '+5 minutes')"
+        );
+        conn.execute_batch(&sql)
+            .map_err(|e| format!("041 fix {table}.updated_at futuro: {}", e))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -941,5 +964,47 @@ mod tests {
             )
             .unwrap();
         assert_eq!(has, 1);
+    }
+
+    #[test]
+    fn test_fix_future_timestamps_rebaja_futuro() {
+        let conn = setup();
+        conn.execute(
+            "INSERT INTO productos (codigo, nombre, precio_usd, updated_at) \
+             VALUES ('FUT1', 'Futuro', 1, '2027-01-01T00:00:00.000Z')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO clientes (nombre, updated_at) \
+             VALUES ('FuturoCliente', '2028-01-01T00:00:00.000Z')",
+            [],
+        ).unwrap();
+        fix_future_timestamps(&conn).unwrap();
+        let p: String = conn
+            .query_row("SELECT updated_at FROM productos WHERE codigo='FUT1'", [], |r| r.get(0))
+            .unwrap();
+        let c: String = conn
+            .query_row("SELECT updated_at FROM clientes WHERE nombre='FuturoCliente'", [], |r| r.get(0))
+            .unwrap();
+        assert!(!p.starts_with("2027"), "producto futuro debe rebajarse: {}", p);
+        assert!(!c.starts_with("2028"), "cliente futuro debe rebajarse: {}", c);
+        assert!(p.ends_with('Z'));
+    }
+
+    #[test]
+    fn test_fix_future_timestamps_no_toca_pasado() {
+        let conn = setup();
+        conn.execute(
+            "INSERT INTO productos (codigo, nombre, precio_usd, updated_at) \
+             VALUES ('PAS1', 'Pasado', 1, '2026-07-01T00:00:00.000Z')",
+            [],
+        ).unwrap();
+        fix_future_timestamps(&conn).unwrap();
+        let v: String = conn
+            .query_row("SELECT updated_at FROM productos WHERE codigo='PAS1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, "2026-07-01T00:00:00.000Z", "pasado no se toca");
+        // Idempotente.
+        fix_future_timestamps(&conn).unwrap();
     }
 }

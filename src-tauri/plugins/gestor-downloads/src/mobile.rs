@@ -39,10 +39,12 @@ impl<R: Runtime> GestorDownloads<R> {
       .map_err(Into::into)
   }
 
-  pub fn save_to_path(&self, payload: SavePathRequest) -> crate::Result<SavePathResponse> {
-    self
-      .0
-      .run_mobile_plugin("saveToDownloads", payload)
-      .map_err(Into::into)
+  pub fn save_to_path(&self, _payload: SavePathRequest) -> crate::Result<SavePathResponse> {
+    // En móvil el frontend solo usa `save_to_downloads` (Descargas). No existe un
+    // comando Kotlin `saveToPath` y rutearlo a `saveToDownloads` con el payload
+    // equivocado daría un fallo confuso: devolver un error claro.
+    Err(crate::Error::NotSupported(
+      "save_to_path no está soportado en Android/iOS. Usa save_to_downloads.".to_string(),
+    ))
   }
 }

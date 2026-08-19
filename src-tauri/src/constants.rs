@@ -47,6 +47,10 @@ pub const CFG_ULTIMO_DOWNLOAD_ALERTAS: &str = "ultimo_download_alertas";
 pub const CFG_ULTIMO_UPLOAD_SOLICITUDES: &str = "ultimo_upload_solicitudes";
 pub const CFG_ULTIMO_DOWNLOAD_SOLICITUDES: &str = "ultimo_download_solicitudes";
 pub const CFG_DISPOSITIVO_ID: &str = "dispositivo_id";
+/// Flag: el dispositivo ya completó su primera descarga completa. Antes de
+/// eso, los downloaders fuerzan el dato remoto (LWW off) para sanar la BD
+/// local en reinstalaciones/restauraciones con datos viejos.
+pub const CFG_FIRST_SYNC_DONE: &str = "first_sync_done";
 pub const CFG_SUPABASE_URL: &str = "supabase_url";
 pub const CFG_SUPABASE_KEY: &str = "supabase_key";
 pub const CFG_BACKUP_KEY: &str = "backup_encryption_key";

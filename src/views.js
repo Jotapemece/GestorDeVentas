@@ -207,6 +207,11 @@ function initGuide() {
     var tab = e.target.closest(SEL.guideTabs);
     if (tab) switchGuideTab(tab.dataset.section);
   });
+  // En Android los atajos de teclado F1/Ctrl+ no existen: ocultar el tip.
+  if (IS_ANDROID) {
+    var shortcuts = qs('.guide-shortcuts');
+    if (shortcuts) shortcuts.style.display = 'none';
+  }
 }
 
 function openGuide() {
@@ -441,13 +446,6 @@ async function handleDeviceRegister() {
     qs(SEL.regPending).classList.add('hidden');
     var successEl = qs(SEL.regSuccess);
     successEl.classList.remove('hidden');
-    successEl.innerHTML = '<div class="reg-check"><i class="nf nf-fa-check"></i></div><p class="reg-desc">Dispositivo registrado. Sincronizando datos...</p>';
-    // Descargar productos, clientes y usuarios en paralelo
-    await Promise.allSettled([
-      invoke('download_products'),
-      invoke('download_clientes'),
-      invoke('download_usuarios'),
-    ]);
     successEl.innerHTML = '<div class="reg-check"><i class="nf nf-fa-check"></i></div><p class="reg-desc">Dispositivo registrado correctamente</p>';
     setTimeout(() => {
       qs(SEL.deviceRegScreen).style.display = 'none';
@@ -496,6 +494,7 @@ async function handleLogin() {
       loadSyncStats();
       refreshCreditoAlertBadge();
       loadOpenRouterKey();
+      loadNombreNegocio();
       await loadTasa();
       updateConnectionState();
       await loadProductCache();
@@ -507,7 +506,14 @@ async function handleLogin() {
         renderProductSearch();
         renderCart();
       }
-      checkPendienteCierre();
+      // Los datos se sincronizan al iniciar sesión (no al registrar el
+      // dispositivo): download_all en background y refresco de caches al
+      // completar. Al login solo se DESCARGA: la subida va por el auto-sync
+      // periódico y tras cada venta (nunca una subida silenciosa en login que
+      // pueda pisar datos más nuevos en Supabase).
+      runLoginSync();
+      // B: el cierre pendiente ya no se verifica automáticamente al login.
+      // Se ejecuta manualmente desde Config → Caja ("Verificar cierre pendiente").
     } else {
       errEl.textContent = res.message;
     }
@@ -515,6 +521,25 @@ async function handleLogin() {
     console.log('login invoke error:', e);
     errEl.textContent = 'Error: ' + e;
   } finally { if (btn) btn.disabled = false; }
+}
+
+let _loginSyncRunning = false;
+async function runLoginSync() {
+  // En teléfonos el auto-sync está desactivado hasta nuevo aviso: no se
+  // sincroniza al iniciar sesión ni por timer (solo manual por botones).
+  if (IS_ANDROID) return;
+  if (_loginSyncRunning) return;
+  _loginSyncRunning = true;
+  try {
+    await invoke('download_all');
+    await loadProductCache();
+    if (typeof loadSyncStats === 'function') loadSyncStats();
+    if (typeof refreshCashierAfterSync === 'function') refreshCashierAfterSync();
+  } catch (e) {
+    console.log('login sync error:', e);
+  } finally {
+    _loginSyncRunning = false;
+  }
 }
 
 async function handleLogout() {
@@ -539,6 +564,29 @@ async function handleLogout() {
   qs(SEL.mainApp).style.display = 'none';
   qs(SEL.bottomTabs).style.display = 'none';
   qs(SEL.loginScreen).style.display = 'flex';
+}
+
+/* ========== NOMBRE DEL NEGOCIO (título de Ventas) ========== */
+async function loadNombreNegocio() {
+  try {
+    const val = await invoke('get_config_value', { key: CFG_NOMBRE_NEGOCIO });
+    const nombre = (val || '').trim() || 'Inari Market';
+    const title = qs(SEL.salesBrandTitle);
+    if (title) title.textContent = nombre;
+    const input = qs(SEL.nombreNegocioInput);
+    if (input) input.value = nombre;
+  } catch (e) { /* se queda el default */ }
+}
+
+async function saveNombreNegocio() {
+  const input = qs(SEL.nombreNegocioInput);
+  if (!input) return;
+  const nombre = input.value.trim();
+  if (!nombre) { showToast('Escribe un nombre de negocio', 'error'); return; }
+  await invokeOrError(invoke('set_config_value', { key: CFG_NOMBRE_NEGOCIO, value: nombre }));
+  const title = qs(SEL.salesBrandTitle);
+  if (title) title.textContent = nombre;
+  showToast('Nombre del negocio guardado');
 }
 
 /* ========== SET TODAY ON REPORT DATES ========== */

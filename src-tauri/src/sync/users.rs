@@ -204,6 +204,7 @@ pub(crate) fn download_usuarios_inner(
 
 #[tauri::command]
 pub fn download_usuarios(state: State<AppState>) -> Result<String, String> {
+    crate::auth::check_admin_role(&state)?;
     run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {
         download_usuarios_inner(tx, supabase_url, supabase_key, dispositivo_id)
     })

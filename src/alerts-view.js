@@ -38,16 +38,13 @@ function createAlertaRow(a) {
   if (tipo === 'deuda_rapida') badgeCls = 'badge-warning';
   if (tipo === 'anulacion') badgeCls = 'badge-danger';
   var nota = a.nota ? '<div class="text-muted">' + escapeHtml(a.nota) + '</div>' : '';
-  var tr = document.createElement('tr');
-  tr.innerHTML =
-    '<td>' + formatAlertaFecha(a.fecha_hora) + '</td>' +
+  return '<td>' + formatAlertaFecha(a.fecha_hora) + '</td>' +
     '<td>' + escapeHtml(a.usuario || '-') + '</td>' +
     '<td><span class="' + badgeCls + '"><i class="nf ' + icon + '"></i> ' + escapeHtml(alertaTipoLabel(tipo)) + '</span></td>' +
     '<td>' + escapeHtml(a.cliente_nombre || ('#' + (a.cliente_id || '-'))) + '</td>' +
     '<td>' + monto + '</td>' +
     '<td>' + escapeHtml(metodo) + '</td>' +
     '<td>' + nota + '</td>';
-  return tr;
 }
 
 function currentUserIsAdmin() {
