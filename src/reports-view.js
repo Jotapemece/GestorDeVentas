@@ -55,9 +55,8 @@ async function loadReports(resetPage) {
 }
 
 async function loadReportsAndTopProducts(resetPage) {
-  await loadReports(resetPage);
-  await loadTopProducts();
-  await loadVendorSales();
+  // Comandos independientes: se disparan en paralelo para reducir ~2/3 el tiempo de carga.
+  await Promise.all([loadReports(resetPage), loadTopProducts(), loadVendorSales()]);
 }
 
 async function loadVendorSales() {
@@ -137,11 +136,13 @@ async function loadDashboard() {
       }).join('') +
     '</div>';
   try {
-    const data = await invoke('get_dashboard_summary');
-    var paymentMethods = null;
-    if (dashboardChartType === 'pie') {
-      paymentMethods = await tryCatch(() => invoke('get_dashboard_payment_methods', { period: piePeriod }));
-    }
+    // Resumen y (si aplica) métodos de pago se solicitan en paralelo.
+    const summaryPromise = invoke('get_dashboard_summary');
+    const paymentPromise = dashboardChartType === 'pie'
+      ? tryCatch(() => invoke('get_dashboard_payment_methods', { period: piePeriod }))
+      : Promise.resolve(null);
+    const data = await summaryPromise;
+    var paymentMethods = await paymentPromise;
     const periodColors = [cssVar('--primary'), cssVar('--accent'), cssVar('--inari')];
     const periods = [
       { label: 'Hoy', icon: 'calendar_day', key: 'today', color: periodColors[0] },
@@ -667,7 +668,8 @@ async function drawProfitLineChart(body) {
   var w = rect.width || CHART.CANVAS_MAX_WIDTH;
   var maxW = CHART.CANVAS_MAX_WIDTH;
   if (w > maxW) w = maxW;
-  var h = CHART.BAR_HEIGHT;
+  var isMobile = rect.width < BREAKPOINT.MOBILE;
+  var h = isMobile ? CHART.BAR_HEIGHT_MOBILE : CHART.BAR_HEIGHT;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
   canvas.style.width = w + 'px';
@@ -683,6 +685,17 @@ async function drawProfitLineChart(body) {
     var points = await invoke('get_profit_series', {
       filter: { start_date: startDate, end_date: endDate }
     });
+    var usedFallback = false;
+    if (!points || points.length < 2) {
+      // Fallback: la vista de reportes carga con el filtro por defecto (hoy→hoy),
+      // que produce 0-1 puntos. Re-consultar con los últimos 30 días para dibujar.
+      var fbStart = new Date();
+      fbStart.setDate(fbStart.getDate() - 29);
+      points = await invoke('get_profit_series', {
+        filter: { start_date: fbStart.toISOString().slice(0, 10), end_date: endDate }
+      });
+      usedFallback = true;
+    }
     if (!points || points.length < 2) {
       ctx.font = '14px sans-serif';
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#999';
@@ -780,7 +793,7 @@ async function drawProfitLineChart(body) {
     ctx.fillStyle = mutedColor;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('\u00daltimos ' + points.length + ' d\u00edas', w / 2, 14);
+    ctx.fillText(usedFallback ? '\u00daltimos ' + points.length + ' d\u00edas (filtro actual sin datos)' : '\u00daltimos ' + points.length + ' d\u00edas', w / 2, 14);
 
     // Hover tooltips
     var profitPoints = points;
@@ -946,7 +959,7 @@ async function showSaleDetail(ventaId, btn) {
     }
     const allVoided = detalles.every(function(d) { return d.anulado; });
     const table = document.createElement('table');
-    table.className = 'table';
+    table.className = 'table table-cards';
     table.innerHTML = '<thead><tr><th>Producto</th><th>Cantidad</th><th>Precio Unit.</th><th>Subtotal</th><th>Estado</th><th>Acci\u00f3n</th></tr></thead>';
     const tbody = document.createElement('tbody');
     detalles.forEach(function(d) {
@@ -959,7 +972,7 @@ async function showSaleDetail(ventaId, btn) {
       const statusBadge = d.anulado
         ? '<span class="badge badge-danger">Anulado</span>'
         : '<span class="badge badge-success">Activo</span>';
-      tr.innerHTML = '<td>' + escapeHtml(d.producto_nombre || d.producto_codigo) + '</td><td>' + d.cantidad + '</td><td>' + formatUSD(d.precio_usd_unitario) + '</td><td>' + formatUSD(d.subtotal_usd) + '</td><td>' + statusBadge + '</td><td>' + voidBtn + '</td>';
+      tr.innerHTML = '<td data-label="Producto">' + escapeHtml(d.producto_nombre || d.producto_codigo) + '</td><td data-label="Cantidad">' + d.cantidad + '</td><td data-label="Precio Unit.">' + formatUSD(d.precio_usd_unitario) + '</td><td data-label="Subtotal">' + formatUSD(d.subtotal_usd) + '</td><td data-label="Estado">' + statusBadge + '</td><td data-label="Acción">' + voidBtn + '</td>';
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);

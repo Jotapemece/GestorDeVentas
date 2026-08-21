@@ -498,6 +498,7 @@ async function handleLogin() {
       await loadTasa();
       updateConnectionState();
       await loadProductCache();
+      startTasaAutoUpdate();
       restoreCartSnapshot();
       try { lastViewName = localStorage.getItem('last_view') || VIEW.SALES; } catch (e) {}
       if (!viewAllowedForRole(lastViewName, currentUser)) lastViewName = VIEW.SALES;
@@ -525,13 +526,17 @@ async function handleLogin() {
 
 let _loginSyncRunning = false;
 async function runLoginSync() {
-  // En teléfonos el auto-sync está desactivado hasta nuevo aviso: no se
-  // sincroniza al iniciar sesión ni por timer (solo manual por botones).
-  if (IS_ANDROID) return;
+  // Al iniciar sesión se muestra el modal de vista previa de cambios a descargar
+  // (sin subir nada, no destructivo). Si no hay cambios, no se muestra nada.
+  // Correr en PC y Android: el preview/apply son accesibles a empleados.
   if (_loginSyncRunning) return;
   _loginSyncRunning = true;
   try {
-    await invoke('download_all');
+    if (typeof window.openLoginDownloadPreview === 'function') {
+      await window.openLoginDownloadPreview();
+    } else {
+      await invoke('download_all');
+    }
     await loadProductCache();
     if (typeof loadSyncStats === 'function') loadSyncStats();
     if (typeof refreshCashierAfterSync === 'function') refreshCashierAfterSync();
@@ -558,6 +563,8 @@ async function handleLogout() {
   // para no dejarlos corriendo en segundo plano tras el logout.
   if (_greetingInterval) { clearInterval(_greetingInterval); _greetingInterval = null; }
   if (_clockInterval) { clearInterval(_clockInterval); _clockInterval = null; }
+  // Detener el timer de tasa automática al cerrar sesión.
+  if (typeof stopTasaAutoUpdate === 'function') stopTasaAutoUpdate();
   currentUser = null; carts = [{ id: 1, items: [], folded: false }]; cart = carts[0].items; cartIdCounter = 1; recentProducts = []; lastCloseReportData = null;
   qs(SEL.loginPassword).value = '';
   qs(SEL.loginError).textContent = '';
@@ -573,20 +580,7 @@ async function loadNombreNegocio() {
     const nombre = (val || '').trim() || 'Inari Market';
     const title = qs(SEL.salesBrandTitle);
     if (title) title.textContent = nombre;
-    const input = qs(SEL.nombreNegocioInput);
-    if (input) input.value = nombre;
   } catch (e) { /* se queda el default */ }
-}
-
-async function saveNombreNegocio() {
-  const input = qs(SEL.nombreNegocioInput);
-  if (!input) return;
-  const nombre = input.value.trim();
-  if (!nombre) { showToast('Escribe un nombre de negocio', 'error'); return; }
-  await invokeOrError(invoke('set_config_value', { key: CFG_NOMBRE_NEGOCIO, value: nombre }));
-  const title = qs(SEL.salesBrandTitle);
-  if (title) title.textContent = nombre;
-  showToast('Nombre del negocio guardado');
 }
 
 /* ========== SET TODAY ON REPORT DATES ========== */
@@ -813,7 +807,7 @@ async function buildChatContext() {
   var now = new Date();
   var today = now.toISOString().split('T')[0];
   contextLines.push('- Fecha/hora: ' + now.toLocaleString('es-VE'));
-  await Promise.allSettled([
+  var tasks = [
     invoke('list_products', { search: null, page: 1, pageSize: 20 }).then(function(r) {
       if (r && r.data) {
         contextLines.push('- Productos activos: ' + (r.total || 0));
@@ -859,28 +853,6 @@ async function buildChatContext() {
         contextLines.push('- Combos (' + combos.length + '): ' + names + (combos.length > 5 ? '...' : ''));
       }
     }),
-    invoke('get_dashboard_payment_methods', { period: 'day' }).then(function(metodos) {
-      if (metodos && metodos.length > 0) {
-        var str = metodos.map(function(m) { return formatMetodoLabel(m.metodo) + ' $' + m.total_usd.toFixed(2); }).join(', ');
-        contextLines.push('- M\u00e9todos hoy: ' + str);
-      }
-    }),
-    invoke('get_dashboard_summary').then(function(dash) {
-      if (dash && dash.today) {
-        if (dash.today.total_ganancia_usd !== undefined) {
-          contextLines.push('- Ganancia hoy: $' + dash.today.total_ganancia_usd.toFixed(2) + ' (costo: $' + (dash.today.total_costo_usd || 0).toFixed(2) + ')');
-        }
-        if (dash.month && dash.month.total_ganancia_usd !== undefined) {
-          contextLines.push('- Ganancia del mes: $' + dash.month.total_ganancia_usd.toFixed(2) + ' (de $' + dash.month.total_usd.toFixed(2) + ' en ventas)');
-        }
-      }
-    }),
-    invoke('get_top_products', { limit: 3 }).then(function(top) {
-      if (top && top.length > 0) {
-        var topStr = top.map(function(p) { return p.nombre + ' (' + p.cantidad_vendida + ' uds, $' + p.total_usd.toFixed(2) + ')'; }).join(', ');
-        contextLines.push('- Más vendidos: ' + topStr);
-      }
-    }),
     invoke('list_products', { search: null, page: 1, pageSize: 200 }).then(function(lowStock) {
       if (lowStock && lowStock.data) {
         var low = lowStock.data.filter(function(p) { return p.stock < p.stock_minimo; });
@@ -900,13 +872,41 @@ async function buildChatContext() {
         }
       }
     }),
-    invoke('get_sales_by_vendor', { startDate: today, endDate: today }).then(function(vendors) {
-      if (vendors && vendors.length > 0) {
-        var vStr = vendors.map(function(v) { return v.username + ' (' + v.total_ventas + ' ventas, $' + v.total_usd.toFixed(2) + ')'; }).join(', ');
-        contextLines.push('- Ventas por vendedor hoy: ' + vStr);
-      }
-    }),
-  ]);
+  ];
+  // Contexto solo para administradores (reportes/dashboard son admin-only desde 2026-08-19)
+  if (currentUser && currentUser.rol === ROL_ADMIN) {
+    tasks.push(
+      invoke('get_dashboard_payment_methods', { period: 'day' }).then(function(metodos) {
+        if (metodos && metodos.length > 0) {
+          var str = metodos.map(function(m) { return formatMetodoLabel(m.metodo) + ' $' + m.total_usd.toFixed(2); }).join(', ');
+          contextLines.push('- M\u00e9todos hoy: ' + str);
+        }
+      }),
+      invoke('get_dashboard_summary').then(function(dash) {
+        if (dash && dash.today) {
+          if (dash.today.total_ganancia_usd !== undefined) {
+            contextLines.push('- Ganancia hoy: $' + dash.today.total_ganancia_usd.toFixed(2) + ' (costo: $' + (dash.today.total_costo_usd || 0).toFixed(2) + ')');
+          }
+          if (dash.month && dash.month.total_ganancia_usd !== undefined) {
+            contextLines.push('- Ganancia del mes: $' + dash.month.total_ganancia_usd.toFixed(2) + ' (de $' + dash.month.total_usd.toFixed(2) + ' en ventas)');
+          }
+        }
+      }),
+      invoke('get_top_products', { limit: 3 }).then(function(top) {
+        if (top && top.length > 0) {
+          var topStr = top.map(function(p) { return p.nombre + ' (' + p.cantidad_vendida + ' uds, $' + p.total_usd.toFixed(2) + ')'; }).join(', ');
+          contextLines.push('- Más vendidos: ' + topStr);
+        }
+      }),
+      invoke('get_sales_by_vendor', { startDate: today, endDate: today }).then(function(vendors) {
+        if (vendors && vendors.length > 0) {
+          var vStr = vendors.map(function(v) { return v.username + ' (' + v.total_ventas + ' ventas, $' + v.total_usd.toFixed(2) + ')'; }).join(', ');
+          contextLines.push('- Ventas por vendedor hoy: ' + vStr);
+        }
+      }),
+    );
+  }
+  await Promise.allSettled(tasks);
   return contextLines;
 }
 

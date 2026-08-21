@@ -178,6 +178,7 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
 /// Check pre-login (público, como register_device): solo lee config con lock
 /// corto. Usado por el arranque de la UI para decidir si mostrar la pantalla
 /// de registro. No confiar en get_sync_stats aquí porque exige sesión.
+// DEAD CODE: comando registrado pero no invocado desde el frontend (el arranque usa recover_device).
 #[tauri::command]
 pub fn is_device_registered(state: State<AppState>) -> Result<bool, String> {
     let db = state.lock_db()?;

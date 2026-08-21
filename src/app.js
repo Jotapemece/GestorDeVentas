@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     bsGroup: qs(SEL.quickDebtMontoBsGroup)
   });
   initTableScrollIndicators();
+  initMarquee();
   initLoginGreeting();
   initHoverCard();
   initCompactToggle();
@@ -802,9 +803,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (header) header.classList.toggle('collapsed');
   });
 
-  /* ========== NOMBRE DEL NEGOCIO ========== */
-  qs(SEL.nombreNegocioSave)?.addEventListener('click', saveNombreNegocio);
-
   /* ========== CIERRE PENDIENTE (manual, Config → Caja) ========== */
   const checkPendienteBtn = qs(SEL.checkPendienteCierreBtn);
   if (checkPendienteBtn) {
@@ -1132,12 +1130,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   async function openDownloadPreview() {
     await openDownloadPreviewModal();
   }
-  async function openDownloadPreviewModal() {
+  async function openDownloadPreviewModal(opts) {
     const modal = qs(SEL.downloadPreviewModal);
+    const showIfEmpty = !!(opts && opts.showIfEmpty);
     qs(SEL.downloadPreviewLoading).classList.remove('hidden');
     qs(SEL.downloadPreviewList).classList.add('hidden');
     qs(SEL.downloadPreviewEmpty).classList.add('hidden');
-    showModal(modal);
+    if (!showIfEmpty) showModal(modal);
     try {
       const desdeEl = qs(SEL.downloadPreviewVentasDesde);
       const hastaEl = qs(SEL.downloadPreviewVentasHasta);
@@ -1146,16 +1145,21 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await invoke('preview_download', { ventasDesde, ventasHasta });
       if (result.total === 0) {
         qs(SEL.downloadPreviewLoading).classList.add('hidden');
+        if (showIfEmpty) return;
         qs(SEL.downloadPreviewEmpty).classList.remove('hidden');
         qs(SEL.downloadPreviewSelectInfo).textContent = '0 / 0';
         return;
       }
+      if (showIfEmpty) showModal(modal);
       renderPreviewSections(result, false);
     } catch (e) {
       qs(SEL.downloadPreviewLoading).classList.add('hidden');
-      showToast('Error al cargar cambios: ' + e, 'error');
+      if (!showIfEmpty) showToast('Error al cargar cambios: ' + e, 'error');
     }
   }
+  window.openLoginDownloadPreview = function() {
+    return openDownloadPreviewModal({ showIfEmpty: true });
+  };
   qs(SEL.downloadPreviewSections).addEventListener('change', function(e) {
     if (e.target && e.target.matches('input[type="checkbox"]')) updatePreviewSelectionInfo();
   });
@@ -1797,8 +1801,26 @@ statusEl.style.color = cssVar('--text-secondary');
   // get_sync_stats exige sesión y fallaría antes de autenticar)
   // recover_device intenta recuperar la huella de una instalación previa en
   // Supabase; solo muestra la pantalla de registro si la huella no existe aún.
+  // El splash cubre la pantalla mientras se resuelve (evita el flash de la
+  // pantalla de registro) y se mantiene un mínimo de ~2s para la animación.
+  const splashEl = qs('#splash-screen');
+  // Animación de "máquina de escribir" del nombre (tipo caja registradora).
+  const splashText = qs('#splash-title span:first-child');
+  if (splashText) {
+    const brand = 'InariMarket';
+    splashText.textContent = '';
+    let i = 0;
+    const tick = setInterval(function() {
+      splashText.textContent = brand.slice(0, ++i);
+      if (i >= brand.length) clearInterval(tick);
+    }, 110);
+  }
+  const minSplash = new Promise(res => setTimeout(res, 2000));
   try {
-    const registered = await invoke('recover_device');
+    const registered = await Promise.all([
+      invoke('recover_device').then(r => !!r).catch(() => false),
+      minSplash,
+    ]).then(([ok]) => ok);
     if (registered) {
       qs(SEL.deviceRegScreen).style.display = 'none';
       qs(SEL.loginScreen).style.display = 'flex';
@@ -1808,6 +1830,7 @@ statusEl.style.color = cssVar('--text-secondary');
   } catch (_) {
     qs(SEL.deviceRegScreen).style.display = 'flex';
   }
+  if (splashEl) splashEl.style.display = 'none';
 
   // Restore remembered username
   const savedUser = localStorage.getItem('recordar_usuario');
@@ -1829,6 +1852,13 @@ statusEl.style.color = cssVar('--text-secondary');
     var _kbModal = null;
     window.visualViewport.addEventListener('resize', function() {
       var diff = _prevVpHeight - window.visualViewport.height;
+      // overlap = cuanto del layout queda cubierto por el teclado. Con
+      // adjustResize el WebView se encoge solo (innerHeight baja a la par del
+      // visualViewport) → overlap ≈ 0 y NO hay que empujar nada. Añadir
+      // paddingBottom en ese caso duplicaba el empuje y separaba el footer del
+      // resto del modal (franja cortada al medio). Solo se empuja si el teclado
+      // solapa contenido real.
+      var overlap = window.innerHeight - window.visualViewport.height;
       var main = qs(SEL.mainApp);
       if (!main) return;
       if (diff > KEYBOARD.THRESHOLD) {
@@ -1836,21 +1866,24 @@ statusEl.style.color = cssVar('--text-secondary');
         document.body.classList.add('keyboard-open');
         var view = qs(SEL.viewActive);
         if (view) view.classList.add('mobile-keyboard');
-        // Si un modal bottom-sheet está abierto, empujar su contenido para que
-        // el footer (Confirmar Pago/Guardar) no quede bajo el teclado.
-        var modal = null;
-        qsa('.modal').forEach(function(m) { if (!m.classList.contains('hidden')) modal = modal || m; });
         var el = document.activeElement;
-        // La barra de búsqueda de Ventas es sticky: si el elemento enfocado está
-        // dentro del .sales-header, NO desplazarlo al centro ni empujar el main,
-        // porque el teclado lo sacaría de la vista (bug móvil). Solo se aplica el
-        // push-up de padding cuando hay un modal bottom-sheet abierto.
         var inSalesHeader = el && el.closest && el.closest('.sales-header');
-        if (modal && !inSalesHeader) {
-          var content = modal.querySelector('.modal-content');
-          if (content) {
-            content.style.paddingBottom = (diff - KEYBOARD.PAD_OFFSET) + 'px';
-            _kbModal = content;
+        if (overlap > KEYBOARD.PAD_OFFSET) {
+          // Si un modal bottom-sheet está abierto, encoger su scrollport para que
+          // el footer (Confirmar Pago/Guardar) no quede bajo el teclado. Solo en
+          // móvil (el max-height base del modal es 92dvh solo ≤600px).
+          var isMobileViewport = IS_ANDROID || window.innerWidth <= 600;
+          var modal = null;
+          qsa('.modal').forEach(function(m) { if (!m.classList.contains('hidden')) modal = modal || m; });
+          if (modal && !inSalesHeader && isMobileViewport) {
+            var content = modal.querySelector('.modal-content');
+            if (content) {
+              content.style.maxHeight = 'calc(92dvh - ' + Math.max(0, overlap - KEYBOARD.PAD_OFFSET) + 'px)';
+              _kbModal = content;
+            }
+          }
+          if (!inSalesHeader) {
+            main.style.paddingBottom = (overlap - KEYBOARD.PAD_OFFSET) + 'px';
           }
         }
         if (el && !inSalesHeader) {
@@ -1858,15 +1891,12 @@ statusEl.style.color = cssVar('--text-secondary');
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }, KEYBOARD.SCROLL_DELAY_MS);
         }
-        if (!inSalesHeader) {
-          main.style.paddingBottom = (diff - KEYBOARD.PAD_OFFSET) + 'px';
-        }
       } else if (diff < -KEYBOARD.THRESHOLD) {
         // Keyboard closed
         document.body.classList.remove('keyboard-open');
         var view2 = qs(SEL.viewActive);
         if (view2) view2.classList.remove('mobile-keyboard');
-        if (_kbModal) { _kbModal.style.paddingBottom = ''; _kbModal = null; }
+        if (_kbModal) { _kbModal.style.maxHeight = ''; _kbModal = null; }
         main.style.paddingBottom = '';
         window.scrollTo(0, 0);
       }

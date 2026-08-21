@@ -225,9 +225,6 @@ describe('createClientRow (DOM)', () => {
   let currentUser = { rol: 'admin' };
   const ROL_ADMIN = 'admin';
 
-  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
-  function formatUSD(v) { return '$' + v.toFixed(2); }
-
   function createClientRow(c) {
     const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
     var activoBadge = c.credito_activo
@@ -296,11 +293,8 @@ describe('createClientRow (DOM)', () => {
 });
 
 describe('createReportRow', () => {
-  function formatUSD(v) { return '$' + v.toFixed(2); }
-  function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
   const METODO_LABELS = { efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago', punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto' };
   function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
-  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
   function formatDateTime(iso) {
     if (!iso) return '-';
     const d = new Date(iso.replace(' ', 'T'));
@@ -373,8 +367,6 @@ describe('createReportRow', () => {
 });
 
 describe('createDebtSaleCard', () => {
-  function formatUSD(v) { return '$' + v.toFixed(2); }
-
   function createDebtSaleCard(v, prodHtml) {
     return '<div class="debt-sale-header"><span># Venta ' + v.id + '</span><span>' + v.fecha_hora + '</span></div><div class="debt-sale-total">Total: ' + formatUSD(v.total_usd) + '</div>' + prodHtml;
   }
@@ -390,9 +382,6 @@ describe('createDebtSaleCard', () => {
 });
 
 describe('createDailySaleRow', () => {
-  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
-  function formatUSD(v) { return '$' + v.toFixed(2); }
-  function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
   function formatDateTime(iso) {
     if (!iso) return '-';
     const d = new Date(iso.replace(' ', 'T'));
@@ -678,15 +667,6 @@ describe('buildCustomSelect (DOM)', () => {
 });
 
 describe('contrastTextColor', () => {
-  function contrastTextColor(hex) {
-    var h = (hex || '#CCCCCC').replace('#', '').trim();
-    if (h.length !== 6) return '#111';
-    var r = parseInt(h.substr(0, 2), 16);
-    var g = parseInt(h.substr(2, 2), 16);
-    var b = parseInt(h.substr(4, 2), 16);
-    var lum = 0.299 * r + 0.587 * g + 0.114 * b;
-    return lum > 150 ? '#111111' : '#FFFFFF';
-  }
 
   it('color claro → texto oscuro', () => {
     expect(contrastTextColor('#FFFFFF')).toBe('#111111');
@@ -800,9 +780,6 @@ describe('initTableSorting — sin bucle infinito', () => {
 describe('buildMixtoDetailHtml (desglose de pago mixto en detalle de venta)', () => {
   const METODO_LABELS = { efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago', punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto' };
   function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
-  function formatUSD(v) { return '$' + v.toFixed(2); }
-  function formatBS(v) { return 'Bs. ' + v.toFixed(2).replace('.', ','); }
-  function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
 
   function buildMixtoDetailHtml(pagoDetalleJson, tasa) {
     if (!pagoDetalleJson) return '';
@@ -849,5 +826,136 @@ describe('buildMixtoDetailHtml (desglose de pago mixto en detalle de venta)', ()
     expect(buildMixtoDetailHtml('', 40)).toBe('');
     expect(buildMixtoDetailHtml('{no-json', 40)).toBe('');
     expect(buildMixtoDetailHtml('[]', 40)).toBe('');
+  });
+});
+
+describe('initMarquee — carrusel de texto truncado', () => {
+  // Reproduce la lógica de utils.js: solo rueda si el texto desborda
+  // (scrollWidth > clientWidth); envuelve en .mq-track con dos .mq-copy
+  // (bucle seamless: sale por la izquierda y entra por la derecha) con
+  // --mq-dist (ancho de una copia) y --mq-duration proporcional a la velocidad.
+  const MQ_SELECTOR = '.prod-name, .product-card-name, .cart-product-name, .cell-name, .global-search-item-title';
+  const MQ_SPEED = 40;
+  const MQ_MIN_DURATION = 2.5;
+  let mqActive = null;
+  let mqHover = null;
+
+  function mqWrap(el) {
+    const track = document.createElement('span');
+    track.className = 'mq-track';
+    const copy1 = document.createElement('span');
+    copy1.className = 'mq-copy';
+    while (el.firstChild) copy1.appendChild(el.firstChild);
+    const copy2 = copy1.cloneNode(true);
+    track.appendChild(copy1);
+    track.appendChild(copy2);
+    el.appendChild(track);
+  }
+  function mqUnwrap(el) {
+    const track = el.querySelector('.mq-track');
+    if (!track) return;
+    const copy1 = track.firstElementChild;
+    if (copy1) {
+      while (copy1.firstChild) el.appendChild(copy1.firstChild);
+    }
+    track.remove();
+  }
+  function mqStart(el) {
+    if (!el || el.dataset.mqAnim === '1') return;
+    const textW = el.scrollWidth;
+    const dist = textW - el.clientWidth;
+    if (dist <= 2) return;
+    mqStop();
+    mqWrap(el);
+    el.style.setProperty('--mq-dist', textW + 'px');
+    el.style.setProperty('--mq-duration', Math.max(textW / MQ_SPEED, MQ_MIN_DURATION) + 's');
+    el.classList.add('mq-anim');
+    el.dataset.mqAnim = '1';
+    mqActive = el;
+  }
+  function mqStop() {
+    if (!mqActive) return;
+    mqActive.classList.remove('mq-anim');
+    mqActive.style.removeProperty('--mq-dist');
+    mqActive.style.removeProperty('--mq-duration');
+    mqUnwrap(mqActive);
+    delete mqActive.dataset.mqAnim;
+    mqActive = null;
+  }
+
+  function makeEl(cls, text, scroll, client) {
+    const el = document.createElement('span');
+    el.className = cls;
+    el.textContent = text;
+    Object.defineProperty(el, 'scrollWidth', { value: scroll, configurable: true });
+    Object.defineProperty(el, 'clientWidth', { value: client, configurable: true });
+    return el;
+  }
+
+  it('no rueda si el texto cabe (sin desborde)', () => {
+    const el = makeEl('prod-name', 'Corto', 50, 60);
+    mqStart(el);
+    expect(el.classList.contains('mq-anim')).toBe(false);
+    expect(el.querySelector('.mq-track')).toBeNull();
+    expect(mqActive).toBeNull();
+  });
+
+  it('envuelve en un track con dos copias y setea distancia/duración', () => {
+    const el = makeEl('cell-name', 'Nombre muy largo de cliente', 300, 100);
+    mqStart(el);
+    expect(el.classList.contains('mq-anim')).toBe(true);
+    expect(el.dataset.mqAnim).toBe('1');
+    const track = el.querySelector('.mq-track');
+    expect(track).not.toBeNull();
+    const copies = track.querySelectorAll('.mq-copy');
+    expect(copies.length).toBe(2);
+    expect(copies[0].textContent).toBe('Nombre muy largo de cliente');
+    expect(copies[1].textContent).toBe('Nombre muy largo de cliente');
+    expect(el.style.getPropertyValue('--mq-dist')).toBe('300px');
+    expect(el.style.getPropertyValue('--mq-duration')).toBe('7.5s');
+  });
+
+  it('mqStop restaura el DOM original sin duplicados y limpia el estado', () => {
+    const el = makeEl('prod-name', 'Producto con nombre enorme', 250, 90);
+    mqStart(el);
+    expect(el.querySelector('.mq-track')).not.toBeNull();
+    mqStop();
+    expect(el.classList.contains('mq-anim')).toBe(false);
+    expect(el.querySelector('.mq-track')).toBeNull();
+    expect(el.textContent).toBe('Producto con nombre enorme');
+    expect(el.querySelectorAll('.mq-copy').length).toBe(0);
+    expect(mqActive).toBeNull();
+  });
+
+  it('no re-dispara si ya está animando el mismo elemento', () => {
+    const el = makeEl('prod-name', 'Otro nombre largo de prueba', 260, 80);
+    mqStart(el);
+    const firstTrack = el.querySelector('.mq-track');
+    mqStart(el); // segundo intento, ignorado
+    expect(el.querySelector('.mq-track')).toBe(firstTrack);
+  });
+
+  it('al pasar a otro elemento detiene y restaura el anterior', () => {
+    const a = makeEl('cell-name', 'Cliente uno con nombre largo', 280, 100);
+    const b = makeEl('prod-name', 'Producto dos muy largo también', 290, 100);
+    mqStart(a);
+    expect(a.classList.contains('mq-anim')).toBe(true);
+    mqHover = a;
+    mqStart(b); // mqStart internamente detiene el anterior
+    expect(a.classList.contains('mq-anim')).toBe(false);
+    expect(a.querySelector('.mq-track')).toBeNull();
+    expect(b.classList.contains('mq-anim')).toBe(true);
+  });
+
+  it('tolerancia: desborde menor o igual a 2px no anima', () => {
+    const el = makeEl('cart-product-name', 'Casi cabe', 102, 100);
+    mqStart(el);
+    expect(el.classList.contains('mq-anim')).toBe(false);
+  });
+
+  it('la duración mínima aplica a textos cortos desbordados', () => {
+    const el = makeEl('prod-name', 'Sobrepasa', 90, 80);
+    mqStart(el);
+    expect(el.style.getPropertyValue('--mq-duration')).toBe('2.5s');
   });
 });

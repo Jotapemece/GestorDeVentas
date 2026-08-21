@@ -1096,6 +1096,96 @@ function initConnectionMonitor() {
   update();
 }
 
+/* ========== MARQUEE (carrusel de texto truncado) ========== */
+/* Textos que no caben (ventas/clientes/crédito/productos plegados, lista de
+   productos, carrito, búsqueda global) ruedan como carrusel al hacer hover
+   (PC, una vez y se resetea al pasar a otro) o al tocarlos (móvil, dos vueltas
+   y se queda quieto). Solo si de verdad se truncan; nada rueda por defecto. */
+const MQ_SELECTOR = '.prod-name, .product-card-name, .cart-product-name, .cell-name, .global-search-item-title';
+const MQ_TOLERANCE = 2;
+const MQ_SPEED = 40; // px/s, velocidad del carrusel
+const MQ_MIN_DURATION = 2.5; // s, duración mínima por vuelta
+let mqActive = null;
+let mqHover = null;
+
+function mqWrap(el) {
+  const track = document.createElement('span');
+  track.className = 'mq-track';
+  const copy1 = document.createElement('span');
+  copy1.className = 'mq-copy';
+  while (el.firstChild) copy1.appendChild(el.firstChild);
+  const copy2 = copy1.cloneNode(true);
+  track.appendChild(copy1);
+  track.appendChild(copy2);
+  el.appendChild(track);
+}
+
+function mqUnwrap(el) {
+  const track = el.querySelector('.mq-track');
+  if (!track) return;
+  const copy1 = track.firstElementChild;
+  if (copy1) {
+    while (copy1.firstChild) el.appendChild(copy1.firstChild);
+  }
+  track.remove();
+}
+
+function mqStart(el) {
+  if (!el || el.dataset.mqAnim === '1') return;
+  const textW = el.scrollWidth;
+  const dist = textW - el.clientWidth;
+  if (dist <= MQ_TOLERANCE) return;
+  mqStop();
+  mqWrap(el);
+  el.style.setProperty('--mq-dist', textW + 'px');
+  el.style.setProperty('--mq-duration', Math.max(textW / MQ_SPEED, MQ_MIN_DURATION) + 's');
+  el.classList.add('mq-anim');
+  el.dataset.mqAnim = '1';
+  mqActive = el;
+}
+
+function mqStop() {
+  if (!mqActive) return;
+  mqActive.classList.remove('mq-anim');
+  mqActive.style.removeProperty('--mq-dist');
+  mqActive.style.removeProperty('--mq-duration');
+  mqUnwrap(mqActive);
+  delete mqActive.dataset.mqAnim;
+  mqActive = null;
+}
+
+function initMarquee() {
+  // PC: una pasada por hover; al pasar a otro elemento se restaura el anterior.
+  document.addEventListener('pointerover', function(e) {
+    if (e.pointerType !== 'mouse') return;
+    const el = e.target.closest ? e.target.closest(MQ_SELECTOR) : null;
+    if (!el) return;
+    if (el === mqHover) return; // no re-disparar dentro del mismo hover
+    mqStop();
+    mqHover = el;
+    mqStart(el);
+  }, true);
+  document.addEventListener('pointerout', function(e) {
+    if (e.pointerType !== 'mouse' || !mqHover) return;
+    if (!mqHover.contains(e.relatedTarget)) {
+      mqStop();
+      mqHover = null;
+    }
+  }, true);
+  // Móvil: un toque rueda dos veces y se queda quieto (animationend lo restaura).
+  document.addEventListener('pointerdown', function(e) {
+    if (e.pointerType === 'mouse') return;
+    const el = e.target.closest ? e.target.closest(MQ_SELECTOR) : null;
+    if (el) mqStart(el);
+  }, true);
+  document.addEventListener('animationend', function(e) {
+    const track = e.target;
+    if (!track || !track.classList || !track.classList.contains('mq-track')) return;
+    const el = track.parentElement;
+    if (el && el.classList && el.classList.contains('mq-anim')) mqStop();
+  });
+}
+
 /* ========== TABLE SORTING INIT ========== */
 document.addEventListener('viewChanged', function(e) {
   const map = {
@@ -1159,17 +1249,26 @@ async function loadConflictCount() {
   } catch (_) { countEl.textContent = '?'; }
 }
 
+function emptyConflictState() {
+  return '<div style="text-align:center;padding:34px 12px;color:var(--text-light)">' +
+    '<i class="nf nf-fa-circle_check" style="font-size:46px;color:var(--success,#2e9e5b)"></i>' +
+    '<p style="margin-top:12px;font-size:15px;color:var(--text)">No hay conflictos pendientes</p>' +
+    '<p class="text-muted text-sm" style="margin-top:2px">Tus datos están sincronizados correctamente.</p>' +
+    '</div>';
+}
+
 async function openConflictModal() {
   let conflictos;
   try {
     conflictos = await invoke('get_conflictos');
   } catch (e) { showToast('Error: ' + e, 'error'); return; }
-  if (!conflictos.length) {
-    showToast('No hay conflictos pendientes');
-    return;
-  }
   const container = qs(SEL.conflictList);
   container.innerHTML = '';
+  if (!conflictos.length) {
+    container.innerHTML = emptyConflictState();
+    showModal(qs(SEL.conflictModal));
+    return;
+  }
   conflictos.forEach(c => {
     const card = document.createElement('div');
     card.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px';
@@ -1186,8 +1285,8 @@ async function openConflictModal() {
     var tsFields = ['local_updated_at', 'remote_updated_at', 'updated_at'];
     for (var key of Object.keys(remoteData)) {
       if (tsFields.includes(key)) continue;
-      var lv = JSON.stringify(localData[key]);
-      var rv = JSON.stringify(remoteData[key]);
+      var lv = localData[key] !== undefined ? JSON.stringify(localData[key]) : '—';
+      var rv = remoteData[key] !== undefined ? JSON.stringify(remoteData[key]) : '—';
       if (lv !== rv) {
         fields.push('<tr><td style="padding:2px 8px;font-weight:600">' + escapeHtml(key) + '</td><td style="padding:2px 8px;color:var(--text)">' + escapeHtml(lv) + '</td><td style="padding:2px 8px;color:var(--accent)">' + escapeHtml(rv) + '</td></tr>');
       }

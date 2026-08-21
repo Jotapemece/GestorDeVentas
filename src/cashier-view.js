@@ -56,6 +56,60 @@ async function fetchTasaBcv() {
   btn.textContent = origText;
 }
 
+/* ========== TASA AUTOMÁTICA (18:00 y cada 30 min) ========== */
+var tasaAutoIntervalId = null;
+var _tasaAutoRunning = false;
+const TASA_AUTO_HORA = 18;
+const TASA_AUTO_INTERVAL_MS = 30 * 60 * 1000;
+
+async function runTasaAutoCheck() {
+  if (_tasaAutoRunning) return;
+  _tasaAutoRunning = true;
+  try {
+    const now = new Date();
+    if (now.getHours() < TASA_AUTO_HORA) return;
+    let lastAuto = '';
+    try {
+      lastAuto = await invoke('get_user_config_value', { key: CFG_TASA_AUTO_UPDATED_AT });
+    } catch (e) {}
+    if (lastAuto && (now.getTime() - new Date(lastAuto).getTime()) < TASA_AUTO_INTERVAL_MS) return;
+    const rate = await invoke('fetch_tasa_bcv');
+    const actual = tasaActual || 0;
+    if (Math.abs(rate - actual) < 0.0001) {
+      await invoke('set_user_config_value', { key: CFG_TASA_AUTO_UPDATED_AT, value: now.toISOString() });
+      return;
+    }
+    tasaActual = rate;
+    await invoke('set_tasa', { tasa: tasaActual });
+    await invoke('set_user_config_value', { key: CFG_TASA_AUTO_UPDATED_AT, value: now.toISOString() });
+    const input = qs(SEL.tasaInput);
+    if (input) input.value = tasaActual.toFixed(2);
+    const warn = qs(SEL.tasaWarning);
+    if (warn) warn.style.display = 'none';
+    updateCartTotals();
+    renderProductSearch();
+    refreshAllBsPrices();
+    showToast('Tasa BCV actualizada automáticamente: ' + formatBS(rate), 'success');
+  } catch (e) {
+    console.log('tasa auto check error:', e);
+  } finally {
+    _tasaAutoRunning = false;
+  }
+}
+
+function startTasaAutoUpdate() {
+  stopTasaAutoUpdate();
+  runTasaAutoCheck();
+  tasaAutoIntervalId = setInterval(runTasaAutoCheck, TASA_AUTO_INTERVAL_MS);
+}
+
+function stopTasaAutoUpdate() {
+  if (tasaAutoIntervalId) {
+    clearInterval(tasaAutoIntervalId);
+    tasaAutoIntervalId = null;
+  }
+}
+
 function updateConnectionState() {
   var online = navigator.onLine;
   var input = qs(SEL.tasaInput);
@@ -1207,9 +1261,18 @@ async function confirmPayment() {
     const totalMoneda = totalBsRedondeado(total);
     const recibido = parseInput(qs(SEL.cambioRecibido).value);
     if (recibido > 0) {
-      if (recibido < totalMoneda) {
-        failPayment('El monto recibido (' + formatBS(recibido) + ') es menor al total (' + formatBS(totalMoneda) + ')');
-        return;
+      if (recibido < totalMoneda - 0.005) {
+        const faltante = totalMoneda - recibido;
+        if (faltante <= PAGO_CORTO_MAX_BS) {
+          const ok = await confirmModal(
+            'El pago es menor al total. Faltan ' + formatBS(faltante) + '. ¿Está seguro de cobrar así?',
+            'Pago incompleto', 'Cobrar igual'
+          );
+          if (!ok) { failPayment(); return; }
+        } else {
+          failPayment('El monto recibido (' + formatBS(recibido) + ') es menor al total (' + formatBS(totalMoneda) + ')');
+          return;
+        }
       }
       total_bs_ingresado = recibido;
     } else if (redondeoBs || redondeoTotal) {

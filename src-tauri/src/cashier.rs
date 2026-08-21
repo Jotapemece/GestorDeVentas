@@ -657,6 +657,7 @@ pub fn get_cierre_detalle(
 
 #[tauri::command]
 pub fn get_dashboard_payment_methods(state: State<AppState>, period: String) -> Result<Vec<MetodoTotal>, String> {
+    crate::auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
     let now = chrono::Local::now();
     let today = now.format("%Y-%m-%d").to_string();
@@ -691,6 +692,7 @@ pub fn get_dashboard_payment_methods(state: State<AppState>, period: String) -> 
 
 #[tauri::command]
 pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary, String> {
+    crate::auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -733,6 +735,7 @@ pub fn get_profit_series(
     state: State<AppState>,
     filter: crate::models::ProfitSeriesFilter,
 ) -> Result<Vec<crate::models::ProfitDataPoint>, String> {
+    crate::auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
 
     let start = filter.start_date;

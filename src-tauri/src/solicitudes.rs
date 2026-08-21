@@ -124,8 +124,10 @@ pub fn get_solicitudes_anulacion_pendientes(state: State<AppState>) -> Result<i6
 }
 
 /// Resuelve una solicitud de anulación. `aprobar=true` anula la venta localmente
-/// (si existe) y marca la solicitud aprobada; la anulación se propaga por sync
-/// como cualquier otra (`anulado_delta` restaura stock en los otros dispositivos).
+/// (si existe) y marca la solicitud aprobada; la anulación se propaga por sync como
+/// cualquier otra: el `updated_at` del detalle/venta viaja y el stock se restaura
+/// en los otros dispositivos vía la descarga de productos (que trae el stock del
+/// vendedor que anuló, ya restaurado localmente con `add_stock`).
 /// Si la venta no está presente en ESTE dispositivo, la solicitud queda pendiente
 /// (no se consumen créditos contra una venta que no se puede anular aquí).
 #[tauri::command]

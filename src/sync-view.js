@@ -145,6 +145,11 @@ function startSyncAutoInterval(minutes) {
 function showView(name) {
   // Decisión 2026-08-14: la sincronización está abierta a todos los roles
   // (vendedor y admin suben/descargan). Los guards de rol viven en el backend.
+  // Decisión 2026-08-19: los reportes son solo de administradores.
+  if (!viewAllowedForRole(name, currentUser)) {
+    showToast('Solo los administradores pueden ver los reportes', 'error');
+    name = VIEW.SALES;
+  }
   lastViewName = name;
   if (typeof androidTrackView === 'function') androidTrackView(name);
   // En móvil el carrito es un bottom-sheet: cerrarlo al cambiar de vista para

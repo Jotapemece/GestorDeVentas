@@ -38,13 +38,13 @@ function createAlertaRow(a) {
   if (tipo === 'deuda_rapida') badgeCls = 'badge-warning';
   if (tipo === 'anulacion') badgeCls = 'badge-danger';
   var nota = a.nota ? '<div class="text-muted">' + escapeHtml(a.nota) + '</div>' : '';
-  return '<td>' + formatAlertaFecha(a.fecha_hora) + '</td>' +
-    '<td>' + escapeHtml(a.usuario || '-') + '</td>' +
-    '<td><span class="' + badgeCls + '"><i class="nf ' + icon + '"></i> ' + escapeHtml(alertaTipoLabel(tipo)) + '</span></td>' +
-    '<td>' + escapeHtml(a.cliente_nombre || ('#' + (a.cliente_id || '-'))) + '</td>' +
-    '<td>' + monto + '</td>' +
-    '<td>' + escapeHtml(metodo) + '</td>' +
-    '<td>' + nota + '</td>';
+  return '<td data-label="Fecha">' + formatAlertaFecha(a.fecha_hora) + '</td>' +
+    '<td data-label="Usuario">' + escapeHtml(a.usuario || '-') + '</td>' +
+    '<td data-label="Tipo"><span class="' + badgeCls + '"><i class="nf ' + icon + '"></i> ' + escapeHtml(alertaTipoLabel(tipo)) + '</span></td>' +
+    '<td data-label="Cliente">' + escapeHtml(a.cliente_nombre || ('#' + (a.cliente_id || '-'))) + '</td>' +
+    '<td data-label="Monto">' + monto + '</td>' +
+    '<td data-label="Método">' + escapeHtml(metodo) + '</td>' +
+    '<td data-label="Nota">' + nota + '</td>';
 }
 
 function currentUserIsAdmin() {

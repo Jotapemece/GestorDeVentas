@@ -84,20 +84,28 @@ pub(crate) fn supabase_get(url: &str, key: &str) -> Result<Vec<serde_json::Value
 /// filas que quedan fuera del corte pero el watermark avanza igual.
 pub(crate) const SYNC_PAGE_SIZE: usize = 1000;
 
-/// Descarga paginada completa: itera `order=updated_at.asc&limit={SYNC_PAGE_SIZE}`
-/// con `offset` creciente hasta obtener un batch menor al máximo. Si falla
-/// cualquier página, propaga el error (el caller hace rollback y NO avanza el
-/// watermark). Ordenar por `updated_at` mantiene estable el cursor entre batches.
+/// Descarga paginada completa: itera `order=updated_at.asc,{tie_breaker}.asc`
+/// con `limit={SYNC_PAGE_SIZE}` y `offset` creciente hasta obtener un batch menor
+/// al máximo. Si falla cualquier página, propaga el error (el caller hace rollback
+/// y NO avanza el watermark).
+///
+/// El tie-breaker es necesario porque muchas filas comparten el mismo
+/// `updated_at` (p.ej. los detalles descargados en bloque, o ventas creadas en
+/// la misma operación). Sin él, `order=updated_at.asc` produce un orden no
+/// determinista en los empates y el `offset` salta/duplica filas entre páginas.
+/// La columna usada debe ser la PK de la tabla remota (`codigo` en productos,
+/// `id` en ventas/detalles/clientes/alertas/solicitudes, `sync_id` en usuarios).
 pub(crate) fn supabase_get_paginated(
     base_url: &str,
     key: &str,
+    tie_breaker: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
     let mut all: Vec<serde_json::Value> = Vec::new();
     let mut offset = 0usize;
     loop {
         let page_url = format!(
-            "{}&order=updated_at.asc&limit={}&offset={}",
-            base_url, SYNC_PAGE_SIZE, offset
+            "{}&order=updated_at.asc,{}.asc&limit={}&offset={}",
+            base_url, tie_breaker, SYNC_PAGE_SIZE, offset
         );
         let page = supabase_get(&page_url, key)?;
         let n = page.len();
@@ -140,32 +148,34 @@ pub(crate) fn urlencoding(s: &str) -> String {
 }
 
 /// Helper: ejecuta el boilerplate común de un comando Tauri de upload.
-/// Obtiene db, supabase_config y dispositivo_id, luego llama a `inner` con
-/// (db, supabase_url, supabase_key, dispositivo_id).
+/// USA `secondary_conn` (NO el lock primario) para no congelar el POS mientras
+/// dura la red: el lock primario bloquea TODAS las operaciones de caja/ventas.
+/// El inner hace lectura local -> red -> escritura de watermark sobre la misma
+/// conexión secundaria (autocommit), sin mantener un lock/tx durante el HTTP.
 pub(crate) fn run_upload<F>(state: &tauri::State<'_, crate::db::AppState>, inner: F) -> Result<String, String>
 where
     F: FnOnce(&rusqlite::Connection, &str, &str, &str) -> Result<String, String>,
 {
-    let db = state.lock_db()?;
+    let db = state.secondary_conn()?;
     let (supabase_url, supabase_key) = supabase_config(&db)?;
     let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
     inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
 
 /// Helper: ejecuta el boilerplate común de un comando Tauri de download.
-/// Obtiene secondary_conn, transaction, supabase_config y dispositivo_id,
-/// luego llama a `inner` con (tx, supabase_url, supabase_key, dispositivo_id) y hace commit.
+/// USA `secondary_conn` SIN abrir una transacción de escritura: mantener un tx
+/// durante el HTTP bloquea las escrituras del POS (writer-writer en WAL con
+/// busy_timeout). El inner hace la red y los inserts en autocommit sobre la
+/// conexión secundaria; el watermark se escribe al final y, si falla, no avanza
+/// (los inserts usan INSERT OR IGNORE, así que un reintento no duplica filas).
 pub(crate) fn run_download<F>(state: &tauri::State<'_, crate::db::AppState>, inner: F) -> Result<String, String>
 where
-    F: FnOnce(&rusqlite::Transaction<'_>, &str, &str, &str) -> Result<String, String>,
+    F: FnOnce(&rusqlite::Connection, &str, &str, &str) -> Result<String, String>,
 {
-    let mut db = state.secondary_conn()?;
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
-    let (supabase_url, supabase_key) = supabase_config(&tx)?;
-    let dispositivo_id = get_config(&tx, constants::CFG_DISPOSITIVO_ID)?;
-    let result = inner(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
-    tx.commit().map_err(|e| format!("Error al confirmar descarga: {}", e))?;
-    Ok(result)
+    let db = state.secondary_conn()?;
+    let (supabase_url, supabase_key) = supabase_config(&db)?;
+    let dispositivo_id = get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
+    inner(&db, &supabase_url, &supabase_key, &dispositivo_id)
 }
 
 pub(crate) fn emit_progress(app: &tauri::AppHandle, step: &str, current: u32, total: u32) {

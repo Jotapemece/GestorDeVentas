@@ -167,7 +167,7 @@ pub(crate) fn download_products_inner(
     );
 
     let cloud_products: Vec<serde_json::Value> =
-        supabase_get_paginated(&get_url, supabase_key)?;
+        supabase_get_paginated(&get_url, supabase_key, "codigo")?;
 
     let count = cloud_products.len();
     if count == 0 {
@@ -224,6 +224,23 @@ pub(crate) fn download_products_inner(
         map
     };
 
+    // Mapa id -> nombre de categoría para normalizar el JSON de conflicto
+    // (fix: el local debe reflejar categoria_nombre igual que el remoto).
+    let cat_names: HashMap<i64, String> = {
+        let mut stmt = db
+            .prepare("SELECT id, nombre FROM categorias")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok());
+        let mut m = HashMap::new();
+        for (id, nombre) in rows {
+            m.insert(id, nombre);
+        }
+        m
+    };
+
     let mut updated = 0i64;
     let mut inserted = 0i64;
     let mut conflicts = 0i64;
@@ -268,6 +285,9 @@ pub(crate) fn download_products_inner(
         if let Some((local_ts, local_nombre, local_precio, local_costo, local_stock_min, local_activo, local_cat_id, local_es_inari, local_subcategoria)) = local_map.get(&codigo) {
             let local_ts = if local_ts.is_empty() { None } else { Some(local_ts.as_str()) };
             if is_conflict(local_ts, remote_ts, &last_sync) {
+                let local_cat_nombre = local_cat_id
+                    .and_then(|id| cat_names.get(&id).cloned())
+                    .unwrap_or_default();
                 let local_json = json!({
                     "codigo": &codigo,
                     "nombre": local_nombre,
@@ -276,17 +296,19 @@ pub(crate) fn download_products_inner(
                     "stock_minimo": local_stock_min,
                     "activo": local_activo,
                     "categoria_id": local_cat_id,
+                    "categoria_nombre": &local_cat_nombre,
                     "es_inari": local_es_inari,
                     "subcategoria": local_subcategoria,
                     "local_updated_at": local_ts,
                     "remote_updated_at": remote_ts,
                 });
-                check_and_record_conflict(
+                if check_and_record_conflict(
                     db, "productos", &codigo,
                     local_ts, remote_ts, &last_sync,
                     local_json, remote_json,
-                );
-                conflicts += 1;
+                ) {
+                    conflicts += 1;
+                }
                 continue;
             }
             // LWW: solo aplicar el remoto si es más nuevo que el local (no sobrescribir
@@ -343,6 +365,7 @@ pub(crate) fn download_products_inner(
     ))
 }
 
+// DEAD CODE: wrapper público no invocado desde el frontend (el orquestador usa download_products_inner).
 #[tauri::command]
 pub fn download_products(state: State<AppState>) -> Result<String, String> {
     run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {

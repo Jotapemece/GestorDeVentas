@@ -647,6 +647,7 @@ pub fn get_top_products(
     end_date: Option<String>,
     limit: Option<i64>,
 ) -> Result<Vec<TopProductItem>, String> {
+    crate::auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
 
     let mut sql = String::from(

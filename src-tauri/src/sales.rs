@@ -285,14 +285,16 @@ fn execute_sale_transaction(
         String::new()
     };
 
+    let esperado = total_usd * request.tasa;
     if let Some(bs) = request.total_bs_ingresado {
         if !bs.is_finite() || bs < 0.0 {
             return Err("El total en Bs. ingresado no es válido".to_string());
         }
         // Evita subreportar el total en Bs. (p.ej. fijar Bs. 0.01 en una venta de $100).
-        // Se permite pagar de más (el cliente recibe vuelto), pero nunca de menos del valor.
-        let esperado = total_usd * request.tasa;
-        let tolerancia = (esperado * 0.01).max(1.0);
+        // Se permite pagar de más (el cliente recibe vuelto). Para Efectivo Bs también se
+        // tolera un faltante pequeño (hasta PAGO_CORTO_MAX_BS, p. ej. pagar 200 de 205):
+        // el frontend lo confirmó explícitamente. Por encima de ese tope se rechaza.
+        let tolerancia = (esperado * 0.01).max(constants::PAGO_CORTO_MAX_BS);
         if bs < esperado - tolerancia {
             return Err(format!(
                 "El total en Bs. ingresado (Bs. {:.2}) es menor al total de la venta (Bs. {:.2})",
@@ -306,8 +308,13 @@ fn execute_sale_transaction(
 
     // Efectivo físico recibido por esta venta (sube el "stock" de EFECTIVO):
     // ventas en efectivo_bs (neto tras vuelto) o tramo efectivo_bs de un mixto.
+    // Para efectivo_bs se usa el monto REALMENTE recibido (request.total_bs_ingresado)
+    // y no el total de la venta, así el "Efectivo disponible" no sobreestima la caja
+    // cuando el cliente paga un faltante confirmado.
     let cash_recibido_bs = if request.metodo_pago == constants::METODO_EFECTIVO_BS {
-        (total_usd * request.tasa * constants::ROUNDING_FACTOR).round() / constants::ROUNDING_FACTOR
+        // Neto que queda en el cajón: si paga de más se entrega el vuelto (retiene el
+        // total); si paga un faltante confirmado, retiene lo efectivamente recibido.
+        request.total_bs_ingresado.map(|bs| bs.min(esperado)).unwrap_or(esperado)
     } else if request.metodo_pago == constants::METODO_MIXTO {
         if let Some(ref detalle) = request.pago_detalle {
             if tiene_linea_efectivo {
@@ -741,6 +748,7 @@ pub fn get_sales_report(
     state: State<AppState>,
     filter: SalesReportFilter,
 ) -> Result<SalesReportResult, String> {
+    crate::auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
     get_sales_report_inner(&db, filter)
 }
@@ -1047,6 +1055,7 @@ pub fn get_sales_by_vendor(
     start_date: String,
     end_date: String,
 ) -> Result<Vec<VendorSales>, String> {
+    crate::auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
     let end = crate::helpers::siguiente_dia(&end_date);
 
@@ -1778,6 +1787,32 @@ mod tests {
             tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
         ).unwrap();
         assert!((total_bs - 150.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_total_bs_ingresado_corto_permitido() {
+        // $10 * tasa 10 = Bs 100. Faltante de 5 Bs (dentro del tope de 10) se acepta.
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() }]);
+        request.total_bs_ingresado = Some(95.0);
+        let (_, _, total_bs, _) = execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap();
+        assert!((total_bs - 95.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_total_bs_ingresado_corto_excesivo_rechazado() {
+        // $10 * tasa 10 = Bs 100. Faltante de 15 Bs (supera el tope de 10) se rechaza.
+        let mut conn = setup_bd();
+        let tx = conn.transaction().unwrap();
+        let mut request = req_basico(vec![ProductoVenta { codigo: "P1".into(), cantidad: 1.0, ..Default::default() }]);
+        request.total_bs_ingresado = Some(85.0);
+        let err = execute_sale_transaction(
+            tx, &request, "tester", 1, "sync-1", "dev1", "2026-07-18 10:00:00", "2026-07-18T10:00:00.000Z",
+        ).unwrap_err();
+        assert!(err.contains("menor al total"));
     }
 
     #[test]

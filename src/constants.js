@@ -47,6 +47,7 @@ const FONT_SIZE_DEFAULT = 100;
 //   AUDIT_LIMIT_DEFAULT ↔ AUDIT_LOG_DEFAULT_LIMIT
 // Config keys (db::configuracion.clave) y métodos de pago
 const CFG_TASA_UPDATED_AT = 'tasa_updated_at';
+const CFG_TASA_AUTO_UPDATED_AT = 'tasa_auto_updated_at';
 const CFG_TEMA = 'tema';
 const CFG_FONT_SIZE = 'font_size';
 const CFG_NOMBRE_NEGOCIO = 'nombre_negocio';
@@ -96,11 +97,16 @@ const METODO_CREDITO = 'credito';
 const METODO_MIXTO = 'mixto';
 const ROL_ADMIN = 'admin';
 
+// Faltante máximo permitido (con confirmación) al cobrar en Efectivo Bs por
+// debajo del total (p. ej. pagar Bs. 200 de un total de 205).
+const PAGO_CORTO_MAX_BS = 10;
+
 // Vistas de acceso restringido a administradores (se aplica al restaurar
 // `last_view` y como guard defensivo en showView).
 // Decisión 2026-08-14: la sincronización quedó abierta a todos los roles
 // (vendedor y admin suben/descargan). Solo la gestión de usuarios sigue admin.
-const ADMIN_ONLY_VIEWS = [];
+// Decisión 2026-08-19: los reportes son solo de administradores.
+const ADMIN_ONLY_VIEWS = [VIEW.REPORTS];
 function viewAllowedForRole(name, user) {
   const isAdmin = !!(user && user.rol === ROL_ADMIN);
   return !ADMIN_ONLY_VIEWS.includes(name) || isAdmin;
@@ -109,7 +115,6 @@ function viewAllowedForRole(name, user) {
 // Pseudo-producto "Efectivo": el efectivo físico disponible en Bs. Su "stock"
 // es `efectivo_disponible_bs` y solo cambia al venderlo o al recibir efectivo.
 const CODIGO_EFECTIVO = 'EFECTIVO';
-const CFG_EFECTIVO_DISPONIBLE = 'efectivo_disponible_bs';
 
 // Config keys (db::configuracion.clave) — back-end sync
 const CFG_SUPABASE_URL = 'supabase_url';
@@ -611,8 +616,6 @@ const SEL = {
   changePwdBtn: '#change-pwd-btn',
   checkPendienteCierreBtn: '#check-pendiente-cierre-btn',
   salesBrandTitle: '#sales-brand-title',
-  nombreNegocioInput: '#nombre-negocio-input',
-  nombreNegocioSave: '#nombre-negocio-save',
   adminPwdModal: '#admin-pwd-modal',
   adminPwdInput: '#admin-pwd-input',
   adminPwdUserInfo: '#admin-pwd-user-info',

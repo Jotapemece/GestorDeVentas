@@ -91,7 +91,7 @@ pub fn preview_download(
             urlencoding(&dispositivo_id),
         ),
     );
-    let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &supabase_key)?;
+let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &supabase_key, "codigo")?;
 
     let local_prod: HashMap<String, (String, String, f64, f64, i64, i64, i64, Option<i64>, i64, String)> = {
         let db = state.lock_db()?;
@@ -207,7 +207,7 @@ pub fn preview_download(
             urlencoding(&dispositivo_id),
         ),
     );
-    let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &supabase_key)?;
+let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &supabase_key, "id")?;
 
     let local_cli: HashMap<String, (String, String, i64, f64, i64)> = {
         let db = state.lock_db()?;
@@ -315,7 +315,7 @@ pub fn preview_download(
             vent_filters,
         ),
     );
-    let cloud_ventas: Vec<serde_json::Value> = supabase_get_paginated(&vent_url, &supabase_key)?;
+    let cloud_ventas: Vec<serde_json::Value> = supabase_get_paginated(&vent_url, &supabase_key, "id")?;
 
     let local_vent: HashMap<String, (String, String, String, f64, f64, i64)> = {
         let db = state.lock_db()?;
@@ -420,6 +420,12 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
     let (supabase_url, supabase_key) = super::supabase_config(&db)?;
     let dispositivo_id = super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?;
 
+    // Primer sync del dispositivo: el remoto SIEMPRE gana (LWW off), igual que en
+    // apply_remote_sales/download_products/download_clientes, para sanar la BD local.
+    let first_sync = super::get_config(&db, constants::CFG_FIRST_SYNC_DONE)
+        .unwrap_or_default()
+        .is_empty();
+
     let mut wanted_prod: Vec<&str> = Vec::new();
     let mut wanted_cli: Vec<&str> = Vec::new();
     let mut wanted_ventas: Vec<&str> = Vec::new();
@@ -449,7 +455,7 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
                 urlencoding(&dispositivo_id),
             ),
         );
-let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &supabase_key)?;
+let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &supabase_key, "codigo")?;
 
         // Local map: sync_id (codigo) -> updated_at (lectura sin tx)
         let mut local_ts: HashMap<String, String> = HashMap::new();
@@ -473,7 +479,8 @@ let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &
             }
             let remote_ts = prod["updated_at"].as_str().unwrap_or("");
             let exists = local_ts.contains_key(codigo);
-            if exists && !force {
+            // LWW off en el primer sync (igual que download_products_inner).
+            if exists && !force && !first_sync {
                 let lts = local_ts.get(codigo).cloned().unwrap_or_default();
                 if !lts.is_empty() && remote_ts <= lts.as_str() {
                     skipped += 1;
@@ -550,7 +557,7 @@ let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &
                 urlencoding(&dispositivo_id),
             ),
         );
-let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &supabase_key)?;
+let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &supabase_key, "id")?;
 
         let mut local_ts: HashMap<String, String> = HashMap::new();
         {
@@ -573,7 +580,8 @@ let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &s
             }
             let remote_ts = cli["updated_at"].as_str().unwrap_or("");
             let exists = local_ts.contains_key(sync_id);
-            if exists && !force {
+            // LWW off en el primer sync (igual que download_clientes_inner).
+            if exists && !force && !first_sync {
                 let lts = local_ts.get(sync_id).cloned().unwrap_or_default();
                 if !lts.is_empty() && remote_ts <= lts.as_str() {
                     skipped += 1;

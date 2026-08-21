@@ -18,6 +18,28 @@ pub fn parse_ts(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
         })
 }
 
+/// Devuelve true si los campos de datos (excluyendo timestamps/metadata) difieren
+/// entre el JSON local y el remoto. Sirve para no registrar como conflicto aquellos
+/// casos donde ambos lados terminaron con el mismo valor (p. ej. "sin categoría"
+/// representado como `null`/`""` en un lado y `""` en el otro).
+fn jsons_differ(local: &serde_json::Value, remote: &serde_json::Value) -> bool {
+    let skip = ["local_updated_at", "remote_updated_at", "updated_at"];
+    let rem = match remote.as_object() {
+        Some(o) => o,
+        None => return true,
+    };
+    for (k, rv) in rem.iter() {
+        if skip.contains(&k.as_str()) {
+            continue;
+        }
+        match local.get(k) {
+            Some(lv) if lv == rv => continue,
+            _ => return true,
+        }
+    }
+    false
+}
+
 /// Checks for conflict and records it in the conflictos table. Returns true if conflict was detected.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_and_record_conflict(
@@ -32,6 +54,10 @@ pub(crate) fn check_and_record_conflict(
 ) -> bool {
     if let Some(local) = local_ts {
         if is_conflict(Some(local), remote_ts, last_sync) {
+            // Sin diferencia real de datos: no es un conflicto que requiera revisión.
+            if !jsons_differ(&local_json, &remote_json) {
+                return false;
+            }
             let _ = db.execute(
                 "INSERT INTO conflictos (tabla, item_id, local_json, remote_json) \
                  VALUES (?1, ?2, ?3, ?4)",
@@ -165,6 +191,7 @@ pub fn resolve_conflicto(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_parse_ts_rfc3339() {
@@ -221,5 +248,47 @@ mod tests {
         assert!(!is_conflict(None, Some("2026-07-18T10:00:00.000Z"), "2026-07-18T09:00:00.000Z"));
         assert!(!is_conflict(Some("2026-07-18T10:00:00.000Z"), None, "2026-07-18T09:00:00.000Z"));
         assert!(!is_conflict(None, None, "2026-07-18T09:00:00.000Z"));
+    }
+
+    #[test]
+    fn test_check_and_record_conflict_skips_when_equal() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute(
+            "CREATE TABLE conflictos (id INTEGER PRIMARY KEY AUTOINCREMENT, tabla TEXT, item_id TEXT, \
+             local_json TEXT, remote_json TEXT, resuelto INTEGER DEFAULT 0, created_at TEXT)",
+            [],
+        )
+        .unwrap();
+        let local = json!({"nombre":"A","categoria_nombre":"","categoria_id":null,"local_updated_at":"2026-07-18T10:00:00Z","remote_updated_at":"2026-07-18T10:01:00Z"});
+        let remote = json!({"nombre":"A","categoria_nombre":"","categoria_id":null,"local_updated_at":"2026-07-18T10:00:00Z","remote_updated_at":"2026-07-18T10:01:00Z"});
+        let r = check_and_record_conflict(
+            &db, "productos", "X",
+            Some("2026-07-18T10:00:00Z"), Some("2026-07-18T10:01:00Z"), "2026-07-18T09:00:00Z",
+            local, remote,
+        );
+        assert!(!r);
+        let count: i64 = db.query_row("SELECT COUNT(*) FROM conflictos", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_check_and_record_conflict_records_when_different() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute(
+            "CREATE TABLE conflictos (id INTEGER PRIMARY KEY AUTOINCREMENT, tabla TEXT, item_id TEXT, \
+             local_json TEXT, remote_json TEXT, resuelto INTEGER DEFAULT 0, created_at TEXT)",
+            [],
+        )
+        .unwrap();
+        let local = json!({"nombre":"A","categoria_nombre":"","categoria_id":null,"local_updated_at":"2026-07-18T10:00:00Z","remote_updated_at":"2026-07-18T10:01:00Z"});
+        let remote = json!({"nombre":"B","categoria_nombre":"","categoria_id":null,"local_updated_at":"2026-07-18T10:00:00Z","remote_updated_at":"2026-07-18T10:01:00Z"});
+        let r = check_and_record_conflict(
+            &db, "productos", "X",
+            Some("2026-07-18T10:00:00Z"), Some("2026-07-18T10:01:00Z"), "2026-07-18T09:00:00Z",
+            local, remote,
+        );
+        assert!(r);
+        let count: i64 = db.query_row("SELECT COUNT(*) FROM conflictos", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1);
     }
 }

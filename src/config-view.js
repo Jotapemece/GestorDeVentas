@@ -120,7 +120,31 @@ function applyTheme(theme) {
   }
 }
 
+let _themeSweepTimer = null;
+function runThemeTransition() {
+  // Transición suave de colores (morph) + barrido de una línea arriba→abajo.
+  document.body.classList.add('theme-anim');
+  clearTimeout(_themeSweepTimer);
+  _themeSweepTimer = setTimeout(function() {
+    document.body.classList.remove('theme-anim');
+  }, 650);
+  let sweep = document.getElementById('theme-sweep');
+  if (!sweep) {
+    sweep = document.createElement('div');
+    sweep.id = 'theme-sweep';
+    document.body.appendChild(sweep);
+  }
+  // Reiniciar animación aunque el overlay ya exista.
+  sweep.classList.remove('run');
+  void sweep.offsetWidth;
+  sweep.classList.add('run');
+  setTimeout(function() {
+    if (sweep && sweep.parentNode) sweep.parentNode.removeChild(sweep);
+  }, 600);
+}
+
 async function handleThemeClick(theme) {
+  runThemeTransition();
   applyTheme(theme);
   qsa('.theme-btn').forEach(function(b) { return b.classList.toggle('active', b.dataset.theme === theme); });
   try {
@@ -130,15 +154,6 @@ async function handleThemeClick(theme) {
 }
 
 /* Share receipt via Web Share API (desde el modal de detalle de venta) */
-function copyReceiptToClipboard(venta) {
-  var text = buildReceiptText(venta);
-  navigator.clipboard.writeText(text).then(function() {
-    showToast('Recibo copiado al portapapeles', 'success');
-  }).catch(function() {
-    showToast('No se pudo copiar el recibo', 'error');
-  });
-}
-
 function buildReceiptText(venta) {
   var items = venta.detalles || [];
   var lines = items.map(function(d) { return d.cantidad + 'x ' + d.nombre + ' = ' + formatUSD(d.subtotal); });

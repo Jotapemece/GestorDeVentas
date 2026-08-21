@@ -238,19 +238,14 @@ pub(crate) fn upload_sales_inner(
     Ok(format!("Subida completada: {} venta(s) subidas", all_ventas.len()))
 }
 
-/// Calcula la transición de anulado de un detalle al descargar una venta remota.
-/// Una venta anulada implica todos sus ítems anulados. Devuelve:
-/// - el estado objetivo (`should_be_anulado`)
-/// - delta de stock: +1 => restaurar stock (activo → anulado), -1 => consumir (anulado → activo), 0 => sin cambio
-/// Mantener el delta en 0 cuando ya se alcanzó el estado objetivo hace el sync idempotente.
-pub(crate) fn anulado_delta(local_anulado: bool, remote_anulado: bool, venta_anulada: bool) -> (bool, i8) {
-    let should_be_anulado = venta_anulada || remote_anulado;
-    let delta = match (local_anulado, should_be_anulado) {
-        (false, true) => 1,
-        (true, false) => -1,
-        _ => 0,
-    };
-    (should_be_anulado, delta)
+/// Determina el estado `anulado` objetivo de un detalle al aplicar una venta
+/// remota: una venta anulada implica todos sus ítems anulados.
+/// El stock ya NO se ajusta aquí — viaja en `productos.stock` (upload/download
+/// de productos). Ajustarlo por venta duplicaba el descuento (el producto ya se
+/// descarga con su stock que refleja esas ventas) y bumpeaba `updated_at`,
+/// dejando el producto local "más nuevo" que el remoto y rompiendo el LWW.
+pub(crate) fn anulado_delta(remote_anulado: bool, venta_anulada: bool) -> bool {
+    venta_anulada || remote_anulado
 }
 
 pub(crate) fn download_sales_inner(
@@ -361,7 +356,7 @@ pub(crate) fn apply_remote_sales(
     };
 
     let cloud_ventas: Vec<serde_json::Value> =
-        supabase_get_paginated(&get_url, supabase_key)
+        supabase_get_paginated(&get_url, supabase_key, "id")
             .map_err(|e| format!("Error al descargar ventas: {}", e))?;
 
     if cloud_ventas.is_empty() {
@@ -403,8 +398,6 @@ pub(crate) fn apply_remote_sales(
 
     let mut inserted_ventas = 0;
     let mut updated_ventas = 0;
-    let mut items_restored = 0.0f64;
-    let mut items_consumed = 0.0f64;
     let mut venta_remote_anulada: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
     let mut to_fetch: Vec<String> = Vec::new();
 
@@ -508,7 +501,7 @@ pub(crate) fn apply_remote_sales(
             supabase_url,
             &format!("/detalles_ventas?venta_id=in.({})&select=*", in_clause),
         );
-        let mut dets = supabase_get_paginated(&det_url, supabase_key)
+        let mut dets = supabase_get_paginated(&det_url, supabase_key, "id")
             .map_err(|e| format!("Error al descargar detalles: {}", e))?;
         cloud_detalles.append(&mut dets);
     }
@@ -540,18 +533,7 @@ pub(crate) fn apply_remote_sales(
 
             match local_dets.get(det_sync).copied() {
                 Some((local_det_id, local_anulado)) => {
-                    let (should_be_anulado, delta) = anulado_delta(local_anulado, remote_anulado, venta_anulada);
-                    if delta == 1 {
-                        // Transición activo -> anulado: restaurar stock una sola vez.
-                        crate::db::add_stock(db, &prod_codigo, cantidad)
-                            .map_err(|e| format!("Error restaurando stock: {}", e))?;
-                        items_restored += cantidad;
-                    } else if delta == -1 {
-                        // Transición anulado -> activo (re-activación remota): consumir stock.
-                        crate::db::sub_stock(db, &prod_codigo, cantidad)
-                            .map_err(|e| format!("Error ajustando stock: {}", e))?;
-                        items_consumed += cantidad;
-                    }
+                    let should_be_anulado = anulado_delta(remote_anulado, venta_anulada);
                     if local_anulado != should_be_anulado {
                         db.execute(
                             "UPDATE detalles_ventas SET anulado = ?1 WHERE id = ?2",
@@ -571,11 +553,6 @@ pub(crate) fn apply_remote_sales(
                             det_sync,
                         ],
                     ).map_err(|e| format!("Error insertando detalle remoto: {}", e))?;
-                    if !should_be_anulado {
-                        crate::db::sub_stock(db, &prod_codigo, cantidad)
-                            .map_err(|e| format!("Error ajustando stock: {}", e))?;
-                        items_consumed += cantidad;
-                    }
                     local_dets.insert(det_sync.to_string(), (*lvid, should_be_anulado));
                 }
             }
@@ -596,12 +573,6 @@ pub(crate) fn apply_remote_sales(
     if updated_ventas > 0 {
         parts.push(format!("{} actualizada(s)", updated_ventas));
     }
-    if items_consumed > 0.0 {
-        parts.push(format!("{:.2} unidad(es) restadas de stock", items_consumed));
-    }
-    if items_restored > 0.0 {
-        parts.push(format!("{:.2} unidad(es) restauradas a stock", items_restored));
-    }
 
     Ok(format!(
         "Descarga completada: {}.",
@@ -614,41 +585,20 @@ mod tests {
     use super::{anulado_delta, remota_mas_nueva};
 
     #[test]
-    fn test_anulado_delta_activo_a_anulado_restaura() {
-        let (state, delta) = anulado_delta(false, true, false);
-        assert_eq!(state, true);
-        assert_eq!(delta, 1);
-    }
-
-    #[test]
     fn test_anulado_delta_venta_anulada_implica_items() {
         // Venta anulada remota fuerza el ítem a anulado aunque el detalle diga 0.
-        let (state, delta) = anulado_delta(false, false, true);
-        assert_eq!(state, true);
-        assert_eq!(delta, 1);
+        assert!(anulado_delta(false, true));
+        assert!(anulado_delta(true, true));
     }
 
     #[test]
-    fn test_anulado_delta_idempotente_ya_anulado() {
-        // Ya anulado: no vuelve a restaurar.
-        let (state, delta) = anulado_delta(true, true, false);
-        assert_eq!(state, true);
-        assert_eq!(delta, 0);
+    fn test_anulado_delta_remoto_anula() {
+        assert!(anulado_delta(true, false));
     }
 
     #[test]
     fn test_anulado_delta_idempotente_activo() {
-        let (state, delta) = anulado_delta(false, false, false);
-        assert_eq!(state, false);
-        assert_eq!(delta, 0);
-    }
-
-    #[test]
-    fn test_anulado_delta_reactivacion_consume() {
-        // Anulado -> activo: consume stock de nuevo.
-        let (state, delta) = anulado_delta(true, false, false);
-        assert_eq!(state, false);
-        assert_eq!(delta, -1);
+        assert!(!anulado_delta(false, false));
     }
 
     #[test]

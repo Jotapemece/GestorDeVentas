@@ -6,6 +6,7 @@ body { background: var(--bg); }
   --bg: #F5F0FF;
   --sidebar-bg: #E8D5F5;
   --sidebar-text: #4A4458;
+  --sidebar-text-rgb: 74, 68, 88;
   --primary: #B8A9C9;
   --primary-dark: #9B8AB0;
   --accent: #A8D5BA;
@@ -187,8 +188,88 @@ button:focus-visible,
   outline-offset: 2px;
 }
 
+/* SPLASH (animación de inicio) */
+#splash-screen {
+  display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;
+  background: var(--sidebar-bg); position: fixed; inset: 0; z-index: 3000; overflow: hidden;
+}
+#splash-screen::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(var(--primary-rgb), 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 80%, rgba(var(--accent-rgb), 0.1) 0%, transparent 50%);
+  animation: splashGlow 2.4s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes splashGlow {
+  0% { opacity: 0.6; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.06); }
+}
+.splash-brand { position: relative; text-align: center; }
+.splash-icon {
+  width: 72px; height: 72px; margin: 0 auto 16px; color: var(--sidebar-text);
+  display: flex; align-items: center; justify-content: center;
+  animation: splashBounce 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.splash-icon svg { width: 100%; height: 100%; filter: drop-shadow(0 0 14px rgba(var(--sidebar-text-rgb), 0.45)); }
+@keyframes splashBounce {
+  0% { transform: scale(0.2); opacity: 0; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.splash-title {
+  font-size: 28px; font-weight: 700; letter-spacing: 1px; color: var(--sidebar-text);
+  min-height: 1.2em; display: flex; align-items: center; justify-content: center;
+}
+.splash-title span:first-child { white-space: pre; }
+.splash-cursor {
+  display: inline-block; width: 3px; height: 0.9em; margin-left: 3px;
+  background: var(--sidebar-text); animation: splashCursorBlink 0.7s step-end infinite;
+  border-radius: 1px;
+}
+@keyframes splashCursorBlink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+.splash-subtitle { margin-top: 10px; font-size: 13px; color: var(--sidebar-text); opacity: .8; }
+
+/* Transición de tema: barrido de una línea de arriba hacia abajo + morph de colores */
+#theme-sweep {
+  position: fixed; inset: 0; z-index: 8000; pointer-events: none;
+  background: linear-gradient(to bottom,
+    rgba(var(--primary-rgb), 0) 0%,
+    rgba(var(--primary-rgb), 0.22) 45%,
+    rgba(var(--accent-rgb), 0.30) 50%,
+    rgba(var(--primary-rgb), 0.22) 55%,
+    rgba(var(--primary-rgb), 0) 100%);
+  opacity: 0;
+}
+#theme-sweep.run {
+  animation: themeSweep .55s ease-out forwards;
+}
+@keyframes themeSweep {
+  0% { opacity: 0; transform: translateY(-100%); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(0); }
+}
+body.theme-anim,
+body.theme-anim body,
+body.theme-anim .config-card,
+body.theme-anim .config-card-header,
+body.theme-anim .modal-content,
+body.theme-anim .sidebar,
+body.theme-anim .nav-btn,
+body.theme-anim .bottom-tabs,
+body.theme-anim input,
+body.theme-anim select,
+body.theme-anim textarea,
+body.theme-anim .btn,
+body.theme-anim .table,
+body.theme-anim .table th,
+body.theme-anim .table td {
+  transition: background-color .45s ease, color .45s ease, border-color .45s ease, box-shadow .45s ease;
+}
+
 /* DEVICE REGISTRATION */
-#device-reg-screen { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: var(--sidebar-bg); position: fixed; z-index: 2000; overflow: hidden; }
+#device-reg-screen { display: none; align-items: center; justify-content: center; width: 100%; height: 100%; background: var(--sidebar-bg); position: fixed; z-index: 2000; overflow: hidden; }
 
 /* LOGIN */
 #login-screen {
@@ -410,6 +491,23 @@ button:focus-visible,
 .prod-name-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .prod-name-cell .prod-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prod-name-cell .fav-star-btn { flex-shrink: 0; font-size: 13px; padding: 2px 4px; }
+
+/* --- Marquee: carrusel de texto truncado --- */
+/* Se activa por JS (hover en PC, toque en móvil) SOLO si el texto desborda.
+   El contenido se duplica en .mq-track (dos .mq-copy) y rueda a la izquierda
+   saliendo por la derecha (bucle continuo tipo letrero), a --mq-duration. */
+.mq-anim { overflow: hidden; }
+.mq-track {
+  display: inline-flex; white-space: nowrap; will-change: transform;
+  animation: mq-roll linear 2;
+  animation-duration: var(--mq-duration, 4.5s);
+  animation-delay: 0.4s;
+}
+.mq-copy { display: inline-block; white-space: nowrap; }
+@keyframes mq-roll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(var(--mq-dist) * -1)); }
+}
 @keyframes cartAddFlash {
   0% { background: rgba(var(--accent-rgb), 0.25); }
   100% { background: transparent; }
@@ -888,12 +986,6 @@ body.no-animations *::after {
 .cart-efectivo-field .cart-efectivo-input:focus {
   border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent);
 }
-.cart-efectivo-qty {
-  display: flex; flex-direction: column; gap: 2px;
-  font-size: 13px; color: var(--text); font-weight: 600;
-}
-.cart-efectivo-cobrar { font-weight: 500; }
-
 /* TABLE (global) */
 .table-container { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; position: relative; }
 .table-container::after {
@@ -2914,7 +3006,11 @@ body.no-animations .product-hover-card {
     box-shadow: var(--shadow); touch-action: manipulation;
   }
   .product-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; }
-  .product-card-name { font-size: 13px; font-weight: 600; line-height: 1.25; }
+  .product-card-name {
+    font-size: 13px; font-weight: 600; line-height: 1.25;
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .product-card-prices { display: flex; flex-direction: column; }
   .product-card-price-usd { font-size: 16px; font-weight: 800; color: var(--primary); }
   .product-card-price-bs { font-size: 12px; color: var(--text-light); }
@@ -2928,6 +3024,12 @@ body.no-animations .product-hover-card {
     color: var(--text-light); padding: 18px 2px 6px;
   }
   .product-section { display: none; }
+
+  /* Top productos: el select en su propia fila (header compacto en móvil) */
+  #top-products-section .config-card-header #top-products-limit {
+    flex-basis: 100%; width: 100% !important;
+  }
+  #top-products-section .config-card-header .config-card-desc { flex: 1 1 100%; text-align: left; }
 
   /* --- Cart bottom-sheet --- */
   .sales-center {
@@ -2987,7 +3089,7 @@ body.no-animations .product-hover-card {
      desplegables de los 3 puntos (position: absolute) salgan sin recortarse. */
   .table-container:has(.table-cards) { overflow: visible; }
   .table-cards thead { display: none; }
-  .table-cards { border-collapse: separate; border-spacing: 0 8px; display: block; }
+  .table-cards { border-collapse: separate; border-spacing: 0 8px; display: block; background: var(--card); }
   .table-cards tbody { display: block; }
   .table-cards tr {
     display: block; background: var(--card);
@@ -3078,6 +3180,9 @@ body.no-animations .product-hover-card {
   .table-cards tr.card-collapsible.collapsed td.cell-status { font-size: 11px; }
   .table-cards tr.card-collapsible.collapsed td.cell-name.sale-anulada { color: var(--danger); }
   .table-cards tr.card-collapsible.collapsed td.cell-toggle { margin-left: auto; }
+  /* Ventas del día plegadas (móvil): solo fecha + precio Bs/USD */
+  #daily-sales-table tr.card-collapsible.collapsed td[data-label="Usuario"],
+  #daily-sales-table tr.card-collapsible.collapsed td[data-label="Método"] { display: none; }
 
   /* Reports: hide low-priority cost/margin columns on phone */
   #report-sales-table td:nth-child(7),

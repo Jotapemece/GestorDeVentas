@@ -223,21 +223,34 @@ let historialTasaData = [];
 let selectedTasaFecha = '';
 
 async function openCambiarTasa() {
-  const actual = tasaActual || 0;
-  const nueva = await promptModal('Ingresa la nueva tasa de cambio (Bs. por USD):', 'Cambiar tasa', 'Guardar');
-  if (nueva === null) return;
-  const num = parseFloat(nueva);
-  if (!isFinite(num) || num <= 0) { showToast('Tasa inválida', 'error'); return; }
-  await invokeOrError(invoke('set_tasa', { tasa: num }));
-  tasaActual = num;
-  const input = qs(SEL.tasaInput);
-  if (input) { input.value = num; }
-  const tasaLabel = qs('#tasa-actual-label');
-  if (tasaLabel) tasaLabel.textContent = '(Hoy)';
-  refreshTasaFromInfo();
-  renderCart();
-  loadInventory();
-  showToast('Tasa actualizada a ' + formatBS(num));
+  // Desde 2026-08-19 el botón consulta el BCV automáticamente (el usuario no
+  // escribe el valor); la edición manual sigue en el input de tasa de Ventas.
+  try {
+    const rate = await invoke('fetch_tasa_bcv');
+    const actual = tasaActual || 0;
+    if (Math.abs(rate - actual) < 0.0001) {
+      showToast('La tasa ya está actualizada: ' + formatBS(rate), 'success');
+      return;
+    }
+    const ok = await confirmModal(
+      'El BCV publicó una tasa nueva.\n\nActual: ' + formatBS(actual) + '\nBCV: ' + formatBS(rate) + '\n\n¿Actualizar la tasa?',
+      'Tasa del BCV',
+      'Actualizar'
+    );
+    if (!ok) return;
+    await invokeOrError(invoke('set_tasa', { tasa: rate }));
+    tasaActual = rate;
+    const input = qs(SEL.tasaInput);
+    if (input) { input.value = rate; }
+    const tasaLabel = qs('#tasa-actual-label');
+    if (tasaLabel) tasaLabel.textContent = '(Hoy)';
+    refreshTasaFromInfo();
+    renderCart();
+    loadInventory();
+    showToast('Tasa actualizada a ' + formatBS(rate));
+  } catch (e) {
+    showToast('Error al obtener la tasa del BCV: ' + e, 'error');
+  }
 }
 
 async function openTasaHistorialModal() {

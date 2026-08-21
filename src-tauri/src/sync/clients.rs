@@ -126,7 +126,7 @@ pub(crate) fn download_clientes_inner(
     );
 
     let cloud_clientes: Vec<serde_json::Value> =
-        supabase_get_paginated(&get_url, supabase_key)?;
+        supabase_get_paginated(&get_url, supabase_key, "id")?;
 
     let count = cloud_clientes.len();
     if count == 0 {
@@ -203,12 +203,13 @@ pub(crate) fn download_clientes_inner(
                     "local_updated_at": local_ts_opt,
                     "remote_updated_at": remote_ts,
                 });
-                check_and_record_conflict(
+                if check_and_record_conflict(
                     db, "clientes", sync_id,
                     local_ts_opt, remote_ts, &last_sync,
                     local_json, remote_json,
-                );
-                conflicts += 1;
+                ) {
+                    conflicts += 1;
+                }
                 continue;
             }
             // LWW por fecha: solo sobrescribir si la versión remota es más reciente,
@@ -270,6 +271,7 @@ pub(crate) fn download_clientes_inner(
     ))
 }
 
+// DEAD CODE: wrapper público no invocado desde el frontend (el orquestador usa download_clientes_inner).
 #[tauri::command]
 pub fn download_clientes(state: State<AppState>) -> Result<String, String> {
     run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {

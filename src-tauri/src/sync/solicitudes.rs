@@ -120,7 +120,7 @@ pub(crate) fn download_solicitudes_inner(
         ),
     );
 
-    let cloud: Vec<serde_json::Value> = supabase_get_paginated(&get_url, supabase_key)?;
+    let cloud: Vec<serde_json::Value> = supabase_get_paginated(&get_url, supabase_key, "id")?;
 
     let count = cloud.len();
     if count == 0 {

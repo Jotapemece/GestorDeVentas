@@ -120,7 +120,7 @@ pub(crate) fn download_alertas_inner(
         ),
     );
 
-    let cloud_alertas: Vec<serde_json::Value> = supabase_get_paginated(&get_url, supabase_key)?;
+    let cloud_alertas: Vec<serde_json::Value> = supabase_get_paginated(&get_url, supabase_key, "id")?;
 
     let count = cloud_alertas.len();
     if count == 0 {

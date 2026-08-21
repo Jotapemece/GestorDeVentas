@@ -24,6 +24,26 @@
 </head>
 <body class="compact">
   <div id="app">
+    <div id="splash-screen">
+      <div class="splash-brand">
+        <div class="splash-icon">
+          <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M30 20 L10 45 L25 55 L30 45 L45 50 L50 35 L30 20Z" fill="currentColor"/>
+            <path d="M70 20 L90 45 L75 55 L70 45 L55 50 L50 35 L70 20Z" fill="currentColor"/>
+            <path d="M25 30 L10 20 L20 35 L25 30Z" fill="currentColor" opacity="0.7"/>
+            <path d="M75 30 L90 20 L80 35 L75 30Z" fill="currentColor" opacity="0.7"/>
+            <ellipse cx="38" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+            <ellipse cx="62" cy="42" rx="3" ry="3.5" fill="currentColor" opacity="0.8"/>
+            <ellipse cx="38" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+            <ellipse cx="62" cy="41" rx="1.5" ry="2" fill="#fff" opacity="0.7"/>
+            <ellipse cx="50" cy="55" rx="6" ry="4" fill="currentColor" opacity="0.6"/>
+            <ellipse cx="50" cy="54" rx="3.5" ry="2.5" fill="currentColor" opacity="0.8"/>
+          </svg>
+        </div>
+        <div class="splash-title" id="splash-title"><span></span><span class="splash-cursor"></span></div>
+        <p class="splash-subtitle">Iniciando sistema...</p>
+      </div>
+    </div>
     <div id="device-reg-screen">
       <div class="login-card">
         <div class="login-brand">
@@ -63,7 +83,7 @@
         <div class="login-greeting-date" id="login-greeting-date"></div>
       </div>
       <div class="login-card">
-        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.2</button>
+        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.3</button>
         <div class="login-brand">
           <div class="login-icon">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -142,7 +162,7 @@
             <span class="nav-text">Caja</span>
             <span id="cashier-nav-badge" class="nav-badge hidden" title="Ventas hoy">0</span>
           </button>
-          <button class="nav-btn" data-view="reports">
+          <button class="nav-btn admin-only" data-view="reports">
             <span class="nav-icon"><i class="nf nf-fa-bar_chart"></i></span>
             <span class="nav-text">Reportes</span>
           </button>
@@ -376,7 +396,7 @@
                 <button class="btn btn-outline dropdown-more-btn" data-action="toggle-dropdown" title="M&aacute;s opciones"><i class="nf nf-fa-ellipsis_h"></i> <span class="btn-label">M&aacute;s</span></button>
                 <div class="dropdown-menu dropdown-menu-end">
                   <button id="historial-cierres-btn" class="admin-only"><i class="nf nf-fa-history"></i> Cierres anteriores</button>
-                  <button id="goto-reports-btn"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
+                  <button id="goto-reports-btn" class="admin-only"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
                   <button id="movimientos-btn"><i class="nf nf-fa-money"></i> Movimientos</button>
                   <button id="sync-download-btn" title="Descargar productos, ventas y clientes"><i class="nf nf-fa-cloud_download"></i> Sincronizar</button>
                   <button id="solicitudes-btn" class="admin-only" title="Solicitudes de anulación de ventas"><i class="nf nf-fa-paper_plane"></i> Solicitudes <span id="solicitudes-btn-count" class="nav-badge hidden">0</span></button>
@@ -663,8 +683,8 @@
           </div>
           <div class="config-card">
             <div class="config-card-header">
-              <i class="nf nf-fa-edit"></i> Entrada de datos
-              <span class="config-card-desc">Configura c&oacute;mo ingresas precios y pagos</span>
+              <i class="nf nf-fa-edit"></i> Caja y ventas
+              <span class="config-card-desc">C&oacute;mo ingresas precios y pagos, y cierres pendientes</span>
               <i class="nf nf-fa-chevron_down config-toggle"></i>
             </div>
             <div class="config-card-body">
@@ -696,16 +716,6 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
-            </div>
-          </div>
-
-          <div class="config-card">
-            <div class="config-card-header">
-              <i class="nf nf-fa-money"></i> Caja
-              <span class="config-card-desc">Cierres pendientes y saldo</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
               <div class="config-row">
                 <span class="config-label"><i class="nf nf-fa-hourglass_half"></i> Cierre pendiente</span>
                 <button id="check-pendiente-cierre-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-search"></i> Verificar cierre pendiente</button>
@@ -718,48 +728,22 @@
 
           <div class="config-card">
             <div class="config-card-header">
-              <i class="nf nf-fa-store"></i> Negocio
-              <span class="config-card-desc">Nombre que se muestra en la parte superior de Ventas</span>
+              <i class="nf nf-fa-heart"></i> Preferencias
+              <span class="config-card-desc">Sonidos y opciones de interfaz para mejorar tu experiencia</span>
               <i class="nf nf-fa-chevron_down config-toggle"></i>
             </div>
             <div class="config-card-body">
               <div class="config-row">
-                <span class="config-label"><i class="nf nf-fa-tag"></i> Nombre del negocio</span>
-                <div class="historial-limpieza-row">
-                  <input type="text" id="nombre-negocio-input" maxlength="40" placeholder="Inari Market" aria-label="Nombre del negocio">
-                  <button id="nombre-negocio-save" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Guardar</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="config-card">
-            <div class="config-card-header">
-              <i class="nf nf-fa-music"></i> Sonidos
-              <span class="config-card-desc">Activa o desactiva los efectos de sonido de la aplicaci&oacute;n</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
-              <div class="config-row">
-                <span class="config-label">Habilitar sonidos</span>
+                <span class="config-label"><i class="nf nf-fa-music"></i> Habilitar sonidos</span>
                 <label class="toggle-switch">
                   <input type="checkbox" id="sound-toggle" checked>
                   <span class="toggle-slider"></span>
                 </label>
               </div>
               <div class="config-row">
-                <span class="config-label">Volumen</span>
+                <span class="config-label"><i class="nf nf-fa-volume_up"></i> Volumen</span>
                 <input type="range" id="sound-volume" min="0" max="100" value="50" aria-label="Volumen de sonidos">
               </div>
-            </div>
-          </div>
-          <div class="config-card">
-            <div class="config-card-header">
-              <i class="nf nf-fa-heart"></i> Calidad de vida
-              <span class="config-card-desc">Opciones de interfaz para mejorar tu experiencia</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
               <div class="config-row">
                 <span class="config-label"><i class="nf nf-fa-text_height"></i> Tama&ntilde;o de fuente</span>
                 <div class="font-size-control" style="margin:0">
@@ -828,29 +812,8 @@
           </div>
           <div class="config-card admin-only">
             <div class="config-card-header">
-              <i class="nf nf-fa-eraser"></i> Limpieza del historial
-              <span class="config-card-desc">Administra la retenci&oacute;n autom&aacute;tica de registros</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
-              <div class="config-info">
-                <p class="text-sm">Limpieza autom&aacute;tica: eliminar registros despu&eacute;s de:</p>
-                <div class="historial-limpieza-row">
-                  <input type="number" id="historial-limpieza-dias" min="0" max="365" value="0" aria-label="Días para limpieza automática">
-                  <span class="text-sm">d&iacute;as</span>
-                  <button id="historial-limpieza-save" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Guardar</button>
-                </div>
-                <div class="historial-limpieza-info">
-                  <span class="text-muted text-sm" id="historial-limpieza-status"></span>
-                  <button id="audit-clear-config-btn" class="btn btn-sm btn-danger"><i class="nf nf-fa-trash"></i> Limpiar ahora</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="config-card admin-only">
-            <div class="config-card-header">
-              <i class="nf nf-fa-database"></i> Respaldo
-              <span class="config-card-desc">Copia de seguridad de la base de datos</span>
+              <i class="nf nf-fa-database"></i> Datos y respaldo
+              <span class="config-card-desc">Copias de seguridad y retenci&oacute;n de registros</span>
               <i class="nf nf-fa-chevron_down config-toggle"></i>
             </div>
             <div class="config-card-body">
@@ -881,6 +844,18 @@
               </div>
               <div class="config-info" style="margin-top:4px">
                 <p class="text-sm">Los respaldos m&aacute;s antiguos se eliminan autom&aacute;ticamente. 0 = conservar todos.</p>
+              </div>
+              <div class="config-info" style="margin-top:16px">
+                <p class="text-sm">Limpieza autom&aacute;tica: eliminar registros despu&eacute;s de:</p>
+                <div class="historial-limpieza-row">
+                  <input type="number" id="historial-limpieza-dias" min="0" max="365" value="0" aria-label="Días para limpieza automática">
+                  <span class="text-sm">d&iacute;as</span>
+                  <button id="historial-limpieza-save" class="btn btn-primary btn-sm"><i class="nf nf-fa-save"></i> Guardar</button>
+                </div>
+                <div class="historial-limpieza-info">
+                  <span class="text-muted text-sm" id="historial-limpieza-status"></span>
+                  <button id="audit-clear-config-btn" class="btn btn-sm btn-danger"><i class="nf nf-fa-trash"></i> Limpiar ahora</button>
+                </div>
               </div>
             </div>
           </div>
@@ -965,20 +940,6 @@
               </div>
               <div style="margin-top:12px">
                 <button id="generate-order-btn" class="btn btn-accent"><i class="nf nf-fa-shopping_cart"></i> Generar orden de compra</button>
-              </div>
-            </div>
-          </div>
-          <div class="config-card">
-            <div class="config-card-header">
-              <i class="nf nf-fa-info_circle"></i> Informaci&oacute;n del sistema
-              <span class="config-card-desc">Detalles t&eacute;cnicos de la aplicaci&oacute;n</span>
-              <i class="nf nf-fa-chevron_down config-toggle"></i>
-            </div>
-            <div class="config-card-body">
-              <div class="config-info">
-                <p><strong>Versi&oacute;n:</strong> 1.2.2</p>
-                <p><strong>Base de datos:</strong> SQLite local</p>
-                <p><strong>Framework:</strong> Tauri v2 + Rust</p>
               </div>
             </div>
           </div>
@@ -1138,7 +1099,7 @@
           <span class="nav-text">M&aacute;s</span>
         </button>
         <div id="more-menu" class="more-menu hidden">
-          <button class="more-menu-item" data-view="reports"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
+          <button class="more-menu-item admin-only" data-view="reports"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
           <button class="more-menu-item" data-view="audit"><i class="nf nf-fa-history"></i> Auditor&iacute;a</button>
           <button class="more-menu-item" data-view="sync"><i class="nf nf-fa-cloud_upload"></i> Sincronizaci&oacute;n</button>
           <button class="more-menu-item" data-view="config"><i class="nf nf-fa-cog"></i> Config.</button>
@@ -1927,7 +1888,7 @@
     </div>
   </div>
 
-  <div id="download-preview-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Cambios disponibles para descargar">
+  <div id="download-preview-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Cambios disponibles para descargar" data-no-autofocus="1">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-cloud_download"></i> Cambios disponibles para descargar</h3>
@@ -2157,16 +2118,13 @@
               <p>Ajusta la aplicaci&oacute;n a tu gusto (solo administradores):</p>
               <ul>
                 <li><strong>Tema:</strong> elige entre 8 combinaciones de colores (oscuro, claro, azul, verde, morado, turquesa, naranja, menta).</li>
-                <li><strong>Sonido:</strong> activa/desactiva sonidos y ajusta el volumen. &Uacute;til para confirmar acciones al vender.</li>
-                <li><strong>Fuente:</strong> ajusta el tama&ntilde;o de letra general de la interfaz.</li>
-                <li><strong>Pantalla completa:</strong> alterna entre modo ventana y pantalla completa.</li>
-                <li><strong>Entrada de datos:</strong> coma autom&aacute;tica en montos, c&aacute;lculo de vuelto, redondeo.</li>
+                <li><strong>Preferencias:</strong> sonidos (con volumen), tama&ntilde;o de fuente, pantalla completa y dem&aacute;s opciones de interfaz.</li>
+                <li><strong>Caja y ventas:</strong> coma autom&aacute;tica en montos, c&aacute;lculo de vuelto, redondeo y verificaci&oacute;n de cierre pendiente.</li>
                 <li><strong>Interfaz:</strong> barra lateral auto-plegable, confirmaci&oacute;n de venta, animaciones (contadores, check de venta y efecto de presi&oacute;n en botones).</li>
                 <li><strong>Usuarios:</strong> crea y elimina usuarios, cambia contrase&ntilde;as (admin).</li>
                 <li><strong>IA:</strong> configura tu API key de OpenRouter y el modelo de IA.</li>
                 <li><strong>Sincronizaci&oacute;n:</strong> sube y descarga datos con Supabase. Activa el sync autom&aacute;tico con intervalo configurable.</li>
-                <li><strong>Respaldos:</strong> crea copias de seguridad de la base de datos manualmente.</li>
-                <li><strong>Limpieza:</strong> retenci&oacute;n autom&aacute;tica del historial de acciones (1-365 d&iacute;as).</li>
+                <li><strong>Datos y respaldo:</strong> copias de seguridad de la base de datos y retenci&oacute;n autom&aacute;tica del historial (1-365 d&iacute;as).</li>
               </ul>
             </div>
             <div class="guide-section">
@@ -2362,10 +2320,19 @@
   <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
     <div class="modal-content changelog-content">
       <div class="modal-header">
-        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.2</h3>
+        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.3</h3>
         <span class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body changelog-body">
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-tag" style="color:var(--accent)"></i> v1.2.3</h4>
+          <ul>
+            <li><strong>Carrusel de texto:</strong> los nombres de producto, cliente y otros textos largos que no caben ahora ruedan suavemente de un extremo a otro (m&aacute;s lento y con una pausa inicial) en vez de quedar cortados con puntos suspensivos.</li>
+            <li><strong>Sincronizaci&oacute;n:</strong> se eliminaron los conflictos falsos por categor&iacute;as (ya no aparecen como "undefined" frente a vac&iacute;o en "Ver conflictos").</li>
+            <li><strong>Pago en efectivo con faltante:</strong> al cobrar en Efectivo Bs. ahora se permite un faltante peque&ntilde;o (hasta 10 Bs) con una confirmaci&oacute;n; un faltante mayor se rechaza para evitar cobros incorrectos.</li>
+            <li><strong>Rendimiento:</strong> la sincronizaci&oacute;n manual (subir/descargar) ya no congela la caja ni las ventas mientras dura la operaci&oacute;n, y los reportes y el dashboard cargan m&aacute;s r&aacute;pido (se hacen en paralelo).</li>
+          </ul>
+        </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-sync" style="color:var(--accent)"></i> Sincronizaci&oacute;n no destructiva</h4>
           <ul>

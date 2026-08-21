@@ -12,6 +12,10 @@ pub const METODO_CREDITO: &str = "credito";
 pub const METODO_MIXTO: &str = "mixto";
 pub const METODO_MOVIMIENTOS_CAJA: &str = "movimientos_caja";
 
+/// Faltante máximo permitido (con confirmación en el frontend) al cobrar en
+/// Efectivo Bs por debajo del total (p. ej. pagar Bs. 200 de un total de 205).
+pub const PAGO_CORTO_MAX_BS: f64 = 10.0;
+
 /// Pseudo-producto que representa el efectivo físico disponible en Bs. (el "stock"
 /// es `efectivo_disponible_bs`). Venderlo = entregar billetes a cambio de otro método.
 pub const CODIGO_EFECTIVO: &str = "EFECTIVO";

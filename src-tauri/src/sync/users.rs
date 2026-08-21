@@ -133,7 +133,7 @@ pub(crate) fn download_usuarios_inner(
     );
 
     let cloud_usuarios: Vec<serde_json::Value> =
-        supabase_get_paginated(&get_url, supabase_key)?;
+        supabase_get_paginated(&get_url, supabase_key, "sync_id")?;
 
     let count = cloud_usuarios.len();
     if count == 0 {

@@ -41,12 +41,12 @@ function createSolicitudRow(s) {
   var notaRes = s.nota_resolucion
     ? '<div class="text-muted" style="margin-top:4px">Nota: ' + escapeHtml(s.nota_resolucion) + '</div>'
     : '';
-  var tr = '<td>' + formatSolicitudFecha(s.fecha_hora) + '</td>' +
-    '<td>#' + s.venta_id + '</td>' +
-    '<td>' + escapeHtml(s.solicitante) + '</td>' +
-    '<td>' + motivo + notaRes + '</td>' +
-    '<td>' + solicitudEstadoBadge(s.estado) + '</td>' +
-    '<td class="row-actions">' + acciones + '</td>';
+  var tr = '<td data-label="Fecha">' + formatSolicitudFecha(s.fecha_hora) + '</td>' +
+    '<td data-label="# Venta">#' + s.venta_id + '</td>' +
+    '<td data-label="Solicitante">' + escapeHtml(s.solicitante) + '</td>' +
+    '<td data-label="Motivo">' + motivo + notaRes + '</td>' +
+    '<td data-label="Estado">' + solicitudEstadoBadge(s.estado) + '</td>' +
+    '<td data-label="Acciones" class="row-actions">' + acciones + '</td>';
   return tr;
 }
 
