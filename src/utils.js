@@ -154,7 +154,6 @@ function createClientRow(c) {
     dropdownItems += '<div class="dropdown-divider"></div>' +
       '<button data-action="toggle-cliente-credito" data-id="' + c.id + '" data-activo="' + c.credito_activo + '"><i class="nf ' + toggleIcon + '"></i> ' + toggleLabel + '</button>' +
       '<button data-action="edit-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-pencil"></i> Editar</button>' +
-      '<button data-action="open-quick-debt" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-bolt"></i> Deuda r&aacute;pida</button>' +
       deleteBtn;
   }
   var dropdown = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + dropdownItems + '</div></div>';
@@ -635,7 +634,7 @@ async function getTasaConFallback() { return tasaActual || await invoke('get_tas
 let activeModal = null;
 
 function isProtectedModal(id) {
-  return ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'quick-debt-modal', 'stock-adjust-modal', 'ajustar-efectivo-modal', 'solicitud-motivo-modal'].indexOf(id) !== -1;
+  return ['payment-modal', 'product-modal', 'client-modal', 'abono-modal', 'combo-modal', 'stock-adjust-modal', 'ajustar-efectivo-modal', 'solicitud-motivo-modal'].indexOf(id) !== -1;
 }
 function trapFocus(modalEl) {
   activeModal = modalEl;

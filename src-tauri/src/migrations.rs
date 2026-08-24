@@ -133,6 +133,7 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("039_add_rango_cierres", add_rango_cierres),
     ("040_fix_utc_offset_031", fix_utc_offset_031),
     ("041_fix_future_timestamps", fix_future_timestamps),
+    ("042_add_movimientos_cliente_id", add_movimientos_cliente_id),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -535,6 +536,15 @@ fn add_movimientos_caja(conn: &Connection) -> Result<(), String> {
             created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
         );"
     ).map_err(|e| format!("026 movimientos_caja: {}", e))
+}
+
+fn add_movimientos_cliente_id(conn: &Connection) -> Result<(), String> {
+    if !column_exists(conn, "movimientos_caja", "cliente_id") {
+        conn.execute_batch(
+            "ALTER TABLE movimientos_caja ADD COLUMN cliente_id INTEGER;"
+        ).map_err(|e| format!("042 add movimientos cliente_id: {}", e))?;
+    }
+    Ok(())
 }
 
 fn add_es_pesable(conn: &Connection) -> Result<(), String> {

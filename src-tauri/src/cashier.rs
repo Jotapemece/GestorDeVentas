@@ -7,10 +7,12 @@ use tauri::State;
 
 const SQL_SUM_VENTAS_RANGE: &str =
     "SELECT COUNT(*), COALESCE(SUM(total_usd), 0), COALESCE(SUM(total_bs), 0) \
-     FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
+     FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0 \
+     AND metodo_pago != ?3";
 const SQL_VENTAS_RANGE: &str = "
     SELECT metodo_pago, pago_detalle, total_usd, referencia_pago_movil
-    FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0";
+    FROM ventas WHERE fecha_hora >= ?1 AND fecha_hora < ?2 AND anulada = 0
+    AND metodo_pago != ?3";
 const SQL_PRODUCTOS_VENDIDOS: &str = "
     SELECT p.nombre, SUM(dv.cantidad), SUM(dv.cantidad * dv.precio_usd_unitario)
     FROM detalles_ventas dv
@@ -47,40 +49,36 @@ fn sumar_ventas_rango(
     db: &rusqlite::Connection,
     start: &str,
     end: &str,
+    metodo_excluido: &str,
 ) -> Result<(i64, f64, f64), String> {
-    db.query_row(SQL_SUM_VENTAS_RANGE, params![start, end], |row| {
+    db.query_row(SQL_SUM_VENTAS_RANGE, params![start, end, metodo_excluido], |row| {
         Ok((row.get(0)?, row.get(1)?, row.get(2)?))
     })
     .map_err(|e| format!("Error al obtener totales del período: {}", e))
 }
 
 /// Neto de movimientos de caja (ingresos - egresos) en el rango [start, end).
-/// Devuelve (neto_usd, neto_bs). Los movimientos solo en Bs. (monto_usd=0) se
-/// convierten con la tasa actual para impactar el neto en USD.
+/// Devuelve (neto_usd, neto_bs).
+/// El valor USD canónico de cada movimiento es `monto_usd`; si es 0 (el movimiento
+/// solo se registró en Bs.) se convierte con la tasa. Así NO se cuenta doble cuando
+/// el frontend guarda ambas representaciones (monto_usd y monto_bs) del mismo
+/// movimiento. `neto_bs` es la suma de `monto_bs` (para mostrar).
 fn sumar_movimientos_rango(
     db: &rusqlite::Connection,
     start: &str,
     end: &str,
 ) -> Result<(f64, f64), String> {
-    let (ingresos_usd, egresos_usd, ingresos_bs, egresos_bs): (f64, f64, f64, f64) = db
+    let tasa = crate::db::get_tasa_from_db(db).unwrap_or(0.0);
+    let (neto_usd, neto_bs): (f64, f64) = db
         .query_row(
             "SELECT \
-               COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto_usd ELSE 0 END), 0), \
-               COALESCE(SUM(CASE WHEN tipo='egreso' THEN monto_usd ELSE 0 END), 0), \
-               COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto_bs ELSE 0 END), 0), \
-               COALESCE(SUM(CASE WHEN tipo='egreso' THEN monto_bs ELSE 0 END), 0) \
+               COALESCE(SUM(CASE WHEN tipo='ingreso' THEN CASE WHEN monto_usd > 0 THEN monto_usd ELSE monto_bs / ?3 END ELSE -CASE WHEN monto_usd > 0 THEN monto_usd ELSE monto_bs / ?3 END END), 0), \
+               COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto_bs ELSE -monto_bs END), 0) \
              FROM movimientos_caja WHERE date(created_at) >= ?1 AND date(created_at) < ?2",
-            params![start, end],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            params![start, end, tasa],
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .map_err(|e| format!("Error al obtener movimientos del período: {}", e))?;
-    let tasa = crate::db::get_tasa_from_db(db).unwrap_or(0.0);
-    let neto_bs = ingresos_bs - egresos_bs;
-    let neto_usd = if tasa > 0.0 {
-        (ingresos_usd - egresos_usd) + neto_bs / tasa
-    } else {
-        ingresos_usd - egresos_usd
-    };
     Ok((neto_usd, neto_bs))
 }
 
@@ -103,7 +101,7 @@ fn obtener_totales_del_dia(
     today: &str,
     tomorrow: &str,
 ) -> Result<(i64, f64, f64, f64), String> {
-    let (cnt, usd, bs) = sumar_ventas_rango(db, today, tomorrow)?;
+    let (cnt, usd, bs) = sumar_ventas_rango(db, today, tomorrow, constants::METODO_CREDITO)?;
 
     let tasa: f64 = db
         .query_row(crate::constants::SQL_TASA, [], |row| row.get(0))
@@ -156,7 +154,7 @@ fn compute_report_data_range(
     let mut stmt = db.prepare(SQL_VENTAS_RANGE).map_err(|e| e.to_string())?;
 
     let rows: Vec<(String, Option<String>, f64, Option<String>)> = stmt
-        .query_map(params![start, end], |row| {
+        .query_map(params![start, end, constants::METODO_CREDITO], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })
         .map_err(|e| e.to_string())?
@@ -231,12 +229,45 @@ pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String>
         .filter_map(|r| r.ok())
         .collect();
 
+    // Abonos de hoy (ingresos de caja por pago de deuda) para la sección "Abonos de hoy".
+    let mut ab_stmt = db
+        .prepare(
+            "SELECT m.id, m.usuario_id, COALESCE(m.cliente_id, 0), COALESCE(c.nombre, ''), \
+                    m.monto_usd, m.monto_bs, m.concepto, m.created_at \
+             FROM movimientos_caja m LEFT JOIN clientes c ON m.cliente_id = c.id \
+             WHERE m.tipo = 'ingreso' AND m.concepto LIKE 'Abono%' \
+               AND date(m.created_at) = date('now','localtime') \
+             ORDER BY m.id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let abonos: Vec<AbonoRow> = ab_stmt
+        .query_map([], |row| {
+            Ok(AbonoRow {
+                id: row.get(0)?,
+                cliente_id: row.get(2)?,
+                cliente_nombre: row.get(3)?,
+                monto_usd: row.get(4)?,
+                monto_bs: row.get(5)?,
+                metodo_pago: String::new(),
+                concepto: row.get(6)?,
+                fecha_hora: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    let abonos_usd: f64 = abonos.iter().map(|a| a.monto_usd).sum();
+    let abonos_bs: f64 = abonos.iter().map(|a| a.monto_bs).sum();
+
     Ok(DailySummary {
         total_ventas,
         total_usd,
         total_bs,
         ventas,
         tasa_actual: tasa,
+        abonos,
+        abonos_usd,
+        abonos_bs,
     })
 }
 
@@ -311,7 +342,7 @@ fn detectar_pendiente_cierre(db: &rusqlite::Connection) -> Result<Option<Pendien
     let mut total_bs = 0.0;
     for dia in &dias {
         let next = crate::helpers::siguiente_dia(dia);
-        let (cnt, usd, bs) = sumar_ventas_rango(db, dia, &next)?;
+        let (cnt, usd, bs) = sumar_ventas_rango(db, dia, &next, constants::METODO_CREDITO)?;
         total_ventas += cnt;
         total_usd += usd;
         total_bs += bs;
@@ -709,7 +740,7 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
     let after_month = crate::helpers::siguiente_dia(&chrono::Local::now().format("%Y-%m-%d").to_string());
 
     fn period(db: &rusqlite::Connection, start: &str, end: &str) -> Result<DashboardPeriod, String> {
-        let (cnt, usd, bs) = sumar_ventas_rango(db, start, end)?;
+        let (cnt, usd, bs) = sumar_ventas_rango(db, start, end, constants::METODO_CREDITO)?;
         let costo = obtener_costo_periodo(db, start, end)?;
         let (neto_usd, neto_bs) = sumar_movimientos_rango(db, start, end)?;
         Ok(DashboardPeriod {
@@ -754,11 +785,12 @@ pub fn get_profit_series(
                           WHERE dv.venta_id = v.id), 0)
          FROM ventas v
          WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.anulada = 0
+         AND v.metodo_pago != ?3
          GROUP BY dia",
     ).map_err(|e| e.to_string())?;
 
     let ventas_rows: Vec<(String, f64, f64)> = ventas_stmt
-        .query_map(params![start, end], |row| {
+        .query_map(params![start, end, constants::METODO_CREDITO], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })
         .map_err(|e| e.to_string())?
@@ -815,12 +847,6 @@ const SQL_INSERT_MOVIMIENTO: &str =
 const SQL_LIST_MOVIMIENTOS: &str =
     "SELECT id, tipo, monto_bs, monto_usd, concepto, usuario_id, username, created_at \
      FROM movimientos_caja WHERE date(created_at) = date('now','localtime') ORDER BY id DESC";
-const SQL_TOTAL_MOVIMIENTOS: &str =
-    "SELECT COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto_usd ELSE 0 END), 0), \
-            COALESCE(SUM(CASE WHEN tipo='egreso' THEN monto_usd ELSE 0 END), 0), \
-            COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto_bs ELSE 0 END), 0), \
-            COALESCE(SUM(CASE WHEN tipo='egreso' THEN monto_bs ELSE 0 END), 0) \
-     FROM movimientos_caja WHERE date(created_at) = date('now','localtime')";
 
 #[tauri::command]
 pub fn register_movimiento(state: State<AppState>, tipo: String, monto_bs: f64, monto_usd: f64, concepto: String) -> Result<MovimientoCaja, String> {
@@ -886,22 +912,41 @@ pub fn get_saldo_caja(state: State<AppState>) -> Result<SaldoCaja, String> {
                     AND metodo_pago != ?3",
             params![today, tomorrow, constants::METODO_CREDITO], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(|e| format!("Error al obtener ventas: {}", e))?;
-    let (ingresos_usd, egresos_usd, ingresos_bs, egresos_bs): (f64, f64, f64, f64) = db
-        .query_row(SQL_TOTAL_MOVIMIENTOS, [], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-        })
-        .map_err(|e| format!("Error al obtener movimientos: {}", e))?;
     let tasa = crate::db::get_tasa_from_db(&db).unwrap_or(0.0);
-    // Movimientos en Bs. (monto_usd=0) también mueven la caja: se convierten con la
-    // tasa para impactar el saldo en USD. Si no hay tasa, se usan tal cual en Bs.
-    let neto_usd = ingresos_usd - egresos_usd;
-    let neto_bs = ingresos_bs - egresos_bs;
+    // Valor USD canónico del movimiento = monto_usd (o monto_bs/tasa si es 0).
+    // No se suma monto_bs/tasa además de monto_usd: el frontend guarda ambas
+    // representaciones del mismo movimiento y sumarlas contaría doble.
+    let neto_usd: f64 = db
+        .query_row(
+            "SELECT COALESCE(SUM(CASE WHEN tipo='ingreso' THEN CASE WHEN monto_usd > 0 THEN monto_usd ELSE monto_bs / ?1 END ELSE -CASE WHEN monto_usd > 0 THEN monto_usd ELSE monto_bs / ?1 END END), 0) \
+             FROM movimientos_caja WHERE date(created_at) = date('now','localtime')",
+            params![tasa],
+            |row| Ok(row.get(0)?),
+        )
+        .map_err(|e| format!("Error al obtener movimientos: {}", e))?;
+    let neto_bs: f64 = db
+        .query_row(
+            "SELECT COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto_bs ELSE -monto_bs END), 0) \
+             FROM movimientos_caja WHERE date(created_at) = date('now','localtime')",
+            [],
+            |row| Ok(row.get(0)?),
+        )
+        .map_err(|e| format!("Error al obtener movimientos: {}", e))?;
     let (saldo_usd, saldo_bs) = if tasa > 0.0 {
-        let usd = ventas_usd + neto_usd + neto_bs / tasa;
+        let usd = ventas_usd + neto_usd;
         (usd, usd * tasa)
     } else {
         (ventas_usd + neto_usd, ventas_bs + neto_bs)
     };
+    let (ingresos_usd, egresos_usd): (f64, f64) = db
+        .query_row(
+            "SELECT COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto_usd ELSE 0 END), 0), \
+                     COALESCE(SUM(CASE WHEN tipo='egreso' THEN monto_usd ELSE 0 END), 0) \
+              FROM movimientos_caja WHERE date(created_at) = date('now','localtime')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| format!("Error al obtener movimientos: {}", e))?;
     Ok(SaldoCaja { saldo_usd, saldo_bs, total_ventas_usd: ventas_usd, total_ventas_bs: ventas_bs, total_ingresos_usd: ingresos_usd, total_egresos_usd: egresos_usd })
 }
 
@@ -929,10 +974,11 @@ mod tests {
         )
         .unwrap();
         let (neto_usd, neto_bs) = sumar_movimientos_rango(&conn, "2026-08-06", "2026-08-07").unwrap();
-        // ingresos_usd = 10 (bs+usd) + 0 (solo bs) = 10 ; ingresos_bs = 100 + 200 = 300
-        // egresos_usd = 5 ; egresos_bs = 50
-        // neto_usd = (10 - 5) + (300 - 50)/10 = 5 + 25 = 30 ; neto_bs = 300 - 50 = 250
-        assert!((neto_usd - 30.0).abs() < 1e-6);
+        // El egreso de 2026-08-07 queda fuera del rango. Movimientos incluidos:
+        // ingreso(100,10), egreso(50,5), ingreso(200,0).
+        // Valor USD canónico = monto_usd; el "solo bs" se convierte con la tasa (200/10=20).
+        // neto_usd = 10 - 5 + 20 = 25 ; neto_bs = 100 + 200 - 50 = 250
+        assert!((neto_usd - 25.0).abs() < 1e-6);
         assert!((neto_bs - 250.0).abs() < 1e-6);
     }
 
@@ -942,6 +988,23 @@ mod tests {
         let (neto_usd, neto_bs) = sumar_movimientos_rango(&conn, "2026-08-06", "2026-08-07").unwrap();
         assert!((neto_usd - 0.0).abs() < 1e-9);
         assert!((neto_bs - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_sumar_movimientos_no_cuenta_doble_mismo_movimiento() {
+        let conn = crate::db::test_support::test_conn();
+        crate::db::set_config_value(&conn, "tasa_dolar", "10.0").unwrap();
+        // El frontend guarda un mismo egreso con ambas representaciones (Bs y USD).
+        conn.execute_batch(
+            "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username, created_at) VALUES \
+             ('egreso', 5000.0, 500.0, 'cambio', 1, 'admin', date('now','localtime'));",
+        ).unwrap();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let tomorrow = crate::helpers::siguiente_dia(&today);
+        let (neto_usd, neto_bs) = sumar_movimientos_rango(&conn, &today, &tomorrow).unwrap();
+        // No debe restar 1000 USD (500 + 5000/10), sino solo 500 USD.
+        assert!((neto_usd + 500.0).abs() < 1e-6);
+        assert!((neto_bs + 5000.0).abs() < 1e-6);
     }
 
     #[test]
@@ -967,6 +1030,68 @@ mod tests {
             )
             .unwrap();
         assert!((ventas_usd - 130.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_sumar_ventas_rango_excluye_credito() {
+        let conn = crate::db::test_support::test_conn();
+        conn.execute_batch(
+            "INSERT INTO ventas (fecha_hora, usuario_id, total_usd, total_bs, metodo_pago, tasa_aplicada, anulada, sync_id, dispositivo_origen, updated_at) VALUES \
+             ('2026-08-06 09:00:00', 1, 100.0, 1000.0, 'efectivo_usd', 10.0, 0, 'a', 'local', '2026-08-06T09:00:00Z'), \
+             ('2026-08-06 10:00:00', 1, 50.0, 500.0, 'credito', 10.0, 0, 'b', 'local', '2026-08-06T10:00:00Z'), \
+             ('2026-08-06 11:00:00', 1, 30.0, 300.0, 'punto', 10.0, 0, 'c', 'local', '2026-08-06T11:00:00Z');",
+        ).unwrap();
+        let today = "2026-08-06".to_string();
+        let tomorrow = crate::helpers::siguiente_dia(&today);
+        let (cnt, usd, bs) = sumar_ventas_rango(&conn, &today, &tomorrow, constants::METODO_CREDITO).unwrap();
+        // El crédito ($50) se excluye: 100 + 30 = 130, 2 ventas.
+        assert_eq!(cnt, 2);
+        assert!((usd - 130.0).abs() < 1e-6);
+        assert!((bs - 1300.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_daily_summary_abonos() {
+        let conn = crate::db::test_support::test_conn();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        conn.execute_batch(
+            &format!(
+                "INSERT INTO clientes (nombre, saldo_deuda_usd) VALUES ('Cli A', 20.0); \
+                 INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username, cliente_id, created_at) VALUES \
+                 ('ingreso', 250.0, 25.0, 'Abono deuda - Cliente #1 - Crédito (efectivo_bs)', 1, 'admin', 1, '{0} 10:00:00'), \
+                 ('egreso', 10.0, 1.0, 'gasto', 1, 'admin', NULL, '{0} 11:00:00');",
+                today
+            ),
+        ).unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT m.id, m.usuario_id, COALESCE(m.cliente_id, 0), COALESCE(c.nombre, ''), \
+                        m.monto_usd, m.monto_bs, m.concepto, m.created_at \
+                 FROM movimientos_caja m LEFT JOIN clientes c ON m.cliente_id = c.id \
+                 WHERE m.tipo = 'ingreso' AND m.concepto LIKE 'Abono%' \
+                   AND date(m.created_at) = date('now','localtime') \
+                 ORDER BY m.id DESC",
+            )
+            .unwrap();
+        let abonos: Vec<AbonoRow> = stmt
+            .query_map([], |row| {
+                Ok(AbonoRow {
+                    id: row.get(0)?,
+                    cliente_id: row.get(2)?,
+                    cliente_nombre: row.get(3)?,
+                    monto_usd: row.get(4)?,
+                    monto_bs: row.get(5)?,
+                    metodo_pago: String::new(),
+                    concepto: row.get(6)?,
+                    fecha_hora: row.get(7)?,
+                })
+            })
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert_eq!(abonos.len(), 1);
+        assert!((abonos[0].monto_usd - 25.0).abs() < 1e-6);
+        assert_eq!(abonos[0].cliente_nombre, "Cli A");
     }
 
     #[test]

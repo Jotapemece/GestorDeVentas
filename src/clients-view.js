@@ -24,7 +24,6 @@ async function loadCreditos() {
 
 let creditoFilterTimer = null;
 let abonoMonedaToggler = null;
-let quickDebtMonedaToggler = null;
 function applyCreditoFilter() {
   clearTimeout(creditoFilterTimer);
   creditoFilterTimer = setTimeout(function() {
@@ -54,6 +53,14 @@ function applyCreditoFilter() {
 function openCreditoModal(cliente) {
   editingClienteId = cliente ? cliente.id : null;
   qs(SEL.clientNombre).value = cliente ? cliente.nombre : '';
+  const deudaInput = qs(SEL.clientDeudaUsd);
+  if (deudaInput) {
+    if (cliente && typeof cliente.saldo_deuda_usd === 'number') {
+      deudaInput.value = cliente.saldo_deuda_usd;
+    } else {
+      deudaInput.value = '';
+    }
+  }
   qs(SEL.clientModalTitle).textContent = cliente ? 'Editar Cliente' : 'Registrar Persona para Cr\u00e9dito';
   qs(SEL.clientSaveBtn).textContent = cliente ? 'Guardar Cambios' : 'Guardar';
   clearClientErrors();
@@ -88,7 +95,14 @@ async function saveClient() {
   if (btn) btn.disabled = true;
   try {
     if (editingClienteId) {
-      if (await invokeOrError(invoke('update_cliente', { clienteId: editingClienteId, nombre })) === undefined) return;
+      const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
+      const args = { clienteId: editingClienteId, nombre };
+      if (isAdmin) {
+        const deudaInput = qs(SEL.clientDeudaUsd);
+        const deudaVal = deudaInput && deudaInput.value.trim() !== '' ? Number(deudaInput.value) : null;
+        args.saldoDeudaUsd = deudaVal;
+      }
+      if (await invokeOrError(invoke('update_cliente', args)) === undefined) return;
       showToast('Cliente actualizado');
     } else {
       if (await invokeOrError(invoke('create_cliente', { nombre })) === undefined) return;
@@ -378,27 +392,7 @@ function clearTasaHistorial() {
   showToast('Usando tasa actual del d\u00eda', 'info');
 }
 
-/* ========== QUICK DEBT ========== */
-async function confirmQuickDebt() {
-  let monto = parseInput(qs(SEL.quickDebtMonto).value);
-  const montoBs = parseInput(qs(SEL.quickDebtMontoBs).value);
-  if (monto <= 0 && montoBs <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
-  var tasa = await getTasaConFallback();
-  if (montoBs > 0 && monto <= 0) monto = bsToUsd(montoBs, tasa);
-  if (monto <= 0) { showToast('Ingrese un monto v\u00e1lido', 'error'); return; }
-  var clienteId = parseInt(qs(SEL.quickDebtMonto).dataset.clienteId);
-  var nombre = qs(SEL.quickDebtClienteNombre).textContent;
-  var ok = await confirmModal('Registrar deuda de ' + formatUSD(monto) + ' a "' + nombre + '"?', 'Deuda R\u00e1pida', 'Registrar');
-  if (!ok) return;
-  await withButtonLock(qs(SEL.quickDebtConfirm), async () => {
-    try {
-      if (await invokeOrError(invoke('add_quick_debt', { clienteId: clienteId, montoUsd: monto })) === undefined) return;
-      showToast('Deuda de ' + formatUSD(monto) + ' registrada');
-      closeModal(qs(SEL.quickDebtModal));
-      loadCreditos();
-    } catch (e) { showToast('Error: ' + e, 'error'); }
-  });
-}
+
 
 function updateCreditoStats(clientes) {
   var total = clientes.length;

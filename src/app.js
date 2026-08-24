@@ -15,12 +15,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     onUsdChange: updateAbonoSaldoRestante,
     onBsChange: updateAbonoSaldoRestante
   });
-  quickDebtMonedaToggler = setupMonedaToggle({
-    toggle: qs(SEL.quickDebtMonedaToggle),
-    usdInput: qs(SEL.quickDebtMonto),
-    bsInput: qs(SEL.quickDebtMontoBs),
-    bsGroup: qs(SEL.quickDebtMontoBsGroup)
-  });
   initTableScrollIndicators();
   initMarquee();
   initLoginGreeting();
@@ -124,15 +118,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   qs(SEL.tasaInput).addEventListener('blur', handleTasaChange);
   qs(SEL.tasaFetchBtn)?.addEventListener('click', fetchTasaBcv);
-  qs(SEL.syncDownloadBtn)?.addEventListener('click', async function() {
-    await withLoadingModal('Sincronizando...', async function() {
-      const msg = await invokeOrError(invoke('sync_all'));
-      if (msg === undefined) return;
-      showToast(msg, 'success');
-      await loadProductCache();
-      refreshCashierAfterSync();
-    });
-  });
   qs(SEL.inventoryTasaBtn)?.addEventListener('click', openTasaHistorialModal);
   qs(SEL.inventorySetTasaBtn)?.addEventListener('click', openCambiarTasa);
   qs(SEL.tasaHistorialApply)?.addEventListener('click', applyTasaHistorial);
@@ -669,24 +654,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       loadCreditos();
       return;
     }
-    const quickDebtBtn = e.target.closest('[data-action="open-quick-debt"]');
-    if (quickDebtBtn) {
-      const id = parseInt(quickDebtBtn.dataset.id);
-      const nombre = quickDebtBtn.dataset.nombre;
-      qs(SEL.quickDebtClienteNombre).textContent = nombre;
-      if (typeof quickDebtMonedaToggler !== 'undefined' && quickDebtMonedaToggler) quickDebtMonedaToggler.setUsd();
-      qs(SEL.quickDebtMonto).value = '';
-      qs(SEL.quickDebtMontoBs).value = '';
-      qs(SEL.quickDebtMonto).dataset.clienteId = id;
-      showModal(qs(SEL.quickDebtModal));
-      return;
-    }
   });
-
-  // Quick debt
-  qs(SEL.quickDebtConfirm)?.addEventListener('click', confirmQuickDebt);
-  qs(SEL.quickDebtCancel)?.addEventListener('click', () => closeModal(qs(SEL.quickDebtModal)));
-  qs(SEL.quickDebtClose)?.addEventListener('click', () => closeModal(qs(SEL.quickDebtModal)));
 
   // Client select dropdown
   qs(SEL.clienteSelectBtn)?.addEventListener('click', function(e) {

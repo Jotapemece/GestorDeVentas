@@ -243,7 +243,6 @@ describe('createClientRow (DOM)', () => {
       dropdownItems += '<div class="dropdown-divider"></div>' +
         '<button data-action="toggle-cliente-credito" data-id="' + c.id + '" data-activo="' + c.credito_activo + '"><i class="nf ' + toggleIcon + '"></i> ' + toggleLabel + '</button>' +
         '<button data-action="edit-cliente" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-pencil"></i> Editar</button>' +
-        '<button data-action="open-quick-debt" data-id="' + c.id + '" data-nombre="' + escapeHtml(c.nombre) + '"><i class="nf nf-fa-bolt"></i> Deuda r\u00e1pida</button>' +
         deleteBtn;
     }
     var dropdown = '<div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu">' + dropdownItems + '</div></div>';
@@ -271,7 +270,6 @@ describe('createClientRow (DOM)', () => {
     const html = createClientRow(c);
     expect(html).toContain('toggle-cliente-credito');
     expect(html).toContain('edit-cliente');
-    expect(html).toContain('open-quick-debt');
     expect(html).toContain('delete-cliente');
   });
 

@@ -702,6 +702,10 @@ function startEditCategoria(id, nombre, color) {
   qs(SEL.categoriaNombre).focus();
 }
 
+function coerceId(id) {
+  return (id === null || id === undefined) ? id : Number(id);
+}
+
 function resetCategoriaForm() {
   editingCategoriaId = null;
   qs(SEL.categoriaNombre).value = '';
@@ -730,7 +734,7 @@ async function saveCategoria(e) {
   btn.disabled = true;
   try {
     if (editingCategoriaId !== null) {
-      await invoke('update_categoria', { id: editingCategoriaId, nombre, color });
+      await invoke('update_categoria', { id: coerceId(editingCategoriaId), nombre, color });
       showToast('Categor\u00eda actualizada');
     } else {
       await invoke('create_categoria', { nombre, color });
@@ -750,7 +754,7 @@ async function deleteCategoria(id, nombre) {
   const ok = await confirmModal('\u00bfEliminar la categor\u00eda "' + nombre + '"?\nLos productos de esa categor\u00eda quedar\u00e1n sin categor\u00eda.', 'Eliminar Categor\u00eda', 'Eliminar');
   if (!ok) return;
   try {
-    await invokeOrError(invoke('delete_categoria', { id }));
+    await invokeOrError(invoke('delete_categoria', { id: coerceId(id) }));
     showToast('Categor\u00eda eliminada');
     playSound('remove');
     refreshCategoriasAfterChange();

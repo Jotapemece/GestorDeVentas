@@ -10,14 +10,14 @@
   <script>
     try {
       (function(){var t={
-        oscuro:{'--bg':'#1A1825','--card':'#282636','--card-alt':'#333048','--danger':'#823F3A','--danger-dark':'#662E2A','--primary':'#8A7BB3','--primary-dark':'#6F5E9A','--primary-rgb':'138, 123, 179','--accent':'#4A9070','--accent-dark':'#3A765A','--accent-rgb':'74, 144, 112','--danger-rgb':'130, 63, 58','--overlay':'rgba(0,0,0,0.7)','--shadow':'0 2px 12px rgba(0,0,0,0.4)','--hover':'#3A3752','--border':'#4E4A68','--text':'#E8E0F2','--text-light':'#B0A8C4','--text-secondary':'#B0A8C4','--sidebar-bg':'#12101C','--sidebar-text':'#C8C0D8','--sidebar-text-rgb':'200,192,216'},
-        claro:{'--bg':'#FAFAFA','--card':'#FFFFFF','--card-alt':'#F2F2F2','--danger':'#D97373','--danger-dark':'#C05555','--primary':'#6C8EBF','--primary-dark':'#5070A0','--primary-rgb':'108,142,191','--accent':'#6BAF8D','--accent-dark':'#4A8F6D','--accent-rgb':'107,175,141','--danger-rgb':'217,115,115','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#F5F5F5','--border':'#DDDDDD','--text':'#333333','--text-light':'#777777','--text-secondary':'#777777','--sidebar-bg':'#F0F0F0','--sidebar-text':'#333333','--sidebar-text-rgb':'51,51,51'},
-        azul:{'--bg':'#EDF2F7','--card':'#FFFFFF','--card-alt':'#F2F6FA','--danger':'#E8A0A0','--danger-dark':'#D48888','--primary':'#7B9EBF','--primary-dark':'#5A7D9E','--primary-rgb':'123,158,191','--accent':'#8FC1B5','--accent-dark':'#6DA89A','--accent-rgb':'143,193,181','--danger-rgb':'232,160,160','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#E2E8F0','--border':'#CBD5E0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#2C5282','--sidebar-text':'#EBF4FF','--sidebar-text-rgb':'235,244,255'},
-        morado:{'--bg':'#F5F0FA','--card':'#FFFFFF','--card-alt':'#F0EAF5','--danger':'#E0A8C0','--danger-dark':'#CC90A8','--primary':'#C4B0E0','--primary-dark':'#B098D4','--primary-rgb':'196,176,224','--accent':'#D4A8DC','--accent-dark':'#C090CA','--accent-rgb':'212,168,220','--danger-rgb':'224,168,192','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#F0EAF6','--border':'#D8CCE8','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#6A4C93','--sidebar-text':'#F3E5F5','--sidebar-text-rgb':'243,229,245'},
-        turquesa:{'--bg':'#E6F7F5','--card':'#F5FFFE','--card-alt':'#EAF8F5','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#4DB8AC','--primary-dark':'#3A9A8E','--primary-rgb':'77,184,172','--accent':'#80D0C4','--accent-dark':'#60B8AA','--accent-rgb':'128,208,196','--danger-rgb':'212,176,160','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(26,74,68,0.08)','--hover':'#E8F5F2','--border':'#C0E0DA','--text':'#1A4A44','--text-light':'#5A7A74','--text-secondary':'#5A7A74','--sidebar-bg':'#B0E0D6','--sidebar-text':'#1A4A44','--sidebar-text-rgb':'26,74,68'},
-        naranja:{'--bg':'#FDF0E8','--card':'#FFF8F0','--card-alt':'#F5EDE0','--danger':'#D97050','--danger-dark':'#C06040','--primary':'#D47A4A','--primary-dark':'#C06030','--primary-rgb':'212,122,74','--accent':'#E8A060','--accent-dark':'#D48540','--accent-rgb':'232,160,96','--danger-rgb':'217,112,80','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(74,42,16,0.08)','--hover':'#F8EDE0','--border':'#E8D0B8','--text':'#4A2A10','--text-light':'#8A6A4A','--text-secondary':'#8A6A4A','--sidebar-bg':'#F0C8A8','--sidebar-text':'#5C2A0A','--sidebar-text-rgb':'92,42,10'},
-        menta:{'--bg':'#EEF7EE','--card':'#FFFFFF','--card-alt':'#E8F5E8','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#6BAF8D','--primary-dark':'#4A8F6D','--primary-rgb':'107,175,141','--accent':'#8FC1A8','--accent-dark':'#6DA88A','--accent-rgb':'143,193,168','--danger-rgb':'212,160,160','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(58,106,74,0.08)','--hover':'#E6F5E6','--border':'#D0E0D0','--text':'#2A3A2A','--text-light':'#5A7A6A','--text-secondary':'#5A7A6A','--sidebar-bg':'#B0D0B8','--sidebar-text':'#2A4A3A','--sidebar-text-rgb':'42,74,58'},
-        rubi:{'--bg':'#FDF2F2','--card':'#FFFFFF','--card-alt':'#FDE8E8','--danger':'#D45050','--danger-dark':'#C03838','--primary':'#C45050','--primary-dark':'#A83838','--primary-rgb':'196,80,80','--accent':'#D47070','--accent-dark':'#C05858','--accent-rgb':'212,112,112','--danger-rgb':'212,80,80','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(80,16,16,0.08)','--hover':'#F8E0E0','--border':'#E8C8C8','--text':'#3D1A1A','--text-light':'#8A5A5A','--text-secondary':'#8A5A5A','--sidebar-bg':'#B42A2A','--sidebar-text':'#FDE8E8','--sidebar-text-rgb':'253,232,232'}
+        oscuro:{'--bg':'#1A1825','--card':'#282636','--card-alt':'#333048','--danger':'#823F3A','--danger-dark':'#662E2A','--primary':'#8A7BB3','--primary-dark':'#6F5E9A','--primary-rgb':'138, 123, 179','--accent':'#4A9070','--accent-dark':'#3A765A','--accent-rgb':'74, 144, 112','--danger-rgb':'130, 63, 58','--success':'#3A9070','--inari':'#C07030','--overlay':'rgba(0,0,0,0.7)','--shadow':'0 2px 12px rgba(0,0,0,0.4)','--hover':'#3A3752','--border':'#4E4A68','--text':'#E8E0F2','--text-light':'#B0A8C4','--text-secondary':'#B0A8C4','--sidebar-bg':'#12101C','--sidebar-text':'#C8C0D8','--sidebar-text-rgb':'200,192,216'},
+        claro:{'--bg':'#FAFAFA','--card':'#FFFFFF','--card-alt':'#F2F2F2','--danger':'#D97373','--danger-dark':'#C05555','--primary':'#6C8EBF','--primary-dark':'#5070A0','--primary-rgb':'108,142,191','--accent':'#6BAF8D','--accent-dark':'#4A8F6D','--accent-rgb':'107,175,141','--danger-rgb':'217,115,115','--success':'#4CAF50','--inari':'#E67E22','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(0,0,0,0.06)','--hover':'#F5F5F5','--border':'#DDDDDD','--text':'#333333','--text-light':'#777777','--text-secondary':'#777777','--sidebar-bg':'#F0F0F0','--sidebar-text':'#333333','--sidebar-text-rgb':'51,51,51'},
+        azul:{'--bg':'#EDF2F7','--card':'#FFFFFF','--card-alt':'#F2F6FA','--danger':'#E8A0A0','--danger-dark':'#D48888','--primary':'#7B9EBF','--primary-dark':'#5A7D9E','--primary-rgb':'123,158,191','--accent':'#8FC1B5','--accent-dark':'#6DA89A','--accent-rgb':'143,193,181','--danger-rgb':'232,160,160','--success':'#60A090','--inari':'#D08040','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#E2E8F0','--border':'#CBD5E0','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#2C5282','--sidebar-text':'#EBF4FF','--sidebar-text-rgb':'235,244,255'},
+        morado:{'--bg':'#F5F0FA','--card':'#FFFFFF','--card-alt':'#F0EAF5','--danger':'#E0A8C0','--danger-dark':'#CC90A8','--primary':'#C4B0E0','--primary-dark':'#B098D4','--primary-rgb':'196,176,224','--accent':'#D4A8DC','--accent-dark':'#C090CA','--accent-rgb':'212,168,220','--danger-rgb':'224,168,192','--success':'#80A880','--inari':'#D49060','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(0,0,0,0.08)','--hover':'#F0EAF6','--border':'#D8CCE8','--text':'#2D3748','--text-light':'#718096','--text-secondary':'#718096','--sidebar-bg':'#6A4C93','--sidebar-text':'#F3E5F5','--sidebar-text-rgb':'243,229,245'},
+        turquesa:{'--bg':'#E6F7F5','--card':'#F5FFFE','--card-alt':'#EAF8F5','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#4DB8AC','--primary-dark':'#3A9A8E','--primary-rgb':'77,184,172','--accent':'#80D0C4','--accent-dark':'#60B8AA','--accent-rgb':'128,208,196','--danger-rgb':'212,176,160','--success':'#50B8A0','--inari':'#C88040','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(26,74,68,0.08)','--hover':'#E8F5F2','--border':'#C0E0DA','--text':'#1A4A44','--text-light':'#5A7A74','--text-secondary':'#5A7A74','--sidebar-bg':'#B0E0D6','--sidebar-text':'#1A4A44','--sidebar-text-rgb':'26,74,68'},
+        naranja:{'--bg':'#FDF0E8','--card':'#FFF8F0','--card-alt':'#F5EDE0','--danger':'#D97050','--danger-dark':'#C06040','--primary':'#D47A4A','--primary-dark':'#C06030','--primary-rgb':'212,122,74','--accent':'#E8A060','--accent-dark':'#D48540','--accent-rgb':'232,160,96','--danger-rgb':'217,112,80','--success':'#D4A040','--inari':'#CC6010','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(74,42,16,0.08)','--hover':'#F8EDE0','--border':'#E8D0B8','--text':'#4A2A10','--text-light':'#8A6A4A','--text-secondary':'#8A6A4A','--sidebar-bg':'#F0C8A8','--sidebar-text':'#5C2A0A','--sidebar-text-rgb':'92,42,10'},
+        menta:{'--bg':'#EEF7EE','--card':'#FFFFFF','--card-alt':'#E8F5E8','--danger':'#D4A0A0','--danger-dark':'#C08888','--primary':'#6BAF8D','--primary-dark':'#4A8F6D','--primary-rgb':'107,175,141','--accent':'#8FC1A8','--accent-dark':'#6DA88A','--accent-rgb':'143,193,168','--danger-rgb':'212,160,160','--success':'#5AA85A','--inari':'#D48040','--overlay':'rgba(0,0,0,0.15)','--shadow':'0 2px 12px rgba(58,106,74,0.08)','--hover':'#E6F5E6','--border':'#D0E0D0','--text':'#2A3A2A','--text-light':'#5A7A6A','--text-secondary':'#5A7A6A','--sidebar-bg':'#B0D0B8','--sidebar-text':'#2A4A3A','--sidebar-text-rgb':'42,74,58'},
+        rubi:{'--bg':'#FDF2F2','--card':'#FFFFFF','--card-alt':'#FDE8E8','--danger':'#D45050','--danger-dark':'#C03838','--primary':'#C45050','--primary-dark':'#A83838','--primary-rgb':'196,80,80','--accent':'#D47070','--accent-dark':'#C05858','--accent-rgb':'212,112,112','--danger-rgb':'212,80,80','--success':'#C05050','--inari':'#D48040','--overlay':'rgba(0,0,0,0.2)','--shadow':'0 2px 12px rgba(80,16,16,0.08)','--hover':'#F8E0E0','--border':'#E8C8C8','--text':'#3D1A1A','--text-light':'#8A5A5A','--text-secondary':'#8A5A5A','--sidebar-bg':'#B42A2A','--sidebar-text':'#FDE8E8','--sidebar-text-rgb':'253,232,232'}
       },saved=localStorage.getItem('tema'),theme=t[saved]||t.claro;Object.keys(theme).forEach(function(k){document.documentElement.style.setProperty(k,theme[k])});}());
     } catch (e) {}
   </script>
@@ -83,7 +83,7 @@
         <div class="login-greeting-date" id="login-greeting-date"></div>
       </div>
       <div class="login-card">
-        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.3</button>
+        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.4</button>
         <div class="login-brand">
           <div class="login-icon">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -398,7 +398,6 @@
                   <button id="historial-cierres-btn" class="admin-only"><i class="nf nf-fa-history"></i> Cierres anteriores</button>
                   <button id="goto-reports-btn" class="admin-only"><i class="nf nf-fa-bar_chart"></i> Reportes</button>
                   <button id="movimientos-btn"><i class="nf nf-fa-money"></i> Movimientos</button>
-                  <button id="sync-download-btn" title="Descargar productos, ventas y clientes"><i class="nf nf-fa-cloud_download"></i> Sincronizar</button>
                   <button id="solicitudes-btn" class="admin-only" title="Solicitudes de anulación de ventas"><i class="nf nf-fa-paper_plane"></i> Solicitudes <span id="solicitudes-btn-count" class="nav-badge hidden">0</span></button>
                 </div>
               </div>
@@ -456,6 +455,23 @@
               </thead>
               <tbody id="daily-sales-body"></tbody>
             </table>
+          </div>
+          <div id="daily-abonos" class="daily-abonos hidden">
+            <h4 class="daily-abonos-title">Abonos de hoy <span id="daily-abonos-total" class="daily-abonos-total"></span></h4>
+            <div class="table-container">
+              <table class="table table-cards" id="daily-abonos-table">
+                <thead>
+                  <tr>
+                    <th>Hora</th>
+                    <th>Cliente</th>
+                    <th>Detalle</th>
+                    <th>Total ($)</th>
+                    <th>Total (Bs.)</th>
+                  </tr>
+                </thead>
+                <tbody id="daily-abonos-body"></tbody>
+              </table>
+            </div>
           </div>
         </section>
 
@@ -1437,6 +1453,11 @@
           <input type="text" id="client-nombre" placeholder="Nombre completo">
           <div class="field-error" id="client-nombre-error"></div>
         </div>
+        <div class="form-group admin-only">
+          <label>Deuda actual ($)</label>
+          <input type="number" id="client-deuda-usd" step="0.01" min="0" placeholder="0.00">
+          <small class="text-muted">Solo administradores. Pon 0 para saldar la deuda.</small>
+        </div>
       </div>
       <div class="modal-footer">
         <button id="client-cancel-btn" class="btn btn-outline">Cancelar</button>
@@ -1574,33 +1595,6 @@
     </div>
   </div>
 
-  <div id="quick-debt-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Deuda Rápida">
-    <div class="modal-content" style="max-width:380px">
-      <div class="modal-header">
-        <h3><i class="nf nf-fa-bolt"></i> Deuda R&aacute;pida</h3>
-        <span class="modal-close" id="quick-debt-close" aria-label="Cerrar" title="Cerrar">&times;</span>
-      </div>
-      <div class="modal-body">
-        <p id="quick-debt-cliente-nombre" style="font-weight:600;margin-bottom:12px"></p>
-        <div class="moneda-toggle" id="quick-debt-moneda-toggle">
-          <button type="button" class="moneda-toggle-btn active" data-moneda="usd">USD</button>
-          <button type="button" class="moneda-toggle-btn" data-moneda="bs">Bs.</button>
-        </div>
-        <div class="form-group">
-          <label>Monto en USD</label>
-          <input type="number" id="quick-debt-monto" class="form-input" step="0.01" min="0.01" placeholder="0.00" inputmode="decimal" style="width:100%">
-        </div>
-        <div class="form-group hidden" id="quick-debt-monto-bs-group" style="margin-top:6px">
-          <label>Monto en Bs.</label>
-          <input type="number" id="quick-debt-monto-bs" class="form-input" step="0.01" min="0.01" placeholder="0.00" inputmode="decimal" style="width:100%">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="quick-debt-cancel-btn" class="btn btn-outline">Cancelar</button>
-        <button id="quick-debt-confirm" class="btn btn-primary"><i class="nf nf-fa-check"></i> Registrar Deuda</button>
-      </div>
-    </div>
-  </div>
 
   <div id="close-cashier-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Confirmar Cierre de Jornada">
     <div class="modal-content">
@@ -2320,10 +2314,27 @@
   <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
     <div class="modal-content changelog-content">
       <div class="modal-header">
-        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.3</h3>
+        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.4</h3>
         <span class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body changelog-body">
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-tag" style="color:var(--accent)"></i> v1.2.4</h4>
+          <ul>
+            <li><strong>Abonos de hoy:</strong> nueva secci&oacute;n en "Ventas del d&iacute;a" que lista los abonos/pagos de deuda del d&iacute;a (cliente, detalle, total en $ y Bs.) con su total. El resumen diario ahora incluye los abonos.</li>
+            <li><strong>Saldo de Caja en tiempo real:</strong> la tarjeta "Saldo Caja" ahora refleja ventas + movimientos (ingresos/egresos) en USD y Bs., y se actualiza al registrar una venta o un pago corto.</li>
+            <li><strong>Ventas a cr&eacute;dito fuera de totales:</strong> el fiado ya no cuenta en el n&uacute;mero ni en los totales de ventas del d&iacute;a, dashboard ni series de ganancia (queda como cuenta por cobrar).</li>
+            <li><strong>Deuda de cliente editable (admin):</strong> al editar un cliente, los administradores pueden ver y ajustar su deuda actual en d&oacute;lares (poner 0 para saldarla).</li>
+            <li><strong>Correcci&oacute;n de saldo:</strong> los movimientos de caja ya no se contaban doble; el saldo y los totales ahora son correctos.</li>
+            <li><strong>Navegaci&oacute;n de cierres:</strong> al ver el detalle de un cierre anterior y pulsar "Volver", ahora regresas a la lista de cierres (antes volv&iacute;a a la Caja).</li>
+            <li><strong>Modales m&aacute;s claros:</strong> los campos de detalle de producto/cliente se muestran como tarjetas con precio/costo y stock/margen resaltados; los inputs usan estilo "relleno" con borde y anillo de foco.</li>
+            <li><strong>Temas coherentes:</strong> los 8 temas de color ahora definen tambi&eacute;n <code>--success</code> e <code>--inari</code> en el arranque, eliminando un parpadeo breve en badges de &eacute;xito y productos Inari.</li>
+            <li><strong>Categor&iacute;as:</strong> corregido el error al crear/editar/eliminar categor&iacute;as (el id se enviaba como texto y el backend lo esperaba num&eacute;rico).</li>
+            <li><strong>Apertura de Caja:</strong> corregido un error que imped&iacute;a entrar a la Caja ("par&aacute;metros de consulta incorrectos").</li>
+            <li><strong>"Deuda R&aacute;pida" eliminada:</strong> se removi&oacute; esta funci&oacute;n y su modal; los abonos y deudas se gestionan desde Cr&eacute;ditos/Clientes.</li>
+            <li><strong>Sincronizaci&oacute;n:</strong> se elimin&oacute; el bot&oacute;n "Sincronizar" dentro del m&oacute;dulo de Caja; la sincronizaci&oacute;n completa sigue en la vista Sincronizaci&oacute;n.</li>
+          </ul>
+        </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-tag" style="color:var(--accent)"></i> v1.2.3</h4>
           <ul>

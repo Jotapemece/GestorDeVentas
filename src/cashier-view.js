@@ -1319,6 +1319,10 @@ async function confirmPayment() {
       if (productCache.some(function(p) { return p.codigo === i.codigo; })) addRecentProduct(i.codigo);
     });
     renderProductSearch();
+    /* Refresca "Ventas del día" / caja de inmediato para que la venta
+     * (incluso un pago corto confirmado) aparezca sin tener que salir y
+     * volver a entrar a la vista. */
+    if (typeof loadDailySummary === 'function') loadDailySummary();
     /* Sube la venta (y su detalle, el stock decrementado y clientes nuevos) a
      * Supabase en background: así el otro dispositivo la ve sin esperar al
      * auto-sync. Fire-and-forget; el guard evita chocar con el timer/manual.
@@ -1363,10 +1367,11 @@ async function loadDailySummary() {
   showSkeleton(tbody, 7);
   const results = await invokeOrError(Promise.all([
     invoke('get_daily_summary'),
-    invoke('get_caja_abierta')
+    invoke('get_caja_abierta'),
+    invoke('get_saldo_caja')
   ]));
   if (results === undefined) return;
-  const [summary, cajaAbierta] = results;
+  const [summary, cajaAbierta, saldo] = results;
   qs(SEL.dailyCount).textContent = summary.total_ventas;
     var badge = qs(SEL.cashierNavBadge);
     if (badge) {
@@ -1380,6 +1385,12 @@ async function loadDailySummary() {
     qs(SEL.dailyUsd).textContent = formatUSD(summary.total_usd);
     qs(SEL.dailyBs).textContent = formatBS(summary.total_bs);
     qs(SEL.dailyTasa).textContent = formatBS(summary.tasa_actual);
+
+    /* Saldo de Caja (USD / Bs.) - refleja ventas + movimientos del día */
+    var saldoEl = qs(SEL.movimientosSaldo);
+    if (saldoEl && saldo) saldoEl.textContent = formatUSD(saldo.saldo_usd) + ' / ' + formatBS(saldo.saldo_bs);
+
+    renderDailyAbonos(summary.abonos || [], summary.abonos_usd, summary.abonos_bs);
 
     tbody.innerHTML = '';
     if (summary.ventas.length === 0) {
@@ -1412,6 +1423,32 @@ async function loadDailySummary() {
       closeBtn.style.display = 'none';
     }
     refreshEfectivoSaldo();
+}
+
+function renderDailyAbonos(abonos, totalUsd, totalBs) {
+  const section = qs(SEL.dailyAbonos);
+  const totalEl = qs(SEL.dailyAbonosTotal);
+  const tbody = qs(SEL.dailyAbonosBody);
+  if (!section || !tbody) return;
+  tbody.innerHTML = '';
+  if (!abonos || abonos.length === 0) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+  if (totalEl) totalEl.textContent = formatUSD(totalUsd) + ' / ' + formatBS(totalBs);
+  abonos.forEach(function(a) {
+    const tr = document.createElement('tr');
+    const hora = (a.fecha_hora || '').replace('T', ' ').slice(0, 16);
+    const cliente = a.cliente_nombre || ('#' + a.cliente_id);
+    tr.innerHTML =
+      '<td data-label="Hora">' + escapeHtml(hora) + '</td>' +
+      '<td data-label="Cliente">' + escapeHtml(cliente) + '</td>' +
+      '<td data-label="Detalle">' + escapeHtml(a.concepto || '') + '</td>' +
+      '<td data-label="Total ($)">' + formatUSD(a.monto_usd) + '</td>' +
+      '<td data-label="Total (Bs.)">' + formatBS(a.monto_bs) + '</td>';
+    tbody.appendChild(tr);
+  });
 }
 
 async function updateSalesCashierBanner() {
@@ -1766,6 +1803,7 @@ function drawHistorialChart(data) { drawPieChart('historial-pie-chart', data); }
 
 function closeHistorialDetalle() {
   closeModal(qs(SEL.historialCierreDetalleModal));
+  showModal(qs(SEL.historialCierresModal));
 }
 
 /* ========== TASA INFO (movimientos + abono) ========== */

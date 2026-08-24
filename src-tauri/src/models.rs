@@ -157,6 +157,21 @@ pub struct DailySummary {
     pub total_bs: f64,
     pub ventas: Vec<Venta>,
     pub tasa_actual: f64,
+    pub abonos: Vec<AbonoRow>,
+    pub abonos_usd: f64,
+    pub abonos_bs: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AbonoRow {
+    pub id: i64,
+    pub cliente_id: i64,
+    pub cliente_nombre: String,
+    pub monto_usd: f64,
+    pub monto_bs: f64,
+    pub metodo_pago: String,
+    pub concepto: String,
+    pub fecha_hora: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

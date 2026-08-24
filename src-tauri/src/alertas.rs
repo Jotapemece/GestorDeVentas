@@ -8,7 +8,6 @@ use uuid::Uuid;
 /// Tipos de alerta de crédito.
 pub const TIPO_VENTA_CREDITO: &str = "venta_credito";
 pub const TIPO_ABONO: &str = "abono";
-pub const TIPO_DEUDA_RAPIDA: &str = "deuda_rapida";
 pub const TIPO_ANULACION: &str = "anulacion";
 
 /// Registra una alerta de crédito. Solo se invoca para operaciones hechas por
@@ -293,7 +292,7 @@ mod tests {
             params![constants::ROL_ADMIN],
         )
         .unwrap();
-        insertar_alerta_si_vendedor(&conn, "jefe", TIPO_DEUDA_RAPIDA, 5.0, None, "C", "", "n").unwrap();
+        insertar_alerta_si_vendedor(&conn, "jefe", "deuda_rapida", 5.0, None, "C", "", "n").unwrap();
         let n: i64 = conn
             .query_row("SELECT COUNT(*) FROM alertas_credito", [], |r| r.get(0))
             .unwrap();

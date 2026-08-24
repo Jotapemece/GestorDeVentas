@@ -44,7 +44,6 @@ const SQL_PAGO_DEUDA_ATOMICO: &str =
     "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd - ?1, updated_at = ?3 WHERE id = ?2 AND saldo_deuda_usd >= ?1";
 const SQL_REACTIVAR_CREDITO: &str =
     "UPDATE clientes SET credito_activo = 1 WHERE id = ?1 AND credito_activo = 0";
-const SQL_UPDATE_CLIENTE: &str = "UPDATE clientes SET nombre = ?1, updated_at = ?2 WHERE id = ?3";
 
 fn row_to_cliente(row: &rusqlite::Row) -> rusqlite::Result<Cliente> {
     let activo: i64 = row.get(2)?;
@@ -387,9 +386,9 @@ fn pay_debt_inner(
         request.pago_detalle.as_deref(),
     );
     tx.execute(
-        "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username) \
-         VALUES ('ingreso', ?1, ?2, ?3, ?4, ?5)",
-        params![monto_bs, request.monto_usd, concepto, usuario_id, username],
+        "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username, cliente_id) \
+         VALUES ('ingreso', ?1, ?2, ?3, ?4, ?5, ?6)",
+        params![monto_bs, request.monto_usd, concepto, usuario_id, username, request.cliente_id],
     )
     .map_err(|e| format!("Error al registrar ingreso de caja: {}", e))?;
 
@@ -433,7 +432,7 @@ fn pay_debt_inner(
 }
 
 #[tauri::command]
-pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String) -> Result<String, String> {
+pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String, saldo_deuda_usd: Option<f64>) -> Result<String, String> {
     if nombre.trim().is_empty() {
         return Err("El nombre no puede estar vacío".to_string());
     }
@@ -444,100 +443,47 @@ pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String) -
         &format!("Editó cliente #{}: '{}'", cliente_id, nombre),
     )?;
     let now = crate::helpers::now_iso();
-    db.execute(SQL_UPDATE_CLIENTE, params![nombre.trim(), now, cliente_id])
+    let saldo_actual: f64 = db
+        .query_row(
+            "SELECT COALESCE(saldo_deuda_usd, 0) FROM clientes WHERE id = ?1",
+            params![cliente_id],
+            |r| r.get(0),
+        )
+        .unwrap_or(0.0);
+
+    let mut sql = String::from("UPDATE clientes SET nombre = ?, updated_at = ?");
+    let mut vals: Vec<Box<dyn rusqlite::ToSql>> = vec![
+        Box::new(nombre.trim().to_string()),
+        Box::new(now.clone()),
+    ];
+    if let Some(nuevo) = saldo_deuda_usd {
+        if !nuevo.is_finite() || nuevo < 0.0 {
+            return Err("La deuda no puede ser negativa ni inválida".to_string());
+        }
+        sql.push_str(", saldo_deuda_usd = ?");
+        vals.push(Box::new(nuevo));
+        let username = state.get_username().unwrap_or_default();
+        if let Err(e) = crate::audit::log_action(
+            &db,
+            &username,
+            &format!(
+                "Editó deuda cliente #{}: ${:.2} → ${:.2}",
+                cliente_id, saldo_actual, nuevo
+            ),
+        ) {
+            eprintln!("[audit] Error al registrar edición de deuda: {}", e);
+        }
+    }
+    sql.push_str(" WHERE id = ?");
+    vals.push(Box::new(cliente_id));
+    let params_refs: Vec<&dyn rusqlite::ToSql> = vals.iter().map(|b| b.as_ref()).collect();
+    db.execute(&sql, &params_refs[..])
         .map_err(|e| e.to_string())?;
     Ok("Cliente actualizado exitosamente".to_string())
 }
 
-#[tauri::command]
-pub fn add_quick_debt(
-    state: State<AppState>,
-    cliente_id: i64,
-    monto_usd: f64,
-) -> Result<String, String> {
-    crate::db::check_action_rate_limit(
-        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
-        "add_quick_debt",
-    )?;
-    crate::auth::check_employee_role(&state)?;
-    if !monto_usd.is_finite() {
-        return Err("El monto no puede ser NaN o infinito".to_string());
-    }
-    if monto_usd <= 0.0 {
-        if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-            crate::db::rate_limit_fail(&mut attempts, "add_quick_debt");
-        }
-        return Err("El monto debe ser mayor a cero".to_string());
-    }
-    let usuario = state.get_employee()?;
-    let username = usuario.username.clone();
-    let mut db = state.lock_db()?;
-    let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
-    let result = add_quick_debt_inner(&tx, cliente_id, monto_usd, &username);
-    match result {
-        Ok(()) => {
-            if let Err(e) = tx.commit() {
-                return Err(format!("Error al confirmar deuda: {}", e));
-            }
-            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-                crate::db::rate_limit_success(&mut attempts, "add_quick_debt");
-            }
-            Ok(format!("Deuda de ${:.2} registrada correctamente", monto_usd))
-        }
-        Err(e) => {
-            if let Ok(mut attempts) = state.admin_action_attempts.lock() {
-                crate::db::rate_limit_fail(&mut attempts, "add_quick_debt");
-            }
-            Err(e)
-        }
-    }
-}
 
-/// Lógica de la deuda rápida aislada del comando Tauri para poder testearla.
-/// Suma la deuda al cliente, audita y genera la alerta de crédito (si el autor
-/// es vendedor).
-fn add_quick_debt_inner(
-    tx: &rusqlite::Transaction,
-    cliente_id: i64,
-    monto_usd: f64,
-    username: &str,
-) -> Result<(), String> {
-    let affected = tx
-        .execute(
-            "UPDATE clientes SET saldo_deuda_usd = saldo_deuda_usd + ?1, updated_at = ?3 WHERE id = ?2",
-            params![monto_usd, cliente_id, crate::helpers::now_iso()],
-        )
-        .map_err(|e| e.to_string())?;
-    if affected == 0 {
-        return Err("Cliente no encontrado".to_string());
-    }
-    let accion = format!(
-        "Deuda rápida - Cliente #{} - Monto: ${:.2}",
-        cliente_id, monto_usd
-    );
-    if let Err(e) = crate::audit::log_action(tx, username, &accion) {
-        eprintln!("[audit] Error al registrar acción: {}", e);
-    }
-    // Alerta de crédito para el admin (solo operaciones de vendedores).
-    let cliente_nombre: String = tx
-        .query_row(
-            "SELECT COALESCE(nombre, '') FROM clientes WHERE id = ?1",
-            params![cliente_id],
-            |r| r.get(0),
-        )
-        .unwrap_or_default();
-    let _ = crate::alertas::insertar_alerta_si_vendedor(
-        tx,
-        username,
-        crate::alertas::TIPO_DEUDA_RAPIDA,
-        monto_usd,
-        Some(cliente_id),
-        &cliente_nombre,
-        "",
-        "Deuda rápida registrada",
-    );
-    Ok(())
-}
+
 
 #[tauri::command]
 pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String, String> {
@@ -818,28 +764,5 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_add_quick_debt_vendedor_genera_alerta_deuda_rapida() {
-        let mut conn = crate::db::test_support::test_conn();
-        insertar_usuario_rol(&conn, 2, "vendedor1", constants::ROL_VENDEDOR);
-        insertar_cliente_con_deuda(&conn, 1, "Juan Pérez", 10.0);
-        let tx = conn.transaction().unwrap();
-        add_quick_debt_inner(&tx, 1, 50.0, "vendedor1").unwrap();
-        tx.commit().unwrap();
-        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_DEUDA_RAPIDA), 1);
-        let deuda: f64 = conn
-            .query_row("SELECT saldo_deuda_usd FROM clientes WHERE id = 1", [], |r| r.get(0))
-            .unwrap();
-        assert!((deuda - 60.0).abs() < 0.001);
-    }
 
-    #[test]
-    fn test_add_quick_debt_admin_no_genera_alerta() {
-        let mut conn = crate::db::test_support::test_conn();
-        insertar_cliente_con_deuda(&conn, 1, "Cliente", 10.0);
-        let tx = conn.transaction().unwrap();
-        add_quick_debt_inner(&tx, 1, 50.0, constants::DEFAULT_ADMIN_USERNAME).unwrap();
-        tx.commit().unwrap();
-        assert_eq!(count_alertas(&conn, crate::alertas::TIPO_DEUDA_RAPIDA), 0);
-    }
 }

@@ -8,6 +8,7 @@ body { background: var(--bg); }
   --sidebar-text: #4A4458;
   --sidebar-text-rgb: 74, 68, 88;
   --primary: #B8A9C9;
+  --primary-rgb: 184, 169, 201;
   --primary-dark: #9B8AB0;
   --accent: #A8D5BA;
   --accent-dark: #8BC4A0;
@@ -1079,11 +1080,13 @@ th .col-toggle-btn { float: none; display: inline; }
 .dropdown-divider { height: 1px; background: var(--border); margin: 4px 8px; }
 
 /* DETAIL MODAL */
-.detail-grid { display: grid; gap: 16px; }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .table td .btn + .btn { margin-left: 4px; }
-.detail-field { display: flex; flex-direction: column; gap: 4px; }
+.detail-field { display: flex; flex-direction: column; gap: 4px; background: var(--card-alt); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .detail-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); font-weight: 600; }
-.detail-value { font-size: 16px; font-weight: 500; color: var(--text); }
+.detail-value { font-size: 17px; font-weight: 500; color: var(--text); }
+#detail-precio, #detail-costo { font-size: 20px; font-weight: 800; color: var(--primary); }
+#detail-stock, #detail-margen { font-weight: 800; color: var(--accent-dark); }
 
 /* SUMMARY CARDS */
 .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -1165,12 +1168,27 @@ th .col-toggle-btn { float: none; display: inline; }
 .loading-modal p { font-size: 15px; color: var(--text); font-weight: 500; text-align: center; }
 
 /* FORM */
-.form-group { margin-bottom: 16px; }
+.form-group { margin-bottom: 18px; }
 .form-group label {
   display: block; margin-bottom: 6px;
   font-weight: 600; font-size: 12px;
   text-transform: uppercase; letter-spacing: 0.3px;
   color: var(--text);
+}
+.form-group input[type="text"], .form-group input[type="number"] {
+  width: 100%;
+  background: var(--card-alt);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.form-group input[type="text"]:focus, .form-group input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15);
 }
 /* PAYMENT MODAL */
 .payment-totals {
@@ -1990,7 +2008,6 @@ th .col-toggle-btn { float: none; display: inline; }
   /* Cashier actions: stack */
   .cashier-actions { width: 100%; flex-wrap: wrap; }
   .cashier-actions .btn { flex: 1; font-size: 12px; padding: 8px 10px; }
-  #sync-download-btn .btn-label { display: none; }
 
   /* Inventory header: stack */
   #view-inventory.active, #view-creditos.active, #view-cashier.active,
@@ -2999,13 +3016,13 @@ body.no-animations .product-hover-card {
   .product-list-container, .cart-container { overflow: visible; border: none; background: transparent; }
 
   /* --- Product cards grid --- */
-  .product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 2px; }
+  .product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 2px; }
   .product-card {
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-    padding: 10px; display: flex; flex-direction: column; gap: 8px;
+    padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
     box-shadow: var(--shadow); touch-action: manipulation;
   }
-  .product-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; }
+  .product-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; min-width: 0; }
   .product-card-name {
     font-size: 13px; font-weight: 600; line-height: 1.25;
     flex: 1 1 auto; min-width: 0;
@@ -3352,4 +3369,14 @@ body.no-animations .product-hover-card {
 .cashier-banner .nf { color: var(--danger); font-size: 16px; flex-shrink: 0; }
 .cashier-banner strong { color: var(--danger); }
 .cashier-banner.hidden { display: none; }
+
+/* ========== Sección "Abonos de hoy" (Ventas del día) ========== */
+.daily-abonos { margin-top: 18px; }
+.daily-abonos-title {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 14px; font-weight: 700; color: var(--text);
+  margin: 0 2px 8px; text-transform: uppercase; letter-spacing: .03em;
+}
+.daily-abonos-total { font-weight: 800; color: var(--accent); font-size: 13px; }
+.daily-abonos.hidden { display: none; }
 
