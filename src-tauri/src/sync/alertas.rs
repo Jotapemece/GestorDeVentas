@@ -128,6 +128,7 @@ pub(crate) fn download_alertas_inner(
     }
 
     let mut inserted = 0;
+    let mut max_ts = String::new();
     for al in &cloud_alertas {
         let sync_id = al["sync_id"].as_str().unwrap_or("");
         if sync_id.is_empty() {
@@ -145,6 +146,12 @@ pub(crate) fn download_alertas_inner(
         let usuario = al["usuario"].as_str().unwrap_or("").to_string();
         let fecha_hora = al["fecha_hora"].as_str().unwrap_or("").to_string();
         let remote_ts = al["updated_at"].as_str().unwrap_or(&ts);
+        // El watermark avanza al updated_at MÁXIMO remoto (no al momento de la
+        // descarga) para no adelantarlo más allá de alertas creadas con reloj
+        // desfasado (evita pérdidas permanentes por desfase de hora entre equipos).
+        if remote_ts > max_ts.as_str() {
+            max_ts = remote_ts.to_string();
+        }
 
         // INSERT OR IGNORE por sync_id. `visto` NO se sincroniza: cada dispositivo
         // mantiene su propia lectura (el badge del admin depende solo del estado local).
@@ -152,8 +159,8 @@ pub(crate) fn download_alertas_inner(
             .execute(
                 "INSERT OR IGNORE INTO alertas_credito \
                  (tipo, monto_usd, cliente_id, cliente_nombre, metodo_pago, nota, usuario, \
-                  fecha_hora, visto, sync_id, updated_at, dispositivo_origen) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, ?10, ?11)",
+                   fecha_hora, visto, sync_id, updated_at, dispositivo_origen) \
+                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, ?10, ?11)",
                 params![
                     tipo, monto, cliente_id, cliente_nombre, metodo, nota, usuario,
                     fecha_hora, sync_id, remote_ts, dispositivo_id,
@@ -165,7 +172,8 @@ pub(crate) fn download_alertas_inner(
         }
     }
 
-    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_ALERTAS, &ts);
+    let wm = if max_ts.is_empty() { ts.clone() } else { max_ts.clone() };
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_ALERTAS, &wm);
 
     Ok(format!(
         "Descarga completada: {} alerta(s) de crédito nuevas.",

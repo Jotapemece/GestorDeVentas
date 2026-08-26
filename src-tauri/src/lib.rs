@@ -83,6 +83,7 @@ pub fn run() {
             clients::pay_debt,
             clients::update_cliente,
             clients::delete_cliente,
+            clients::export_clientes_xlsx,
             // Cashier
             cashier::get_daily_summary,
             cashier::close_cashier,
@@ -156,6 +157,7 @@ pub fn run() {
             sync::get_conflictos,
             sync::resolve_conflicto,
             sync::upload_all,
+            sync::upload_after_sale,
             sync::download_all,
             sync::sync_all,
             sync::refresh_solicitudes,

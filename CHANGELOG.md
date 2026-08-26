@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.2.5] - 2026-08-26
+
+### Nuevas funciones
+- **Exportar clientes a Excel**: botón "Exportar" en Crédito que genera un XLSX (id, nombre, deuda USD/Bs, crédito activo, activo, nº de ventas, total de ventas, última venta, último abono) vía nuevo comando `export_clientes_xlsx`
+- **Toggle de saldo de caja en Bs/USD**: alterna la vista del saldo entre dólares y bolívares; oculto en móvil para no recargar la pantalla (en PC se mantiene)
+- **Carrito: apertura automática y FAB en todos los módulos**: configurables desde Configuración (`cart_auto_open`, `cart_fab_all_modules`)
+
+### Rendimiento y sincronización
+- **Subida tras cada venta (background)**: nuevo comando `upload_after_sale` sube solo ventas + alertas + clientes tras confirmar una venta, sin arrastrar el catálogo completo (evita congelar el POS)
+- **PRAGMAs de rendimiento**: `mmap_size` (256 MB) y `cache_size` para lecturas más rápidas en BD grandes
+- **Alertas de crédito**: el watermark de descarga usa el `updated_at` máximo remoto (no el momento de la descarga), evitando perder alertas por desfase de reloj entre equipos
+- **Login**: la descarga de sync se difiere ~1.5 s tras el login para priorizar el pintado en equipos lentos; se recarga la caché de productos tras descargar
+
+### Correcciones y UX
+- **Bug del deshacer en el carrito**: al deshacer el último producto recién agregado, el carrito se vacía y muestra el estado vacío (antes quedaba una línea fantasma solo con el código y sin precio)
+- **Carritos en espera**: al vender otro producto, los carritos plegados "en espera" ya no reaparecen como pestañas fantasma (el snapshot solo persiste carritos activos)
+- **Menú de 3 puntos (acciones por fila)**: ya no queda tapado por la info de la venta en móvil (z-index y posicionamiento corregidos)
+- **Notificaciones largas**: si el texto no cabe, rueda en carrusel automático y se pausa al mantener el dedo/clic (una vuelta y se detiene)
+- **Indicador de sincronización**: el sidebar ahora muestra "Última sincronización: hace X min" con punto verde (reciente) / ámbar / rojo (vieja o nunca), y "Sincronizando…" en azul durante el proceso
+- **Indicador "Guardando…"**: al cambiar cualquier configuración aparece un pill "Guardando…" → "Guardado ✓"
+- **Vibración en venta (Android)**: se añadió el permiso VIBRATE; el teléfono vibra al confirmar una venta (y al agregar producto)
+- **Gráfico de ganancias**: cambio de rango (Hoy/7 días/Mes) por swipe/deslizamiento y botones; mejor redibujado al expandir el dashboard
+- **Login**: carga la configuración del carrito al iniciar sesión
+
+## [1.2.4] - 2026-08
+### Caja y crédito
+- Abonos de hoy, saldo de caja en tiempo real, fiado fuera de totales del día, deuda de cliente editable (admin), navegación de cierres a cierres, modales más claros, temas coherentes (`--success`/`--inari` en arranque), fix categorías (id numérico), apertura de Caja corregida, "Deuda Rápida" eliminada, botón Sync fuera de Caja
+
+## [1.2.3] - 2026-08
+- Carrusel de texto (marquee) para nombres largos, fin de conflictos falsos por categorías, pago en efectivo con faltante permitido (hasta 10 Bs con confirmación), sincronización manual sin congelar la UI, reportes/dashboard en paralelo
+
+## [1.2.2] - 2026-08
+- Ventas del día colapsables en móvil
+
 ## [1.2.1] - 2026-08-13
 
 ### Permisos por rol (Fase A)

@@ -286,7 +286,7 @@ function showChartTooltip(clientX, clientY, text) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'chart-tooltip';
-    el.style.cssText = 'position:fixed;pointer-events:none;background:rgba(0,0,0,0.85);color:#fff;padding:6px 10px;border-radius:4px;font-size:13px;z-index:9999;white-space:nowrap;display:none;';
+    el.style.cssText = 'position:fixed;pointer-events:none;background:rgba(0,0,0,0.85);color:#fff;padding:5px 9px;border-radius:4px;font-size:11px;line-height:1.3;z-index:9999;white-space:normal;max-width:min(82vw,320px);word-break:break-word;display:none;';
     document.body.appendChild(el);
   }
   if (text) {
@@ -650,12 +650,6 @@ function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
 }
 
 /* ========== PROFIT LINE CHART ========== */
-function linePoint(padding, chartW, chartH, minVal, range, count, i, val) {
-  return {
-    x: padding.left + (i / (count - 1)) * chartW,
-    y: padding.top + chartH - ((val - minVal) / range) * chartH
-  };
-}
 
 async function drawProfitLineChart(body) {
   var canvas = qs(SEL.dashboardCanvas);
@@ -688,9 +682,9 @@ async function drawProfitLineChart(body) {
     var usedFallback = false;
     if (!points || points.length < 2) {
       // Fallback: la vista de reportes carga con el filtro por defecto (hoy→hoy),
-      // que produce 0-1 puntos. Re-consultar con los últimos 30 días para dibujar.
+      // que produce 0-1 puntos. Re-consultar con los últimos 7 días para dibujar.
       var fbStart = new Date();
-      fbStart.setDate(fbStart.getDate() - 29);
+      fbStart.setDate(fbStart.getDate() - 6);
       points = await invoke('get_profit_series', {
         filter: { start_date: fbStart.toISOString().slice(0, 10), end_date: endDate }
       });
@@ -727,81 +721,102 @@ async function drawProfitLineChart(body) {
     minVal = Math.max(0, minVal - yPad);
     range = maxVal - minVal || 1;
 
-    // Grid lines
-    ctx.strokeStyle = gridColor;
-    ctx.lineWidth = 1;
-    var gridLines = 5;
-    for (var i = 0; i <= gridLines; i++) {
-      var y = padding.top + (chartH / gridLines) * i;
+    var baseY = padding.top + chartH;
+    function ptX(idx) { return padding.left + (idx / (points.length - 1)) * chartW; }
+    // La curva "se levanta" desde la base: en ease=0 todos los puntos están en
+    // la línea inferior y suben hasta su posición real al llegar ease=1.
+    function ptY(val, ease) {
+      var real = padding.top + chartH - ((val - minVal) / range) * chartH;
+      return baseY + (real - baseY) * ease;
+    }
+
+    function drawBase(ease) {
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid lines
+      ctx.strokeStyle = gridColor;
+      ctx.lineWidth = 1;
+      var gridLines = 5;
+      for (var i = 0; i <= gridLines; i++) {
+        var gy = padding.top + (chartH / gridLines) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, gy);
+        ctx.lineTo(w - padding.right, gy);
+        ctx.stroke();
+        var val = maxVal - (range / gridLines) * i;
+        ctx.fillStyle = mutedColor;
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText('$' + val.toFixed(1), padding.left - 5, gy + 4);
+      }
+
+      // X labels
+      ctx.textAlign = 'center';
+      ctx.font = '10px sans-serif';
+      var step = Math.max(1, Math.floor(points.length / 10));
+      points.forEach(function(p, idx) {
+        if (idx % step !== 0 && idx !== points.length - 1) return;
+        ctx.fillStyle = mutedColor;
+        ctx.fillText(p.date.slice(5), ptX(idx), h - padding.bottom + 15);
+      });
+
+      // Area fill
       ctx.beginPath();
-      ctx.moveTo(padding.left, y);
-      ctx.lineTo(w - padding.right, y);
-      ctx.stroke();
-      var val = maxVal - (range / gridLines) * i;
-      ctx.fillStyle = mutedColor;
-      ctx.font = '11px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText('$' + val.toFixed(1), padding.left - 5, y + 4);
-    }
-
-    // X labels
-    ctx.textAlign = 'center';
-    ctx.font = '10px sans-serif';
-    var step = Math.max(1, Math.floor(points.length / 10));
-    points.forEach(function(p, idx) {
-      if (idx % step !== 0 && idx !== points.length - 1) return;
-      var pt = linePoint(padding, chartW, chartH, minVal, range, points.length, idx, p.profit_usd);
-      ctx.fillStyle = mutedColor;
-      ctx.fillText(p.date.slice(5), pt.x, h - padding.bottom + 15);
-    });
-
-    // Area fill
-    ctx.beginPath();
-    var first = linePoint(padding, chartW, chartH, minVal, range, points.length, 0, points[0].profit_usd);
-    ctx.moveTo(first.x, padding.top + chartH);
-    ctx.lineTo(first.x, first.y);
-    for (var j = 1; j < points.length; j++) {
-      var pj = linePoint(padding, chartW, chartH, minVal, range, points.length, j, points[j].profit_usd);
-      ctx.lineTo(pj.x, pj.y);
-    }
-    ctx.lineTo(padding.left + chartW, padding.top + chartH);
-    ctx.closePath();
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-
-    // Line
-    ctx.beginPath();
-    for (var k = 0; k < points.length; k++) {
-      var pk = linePoint(padding, chartW, chartH, minVal, range, points.length, k, points[k].profit_usd);
-      if (k === 0) ctx.moveTo(pk.x, pk.y);
-      else ctx.lineTo(pk.x, pk.y);
-    }
-    ctx.strokeStyle = lineColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Dots
-    points.forEach(function(p, idx) {
-      var pd = linePoint(padding, chartW, chartH, minVal, range, points.length, idx, p.profit_usd);
-      ctx.beginPath();
-      ctx.arc(pd.x, pd.y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = lineColor;
+      ctx.moveTo(ptX(0), baseY);
+      for (var j = 0; j < points.length; j++) {
+        ctx.lineTo(ptX(j), ptY(points[j].profit_usd, ease));
+      }
+      ctx.lineTo(ptX(points.length - 1), baseY);
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
       ctx.fill();
-    });
 
-    // Labels
-    ctx.fillStyle = mutedColor;
-    ctx.font = '12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(usedFallback ? '\u00daltimos ' + points.length + ' d\u00edas (filtro actual sin datos)' : '\u00daltimos ' + points.length + ' d\u00edas', w / 2, 14);
+      // Line
+      ctx.beginPath();
+      for (var k = 0; k < points.length; k++) {
+        var y = ptY(points[k].profit_usd, ease);
+        if (k === 0) ctx.moveTo(ptX(k), y);
+        else ctx.lineTo(ptX(k), y);
+      }
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 2;
+      ctx.stroke();
 
-    // Hover tooltips
-    var profitPoints = points;
-    var hoverData = {
-      padding: padding, chartW: chartW, chartH: chartH,
-      minVal: minVal, range: range, points: points
-    };
-    attachLineHover(canvas, dpr, hoverData);
+      // Dots
+      points.forEach(function(p, idx) {
+        ctx.beginPath();
+        ctx.arc(ptX(idx), ptY(p.profit_usd, ease), 3, 0, Math.PI * 2);
+        ctx.fillStyle = lineColor;
+        ctx.fill();
+      });
+
+      // Labels
+      ctx.fillStyle = mutedColor;
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(usedFallback ? '\u00daltimos ' + points.length + ' d\u00edas (filtro actual sin datos)' : '\u00daltimos ' + points.length + ' d\u00edas', w / 2, 14);
+    }
+
+    // Animación ease-out (igual patrón que la barra y el pastel): la curva se
+    // levanta desde la base hasta su forma final.
+    var duration = CHART.BAR_ANIM_MS;
+    var startTime = null;
+    function animateProfit(timestamp) {
+      if (!startTime) startTime = timestamp;
+      var progress = Math.min((timestamp - startTime) / duration, 1);
+      var ease = 1 - Math.pow(1 - progress, 3);
+      drawBase(ease);
+      if (progress < 1) { requestAnimationFrame(animateProfit); }
+      else {
+        var hoverData = {
+          padding: padding, chartW: chartW, chartH: chartH,
+          minVal: minVal, range: range, points: points
+        };
+        attachLineHover(canvas, dpr, hoverData);
+        attachProfitSwipe(canvas);
+      }
+    }
+    requestAnimationFrame(animateProfit);
 
   } catch (e) {
     ctx.font = '14px sans-serif';
@@ -809,6 +824,57 @@ async function drawProfitLineChart(body) {
     ctx.textAlign = 'center';
     ctx.fillText('Error: ' + e.message || e, w / 2, h / 2);
   }
+}
+
+/* Mantiene la tarjeta "Dashboard" (con el gráfico de ganancias) desplegada por
+   defecto, aunque app.js colapse todas las .config-card-header al iniciar. Las
+   secciones de datos (top productos, detalle, vendedor) sí quedan plegadas. */
+function ensureDashboardExpanded() {
+  const db = qs(SEL.dashboardBody);
+  const header = db && db.previousElementSibling;
+  if (header && header.classList.contains('config-card-header')) {
+    header.classList.remove('collapsed');
+  }
+}
+
+/* ========== PROFIT CHART RANGE + SWIPE (B5) ========== */
+const PROFIT_RANGES = [
+  { key: 'today', label: 'Hoy' },
+  { key: 'week', label: 'Últimos 7 días' },
+  { key: 'month', label: 'Este mes' }
+];
+function currentProfitRangeKey() {
+  const sd = qs(SEL.reportStartDate), ed = qs(SEL.reportEndDate);
+  if (!sd || !ed || !sd.value || !ed.value) return 'today';
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  if (sd.value === today && ed.value === today) return 'today';
+  const wkStart = new Date(now); wkStart.setDate(now.getDate() - 6);
+  if (sd.value === wkStart.toISOString().split('T')[0] && ed.value === today) return 'week';
+  const mStart = today.slice(0, 8) + '01';
+  if (sd.value === mStart && ed.value === today) return 'month';
+  return 'today';
+}
+function cycleProfitRange(dir) {
+  const idx = PROFIT_RANGES.findIndex(function(r) { return r.key === currentProfitRangeKey(); });
+  const next = (idx + (dir > 0 ? 1 : PROFIT_RANGES.length - 1)) % PROFIT_RANGES.length;
+  const key = PROFIT_RANGES[next].key;
+  if (typeof applyReportPreset === 'function') applyReportPreset(key);
+  if (typeof loadDashboard === 'function') loadDashboard();
+  showToast('Rango: ' + PROFIT_RANGES[next].label, 'info');
+}
+function attachProfitSwipe(canvas) {
+  let sx = 0, sy = 0, st = 0;
+  canvas.addEventListener('touchstart', function(e) {
+    const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now();
+  }, { passive: true });
+  canvas.addEventListener('touchend', function(e) {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) && (Date.now() - st) < 1000) {
+      cycleProfitRange(dx < 0 ? 1 : -1);
+    }
+  }, { passive: true });
 }
 
 function attachLineHover(canvas, dpr, data) {

@@ -18,6 +18,7 @@
 }
 
 .nf-fa-shopping_cart::before { content: "\f07a"; }
+.nf-fa-cart_plus::before { content: "\f217"; }
 .nf-fa-archive::before { content: "\f187"; }
 .nf-fa-credit_card::before { content: "\f09d"; }
 .nf-fa-money::before { content: "\f0d6"; }
@@ -65,6 +66,9 @@
 .nf-fa-chart_pie::before { content: "\f200"; }
 .nf-fa-chart_line::before { content: "\f201"; }
 .nf-fa-calendar::before { content: "\f133"; }
+.nf-fa-calendar_week::before { content: "\f784"; }
+.nf-fa-calendar_minus::before { content: "\f272"; }
+.nf-fa-file_export::before { content: "\f56e"; }
 .nf-fa-save::before { content: "\f0c7"; }
 .nf-fa-keyboard::before { content: "\f11c"; }
 .nf-fa-calculator::before { content: "\f1ec"; }

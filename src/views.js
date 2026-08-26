@@ -491,6 +491,7 @@ async function handleLogin() {
       loadSidebarAutoHideConfig();
       applyRoleUI();
       loadSyncAutoConfig();
+      if (typeof loadCartConfig === 'function') loadCartConfig();
       loadSyncStats();
       refreshCreditoAlertBadge();
       loadOpenRouterKey();
@@ -512,7 +513,9 @@ async function handleLogin() {
       // completar. Al login solo se DESCARGA: la subida va por el auto-sync
       // periódico y tras cada venta (nunca una subida silenciosa en login que
       // pueda pisar datos más nuevos en Supabase).
-      runLoginSync();
+      // Se difiere ~1.5s para que la carga del caché de productos y el
+      // primer pintado de la UI tengan prioridad de CPU en equipos lentos.
+      setTimeout(function() { runLoginSync(); }, 1500);
       // B: el cierre pendiente ya no se verifica automáticamente al login.
       // Se ejecuta manualmente desde Config → Caja ("Verificar cierre pendiente").
     } else {
@@ -536,8 +539,8 @@ async function runLoginSync() {
       await window.openLoginDownloadPreview();
     } else {
       await invoke('download_all');
+      await loadProductCache();
     }
-    await loadProductCache();
     if (typeof loadSyncStats === 'function') loadSyncStats();
     if (typeof refreshCashierAfterSync === 'function') refreshCashierAfterSync();
   } catch (e) {
@@ -619,7 +622,7 @@ function applyReportPreset(preset) {
 async function saveOpenRouterKey() {
   const key = qs(SEL.openrouterApiKey).value.trim();
   if (!key) { showToast('Ingresa una API key', 'error'); return; }
-  if (await invokeOrError(invoke('set_config_value', { key: CFG_OPENROUTER_API_KEY, value: key })) === undefined) return;
+  if (!(await saveConfigValue(CFG_OPENROUTER_API_KEY, key))) return;
   showToast('API key guardada');
 }
 

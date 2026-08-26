@@ -13,12 +13,51 @@ async function loadSyncConfig() {
   loadSyncAutoConfig();
 }
 
+let lastSyncTs = null;
+let syncRelInterval = null;
+
+function formatRelativeTime(sec) {
+  if (sec < 60) return 'ahora';
+  if (sec < 3600) return 'hace ' + Math.floor(sec / 60) + ' min';
+  if (sec < 86400) return 'hace ' + Math.floor(sec / 3600) + ' h';
+  return 'hace ' + Math.floor(sec / 86400) + ' d';
+}
+
+function renderSyncRelative() {
+  const el = qs(SEL.syncIndicator);
+  const textEl = qs(SEL.syncIndicatorText);
+  if (!el || !textEl) return;
+  el.classList.remove('sync-ok', 'sync-warn', 'sync-stale');
+  if (!lastSyncTs) {
+    textEl.textContent = 'Sin sincronizar';
+    el.classList.add('sync-stale');
+    return;
+  }
+  const d = new Date(lastSyncTs);
+  if (isNaN(d.getTime())) {
+    textEl.textContent = 'Sin sincronizar';
+    el.classList.add('sync-stale');
+    return;
+  }
+  const diff = (Date.now() - d.getTime()) / 1000;
+  textEl.textContent = formatRelativeTime(diff);
+  // Punto de estado: verde si es reciente, ámbar si lleva unas horas, rojo si viejo.
+  if (diff < 30 * 60) el.classList.add('sync-ok');
+  else if (diff < 2 * 3600) el.classList.add('sync-warn');
+  else el.classList.add('sync-stale');
+}
+
 function updateSyncIndicator(text, isSyncActive) {
   const el = qs(SEL.syncIndicator);
   const textEl = qs(SEL.syncIndicatorText);
   if (!el || !textEl) return;
-  textEl.textContent = text;
   el.classList.toggle('syncing', !!isSyncActive);
+  if (isSyncActive) {
+    textEl.textContent = text;
+    el.classList.remove('sync-ok', 'sync-warn', 'sync-stale');
+  } else {
+    renderSyncRelative();
+  }
 }
 
 async function loadSyncStats() {
@@ -44,15 +83,12 @@ async function loadSyncStats() {
       badge.classList.toggle('hidden', n === 0);
       badge.title = n === 1 ? '1 elemento pendiente de subir' : (n + ' elementos pendientes de subir');
     }
-    // Update sync indicator in sidebar with most recent sync time
+    // Update sync indicator in sidebar with most recent sync time (relativa)
     var timestamps = [stats.ultimo_upload, stats.ultimo_download, stats.ultimo_upload_ventas, stats.ultimo_download_ventas].filter(Boolean);
-    var latest = timestamps.length ? timestamps.sort().pop() : null;
-    var label = 'Sin sincronizar';
-    if (latest) {
-      var dt = formatDateTime(latest);
-      label = dt.indexOf(' ') > -1 ? dt.split(' ')[1] : dt;
-    }
-    updateSyncIndicator(label, false);
+    lastSyncTs = timestamps.length ? timestamps.sort().pop() : null;
+    updateSyncIndicator(null, false);
+    // Refresca la etiqueta "hace X min" sin reconsultar el backend.
+    if (!syncRelInterval) syncRelInterval = setInterval(renderSyncRelative, 30000);
     // Refresco del badge de alertas de crédito alineado al ciclo de sync (10 min auto-sync)
     if (typeof refreshCreditoAlertBadge === 'function') refreshCreditoAlertBadge();
     if (typeof refreshSolicitudesBadge === 'function') refreshSolicitudesBadge();
@@ -70,12 +106,6 @@ function loadSyncAutoConfig() {
   const toggle = qs(SEL.syncAutoEnabled);
   const badge = qs(SEL.syncAutoBadge);
   if (!input) return;
-  // En teléfonos el auto-sync está desactivado hasta nuevo aviso (solo manual):
-  // bloquear los controles para que la UI no muestre una configuración engañosa.
-  if (IS_ANDROID) {
-    if (input) input.disabled = true;
-    if (toggle) toggle.disabled = true;
-  }
   invoke('get_config_value', { key: CFG_SYNC_AUTO_INTERVAL }).then(val => {
     const minutes = parseInt(val) || SYNC.AUTO_MIN;
     input.value = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
@@ -88,29 +118,28 @@ function loadSyncAutoConfig() {
   }).catch(() => {});
   if (!syncAutoListenerAttached) {
     syncAutoListenerAttached = true;
-    input.addEventListener('change', () => {
-      if (IS_ANDROID) return;
-      let minutes = parseInt(input.value) || SYNC.AUTO_MIN;
-      minutes = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
-      input.value = minutes;
-      invoke('set_config_value', { key: CFG_SYNC_AUTO_INTERVAL, value: String(minutes) }).catch(() => {});
-      applySyncAutoConfig();
-    });
-    if (toggle) toggle.addEventListener('change', () => {
-      if (IS_ANDROID) return;
-      invoke('set_config_value', { key: CFG_SYNC_AUTO_ENABLED, value: String(toggle.checked) }).catch(() => {});
-      applySyncAutoConfig();
-    });
+      input.addEventListener('change', () => {
+        let minutes = parseInt(input.value) || SYNC.AUTO_MIN;
+        minutes = Math.max(SYNC.AUTO_MIN, Math.min(SYNC.AUTO_MAX, minutes));
+        input.value = minutes;
+        saveConfigValue(CFG_SYNC_AUTO_INTERVAL, minutes);
+        applySyncAutoConfig();
+      });
+      if (toggle) toggle.addEventListener('change', () => {
+        saveConfigValue(CFG_SYNC_AUTO_ENABLED, toggle.checked);
+        applySyncAutoConfig();
+      });
   }
 }
 
 function applySyncAutoConfig() {
   const enabled = qs(SEL.syncAutoEnabled);
   const badge = qs(SEL.syncAutoBadge);
-  // En teléfonos el auto-sync está desactivado hasta nuevo aviso (solo manual).
-  const on = !IS_ANDROID && (!enabled || enabled.checked);
+  // En teléfono el auto-sync es SOLO descarga (download_all) para recibir alertas
+  // sin arriesgar una subida pesada de catálogo desde el móvil.
+  const on = (!enabled || enabled.checked);
   if (badge) {
-    badge.textContent = on ? 'Activo' : (IS_ANDROID ? 'Desactivado (teléfono)' : 'Desactivado');
+    badge.textContent = on ? (IS_ANDROID ? 'Activo (descarga)' : 'Activo') : 'Desactivado';
     badge.classList.toggle('sync-auto-off', !on);
   }
   const minutes = parseInt(qs(SEL.syncAutoInterval)?.value) || SYNC.AUTO_MIN;
@@ -118,14 +147,6 @@ function applySyncAutoConfig() {
 }
 
 function startSyncAutoInterval(minutes) {
-  // En teléfonos el auto-sync está desactivado hasta nuevo aviso: el timer
-  // nunca arranca aunque el toggle esté marcado.
-  if (IS_ANDROID) {
-    currentAutoMinutes = 0;
-    if (syncAutoIntervalId) clearInterval(syncAutoIntervalId);
-    syncAutoIntervalId = null;
-    return;
-  }
   if (minutes === currentAutoMinutes && syncAutoIntervalId) return;
   currentAutoMinutes = minutes;
   if (syncAutoIntervalId) clearInterval(syncAutoIntervalId);
@@ -135,7 +156,8 @@ function startSyncAutoInterval(minutes) {
     if (!isSyncing) {
       isSyncing = true;
       updateSyncIndicator('Sincronizando...', true);
-      invoke('sync_all')
+      // En teléfono solo descarga (recibe alertas de crédito sin subir catálogo).
+      invoke(IS_ANDROID ? 'download_all' : 'sync_all')
         .then(() => { isSyncing = false; loadSyncStats(); if (typeof refreshCashierAfterSync === 'function') refreshCashierAfterSync(); })
         .catch(() => { isSyncing = false; loadSyncStats(); });
     }
@@ -152,6 +174,7 @@ function showView(name) {
   }
   lastViewName = name;
   if (typeof androidTrackView === 'function') androidTrackView(name);
+  if (typeof applyCartFabVisibility === 'function') applyCartFabVisibility();
   // En móvil el carrito es un bottom-sheet: cerrarlo al cambiar de vista para
   // que no quede como overlay sobre la vista nueva.
   if (document.body.classList.contains('cart-open') && typeof closeCartSheet === 'function') {
@@ -192,7 +215,7 @@ function showView(name) {
     [VIEW.CREDITOS]: loadCreditos,
     [VIEW.CASHIER]: loadDailySummary,
     [VIEW.AUDIT]: loadAudit,
-    [VIEW.REPORTS]: () => { setDefaultReportDates(); loadReportsAndTopProducts(false); },
+    [VIEW.REPORTS]: () => { setDefaultReportDates(); if (typeof ensureDashboardExpanded === 'function') ensureDashboardExpanded(); loadReportsAndTopProducts(false); },
     [VIEW.CONFIG]: () => { loadThemeConfig(); loadConflictCount(); },
     [VIEW.SYNC]: () => { loadSyncConfig(); loadConflictCount(); },
   };

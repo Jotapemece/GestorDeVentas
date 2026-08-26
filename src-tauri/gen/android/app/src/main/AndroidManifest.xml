@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Vibración del teléfono en ventas/acciones (navigator.vibrate en el WebView). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Escritura en Descargas solo es necesaria en Android < 10 (API 28/menos). -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />

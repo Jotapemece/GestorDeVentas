@@ -2,7 +2,9 @@ use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
 use crate::sales;
-use rusqlite::params;
+use base64::Engine;
+use rusqlite::{params, Connection};
+use rust_xlsxwriter::*;
 use std::collections::HashMap;
 use tauri::State;
 use uuid::Uuid;
@@ -227,6 +229,132 @@ pub fn get_cliente_history(
         cliente,
         ventas,
     })
+}
+
+#[tauri::command]
+pub fn export_clientes_xlsx(state: State<AppState>, tasa: f64) -> Result<String, String> {
+    let db = state.lock_db()?;
+    export_clientes_xlsx_inner(&db, tasa)
+}
+
+pub fn export_clientes_xlsx_inner(db: &Connection, tasa: f64) -> Result<String, String> {
+    let sql = "SELECT c.id, c.nombre, c.credito_activo, c.saldo_deuda_usd, COALESCE(c.activo, 1), \
+        (SELECT COUNT(*) FROM ventas v WHERE v.cliente_id = c.id), \
+        (SELECT COALESCE(SUM(v.total_usd), 0) FROM ventas v WHERE v.cliente_id = c.id), \
+        (SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id), \
+        (SELECT v.total_usd FROM ventas v WHERE v.cliente_id = c.id ORDER BY v.fecha_hora DESC LIMIT 1), \
+        (SELECT MAX(m.created_at) FROM movimientos_caja m WHERE m.cliente_id = c.id AND m.concepto LIKE 'Abono%'), \
+        (SELECT m.monto_usd FROM movimientos_caja m WHERE m.cliente_id = c.id AND m.concepto LIKE 'Abono%' ORDER BY m.created_at DESC LIMIT 1) \
+        FROM clientes c ORDER BY c.nombre ASC";
+
+    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows: Vec<(
+        i64,
+        String,
+        i64,
+        f64,
+        i64,
+        i64,
+        f64,
+        Option<String>,
+        Option<f64>,
+        Option<String>,
+        Option<f64>,
+    )> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+                row.get(9)?,
+                row.get(10)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut workbook = Workbook::new();
+    let sheet = workbook.add_worksheet();
+    sheet.set_name("Clientes").ok();
+
+    let header_format = Format::new()
+        .set_bold()
+        .set_background_color(Color::RGB(0xE8D5F5))
+        .set_border(FormatBorder::Thin);
+
+    let headers = [
+        "ID",
+        "Nombre",
+        "Deuda (USD)",
+        "Deuda (Bs)",
+        "Crédito activo",
+        "Activo",
+        "Nº ventas",
+        "Total ventas (USD)",
+        "Última venta (fecha)",
+        "Monto últ. venta (USD)",
+        "Fecha últ. abono",
+        "Monto últ. abono (USD)",
+    ];
+    for (col, header) in headers.iter().enumerate() {
+        sheet.write_string_with_format(0, col as u16, *header, &header_format).ok();
+    }
+
+    let number_format = Format::new().set_num_format("#,##0.00");
+    let bs_format = Format::new().set_num_format("'#,##0.00");
+
+    for (i, r) in rows.iter().enumerate() {
+        let row = (i + 1) as u32;
+        let (id, nombre, credito_activo, saldo, activo, num_ventas, total_ventas, uv_fecha, uv_total, ua_fecha, ua_monto) = r;
+        sheet.write_number(row, 0, *id as f64).ok();
+        sheet.write_string(row, 1, nombre).ok();
+        sheet.write_number_with_format(row, 2, *saldo, &number_format).ok();
+        sheet.write_number_with_format(row, 3, *saldo * tasa, &bs_format).ok();
+        sheet.write_string(row, 4, if *credito_activo == 1 { "Sí" } else { "No" }).ok();
+        sheet.write_string(row, 5, if *activo == 1 { "Sí" } else { "No" }).ok();
+        sheet.write_number(row, 6, *num_ventas as f64).ok();
+        sheet.write_number_with_format(row, 7, *total_ventas, &number_format).ok();
+        match uv_fecha {
+            Some(f) => { sheet.write_string(row, 8, f).ok(); }
+            None => { sheet.write_string(row, 8, "").ok(); }
+        }
+        match uv_total {
+            Some(t) => { sheet.write_number_with_format(row, 9, *t, &number_format).ok(); }
+            None => { sheet.write_string(row, 9, "").ok(); }
+        }
+        match ua_fecha {
+            Some(f) => { sheet.write_string(row, 10, f).ok(); }
+            None => { sheet.write_string(row, 10, "").ok(); }
+        }
+        match ua_monto {
+            Some(m) => { sheet.write_number_with_format(row, 11, *m, &number_format).ok(); }
+            None => { sheet.write_string(row, 11, "").ok(); }
+        }
+    }
+
+    sheet.set_column_width(0, 8).ok();
+    sheet.set_column_width(1, 40).ok();
+    sheet.set_column_width(2, 14).ok();
+    sheet.set_column_width(3, 14).ok();
+    sheet.set_column_width(4, 14).ok();
+    sheet.set_column_width(5, 10).ok();
+    sheet.set_column_width(6, 12).ok();
+    sheet.set_column_width(7, 18).ok();
+    sheet.set_column_width(8, 24).ok();
+    sheet.set_column_width(9, 20).ok();
+    sheet.set_column_width(10, 22).ok();
+    sheet.set_column_width(11, 20).ok();
+
+    let buffer = workbook.save_to_buffer().map_err(|e| format!("Error al exportar: {}", e))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&buffer);
+    Ok(b64)
 }
 
 fn validate_pay_debt_request(request: &PayDebtRequest) -> Result<(), String> {
@@ -762,6 +890,15 @@ mod tests {
             concepto,
             "Abono deuda - Cliente #1 - Mixto (Efectivo Bs. $30.00, Pago Móvil $20.00 (ref 5566))"
         );
+    }
+
+    #[test]
+    fn test_export_clientes_xlsx_funciona() {
+        let conn = crate::db::test_support::test_conn();
+        insertar_cliente_con_deuda(&conn, 1, "Cliente", 80.0);
+        crate::db::set_config_value(&conn, "tasa_dolar", "10.0").unwrap();
+        let b64 = export_clientes_xlsx_inner(&conn, 10.0).expect("export_clientes_xlsx no debe fallar");
+        assert!(!b64.is_empty());
     }
 
 

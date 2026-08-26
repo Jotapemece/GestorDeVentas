@@ -410,5 +410,20 @@ function updateCreditoStats(clientes) {
   if (deudaTotalEl) deudaTotalEl.textContent = formatUSD(deudaTotal);
 }
 
+async function exportClientes() {
+  var btn = qs(SEL.clientesExportBtn);
+  if (btn) btn.disabled = true;
+  try {
+    var b64 = await invokeOrError(invoke('export_clientes_xlsx', { tasa: tasaActual }));
+    if (b64 === undefined) return;
+    await saveExportedFile('clientes_export.xlsx', b64);
+    showToast('Clientes exportados', 'success');
+  } catch (e) {
+    showToast('Error: ' + e, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 /* ========== TEMP CLIENTS HISTORY ========== */
 

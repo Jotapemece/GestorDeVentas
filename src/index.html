@@ -83,7 +83,7 @@
         <div class="login-greeting-date" id="login-greeting-date"></div>
       </div>
       <div class="login-card">
-        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.4</button>
+        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.5</button>
         <div class="login-brand">
           <div class="login-icon">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -357,6 +357,7 @@
             <div class="view-header-actions">
               <button id="alertas-credito-btn" class="btn btn-outline btn-sm admin-only" title="Alertas de cr&eacute;dito"><i class="nf nf-fa-bell"></i> Alertas <span id="alertas-credito-btn-count" class="nav-badge hidden">0</span></button>
               <button id="credito-add-btn" class="btn btn-primary admin-only"><i class="nf nf-fa-plus"></i> Registrar Persona</button>
+              <button id="clientes-export-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-file_export"></i> Exportar</button>
             </div>
           </div>
           <div class="summary-cards">
@@ -418,7 +419,7 @@
               <div class="summary-value" id="daily-usd">$0.00</div>
             </div>
             <div class="summary-card">
-              <i class="nf nf-fa-money summary-icon" style="color:var(--accent)"></i>
+              <i class="nf nf-fa-calculator summary-icon" style="color:var(--accent)"></i>
               <div class="summary-label">Total Bs.</div>
               <div class="summary-value" id="daily-bs">Bs. 0,00</div>
             </div>
@@ -431,6 +432,7 @@
               <i class="nf nf-fa-database summary-icon" style="color:var(--danger)"></i>
               <div class="summary-label">Saldo Caja</div>
               <div class="summary-value" id="movimientos-saldo">$0.00</div>
+              <button id="saldo-moneda-toggle" class="currency-toggle-btn" type="button" style="margin-top:6px">Mostrar en Bs</button>
               <button id="ajustar-efectivo-btn" class="btn btn-sm btn-outline admin-only" type="button" style="margin-top:8px"><i class="nf nf-fa-money"></i> Ajustar efectivo</button>
             </div>
             <div class="summary-card admin-only ajustar-efectivo-card" id="ajustar-efectivo-card">
@@ -532,10 +534,10 @@
           <div class="reports-filters">
             <div class="reports-presets">
               <span class="reports-presets-label">Rango:</span>
-              <button class="btn btn-xs btn-outline report-preset-btn" data-preset="today">Hoy</button>
-              <button class="btn btn-xs btn-outline report-preset-btn" data-preset="week">Semana</button>
-              <button class="btn btn-xs btn-outline report-preset-btn" data-preset="month">Mes</button>
-              <button class="btn btn-xs btn-outline report-preset-btn" data-preset="last-month">Mes pasado</button>
+              <button class="btn btn-xs btn-outline report-preset-btn" data-preset="today" title="Hoy"><i class="nf nf-fa-calendar_day"></i></button>
+              <button class="btn btn-xs btn-outline report-preset-btn" data-preset="week" title="Semana"><i class="nf nf-fa-calendar_week"></i></button>
+              <button class="btn btn-xs btn-outline report-preset-btn" data-preset="month" title="Mes"><i class="nf nf-fa-calendar"></i></button>
+              <button class="btn btn-xs btn-outline report-preset-btn" data-preset="last-month" title="Mes pasado"><i class="nf nf-fa-calendar_minus"></i></button>
             </div>
             <div class="reports-filter-row">
               <div class="form-group">
@@ -824,6 +826,20 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
+              <div class="config-row mobile-only">
+                <span class="config-label"><i class="nf nf-fa-plus"></i> Abrir carrito al agregar (m&oacute;vil)</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="cart-auto-open" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="config-row mobile-only">
+                <span class="config-label"><i class="nf nf-fa-layer_group"></i> Bot&oacute;n de carrito en todos los m&oacute;dulos</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="cart-fab-all-modules" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
           <div class="config-card admin-only">
@@ -1057,7 +1073,7 @@
                     </div>
                     <div class="sync-auto-info">
                       <i class="nf nf-fa-info_circle sync-icon-primary" style="font-size:12px;flex-shrink:0"></i>
-                      <span>Este timer sincroniza en segundo plano (sube y baja cambios de otros dispositivos). En tel&eacute;fonos est&aacute; desactivado hasta nuevo aviso: sincroniza manualmente con el bot&oacute;n "Sincronizar todo".</span>
+                      <span>Este timer sincroniza en segundo plano. En tel&eacute;fono es solo descarga (recibe alertas de cr&eacute;dito sin subir el cat&aacute;logo).</span>
                     </div>
                   </div>
                 </div>
@@ -1086,7 +1102,7 @@
       <!-- Mobile cart FAB + backdrop -->
       <div id="cart-backdrop" class="cart-backdrop"></div>
       <button id="cart-fab" class="cart-fab no-items" title="Ver carrito" aria-label="Ver carrito">
-        <i class="nf nf-fa-shopping_cart"></i>
+        <i class="nf nf-fa-cart_plus"></i>
         <span id="cart-fab-badge" class="cart-badge hidden">0</span>
       </button>
 
@@ -2314,10 +2330,28 @@
   <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
     <div class="modal-content changelog-content">
       <div class="modal-header">
-        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.4</h3>
+        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.5</h3>
         <span class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</span>
       </div>
       <div class="modal-body changelog-body">
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-tag" style="color:var(--accent)"></i> v1.2.5</h4>
+          <ul>
+            <li><strong>Exportar clientes a Excel:</strong> nuevo bot&oacute;n "Exportar" en Cr&eacute;dito que genera un XLSX con id, nombre, deuda (USD/Bs), cr&eacute;dito activo, nº de ventas, total, &uacute;ltima venta y &uacute;ltimo abono.</li>
+            <li><strong>Saldo de caja en Bs/USD:</strong> toggle para alternar la vista del saldo (oculto en m&oacute;vil; en PC se mantiene).</li>
+            <li><strong>Carrito:</strong> apertura autom&aacute;tica y FAB en todos los m&oacute;dulos, configurables desde Configuraci&oacute;n.</li>
+            <li><strong>Subida tras cada venta:</strong> nuevo comando que sube solo ventas + alertas + clientes en segundo plano (sin congelar el POS con el cat&aacute;logo completo).</li>
+            <li><strong>Rendimiento:</strong> PRAGMAs <code>mmap_size</code> y <code>cache_size</code> para BD grandes; el watermark de alertas usa el <code>updated_at</code> m&aacute;ximo remoto.</li>
+            <li><strong>Bug del deshacer:</strong> al deshacer el &uacute;ltimo producto reci&eacute;n agregado, el carrito se vac&iacute;a (antes quedaba una l&iacute;nea fantasma sin precio).</li>
+            <li><strong>Carritos en espera:</strong> ya no reaparecen como pesta&ntilde;as fantasma al vender otro producto.</li>
+            <li><strong>Men&uacute; de 3 puntos:</strong> ya no queda tapado por la info de la venta en m&oacute;vil.</li>
+            <li><strong>Notificaciones largas:</strong> ruedan en carrusel autom&aacute;tico y se pausan al mantener pulsado.</li>
+            <li><strong>Indicador de sincronizaci&oacute;n:</strong> "Última sincronizaci&oacute;n: hace X min" con punto verde/&aacute;mbar/rojo y "Sincronizando…" en azul.</li>
+            <li><strong>Indicador "Guardando…":</strong> aparece al cambiar cualquier configuraci&oacute;n.</li>
+            <li><strong>Vibraci&oacute;n en venta (Android):</strong> el tel&eacute;fono vibra al confirmar una venta.</li>
+            <li><strong>Gr&aacute;fico de ganancias:</strong> cambio de rango por swipe y botones; mejor redibujado al expandir el dashboard.</li>
+          </ul>
+        </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-tag" style="color:var(--accent)"></i> v1.2.4</h4>
           <ul>
@@ -2615,6 +2649,7 @@
   </div>
 
   <div id="toast-container"></div>
+  <div id="save-status" class="save-status hidden"></div>
 
   <div id="global-search-overlay" class="global-search-overlay hidden">
     <div class="global-search-modal">

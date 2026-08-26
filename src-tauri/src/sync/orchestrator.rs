@@ -266,6 +266,36 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
 }
 
 #[tauri::command]
+pub fn upload_after_sale(state: State<AppState>) -> Result<String, String> {
+    crate::auth::check_employee_role(&state)?;
+    let (supabase_url, supabase_key, dispositivo_id) = {
+        let db = state.secondary_conn()?;
+        let (u, k) = supabase_config(&db)?;
+        (u, k, get_config(&db, constants::CFG_DISPOSITIVO_ID)?)
+    };
+
+    // Subida liviana tras cada venta: solo las tablas que pueden haber cambiado con
+    // la venta (ventas + detalles, alertas de crédito y clientes nuevos/modificados).
+    // NO incluye productos/usuarios/solicitudes (carga pesada) para no congelar el
+    // POS mientras sube el catálogo completo en cada venta.
+    // Cada etapa usa su propia transacción corta (red fuera del lock de escritura).
+    let steps: Vec<(&str, fn(&Connection, &str, &str, &str) -> Result<String, String>)> = vec![
+        ("ventas", upload_sales_inner),
+        ("alertas", upload_alertas_inner),
+        ("clientes", upload_clientes_inner),
+    ];
+    let mut parts = Vec::new();
+    for (label, f) in steps.iter() {
+        let mut db = state.secondary_conn()?;
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+        let r = f(&tx, &supabase_url, &supabase_key, &dispositivo_id)?;
+        tx.commit().map_err(|e| format!("Error al confirmar subida de {}: {}", label, e))?;
+        parts.push(r);
+    }
+    Ok(parts.join("\n"))
+}
+
+#[tauri::command]
 pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<String, String> {
     crate::auth::check_employee_role(&state)?;
     let (supabase_url, supabase_key, dispositivo_id) = {

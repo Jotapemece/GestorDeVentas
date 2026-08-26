@@ -64,6 +64,8 @@ impl AppState {
         conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
         conn.execute_batch("PRAGMA foreign_keys=ON;").ok();
         conn.execute_batch("PRAGMA busy_timeout=5000;").ok();
+        conn.execute_batch("PRAGMA mmap_size=268435456;").ok();
+        conn.execute_batch("PRAGMA cache_size=-8000;").ok();
         Ok(conn)
     }
 
@@ -121,6 +123,8 @@ pub fn init_db(app_handle: &AppHandle) -> Result<(Connection, PathBuf), String> 
     conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
     conn.execute_batch("PRAGMA foreign_keys=ON;").ok();
     conn.execute_batch("PRAGMA busy_timeout=5000;").ok();
+    conn.execute_batch("PRAGMA mmap_size=268435456;").ok();
+    conn.execute_batch("PRAGMA cache_size=-8000;").ok();
 
     conn.execute_batch(crate::migrations::SQL_CREATE_TABLES)
         .map_err(|e| format!("Error al crear tablas: {}", e))?;

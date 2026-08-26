@@ -10,15 +10,21 @@ let tasaActual = 0;
 let tasaInventario = 0;
 let tasaInventarioFecha = '';
 let cartShowBs = false;
+let saldoShowBs = false;
 
 function loadStoredPrefs() {
   try {
     if (localStorage.getItem('cartShowBs') === '1') cartShowBs = true;
+    if (localStorage.getItem('saldoShowBs') === '1') saldoShowBs = true;
   } catch (e) {}
 }
 
 function persistCartShowBs() {
   try { localStorage.setItem('cartShowBs', cartShowBs ? '1' : '0'); } catch (e) {}
+}
+
+function persistSaldoShowBs() {
+  try { localStorage.setItem('saldoShowBs', saldoShowBs ? '1' : '0'); } catch (e) {}
 }
 let comboCache = [];
 let editingProduct = null;

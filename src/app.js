@@ -25,6 +25,24 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Collapse all config cards by default
   qsa(SEL.configCardHeader).forEach(h => h.classList.add('collapsed'));
 
+  // Carrito móvil: cargar config y atar toggles
+  if (typeof loadCartConfig === 'function') loadCartConfig();
+  const cartAutoToggle = qs(SEL.cartAutoOpenToggle);
+  if (cartAutoToggle) cartAutoToggle.addEventListener('change', () => {
+    saveConfigValue(CFG_CART_AUTO_OPEN, cartAutoToggle.checked);
+    if (typeof loadCartConfig === 'function') loadCartConfig();
+  });
+  const cartFabToggle = qs(SEL.cartFabAllModulesToggle);
+  if (cartFabToggle) cartFabToggle.addEventListener('change', () => {
+    saveConfigValue(CFG_CART_FAB_ALL_MODULES, cartFabToggle.checked);
+    if (typeof loadCartConfig === 'function') loadCartConfig();
+  });
+
+  // Las opciones de carrito móvil solo aplican en teléfono: ocultarlas en PC.
+  if (typeof IS_ANDROID !== 'undefined' && !IS_ANDROID) {
+    document.querySelectorAll('.mobile-only').forEach(function(el) { el.style.display = 'none'; });
+  }
+
   // Auth
   qs(SEL.loginBtn).addEventListener('click', handleLogin);
   qs(SEL.loginUsername).addEventListener('keydown', e => {
@@ -256,16 +274,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       }
       return;
     }
-    const editBtn = e.target.closest('[data-action="edit-price"]');
-    if (editBtn) {
-      cartEditPrice(editBtn.dataset.codigo);
-      return;
-    }
-    const editEf = e.target.closest('[data-action="edit-efectivo"]');
-    if (editEf) {
-      openEfectivoModal();
-      return;
-    }
   });
 
   const cartUndoPill = qs(SEL.cartUndoPill);
@@ -291,40 +299,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (tr) tr.classList.toggle('collapsed');
     }
   });
-
-  /* Cart inline price editor */
-  function cartEditPrice(codigo) {
-    var item = cart.find(function(i) { return i.codigo === codigo; });
-    if (!item) return;
-    var tr = qs(SEL.cartBody).querySelector('tr[data-codigo="' + codigo + '"]');
-    if (!tr) return;
-    var totalTd = tr.querySelector('.cart-item-total');
-    if (!totalTd) return;
-    var currentPrice = item.precio_usd;
-    totalTd.innerHTML = '<input type="number" inputmode="decimal" class="cart-price-edit" step="0.01" min="0" value="' + currentPrice.toFixed(2) + '">';
-    var input = totalTd.querySelector('.cart-price-edit');
-    input.focus();
-    input.select();
-    function commitPrice() {
-      var val = parseFloat(input.value);
-      if (!isNaN(val) && val >= 0 && val !== item.precio_usd) {
-        cartHistoryPush();
-        item.precio_usd = val;
-        renderCart();
-        updateCheckoutBtn();
-        saveCartSnapshot();
-      } else if (!isNaN(val) && val >= 0) {
-        renderCart();
-      } else {
-        renderCart();
-      }
-    }
-    input.addEventListener('blur', commitPrice);
-    input.addEventListener('keydown', function(ev) {
-      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
-      if (ev.key === 'Escape') { ev.preventDefault(); renderCart(); }
-    });
-  }
 
   // Payment modal
   qs(SEL.paymentModalClose).addEventListener('click', closePaymentModal);
@@ -493,17 +467,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  // Double-click cart row to edit unit price (admin only)
-  qs(SEL.cartBody).addEventListener('dblclick', function(e) {
-    if (!currentUser || currentUser.rol !== ROL_ADMIN) return;
-    if (e.target.closest('.cart-qty-input') || e.target.closest('.cart-qty-btn') || e.target.closest('.cart-remove-btn') || e.target.closest('[data-action="edit-price"]')) return;
-    var tr = e.target.closest('tr');
-    if (!tr) return;
-    var codigo = tr.dataset.codigo;
-    if (!codigo) return;
-    cartEditPrice(codigo);
-  });
-
   // Product modal
   qs(SEL.productModalClose).addEventListener('click', closeProductModal);
   qs(SEL.productCancelBtn).addEventListener('click', closeProductModal);
@@ -557,6 +520,18 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Ajustar efectivo (admin)
   qs(SEL.ajustarEfectivoBtn).addEventListener('click', openAjustarEfectivoModal);
   qs(SEL.ajustarEfectivoBtnMobile)?.addEventListener('click', openAjustarEfectivoModal);
+
+  // Toggle de moneda del Saldo de Caja (USD / Bs.)
+  const saldoMonedaToggle = qs(SEL.saldoMonedaToggle);
+  if (saldoMonedaToggle) {
+    saldoMonedaToggle.textContent = saldoShowBs ? '$' : 'Bs.';
+    saldoMonedaToggle.addEventListener('click', function() {
+      saldoShowBs = !saldoShowBs;
+      persistSaldoShowBs();
+      this.textContent = saldoShowBs ? '$' : 'Bs.';
+      refreshSaldoDisplay();
+    });
+  }
   qs(SEL.ajustarEfectivoClose).addEventListener('click', closeAjustarEfectivoModal);
   qs(SEL.ajustarEfectivoCancelBtn).addEventListener('click', closeAjustarEfectivoModal);
   qs(SEL.ajustarEfectivoConfirmBtn).addEventListener('click', confirmAjustarEfectivo);
@@ -696,6 +671,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.clientQuickNombre)?.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') { e.preventDefault(); qs(SEL.clientQuickSaveBtn).click(); }
   });
+  qs(SEL.clientesExportBtn)?.addEventListener('click', exportClientes);
   // Cashier
   qs(SEL.openCashierBtn).addEventListener('click', handleOpenCashier);
   qs(SEL.closeCashierBtn).addEventListener('click', openCloseCashier);
@@ -923,10 +899,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   /* Guardar URL y Key al cambiar */
   document.addEventListener('change', function(e) {
     if (e.target.id === 'sync-url') {
-      invoke('set_config_value', { key: CFG_SUPABASE_URL, value: e.target.value }).catch(() => {});
+      saveConfigValue(CFG_SUPABASE_URL, e.target.value);
     }
     if (e.target.id === 'sync-key') {
-      invoke('set_config_value', { key: CFG_SUPABASE_KEY, value: e.target.value }).catch(() => {});
+      saveConfigValue(CFG_SUPABASE_KEY, e.target.value);
     }
   });
 
@@ -1342,7 +1318,7 @@ statusEl.style.color = cssVar('--text-secondary');
     return obs;
   }
   // Reports: set default dates + dashboard on show
-  observeView(qs(SEL.viewReports), function() { loadChartPrefs(); setDefaultReportDates(); loadDashboard(); });
+  observeView(qs(SEL.viewReports), function() { loadChartPrefs(); setDefaultReportDates(); if (typeof ensureDashboardExpanded === 'function') ensureDashboardExpanded(); loadDashboard(); });
   // Config: load user list on show (admin only; list_usuarios es admin-only)
   observeView(qs(SEL.viewConfig), function() {
     if (currentUser && currentUser.rol === ROL_ADMIN) loadUserList();
@@ -1664,7 +1640,7 @@ statusEl.style.color = cssVar('--text-secondary');
   if (inariToggle) {
     inariToggle.addEventListener('change', function() {
       const active = this.checked;
-      invoke('set_config_value', { key: 'inari_activo', value: active ? '1' : '0' }).catch(() => {});
+      saveConfigValue('inari_activo', active ? '1' : '0');
       applyInariConfig(active);
     });
   }
@@ -1692,7 +1668,7 @@ statusEl.style.color = cssVar('--text-secondary');
       if (isNaN(val) || val < 0) val = 0;
       if (val > HISTORIAL_MAX_DAYS) val = HISTORIAL_MAX_DAYS;
       input.value = val;
-      if (await invokeOrError(invoke('set_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS, value: String(val) })) === undefined) return;
+      if (!(await saveConfigValue(CFG_HISTORIAL_LIMPIEZA_DIAS, val))) return;
       updateHistoryCleanupStatus(val);
       showToast('Configuraci\u00f3n guardada');
     });
@@ -1712,7 +1688,7 @@ statusEl.style.color = cssVar('--text-secondary');
       if (isNaN(val) || val < 0) val = 0;
       if (val > 100) val = 100;
       input.value = val;
-      if (await invokeOrError(invoke('set_config_value', { key: CFG_MAX_BACKUPS, value: String(val) })) === undefined) return;
+      if (!(await saveConfigValue(CFG_MAX_BACKUPS, val))) return;
       showToast('Configuraci\u00f3n guardada');
     });
   }
@@ -1886,7 +1862,7 @@ statusEl.style.color = cssVar('--text-secondary');
     var wrap = qs(SEL.openrouterModelWrap);
     setCustomSelectValue(wrap, opt.dataset.value);
     wrap.classList.remove('open');
-    try { invoke('set_config_value', { key: CFG_OPENROUTER_MODEL, value: opt.dataset.value }); } catch (e) { showToast('Error al guardar modelo: ' + e, 'error'); }
+    saveConfigValue(CFG_OPENROUTER_MODEL, opt.dataset.value);
   });
   document.addEventListener('click', function(e) {
     var wrap = qs(SEL.openrouterModelWrap);

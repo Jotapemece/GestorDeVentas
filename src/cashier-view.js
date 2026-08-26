@@ -194,9 +194,13 @@ function addRecentProduct(codigo) {
 /* Cart snapshot (localStorage) */
 function saveCartSnapshot() {
   try {
-    var hasItems = carts.some(function(c) { return c.items.length > 0; });
+    // Solo persistimos los carritos ACTIVOS (no los plegados/"en espera"): si
+    // guardáramos uno plegado, al recargar la app (frecuente en móvil) se
+    // reinyectaría como pestaña fantasma que no responde al clic.
+    var active = carts.filter(function(c) { return !c.folded; });
+    var hasItems = active.some(function(c) { return c.items.length > 0; });
     if (hasItems) {
-      localStorage.setItem('cart_snapshot', JSON.stringify(carts));
+      localStorage.setItem('cart_snapshot', JSON.stringify(active));
     } else {
       localStorage.removeItem('cart_snapshot');
     }
@@ -278,8 +282,10 @@ function restoreCartSnapshot() {
       carts = [{ id: 1, items: parsed, folded: false }];
     }
     if (carts.length === 0) carts = [{ id: 1, items: [], folded: false }];
-    var active = carts.find(function(c) { return !c.folded; }) || carts[0];
-    if (active) activateCart(active);
+    // Ningún carrito restaurado queda plegado ("en espera"): se restaura como
+    // carrito de trabajo activo para evitar pestañas fantasma.
+    carts.forEach(function(c) { c.folded = false; });
+    cart = carts[0].items;
     cartIdCounter = carts.reduce(function(m, c) { return Math.max(m, c.id + 1); }, 1);
     renderCart();
     updateCheckoutBtn();
@@ -453,7 +459,8 @@ function addToCart(codigo) {
   saveCartSnapshot();
   // En móvil, al pasar de 0 a 1 ítem abrir el bottom-sheet para que el usuario
   // descubra dónde quedó el carrito (el FAB solo se muestra con badge).
-  if (wasEmpty && isPhonePos() && cart.length > 0 && typeof openCartSheet === 'function') {
+  // Respeta el toggle "Abrir carrito al agregar" (por defecto activo).
+  if (wasEmpty && isPhonePos() && cart.length > 0 && cartAutoOpen && typeof openCartSheet === 'function') {
     openCartSheet();
   }
   const cartBody = qs(SEL.cartBody);
@@ -475,13 +482,16 @@ function resolveCartProduct(codigo) {
   return null;
 }
 
-async function loadProductName(codigo) {
-  const p = resolveCartProduct(codigo);
-  if (p) {
-    const item = cart.find(x => x.codigo === codigo);
-    if (item) {
-      cartHistoryPush();
-      item.nombre = p.nombre; item.precio_usd = p.precio_usd; item.stock = p.stock; item.es_inari = p.es_inari; item.es_pesable = !!p.es_pesable;
+  async function loadProductName(codigo) {
+   const p = resolveCartProduct(codigo);
+   if (p) {
+     const item = cart.find(x => x.codigo === codigo);
+     if (item) {
+       // Nota: NO hacemos cartHistoryPush aquí. El addToCart ya registró el
+       // estado previo al agregar, así que un solo "deshacer" vacía el carrito.
+       // Hacer push aquí (antes de asignar nombre/precio) capturaba el item
+       // incompleto y el deshacer dejaba un renglón sin nombre ni precio.
+       item.nombre = p.nombre; item.precio_usd = p.precio_usd; item.stock = p.stock; item.es_inari = p.es_inari; item.es_pesable = !!p.es_pesable;
       if (!p.es_inari && !p.es_pesable && p.stock === 0) {
         var idx = cart.findIndex(function(x) { return x.codigo === codigo; });
         if (idx !== -1) cart.splice(idx, 1);
@@ -598,12 +608,29 @@ function updateCartBadge() {
 }
 
 /* Mobile cart bottom-sheet */
+let _salesCenterHome = null;
 function openCartSheet() {
+  // En móvil #sales-center vive dentro de #view-sales (que es display:none en
+  // otras vistas), así que al abrir el carrito lo sacamos al <body> para que el
+  // bottom-sheet se muestre como overlay global sobre cualquier módulo, sin verse
+  // atrapado por la vista de ventas ni quedar detrás de la vista activa.
+  if (isPhonePos()) {
+    const center = qs('#sales-center');
+    if (center && center.parentElement && center.parentElement !== document.body) {
+      _salesCenterHome = center.parentElement;
+      document.body.appendChild(center);
+    }
+  }
   document.body.classList.add('cart-open');
 }
 
 function closeCartSheet() {
   document.body.classList.remove('cart-open');
+  const center = qs('#sales-center');
+  if (center && _salesCenterHome && center.parentElement === document.body) {
+    _salesCenterHome.appendChild(center);
+    _salesCenterHome = null;
+  }
 }
 
 function toggleCartSheet() {
@@ -1347,12 +1374,41 @@ async function confirmPayment() {
 }
 
 let _saleUploadRunning = false;
+
+/* ========== Carrito móvil: configuración ========== */
+let cartAutoOpen = true;
+let cartFabAllModules = true;
+
+async function loadCartConfig() {
+  try {
+    const a = await invoke('get_config_value', { key: CFG_CART_AUTO_OPEN });
+    cartAutoOpen = (a === undefined || a === null || a === '' || a === 'true' || a === '1');
+  } catch (e) {}
+  try {
+    const b = await invoke('get_config_value', { key: CFG_CART_FAB_ALL_MODULES });
+    cartFabAllModules = (b === undefined || b === null || b === '' || b === 'true' || b === '1');
+  } catch (e) {}
+  const t1 = qs(SEL.cartAutoOpenToggle);
+  if (t1) t1.checked = cartAutoOpen;
+  const t2 = qs(SEL.cartFabAllModulesToggle);
+  if (t2) t2.checked = cartFabAllModules;
+  applyCartFabVisibility();
+}
+
+function applyCartFabVisibility() {
+  const fab = qs(SEL.cartFab);
+  if (!fab) return;
+  const onSales = (typeof lastViewName !== 'undefined') && lastViewName === VIEW.SALES;
+  if (!cartFabAllModules && !onSales) fab.classList.add('cart-fab-module-limited');
+  else fab.classList.remove('cart-fab-module-limited');
+}
+
 function uploadAfterSale() {
   if (typeof isSyncing === 'boolean' && isSyncing) return;
   if (_saleUploadRunning) return;
   _saleUploadRunning = true;
   if (typeof updateSyncIndicator === 'function') updateSyncIndicator('Subiendo venta...', true);
-  invoke('upload_all')
+  invoke('upload_after_sale')
     .then(() => { if (typeof loadSyncStats === 'function') loadSyncStats(); })
     .catch(e => console.log('upload tras venta:', e))
     .finally(() => {
@@ -1386,9 +1442,8 @@ async function loadDailySummary() {
     qs(SEL.dailyBs).textContent = formatBS(summary.total_bs);
     qs(SEL.dailyTasa).textContent = formatBS(summary.tasa_actual);
 
-    /* Saldo de Caja (USD / Bs.) - refleja ventas + movimientos del día */
-    var saldoEl = qs(SEL.movimientosSaldo);
-    if (saldoEl && saldo) saldoEl.textContent = formatUSD(saldo.saldo_usd) + ' / ' + formatBS(saldo.saldo_bs);
+    /* Saldo de Caja (USD o Bs. según toggle) - refleja ventas + movimientos del día */
+    setSaldoDisplay(saldo);
 
     renderDailyAbonos(summary.abonos || [], summary.abonos_usd, summary.abonos_bs);
 
@@ -1837,12 +1892,20 @@ async function loadMovimientos() {
     qs(SEL.movimientosTotalIngresos).textContent = formatUSD(saldo.total_ingresos_usd);
     qs(SEL.movimientosTotalEgresos).textContent = formatUSD(saldo.total_egresos_usd);
     /* Update saldo in summary card */
-    var saldoEl = qs(SEL.movimientosSaldo);
-    if (saldoEl) {
-      saldoEl.textContent = formatUSD(saldo.saldo_usd) + ' / ' + formatBS(saldo.saldo_bs);
-    }
+    setSaldoDisplay(saldo);
   } catch (e) { showToast('Error al cargar movimientos: ' + e, 'error'); }
 }
+
+/* Saldo de Caja: muestra solo USD o solo Bs según el toggle (saldoShowBs). */
+var _lastSaldo = null;
+function setSaldoDisplay(saldo) {
+  if (!saldo) return;
+  _lastSaldo = saldo;
+  var el = qs(SEL.movimientosSaldo);
+  if (!el) return;
+  el.textContent = saldoShowBs ? formatBS(saldo.saldo_bs) : formatUSD(saldo.saldo_usd);
+}
+function refreshSaldoDisplay() { setSaldoDisplay(_lastSaldo); }
 
 function renderMovimientos() {
   var filtro = qs(SEL.movimientosFiltroTipo);

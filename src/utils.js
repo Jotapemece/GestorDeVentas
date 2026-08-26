@@ -74,13 +74,12 @@ function createCartRow(item) {
     const totalUsd = item.cantidad * item.precio_usd;
     const totalText = showBs ? formatBS(totalUsd * tasaActual) : formatUSD(totalUsd);
     const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
-    const editBtn = '<button class="cart-edit-price-btn" data-action="edit-efectivo" data-codigo="' + code + '" title="Ver disponibilidad y montos"><i class="nf nf-fa-pencil"></i></button>';
     return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td>' +
       '<td><div class="cart-qty-wrap cart-efectivo-inline">' +
         '<label class="cart-efectivo-field">Entregar<input type="text" inputmode="decimal" class="cart-qty-input cart-efectivo-input" data-action="efectivo-entregar" data-codigo="' + code + '" value="' + redondeado2(entregar) + '"></label>' +
         '<label class="cart-efectivo-field">Cobrar<input type="text" inputmode="decimal" class="cart-qty-input cart-efectivo-input" data-action="efectivo-cobrar" data-codigo="' + code + '" value="' + redondeado2(cobrar) + '"></label>' +
       '</div></td>' +
-      '<td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td>' +
+      '<td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span></td>' +
       '<td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
   }
   const displayName = item.nombre || item.codigo;
@@ -90,7 +89,6 @@ function createCartRow(item) {
   const totalBs = totalUsd * tasaActual;
   const totalText = showBs ? formatBS(totalBs) : formatUSD(totalUsd);
   const cls = 'cart-item-total' + (showBs ? ' bs-mode' : '');
-  const editBtn = (currentUser && currentUser.rol === ROL_ADMIN) ? '<button class="cart-edit-price-btn" data-action="edit-price" data-codigo="' + code + '" title="Editar precio unitario"><i class="nf nf-fa-pencil"></i></button>' : '';
   var qtyCell;
   if (item.es_pesable) {
     qtyCell = '<div class="cart-qty-wrap"><input type="number" inputmode="decimal" class="cart-qty-input" value="' + item.cantidad + '" min="0" step="0.001" data-codigo="' + code + '" placeholder="0.000"> <span class="text-muted text-sm">kg</span></div>';
@@ -100,7 +98,7 @@ function createCartRow(item) {
     qtyCell = '<div class="cart-qty-wrap"><button class="cart-qty-btn" data-action="qty-dec" data-codigo="' + code + '">&minus;</button><input type="number" inputmode="numeric" class="cart-qty-input" value="' + item.cantidad + '" min="1" max="' + item.stock + '" data-codigo="' + code + '"><button class="cart-qty-btn" data-action="qty-inc" data-codigo="' + code + '">+</button></div>';
   }
   var qtyWarn = (item.es_pesable && !(item.cantidad > 0)) ? '<div class="cart-qty-warn">Ingresa el peso</div>' : '';
-  return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td>' + qtyCell + qtyWarn + '</td><td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span>' + editBtn + '</td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
+  return '<td><div class="cart-product-info"><span class="cart-product-name" title="' + name + '">' + name + '</span><span class="cart-product-code">' + code + '</span></div></td><td>' + qtyCell + qtyWarn + '</td><td class="' + cls + '"><span class="cart-total-text">' + totalText + '</span></td><td><button class="cart-remove-btn" data-action="remove-from-cart" data-codigo="' + code + '" title="Eliminar"><i class="nf nf-fa-trash"></i></button></td>';
 }
 function createInventoryRow(p, editBtn) {
   var stockClass = (p.stock < p.stock_minimo) ? ' low-stock' : '';
@@ -238,6 +236,7 @@ function hideToast(el) {
   if (el._timer) clearTimeout(el._timer);
   if (el._resumeTimer) clearTimeout(el._resumeTimer);
   el._pausedAt = null;
+  if (mqActive && el.contains(mqActive)) mqStop();
   el.classList.add('exit');
   setTimeout(() => {
     el.remove();
@@ -247,6 +246,44 @@ function hideToast(el) {
       showToast(next.msg, next.type, next.action);
     }
   }, TOAST.FADE_MS);
+}
+
+/* ========== INDICADOR "GUARDANDO…" ========== */
+let saveStatusTimer = null;
+function showSaveStatus(state) {
+  const el = qs('#save-status');
+  if (!el) return;
+  clearTimeout(saveStatusTimer);
+  el.classList.remove('hidden', 'saving', 'saved', 'error');
+  if (state === 'saving') {
+    el.classList.add('saving');
+    el.innerHTML = '<i class="nf nf-fa-spinner"></i> Guardando…';
+  } else if (state === 'saved') {
+    el.classList.add('saved');
+    el.innerHTML = '<i class="nf nf-fa-check"></i> Guardado';
+    saveStatusTimer = setTimeout(() => el.classList.add('hidden'), 1500);
+  } else if (state === 'error') {
+    el.classList.add('error');
+    el.innerHTML = '<i class="nf nf-fa-triangle_warning"></i> No se pudo guardar';
+    saveStatusTimer = setTimeout(() => el.classList.add('hidden'), 2500);
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+/* Guarda un valor de configuración mostrando el indicador de "Guardando…".
+   Devuelve true/false según éxito. Sustituye los invoke('set_config_value'). */
+async function saveConfigValue(key, value) {
+  showSaveStatus('saving');
+  try {
+    await invoke('set_config_value', { key, value: String(value) });
+    showSaveStatus('saved');
+    return true;
+  } catch (e) {
+    showSaveStatus('error');
+    showToast('Error al guardar: ' + e, 'error');
+    return false;
+  }
 }
 
 function toastTick(el, cfg) {
@@ -369,6 +406,24 @@ function toastBindLifecycle(el, cfg) {
   el.addEventListener('click', function(e) {
     if (e.target === el || e.target.classList.contains('toast-msg')) hideToast(el);
   });
+
+  /* Carrusel automático para notificaciones largas que no caben: rueda solo
+     mientras la notificación está visible. Mantener presionado pausa el scroll;
+     al soltar retoma y completa UNA vuelta más hasta volver al inicio, luego para. */
+  const msgSpan = el.querySelector('.toast-msg');
+  if (msgSpan) {
+    requestAnimationFrame(function() {
+      if (msgSpan.scrollWidth - msgSpan.clientWidth > MQ_TOLERANCE) {
+        mqStart(msgSpan, { auto: true });
+        let held = false;
+        const pauseMq = function() { held = true; mqPause(msgSpan); };
+        const resumeMq = function() { if (held) { held = false; mqResumeOnce(msgSpan); } };
+        el.addEventListener('pointerdown', pauseMq);
+        el.addEventListener('pointerup', resumeMq);
+        el.addEventListener('pointercancel', resumeMq);
+      }
+    });
+  }
 
   if (IS_ANDROID || window.innerWidth <= 768) {
     let startX = 0;
@@ -1129,18 +1184,43 @@ function mqUnwrap(el) {
   track.remove();
 }
 
-function mqStart(el) {
+function mqStart(el, opts) {
   if (!el || el.dataset.mqAnim === '1') return;
   const textW = el.scrollWidth;
   const dist = textW - el.clientWidth;
   if (dist <= MQ_TOLERANCE) return;
-  mqStop();
+  // No detener un carrusel automático (p.ej. un toast) si se inicia otro
+  // carrusel en paralelo: cada elemento gestiona su propia animación.
+  if (!(mqActive && mqActive.dataset.mqAuto === '1')) mqStop();
   mqWrap(el);
-  el.style.setProperty('--mq-dist', textW + 'px');
-  el.style.setProperty('--mq-duration', Math.max(textW / MQ_SPEED, MQ_MIN_DURATION) + 's');
+  // El contenido se duplica en .mq-track (dos .mq-copy con padding-right de
+  // separación). El periodo real del bucle es la mitad del ancho del track, para
+  // que al reiniciar haya un espacio entre el final y el principio del texto.
+  const track = el.querySelector('.mq-track');
+  const period = track ? track.scrollWidth / 2 : textW;
+  el.style.setProperty('--mq-dist', period + 'px');
+  el.style.setProperty('--mq-duration', Math.max(period / MQ_SPEED, MQ_MIN_DURATION) + 's');
+  if (opts && opts.auto) {
+    // Carrusel continuo (no se detiene solo): lo para el usuario o se elimina.
+    if (track) track.style.animationIterationCount = 'infinite';
+    el.dataset.mqAuto = '1';
+  }
   el.classList.add('mq-anim');
   el.dataset.mqAnim = '1';
   mqActive = el;
+}
+
+function mqPause(el) {
+  const track = el && el.querySelector ? el.querySelector('.mq-track') : null;
+  if (track) track.style.animationPlayState = 'paused';
+}
+
+function mqResumeOnce(el) {
+  const track = el && el.querySelector ? el.querySelector('.mq-track') : null;
+  if (!track) return;
+  // Reanuda y completa UNA vuelta más hasta volver al inicio, luego se detiene.
+  track.style.animationPlayState = 'running';
+  track.style.animationIterationCount = '1';
 }
 
 function mqStop() {
@@ -1148,8 +1228,14 @@ function mqStop() {
   mqActive.classList.remove('mq-anim');
   mqActive.style.removeProperty('--mq-dist');
   mqActive.style.removeProperty('--mq-duration');
+  const t = mqActive.querySelector ? mqActive.querySelector('.mq-track') : null;
+  if (t) {
+    t.style.animationPlayState = '';
+    t.style.animationIterationCount = '';
+  }
   mqUnwrap(mqActive);
   delete mqActive.dataset.mqAnim;
+  delete mqActive.dataset.mqAuto;
   mqActive = null;
 }
 

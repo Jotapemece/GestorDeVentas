@@ -121,6 +121,8 @@ const CFG_SUPABASE_URL = 'supabase_url';
 const CFG_SUPABASE_KEY = 'supabase_key';
 const CFG_SYNC_AUTO_INTERVAL = 'sync_auto_interval';
 const CFG_SYNC_AUTO_ENABLED = 'sync_auto_enabled';
+const CFG_CART_AUTO_OPEN = 'cart_auto_open';
+const CFG_CART_FAB_ALL_MODULES = 'cart_fab_all_modules';
 const CFG_MAX_BACKUPS = 'max_backups';
 const DEFAULT_MAX_BACKUPS = 10;
 
@@ -413,6 +415,7 @@ const SEL = {
   creditosBody: '#creditos-body',
   creditosHeader: '#view-creditos .view-header',
   creditoAddBtn: '#credito-add-btn',
+  clientesExportBtn: '#clientes-export-btn',
   clientModal: '#client-modal',
   clientModalTitle: '#client-modal-title',
   clientNombre: '#client-nombre',
@@ -805,6 +808,8 @@ const SEL = {
   syncAutoInterval: '#sync-auto-interval',
   syncAutoEnabled: '#sync-auto-enabled',
   syncAutoBadge: '#sync-auto-badge',
+  cartAutoOpenToggle: '#cart-auto-open',
+  cartFabAllModulesToggle: '#cart-fab-all-modules',
   viewCashier: '#view-cashier',
   cartCurrencyToggle: '#cart-currency-toggle',
   restoreBackupBtn: '#restore-backup-btn',
@@ -837,6 +842,7 @@ const SEL = {
   movimientosMontoUsd: '#movimientos-monto-usd',
   movimientosConcepto: '#movimientos-concepto',
   movimientosSaldo: '#movimientos-saldo',
+  saldoMonedaToggle: '#saldo-moneda-toggle',
   movimientosTotalIngresos: '#movimientos-total-ingresos',
   movimientosTotalEgresos: '#movimientos-total-egresos',
   movimientosFiltroTipo: '#movimientos-filtro-tipo',
