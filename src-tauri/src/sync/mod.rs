@@ -132,8 +132,9 @@ pub(crate) fn get_config(db: &rusqlite::Connection, key: &str) -> Result<String,
         .ok_or_else(|| format!("Configura '{}' primero en Ajustes", key))
 }
 
-pub(crate) fn upsert_config(db: &rusqlite::Connection, key: &str, value: &str) {
-    let _ = crate::db::set_config_value(db, key, value);
+pub(crate) fn upsert_config(db: &rusqlite::Connection, key: &str, value: &str) -> Result<(), String> {
+    crate::db::set_config_value(db, key, value)?;
+    Ok(())
 }
 
 pub(crate) fn urlencoding(s: &str) -> String {

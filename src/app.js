@@ -1645,15 +1645,12 @@ statusEl.style.color = cssVar('--text-secondary');
     });
   }
   try {
-    const val = await invoke('get_config_value', { key: 'inari_activo' });
+    const cfg = await getConfigValues(['inari_activo', CFG_HISTORIAL_LIMPIEZA_DIAS, CFG_MAX_BACKUPS]);
+    const val = cfg['inari_activo'];
     const enabled = val === '1';
     if (inariToggle) inariToggle.checked = enabled;
     applyInariConfig(enabled);
-  } catch (e) {}
-
-  // Load history cleanup config
-  try {
-    const days = await invoke('get_config_value', { key: CFG_HISTORIAL_LIMPIEZA_DIAS });
+    const days = cfg[CFG_HISTORIAL_LIMPIEZA_DIAS];
     const input = qs(SEL.historialLimpiezaDias);
     if (input) {
       input.value = parseInt(days) || 0;
@@ -1676,9 +1673,9 @@ statusEl.style.color = cssVar('--text-secondary');
 
   // Load backup retention config
   try {
-    const maxBackups = await invoke('get_config_value', { key: CFG_MAX_BACKUPS });
+    const cfg = await getConfigValues([CFG_MAX_BACKUPS]);
     const backupInput = qs(SEL.backupMaxInput);
-    if (backupInput) backupInput.value = (parseInt(maxBackups) || DEFAULT_MAX_BACKUPS);
+    if (backupInput) backupInput.value = (parseInt(cfg[CFG_MAX_BACKUPS]) || DEFAULT_MAX_BACKUPS);
   } catch (e) {}
   const backupSaveBtn = qs(SEL.backupMaxSave);
   if (backupSaveBtn) {

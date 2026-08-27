@@ -235,6 +235,11 @@ function hideToast(el) {
   if (el._frame) cancelAnimationFrame(el._frame);
   if (el._timer) clearTimeout(el._timer);
   if (el._resumeTimer) clearTimeout(el._resumeTimer);
+  if (el._outsideClick) {
+    document.removeEventListener('touchstart', el._outsideClick, { passive: true });
+    document.removeEventListener('mousedown', el._outsideClick);
+    el._outsideClick = null;
+  }
   el._pausedAt = null;
   if (mqActive && el.contains(mqActive)) mqStop();
   el.classList.add('exit');
@@ -284,6 +289,11 @@ async function saveConfigValue(key, value) {
     showToast('Error al guardar: ' + e, 'error');
     return false;
   }
+}
+
+/* Lee varias configuraciones en una sola llamada IPC (menos round-trips). */
+async function getConfigValues(keys) {
+  return await invoke('get_config_values', { keys });
 }
 
 function toastTick(el, cfg) {
@@ -400,6 +410,7 @@ function toastBindLifecycle(el, cfg) {
       toastStartResume(el, cfg);
     }
   }
+  el._outsideClick = outsideClick;
   document.addEventListener('touchstart', outsideClick, { passive: true });
   document.addEventListener('mousedown', outsideClick);
 
@@ -640,6 +651,12 @@ function appendRows(tbody, items, rowFn, setupTr) {
     frag.appendChild(tr);
   });
   tbody.appendChild(frag);
+}
+function renderLoadMore(btnEl, hasMore, onClick) {
+  if (!btnEl) return;
+  if (!hasMore) { btnEl.classList.add('hidden'); btnEl.onclick = null; return; }
+  btnEl.classList.remove('hidden');
+  btnEl.onclick = onClick;
 }
 function toFriendlyError(err) {
   if (!err) return 'Error desconocido';

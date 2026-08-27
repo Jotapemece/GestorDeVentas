@@ -134,6 +134,7 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("040_fix_utc_offset_031", fix_utc_offset_031),
     ("041_fix_future_timestamps", fix_future_timestamps),
     ("042_add_movimientos_cliente_id", add_movimientos_cliente_id),
+    ("043_add_performance_indexes", add_performance_indexes),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -543,6 +544,21 @@ fn add_movimientos_cliente_id(conn: &Connection) -> Result<(), String> {
         conn.execute_batch(
             "ALTER TABLE movimientos_caja ADD COLUMN cliente_id INTEGER;"
         ).map_err(|e| format!("042 add movimientos cliente_id: {}", e))?;
+    }
+    Ok(())
+}
+
+fn add_performance_indexes(conn: &Connection) -> Result<(), String> {
+    for sql in [
+        "CREATE INDEX IF NOT EXISTS idx_detalles_ventas_venta_id ON detalles_ventas(venta_id)",
+        "CREATE INDEX IF NOT EXISTS idx_ventas_fecha_hora ON ventas(fecha_hora)",
+        "CREATE INDEX IF NOT EXISTS idx_movimientos_caja_created_at ON movimientos_caja(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_ventas_dispositivo_origen ON ventas(dispositivo_origen)",
+        "CREATE INDEX IF NOT EXISTS idx_clientes_activo ON clientes(activo)",
+        "CREATE INDEX IF NOT EXISTS idx_productos_activo ON productos(activo)",
+        "CREATE INDEX IF NOT EXISTS idx_ventas_anulada ON ventas(anulada)",
+    ] {
+        conn.execute_batch(sql).map_err(|e| format!("043 índice: {}", e))?;
     }
     Ok(())
 }

@@ -562,6 +562,11 @@ async function handleLogout() {
     syncAutoIntervalId = null;
     currentAutoMinutes = 0;
   }
+  // Detener el timer de "sincronización hace X min" al cerrar sesión.
+  if (typeof syncRelInterval !== 'undefined' && syncRelInterval) {
+    clearInterval(syncRelInterval);
+    syncRelInterval = null;
+  }
   // F6-f: detener los intervalos de 1s (reloj del login y reloj del sidebar)
   // para no dejarlos corriendo en segundo plano tras el logout.
   if (_greetingInterval) { clearInterval(_greetingInterval); _greetingInterval = null; }
@@ -865,13 +870,11 @@ async function buildChatContext() {
         }
       }
     }),
-    invoke('list_clientes').then(function(clients) {
-      if (clients && clients.length > 0) {
-        var debtClients = clients.filter(function(c) { return c.saldo_deuda_usd > 0; });
-        contextLines.push('- Clientes: ' + clients.length);
-        if (debtClients.length > 0) {
-          var debtStr = debtClients.slice(0, 5).map(function(c) { return c.nombre + ' ($' + c.saldo_deuda_usd.toFixed(2) + ')'; }).join(', ');
-          contextLines.push('- Deudas (' + debtClients.length + '): ' + debtStr + (debtClients.length > 5 ? '...' : ''));
+    invoke('get_clientes_resumen').then(function(res) {
+      if (res) {
+        contextLines.push('- Clientes: ' + res.total);
+        if (res.con_deuda > 0) {
+          contextLines.push('- Deudas: ' + res.con_deuda + ' clientes, total $' + res.deuda_total.toFixed(2));
         }
       }
     }),

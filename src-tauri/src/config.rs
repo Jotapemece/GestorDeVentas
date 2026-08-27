@@ -14,6 +14,26 @@ pub fn get_config_value(state: State<AppState>, key: String) -> Result<String, S
 }
 
 #[tauri::command]
+pub fn get_config_values(
+    state: State<AppState>,
+    keys: Vec<String>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    state.get_username()?;
+    let db = state.lock_db()?;
+    let mut out = std::collections::HashMap::new();
+    for key in keys {
+        // La clave maestra de cifrado de backups nunca se entrega por este comando.
+        if key == crate::constants::CFG_BACKUP_KEY {
+            continue;
+        }
+        if let Some(v) = crate::db::get_config_value(&db, &key)? {
+            out.insert(key, v);
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
 pub fn set_config_value(
     state: State<AppState>,
     key: String,

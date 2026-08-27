@@ -76,6 +76,7 @@ pub fn run() {
             sales::get_sales_by_vendor,
             // Clients
             clients::list_clientes,
+            clients::get_clientes_resumen,
             clients::create_cliente,
             clients::quick_create_cliente,
             clients::toggle_cliente_credito,
@@ -114,6 +115,7 @@ pub fn run() {
             solicitudes::resolver_solicitud_anulacion,
             // Config
             config::get_config_value,
+            config::get_config_values,
             config::set_config_value,
             config::get_user_config_value,
             config::set_user_config_value,

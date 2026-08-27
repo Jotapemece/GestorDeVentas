@@ -90,7 +90,7 @@ pub(crate) fn upload_alertas_inner(
         &body,
     )?;
 
-    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_ALERTAS, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_ALERTAS, &ts)?;
 
     Ok(format!(
         "Subida completada: {} alerta(s) de crédito subidas",
@@ -173,7 +173,7 @@ pub(crate) fn download_alertas_inner(
     }
 
     let wm = if max_ts.is_empty() { ts.clone() } else { max_ts.clone() };
-    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_ALERTAS, &wm);
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_ALERTAS, &wm)?;
 
     Ok(format!(
         "Descarga completada: {} alerta(s) de crédito nuevas.",

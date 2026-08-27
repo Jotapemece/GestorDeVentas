@@ -140,7 +140,7 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
     if let Some(device) = existing.first() {
         if let Some(existing_id) = device["id"].as_str() {
             let db = state.lock_db()?;
-            upsert_config(&db, constants::CFG_DISPOSITIVO_ID, existing_id);
+            upsert_config(&db, constants::CFG_DISPOSITIVO_ID, existing_id)?;
             return Ok(format!("Dispositivo recuperado: {}", existing_id));
         }
     }
@@ -170,7 +170,7 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
     }
 
     let db = state.lock_db()?;
-    upsert_config(&db, constants::CFG_DISPOSITIVO_ID, &new_id);
+    upsert_config(&db, constants::CFG_DISPOSITIVO_ID, &new_id)?;
 
     Ok(format!("Dispositivo registrado: {}", new_id))
 }
@@ -224,7 +224,7 @@ pub fn recover_device(state: State<AppState>) -> Result<bool, String> {
     if let Some(device) = existing.first() {
         if let Some(existing_id) = device["id"].as_str() {
             let db = state.lock_db()?;
-            upsert_config(&db, constants::CFG_DISPOSITIVO_ID, existing_id);
+            upsert_config(&db, constants::CFG_DISPOSITIVO_ID, existing_id)?;
             return Ok(true);
         }
     }

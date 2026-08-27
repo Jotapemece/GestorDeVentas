@@ -1375,6 +1375,8 @@ th .col-toggle-btn { float: none; display: inline; }
 .audit-filters .form-group { margin-bottom: 0; min-width: 150px; }
 .audit-filters input[type="search"] { min-width: 220px; }
 .audit-load-more { text-align: center; padding: 12px; }
+.load-more-wrap { text-align: center; padding: 12px; }
+.load-more-btn { min-width: 180px; }
 
 /* CALCULATOR */
 .calculator-content { width: 320px; transform-origin: center center; }
@@ -2070,8 +2072,6 @@ th .col-toggle-btn { float: none; display: inline; }
   .cart-remove-btn { width: 32px; height: 32px; font-size: 14px; }
   .cart-table { overflow-x: hidden; }
   .cart-product-name { max-width: 130px; }
-  /* En touch no hay hover: el botón de editar precio/Efectivo siempre visible */
-  .cart-item-total .cart-edit-price-btn { opacity: 1; }
 
   /* Hide cart remove button on mobile — swipe-to-delete replaces it */
   #cart-body td:last-child { display: none; }
@@ -2651,15 +2651,6 @@ th[data-sortable].sort-asc .sort-arrow::after { content: '▲'; opacity: 1; }
 th[data-sortable].sort-desc .sort-arrow::after { content: '▼'; opacity: 1; }
 th[data-sortable].sort-asc .sort-arrow, th[data-sortable].sort-desc .sort-arrow { opacity: 1; }
 
-/* ========== CART PRICE EDIT ========== */
-.cart-edit-price-btn {
-  background: none; border: none; cursor: pointer; font-size: 11px;
-  color: var(--text-secondary, #888); padding: 2px 6px; opacity: 0;
-  transition: opacity 0.15s;
-}
-.cart-item-total:hover .cart-edit-price-btn { opacity: 1; }
-.cart-edit-price-btn:hover { color: var(--primary, #4361ee); }
-.cart-price-edit { width: 80px; padding: 2px 6px; text-align: right; font-size: 13px; }
 .cart-total-text { vertical-align: middle; }
 
 /* Changelog modal */
@@ -3110,7 +3101,6 @@ body.no-animations .product-hover-card {
   .cart-qty-input { height: 26px; min-height: 26px; width: 38px; font-size: 14px; }
   .cart-remove-btn { width: 30px; height: 30px; min-height: 30px; font-size: 16px; }
   .cart-item-total { font-size: 13px; }
-  .cart-edit-price-btn { opacity: 1; font-size: 12px; min-height: 0; width: 36px; height: 36px; }
   .cart-totals { padding: 7px 10px; margin-bottom: 8px; }
   .cart-total { font-size: 13px; padding: 3px 0; }
   .cart-total:last-child { font-size: 15px; padding-top: 4px; }

@@ -90,7 +90,7 @@ pub(crate) fn upload_solicitudes_inner(
         &body,
     )?;
 
-    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_SOLICITUDES, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_SOLICITUDES, &ts)?;
 
     Ok(format!(
         "Subida completada: {} solicitud(es) de anulación subidas",
@@ -187,7 +187,7 @@ pub(crate) fn download_solicitudes_inner(
         }
     }
 
-    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_SOLICITUDES, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_SOLICITUDES, &ts)?;
 
     let mut parts: Vec<String> = Vec::new();
     if inserted > 0 {

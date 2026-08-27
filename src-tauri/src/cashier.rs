@@ -762,30 +762,29 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummary,
 }
 
 #[tauri::command]
-pub fn get_profit_series(
-    state: State<AppState>,
-    filter: crate::models::ProfitSeriesFilter,
+fn profit_series_inner(
+    db: &rusqlite::Connection,
+    start: String,
+    end: String,
 ) -> Result<Vec<crate::models::ProfitDataPoint>, String> {
-    crate::auth::check_admin_role(&state)?;
-    let db = state.lock_db()?;
-
-    let start = filter.start_date;
-    let end = if filter.end_date.contains(' ') {
-        filter.end_date
-    } else {
-        crate::helpers::siguiente_dia(&filter.end_date)
-    };
-
     let mut ventas_stmt = db.prepare(
-        "SELECT date(v.fecha_hora) as dia,
+        "WITH costo_por_dia AS (
+            SELECT date(v.fecha_hora) AS dia,
+                   COALESCE(SUM(dv.cantidad * COALESCE(p.costo, 0)), 0) AS costo
+            FROM ventas v
+            JOIN detalles_ventas dv ON dv.venta_id = v.id
+            JOIN productos p ON p.codigo = dv.producto_codigo
+            WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.anulada = 0
+              AND v.metodo_pago != ?3
+            GROUP BY dia
+         )
+         SELECT date(v.fecha_hora) AS dia,
                 COALESCE(SUM(v.total_usd), 0),
-                COALESCE((SELECT SUM(COALESCE(p.costo, 0) * dv.cantidad)
-                          FROM detalles_ventas dv
-                          JOIN productos p ON p.codigo = dv.producto_codigo
-                          WHERE dv.venta_id = v.id), 0)
+                COALESCE(c.costo, 0)
          FROM ventas v
+         LEFT JOIN costo_por_dia c ON c.dia = date(v.fecha_hora)
          WHERE v.fecha_hora >= ?1 AND v.fecha_hora < ?2 AND v.anulada = 0
-         AND v.metodo_pago != ?3
+           AND v.metodo_pago != ?3
          GROUP BY dia",
     ).map_err(|e| e.to_string())?;
 
@@ -841,6 +840,22 @@ pub fn get_profit_series(
     Ok(points)
 }
 
+#[tauri::command]
+pub fn get_profit_series(
+    state: State<AppState>,
+    filter: crate::models::ProfitSeriesFilter,
+) -> Result<Vec<crate::models::ProfitDataPoint>, String> {
+    crate::auth::check_admin_role(&state)?;
+    let db = state.lock_db()?;
+    let start = filter.start_date;
+    let end = if filter.end_date.contains(' ') {
+        filter.end_date
+    } else {
+        crate::helpers::siguiente_dia(&filter.end_date)
+    };
+    profit_series_inner(&db, start, end)
+}
+
 /* ========== MOVIMIENTOS CAJA ========== */
 const SQL_INSERT_MOVIMIENTO: &str =
     "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
@@ -878,9 +893,20 @@ pub fn register_movimiento(state: State<AppState>, tipo: String, monto_bs: f64, 
 }
 
 #[tauri::command]
-pub fn list_movimientos(state: State<AppState>) -> Result<Vec<MovimientoCaja>, String> {
+pub fn list_movimientos(
+    state: State<AppState>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<MovimientoCaja>, String> {
     let db = state.lock_db()?;
-    let mut stmt = db.prepare(SQL_LIST_MOVIMIENTOS).map_err(|e| format!("Error al listar movimientos: {}", e))?;
+    let query = if let (Some(p), Some(ps)) = (page, page_size) {
+        let ps = ps.max(1);
+        let offset = (p.max(1) - 1) * ps;
+        format!("{} LIMIT {} OFFSET {}", SQL_LIST_MOVIMIENTOS, ps, offset)
+    } else {
+        SQL_LIST_MOVIMIENTOS.to_string()
+    };
+    let mut stmt = db.prepare(&query).map_err(|e| format!("Error al listar movimientos: {}", e))?;
     let rows = stmt.query_map([], |row| {
         Ok(MovimientoCaja {
             id: row.get(0)?,
@@ -1249,6 +1275,30 @@ mod tests {
         .unwrap();
         let p = detectar_pendiente_cierre(&conn).unwrap();
         assert!(p.is_none());
+    }
+
+    #[test]
+    fn test_profit_series_costo_por_dia_unico() {
+        let conn = crate::db::test_support::test_conn();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        conn.execute_batch(
+            &format!(
+                "INSERT INTO productos (codigo, nombre, precio_usd, costo, stock, es_inari, activo) \
+                 VALUES ('P1', 'Prod', 10.0, 5.0, 100, 0, 1); \
+                 INSERT INTO ventas (fecha_hora, usuario_id, metodo_pago, total_usd, tasa_aplicada, total_bs, anulada, sync_id, dispositivo_origen, updated_at) \
+                 VALUES ('{0} 10:00:00', 1, 'efectivo_bs', 30.0, 10.0, 300.0, 0, 'v1', 'local', '2026-01-01T10:00:00Z'); \
+                 INSERT INTO detalles_ventas (venta_id, producto_codigo, cantidad, precio_usd_unitario, sync_id) \
+                 VALUES (1, 'P1', 3, 10.0, 'd1');",
+                today
+            ),
+        )
+        .unwrap();
+        let end = crate::helpers::siguiente_dia(&today);
+        let points = profit_series_inner(&conn, today.clone(), end).unwrap();
+        let punto = points.iter().find(|p| p.date == today).expect("debe haber punto del día");
+        assert!((punto.revenue_usd - 30.0).abs() < 1e-6, "revenue");
+        assert!((punto.cost_usd - 15.0).abs() < 1e-6, "costo = 3*5");
+        assert!((punto.profit_usd - 15.0).abs() < 1e-6, "profit = 30-15");
     }
 }
 

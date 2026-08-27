@@ -65,25 +65,64 @@ pub fn list_clientes(
     state: State<AppState>,
     page: Option<i64>,
     page_size: Option<i64>,
+    search: Option<String>,
 ) -> Result<Vec<Cliente>, String> {
     let db = state.lock_db()?;
+    let search_term = search.filter(|s| !s.trim().is_empty());
+    let base = match &search_term {
+        Some(_) => format!(
+            "{} AND c.nombre LIKE ?1",
+            SQL_LIST_CLIENTES.replace("ORDER BY c.nombre ASC", "")
+        ),
+        None => SQL_LIST_CLIENTES.to_string(),
+    };
     let query = if let (Some(p), Some(ps)) = (page, page_size) {
         let ps = ps.max(1);
         let offset = (p.max(1) - 1) * ps;
-        format!("{} LIMIT {} OFFSET {}", SQL_LIST_CLIENTES, ps, offset)
+        format!("{} LIMIT {} OFFSET {}", base, ps, offset)
     } else {
-        SQL_LIST_CLIENTES.to_string()
+        base
     };
 
+    let like_val: String;
     let mut stmt = db.prepare(&query).map_err(|e| e.to_string())?;
-
-    let clientes: Vec<Cliente> = stmt
-        .query_map([], row_to_cliente)
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+    let clientes: Vec<Cliente> = if let Some(s) = &search_term {
+        like_val = format!("%{}%", s.trim());
+        stmt.query_map(params![like_val], row_to_cliente)
+    } else {
+        stmt.query_map([], row_to_cliente)
+    }
+    .map_err(|e| e.to_string())?
+    .filter_map(|r| r.ok())
+    .collect();
 
     Ok(clientes)
+}
+
+#[tauri::command]
+pub fn get_clientes_resumen(state: State<AppState>) -> Result<crate::models::ClienteResumen, String> {
+    let db = state.lock_db()?;
+    let (total,): (i64,) = db
+        .query_row(
+            "SELECT COUNT(*) FROM clientes WHERE COALESCE(activo,1) = 1",
+            [],
+            |r| Ok((r.get(0)?,)),
+        )
+        .map_err(|e| e.to_string())?;
+    let (con_deuda, deuda_total): (i64, f64) = db
+        .query_row(
+            "SELECT COUNT(*), COALESCE(SUM(saldo_deuda_usd), 0) \
+             FROM clientes WHERE COALESCE(activo,1) = 1 AND saldo_deuda_usd > 0.001",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(crate::models::ClienteResumen {
+        total,
+        con_deuda,
+        deuda_total,
+        personas_con_deuda: con_deuda,
+    })
 }
 
 #[tauri::command]

@@ -4,9 +4,10 @@ async function loadSyncConfig() {
   const keyEl = qs(SEL.syncKey);
   if (!urlEl) return;
   try {
-    const url = await invoke('get_config_value', { key: CFG_SUPABASE_URL });
+    const cfg = await getConfigValues([CFG_SUPABASE_URL, CFG_SUPABASE_KEY]);
+    const url = cfg[CFG_SUPABASE_URL];
     if (url) urlEl.value = url;
-    const key = await invoke('get_config_value', { key: CFG_SUPABASE_KEY });
+    const key = cfg[CFG_SUPABASE_KEY];
     if (key) keyEl.value = key;
   } catch (e) { showToast('Error al cargar configuración de sincronización: ' + e, 'error'); }
   loadSyncStats();

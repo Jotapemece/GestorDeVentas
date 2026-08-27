@@ -60,6 +60,14 @@ pub struct Cliente {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ClienteResumen {
+    pub total: i64,
+    pub con_deuda: i64,
+    pub deuda_total: f64,
+    pub personas_con_deuda: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Venta {
     pub id: i64,
     pub fecha_hora: String,

@@ -1,29 +1,58 @@
 /* ========== CREDITOS ========== */
-async function loadCreditos() {
+async function loadCreditos(reset) {
+  if (reset === undefined) reset = true;
   const tbody = qs(SEL.creditosBody);
-  showSkeleton(tbody, 5);
-  const clientes = await invokeOrError(invoke('list_clientes'));
+  if (reset) {
+    clientePage = 1;
+    creditoRows = [];
+    showSkeleton(tbody, 5);
+    tbody.innerHTML = '';
+  }
+  const clientes = await invokeOrError(invoke('list_clientes', { page: clientePage, page_size: CLIENTE_PAGE_SIZE }));
   if (clientes === undefined) return;
-  tbody.innerHTML = '';
-  if (clientes.length === 0) {
+  if (reset) tbody.innerHTML = '';
+  if (clientes.length === 0 && clientePage === 1) {
     tbody.innerHTML = emptyTableRow(3, '<i class="nf nf-fa-credit_card"></i>', 'No hay clientes registrados', 'Registre personas para otorgar cr\u00e9dito');
     creditoRows = [];
-    updateCreditoStats([]);
+    updateCreditoStatsResumen();
+    renderLoadMore(qs(SEL.creditosLoadMore), false);
     return;
   }
-  const rows = [];
   appendRows(tbody, clientes, createClientRow, function(tr, c) {
     tr.dataset.nombre = c.nombre.toLowerCase();
     tr.classList.add('card-collapsible', 'collapsed');
-    rows.push(tr);
+    creditoRows.push(tr);
   });
-  creditoRows = rows;
-  updateCreditoStats(clientes);
+  clienteHasMore = clientes.length === CLIENTE_PAGE_SIZE;
+  updateCreditoStatsResumen();
+  renderLoadMore(qs(SEL.creditosLoadMore), clienteHasMore, loadMoreClientes);
+  applyCreditoFilter();
+}
+
+async function loadMoreClientes() {
+  if (clienteLoadingMore || !clienteHasMore) return;
+  clienteLoadingMore = true;
+  clientePage++;
+  const tbody = qs(SEL.creditosBody);
+  const clientes = await invokeOrError(invoke('list_clientes', { page: clientePage, page_size: CLIENTE_PAGE_SIZE }));
+  clienteLoadingMore = false;
+  if (clientes === undefined) { clientePage--; return; }
+  appendRows(tbody, clientes, createClientRow, function(tr, c) {
+    tr.dataset.nombre = c.nombre.toLowerCase();
+    tr.classList.add('card-collapsible', 'collapsed');
+    creditoRows.push(tr);
+  });
+  clienteHasMore = clientes.length === CLIENTE_PAGE_SIZE;
+  renderLoadMore(qs(SEL.creditosLoadMore), clienteHasMore, loadMoreClientes);
   applyCreditoFilter();
 }
 
 let creditoFilterTimer = null;
 let abonoMonedaToggler = null;
+let clientePage = 1;
+const CLIENTE_PAGE_SIZE = 50;
+let clienteHasMore = false;
+let clienteLoadingMore = false;
 function applyCreditoFilter() {
   clearTimeout(creditoFilterTimer);
   creditoFilterTimer = setTimeout(function() {
@@ -163,9 +192,9 @@ function openAbonoModal(id) {
 
 async function loadAbonoClienteInfo(id) {
   await tryCatch(async () => {
-    const clientes = await invoke('list_clientes');
-    const c = clientes.find(x => x.id === id);
-    if (!c) return;
+    const hist = await invoke('get_cliente_history', { clienteId: id });
+    if (!hist || !hist.cliente) return;
+    const c = hist.cliente;
     qs(SEL.abonoClienteNombre).textContent = c.nombre;
     qs(SEL.abonoDeudaUsd).textContent = formatUSD(c.saldo_deuda_usd);
     qs(SEL.abonoDeudaBs).textContent = formatBS(c.saldo_deuda_usd * tasaActual);
@@ -408,6 +437,19 @@ function updateCreditoStats(clientes) {
   if (totalEl) totalEl.textContent = total;
   if (deudaEl) deudaEl.textContent = conDeuda;
   if (deudaTotalEl) deudaTotalEl.textContent = formatUSD(deudaTotal);
+}
+
+async function updateCreditoStatsResumen() {
+  try {
+    const res = await invoke('get_clientes_resumen');
+    if (!res) return;
+    var totalEl = qs(SEL.creditosTotalPersonas);
+    var deudaEl = qs(SEL.creditosConDeuda);
+    var deudaTotalEl = qs(SEL.creditosDeudaTotal);
+    if (totalEl) totalEl.textContent = res.total;
+    if (deudaEl) deudaEl.textContent = res.con_deuda;
+    if (deudaTotalEl) deudaTotalEl.textContent = formatUSD(res.deuda_total);
+  } catch (e) {}
 }
 
 async function exportClientes() {

@@ -124,7 +124,7 @@ async function performGlobalSearch() {
 
   // Clients
   try {
-    const clients = await invoke('list_clientes');
+    const clients = await invoke('list_clientes', { page: 1, page_size: 20, search: query });
     const matched = clients.filter(function(c) { return c.nombre.toLowerCase().includes(query); });
     if (matched.length > 0) {
       html += '<div class="global-search-section-title"><i class="nf nf-fa-users"></i> Clientes (' + matched.length + ')</div>';

@@ -93,7 +93,7 @@ pub(crate) fn upload_clientes_inner(
         &body,
     )?;
 
-    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_CLIENTES, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_CLIENTES, &ts)?;
 
     Ok(format!("Subida completada: {} cliente(s) subidos", clientes_json.len()))
 }
@@ -131,7 +131,7 @@ pub(crate) fn download_clientes_inner(
     let count = cloud_clientes.len();
     if count == 0 {
         if first_sync {
-            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1")?;
         }
         return Ok("No hay cambios nuevos para descargar".to_string());
     }
@@ -241,9 +241,9 @@ pub(crate) fn download_clientes_inner(
         }
     }
 
-    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES, &ts)?;
     if first_sync {
-        upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+        upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1")?;
     }
 
     let parts: Vec<String> = [

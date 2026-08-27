@@ -74,10 +74,26 @@ pub fn preview_download(
     // T1: NO mantener lock_db durante el HTTP (congelaba el POS ~90s). Se lee
     // config con lock corto, se hace toda la red sin lock, y los reads locales
     // vuelven a tomar lock solo en bloques scoped.
-    let (supabase_url, supabase_key, dispositivo_id) = {
+    let (supabase_url, supabase_key, dispositivo_id, first_sync, wm_prod, wm_cli) = {
         let db = state.lock_db()?;
         let (u, k) = super::supabase_config(&db)?;
-        (u, k, super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?)
+        let fs = super::get_config(&db, constants::CFG_FIRST_SYNC_DONE)?;
+        let wmp = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD)?;
+        let wmc = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES)?;
+        (u, k, super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?, fs != "1", wmp, wmc)
+    };
+    // Delta: en sync posteriores al primero solo traemos lo modificado desde el
+    // último download (igual que apply_download). El primer sync trae todo para
+    // que el usuario pueda elegir sembrar su BD local.
+    let prod_ts_filter = if first_sync || wm_prod.is_empty() {
+        String::new()
+    } else {
+        format!("&updated_at=gt.{}", wm_prod)
+    };
+    let cli_ts_filter = if first_sync || wm_cli.is_empty() {
+        String::new()
+    } else {
+        format!("&updated_at=gt.{}", wm_cli)
     };
 
     let mut productos = Vec::new();
@@ -87,8 +103,8 @@ pub fn preview_download(
     let prod_url = api_url(
         &supabase_url,
         &format!(
-            "/productos?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,categoria_nombre,es_inari,subcategoria,updated_at,dispositivo_origen",
-            urlencoding(&dispositivo_id),
+            "/productos?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=codigo,nombre,precio_usd,costo,stock,stock_minimo,activo,categoria_id,categoria_nombre,es_inari,subcategoria,updated_at,dispositivo_origen{}",
+            urlencoding(&dispositivo_id), prod_ts_filter,
         ),
     );
 let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &supabase_key, "codigo")?;
@@ -203,8 +219,8 @@ let cloud_products: Vec<serde_json::Value> = supabase_get_paginated(&prod_url, &
     let cli_url = api_url(
         &supabase_url,
         &format!(
-            "/clientes?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*",
-            urlencoding(&dispositivo_id),
+            "/clientes?or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*{}",
+            urlencoding(&dispositivo_id), cli_ts_filter,
         ),
     );
 let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &supabase_key, "id")?;

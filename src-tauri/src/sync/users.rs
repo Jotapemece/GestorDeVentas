@@ -98,7 +98,7 @@ pub(crate) fn upload_usuarios_inner(
         &body,
     )?;
 
-    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_USUARIOS, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_USUARIOS, &ts)?;
 
     Ok(format!("Subida completada: {} usuario(s) subidos", usuarios_json.len()))
 }
@@ -185,7 +185,7 @@ pub(crate) fn download_usuarios_inner(
         }
     }
 
-    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_USUARIOS, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_USUARIOS, &ts)?;
 
     let parts: Vec<String> = [
         (inserted > 0, format!("{} nuevos insertados", inserted)),

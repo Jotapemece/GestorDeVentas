@@ -233,7 +233,7 @@ pub(crate) fn upload_sales_inner(
         ).map_err(|e| format!("Error persistiendo sync_id de detalle: {}", e))?;
     }
 
-    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_VENTAS, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD_VENTAS, &ts)?;
 
     Ok(format!("Subida completada: {} venta(s) subidas", all_ventas.len()))
 }
@@ -361,7 +361,7 @@ pub(crate) fn apply_remote_sales(
 
     if cloud_ventas.is_empty() {
         if use_watermark {
-            upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+            upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts)?;
         }
         return Ok("No hay ventas nuevas para descargar".to_string());
     }
@@ -486,7 +486,7 @@ pub(crate) fn apply_remote_sales(
 
     if to_fetch.is_empty() {
         if use_watermark {
-            upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+            upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts)?;
         }
         return Ok("No hay ventas nuevas para descargar".to_string());
     }
@@ -560,9 +560,9 @@ pub(crate) fn apply_remote_sales(
     }
 
     if use_watermark {
-        upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts);
+        upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD_VENTAS, &ts)?;
         if first_sync {
-            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1")?;
         }
     }
 

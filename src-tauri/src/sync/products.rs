@@ -100,7 +100,7 @@ pub(crate) fn upload_products_inner(
         )?;
     }
 
-    upsert_config(db, constants::CFG_ULTIMO_UPLOAD, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_UPLOAD, &ts)?;
 
     Ok(format!(
         "Subida completada: {} categorías y {} productos subidos",
@@ -172,7 +172,7 @@ pub(crate) fn download_products_inner(
     let count = cloud_products.len();
     if count == 0 {
         if first_sync {
-            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+            upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1")?;
         }
         return Ok("No hay cambios nuevos para descargar".to_string());
     }
@@ -335,9 +335,9 @@ pub(crate) fn download_products_inner(
     drop(upd);
     drop(ins);
 
-    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD, &ts);
+    upsert_config(db, constants::CFG_ULTIMO_DOWNLOAD, &ts)?;
     if first_sync {
-        upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1");
+        upsert_config(db, constants::CFG_FIRST_SYNC_DONE, "1")?;
     }
 
     let parts: Vec<String> = [

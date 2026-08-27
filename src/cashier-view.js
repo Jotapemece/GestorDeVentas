@@ -180,6 +180,18 @@ async function loadProductCache() {
   await refreshEfectivoSaldo();
 }
 
+/* Tras una venta no recargamos los 5000 productos: ajustamos el stock en
+ * memoria de los ítems vendidos y refrescamos el saldo de efectivo. */
+async function updateProductCacheAfterSale(items) {
+  (items || []).forEach(function(i) {
+    var p = productCache.find(function(x) { return x.codigo === i.codigo; });
+    if (p && typeof p.stock === 'number') {
+      p.stock = Math.max(0, p.stock - (i.cantidad || 0));
+    }
+  });
+  await refreshEfectivoSaldo();
+}
+
 /* ========== SALES ========== */
 let productSearchTimer = null;
 
@@ -482,9 +494,16 @@ function resolveCartProduct(codigo) {
   return null;
 }
 
-  async function loadProductName(codigo) {
-   const p = resolveCartProduct(codigo);
-   if (p) {
+   async function loadProductName(codigo) {
+    let p = resolveCartProduct(codigo);
+    if (!p) {
+      try {
+        const fallback = await invoke('list_products', { search: codigo, page: 1, pageSize: 20 });
+        const data = fallback.data || fallback;
+        if (data && data.length) p = data.find(x => x.codigo === codigo) || data[0];
+      } catch (e) {}
+    }
+    if (p) {
      const item = cart.find(x => x.codigo === codigo);
      if (item) {
        // Nota: NO hacemos cartHistoryPush aquí. El addToCart ya registró el
@@ -1186,9 +1205,10 @@ function selectCliente(id, nombre) {
   toggleClientDropdown(false);
 }
 
-async function loadClientesForSelect() {
+async function loadClientesForSelect(search) {
   try {
-    const clientes = await invoke('list_clientes');
+    const term = (search || '').trim();
+    const clientes = await invoke('list_clientes', { page: 1, page_size: 200, search: term || null });
     const menu = qs(SEL.clienteSelectMenu);
     var searchInput = menu.querySelector('.custom-select-search');
     menu.querySelectorAll('.custom-select-item').forEach(function(el) { el.remove(); });
@@ -1205,7 +1225,6 @@ async function loadClientesForSelect() {
     placeholder.dataset.id = '';
     placeholder.textContent = 'Seleccione un cliente...';
     menu.appendChild(placeholder);
-    var items = [];
     clientes.forEach(c => {
       const div = document.createElement('div');
       div.className = 'custom-select-item' + (c.credito_activo ? '' : ' disabled muted');
@@ -1216,13 +1235,9 @@ async function loadClientesForSelect() {
         div.addEventListener('click', function() { selectCliente(c.id, c.nombre); });
       }
       menu.appendChild(div);
-      items.push(div);
     });
     searchInput.oninput = function() {
-      var term = this.value.toLowerCase().trim();
-      items.forEach(function(el) {
-        el.style.display = !term || (el.dataset.nombre || '').toLowerCase().includes(term) ? '' : 'none';
-      });
+      loadClientesForSelect(this.value);
     };
   } catch (e) { showToast('Error al cargar clientes', 'error'); }
 }
@@ -1338,7 +1353,7 @@ async function confirmPayment() {
     disposeActiveCart();
     saveCartSnapshot();
     resetCartHistory();
-    await loadProductCache();
+    await updateProductCacheAfterSale(productos);
     renderCart(); updateCheckoutBtn(); closePaymentModal();
     /* Reset search for the next customer */
     qs(SEL.productSearch).value = '';
@@ -1381,11 +1396,10 @@ let cartFabAllModules = true;
 
 async function loadCartConfig() {
   try {
-    const a = await invoke('get_config_value', { key: CFG_CART_AUTO_OPEN });
+    const cfg = await getConfigValues([CFG_CART_AUTO_OPEN, CFG_CART_FAB_ALL_MODULES]);
+    const a = cfg[CFG_CART_AUTO_OPEN];
     cartAutoOpen = (a === undefined || a === null || a === '' || a === 'true' || a === '1');
-  } catch (e) {}
-  try {
-    const b = await invoke('get_config_value', { key: CFG_CART_FAB_ALL_MODULES });
+    const b = cfg[CFG_CART_FAB_ALL_MODULES];
     cartFabAllModules = (b === undefined || b === null || b === '' || b === 'true' || b === '1');
   } catch (e) {}
   const t1 = qs(SEL.cartAutoOpenToggle);
@@ -1878,22 +1892,58 @@ async function refreshTasaFromInfo(prefix) {
 
 /* ========== MOVIMIENTOS CAJA ========== */
 let _movimientosData = [];
+let movimientosPage = 1;
+const MOVIMIENTOS_PAGE_SIZE = 50;
+let movimientosHasMore = false;
+let movimientosLoadingMore = false;
 
-async function loadMovimientos() {
-  var list = qs(SEL.movimientosList);
-  list.innerHTML = '<div class="movimientos-empty" style="padding:24px;text-align:center"><i class="nf nf-fa-spinner fa-spin"></i> Cargando...</div>';
+async function loadMovimientos(reset) {
+  if (reset === undefined) reset = true;
+  if (reset) {
+    movimientosPage = 1;
+    movimientosHasMore = false;
+    _movimientosData = [];
+  }
+  if (reset) {
+    var list = qs(SEL.movimientosList);
+    if (list) list.innerHTML = '<div class="movimientos-empty" style="padding:24px;text-align:center"><i class="nf nf-fa-spinner fa-spin"></i> Cargando...</div>';
+  }
   try {
     var [movimientos, saldo] = await Promise.all([
-      invoke('list_movimientos'),
+      invoke('list_movimientos', { page: movimientosPage, page_size: MOVIMIENTOS_PAGE_SIZE }),
       invoke('get_saldo_caja')
     ]);
-    _movimientosData = movimientos || [];
+    var pageData = movimientos || [];
+    _movimientosData = reset ? pageData : _movimientosData.concat(pageData);
+    movimientosHasMore = pageData.length === MOVIMIENTOS_PAGE_SIZE;
     renderMovimientos();
-    qs(SEL.movimientosTotalIngresos).textContent = formatUSD(saldo.total_ingresos_usd);
-    qs(SEL.movimientosTotalEgresos).textContent = formatUSD(saldo.total_egresos_usd);
-    /* Update saldo in summary card */
-    setSaldoDisplay(saldo);
+    renderLoadMore(qs(SEL.movimientosLoadMore), movimientosHasMore, loadMoreMovimientos);
+    if (saldo) {
+      qs(SEL.movimientosTotalIngresos).textContent = formatUSD(saldo.total_ingresos_usd);
+      qs(SEL.movimientosTotalEgresos).textContent = formatUSD(saldo.total_egresos_usd);
+      setSaldoDisplay(saldo);
+    }
   } catch (e) { showToast('Error al cargar movimientos: ' + e, 'error'); }
+}
+
+async function loadMoreMovimientos() {
+  if (movimientosLoadingMore || !movimientosHasMore) return;
+  movimientosLoadingMore = true;
+  movimientosPage++;
+  var prev = _movimientosData;
+  try {
+    var movimientos = await invoke('list_movimientos', { page: movimientosPage, page_size: MOVIMIENTOS_PAGE_SIZE });
+    var pageData = movimientos || [];
+    _movimientosData = prev.concat(pageData);
+    movimientosHasMore = pageData.length === MOVIMIENTOS_PAGE_SIZE;
+    renderMovimientos();
+    renderLoadMore(qs(SEL.movimientosLoadMore), movimientosHasMore, loadMoreMovimientos);
+  } catch (e) {
+    movimientosPage--;
+    showToast('Error al cargar m\u00e1s movimientos', 'error');
+  } finally {
+    movimientosLoadingMore = false;
+  }
 }
 
 /* Saldo de Caja: muestra solo USD o solo Bs según el toggle (saldoShowBs). */
