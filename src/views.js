@@ -486,7 +486,7 @@ async function handleLogin() {
       initSidebarAutoHide();
       initCalculator();
       initGuide();
-      initSnake();
+      initTetris();
       initColumnToggle();
       loadSidebarAutoHideConfig();
       applyRoleUI();

@@ -3269,7 +3269,7 @@ body.no-animations .product-hover-card {
 
 
 /* ========== SNAKE ========== */
-.snake-content { width: 440px; max-width: 94vw; }
+.snake-content { width: 440px; max-width: 96vw; }
 .snake-body { padding: 12px 16px 16px; user-select: none; }
 .snake-hud { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 10px; }
 .snake-score-label { font-size: 14px; color: var(--text); }
@@ -3282,21 +3282,42 @@ body.no-animations .product-hover-card {
 .snake-status.ok { background: var(--accent); }
 .snake-status.paused { background: #C4903A; }
 .snake-status.over { background: var(--danger); }
-#snake-board {
-  margin: 0; padding: 10px; background: rgba(0,0,0,0.55); border-radius: 10px;
-  border: 1px solid var(--border); text-align: center;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 15px; line-height: 1.15; letter-spacing: 2px;
-  color: var(--text); white-space: pre; overflow: hidden;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+.tetris-frame {
+  display: flex; gap: 16px; align-items: stretch; justify-content: center;
+  background: var(--accent); color: var(--text);
+  border: 3px solid #000; border-radius: 12px; padding: 14px; margin-bottom: 8px;
 }
+.tetris-field { border-radius: 6px; padding: 3px; }
+#tetris-board { display: block; }
+.tetris-panel { display: flex; flex-direction: column; gap: 14px; min-width: 112px; flex: 0 0 auto; text-align: left; }
+.tetris-label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.85; }
+.tetris-score-box { border: 2px solid currentColor; border-radius: 8px; padding: 6px 10px; text-align: center; }
+.tetris-score-val { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 24px; font-weight: 800; line-height: 1.1; }
+.tetris-stat { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.tetris-stat-val { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 18px; font-weight: 700; }
+.tetris-next { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#tetris-next { display: block; background: transparent; border-radius: 6px; }
+.tetris-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; text-align: center; padding: 12px;
+}
+.tetris-overlay.hidden { display: none; }
+.tetris-over-inner { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.tetris-over-title { font-size: 30px; font-weight: 800; letter-spacing: 3px; }
+.tetris-over-stats { display: flex; gap: 18px; justify-content: center; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tetris-over-stats div { display: flex; flex-direction: column; gap: 2px; }
+.tetris-over-stats span { font-size: 10px; letter-spacing: 1.5px; opacity: 0.8; }
+.tetris-over-stats b { font-size: 20px; }
+.tetris-over-hint { font-size: 13px; opacity: 0.9; }
+.tetris-over-hint b { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tetris-controls-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 6px; }
+@media (max-width: 480px) { .tetris-frame { flex-wrap: wrap; } }
 .snake-help {
   display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center;
   margin-top: 10px; font-size: 11px; color: var(--text-light);
 }
 .snake-help i { font-size: 12px; color: var(--accent); margin-right: 4px; }
 .snake-help kbd { padding: 1px 5px; font-size: 10px; font-family: inherit; background: var(--hover); border-radius: 4px; border: 1px solid var(--border); }
-.snake-2p-score { visibility: hidden; }
 .snake-opts-row {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
   gap: 10px; margin-bottom: 8px;
@@ -3311,11 +3332,6 @@ body.no-animations .product-hover-card {
 }
 .snake-size-btn:hover { transform: scale(1.06); }
 .snake-size-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.snake-2p-opt { cursor: pointer; }
-.snake-2p-help { border-top: 1px dashed var(--border); }
-.snake-2p-help i { margin-right: 0; }
-.snake-2p-help strong { font-size: 13px; margin: 0 2px; }
-.snake-2p-help kbd { margin: 0 2px; }
 .snake-palette-row {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border);

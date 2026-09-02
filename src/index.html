@@ -2026,8 +2026,10 @@
                 <li><strong>Resumen diario:</strong> tarjetas con ventas totales, total en USD, tasa actual y cantidad de ventas del d&iacute;a.</li>
                 <li><strong>Saldo de caja:</strong> tarjeta que muestra el saldo calculado (ventas + ingresos &minus; egresos del d&iacute;a).</li>
                 <li><strong>Movimientos:</strong> bot&oacute;n para registrar gastos (egresos) e ingresos extraordinarios. &Uacute;til para anotar salidas de efectivo para cambio, pagos r&aacute;pidos o dep&oacute;sitos. Los movimientos se listan en orden cronol&oacute;gico inverso y se reflejan en el saldo de caja.</li>
-                <li><strong>Historial de cierres:</strong> consulta cierres anteriores con detalles.</li>
-              </ul>
+                 <li><strong>Historial de cierres:</strong> consulta cierres anteriores con detalles.</li>
+                 <li><strong>Ajuste de efectivo:</strong> los administradores pueden sumar o restar efectivo del saldo (entrada/salida con un motivo) desde la card "Saldo de caja", &uacute;til para cuadrar el dinero real sin crear una venta.</li>
+                 <li><strong>Cierre pendiente y respaldo:</strong> si la app se cerr&oacute; por un corte de energ&iacute;a con la caja abierta, al volver a entrar usa "Verificar cierre pendiente" para descargar las ventas y mostrar el cierre del d&iacute;a anterior. Al cerrar caja se genera autom&aacute;ticamente un respaldo diario cifrado.</li>
+               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-info_circle"></i>
@@ -2045,6 +2047,8 @@
                 <li><strong>Ventas a cr&eacute;dito:</strong> al cobrar, selecciona "Cr&eacute;dito" como m&eacute;todo y elige el cliente.</li>
                 <li><strong>Abonos:</strong> registra pagos parciales con m&eacute;todo de pago y referencia.</li>
                 <li><strong>Historial:</strong> desde "Detalles" consulta las ventas y abonos del cliente.</li>
+                <li><strong>Alertas de cr&eacute;dito:</strong> cuando un vendedor registra una venta a cr&eacute;dito, un abono, una deuda r&aacute;pida o una anulaci&oacute;n, el administrador ve un badge de alerta en el nav "Cr&eacute;dito" y un panel con el detalle. "Marcar todas vistas" baja el contador a cero.</li>
+                <li><strong>Solicitudes de anulaci&oacute;n:</strong> los vendedores no anulan directo; usan "Solicitar anulaci&oacute;n" en una venta del d&iacute;a. El administrador recibe la solicitud (badge en Ventas) y la aprueba o rechaza, indicando el motivo del rechazo.</li>
               </ul>
             </div>
             <div class="guide-tip">
@@ -2063,8 +2067,10 @@
                 <li><strong>Buscar:</strong> el campo de b&uacute;squeda filtra productos por nombre o c&oacute;digo.</li>
                 <li><strong>Importar:</strong> desde Config puedes importar productos desde un archivo TSV.</li>
                 <li><strong>Exportar:</strong> exporta el inventario a Excel (.xlsx) con el bot&oacute;n de exportaci&oacute;n.</li>
-                <li><strong>Paginaci&oacute;n:</strong> 50 productos por p&aacute;gina con controles Anterior/Siguiente.</li>
-              </ul>
+                 <li><strong>Paginaci&oacute;n:</strong> 50 productos por p&aacute;gina con controles Anterior/Siguiente.</li>
+                 <li><strong>Ajuste de stock:</strong> desde el men&uacute; (&ctdot;) de cada producto un administrador puede ajustar el stock manualmente (cantidad y motivo). El cambio queda registrado en auditor&iacute;a para trazabilidad.</li>
+                 <li><strong>Combos e Inari:</strong> un combo es un producto que agrupa otros y al venderlo descuenta el stock de sus componentes. Los productos <em>Inari</em> s&oacute;lo aparecen para la venta los d&iacute;as jueves a domingo (o con el toggle manual en la configuraci&oacute;n de Inari).</li>
+               </ul>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-archive"></i>
@@ -2128,7 +2134,7 @@
             <div class="guide-section">
               <p>Ajusta la aplicaci&oacute;n a tu gusto (solo administradores):</p>
               <ul>
-                <li><strong>Tema:</strong> elige entre 8 combinaciones de colores (oscuro, claro, azul, verde, morado, turquesa, naranja, menta).</li>
+                 <li><strong>Tema:</strong> elige entre 8 combinaciones de colores (oscuro, claro, azul, morado, turquesa, naranja, menta, rub&iacute;) m&aacute;s el modo autom&aacute;tico "sistema".</li>
                 <li><strong>Preferencias:</strong> sonidos (con volumen), tama&ntilde;o de fuente, pantalla completa y dem&aacute;s opciones de interfaz.</li>
                 <li><strong>Caja y ventas:</strong> coma autom&aacute;tica en montos, c&aacute;lculo de vuelto, redondeo y verificaci&oacute;n de cierre pendiente.</li>
                 <li><strong>Interfaz:</strong> barra lateral auto-plegable, confirmaci&oacute;n de venta, animaciones (contadores, check de venta y efecto de presi&oacute;n en botones).</li>
@@ -2206,19 +2212,19 @@
             </div>
           </div>
           <div class="guide-page" id="guide-juego">
-            <h4><i class="nf nf-fa-gamepad"></i> Snake (Entretenimiento)</h4>
+            <h4><i class="nf nf-fa-gamepad"></i> Tetris (Entretenimiento)</h4>
             <div class="guide-section">
-              <p><strong>Snake</strong> es un peque&ntilde;o juego de entretenimiento incluido, disponible solo en PC. Juega a hacer crecer a la serpiente sin chocar con la pared ni contigo mismo.</p>
+              <p><strong>Tetris</strong> es un peque&ntilde;o juego de entretenimiento incluido, disponible solo en PC. Acomoda las piezas que caen para completar l&iacute;neas sin dejar huecos.</p>
               <h5>C&oacute;mo jugar</h5>
               <ul class="guide-list">
-                <li><i class="nf nf-fa-arrows"></i> Mueve con las <strong>flechas</strong> del teclado o <strong>WASD</strong>.</li>
-                <li><i class="nf nf-fa-apple"></i> Come la <strong>$</strong> para crecer y sumar puntos.</li>
-                <li><i class="nf nf-fa-pause"></i> <strong>P</strong> / <strong>Espacio</strong> pausa. <i class="nf nf-fa-rotate_right"></i> <strong>R</strong> reinicia.</li>
-                <li><i class="nf nf-fa-ban"></i> No puedes girar 180&deg; de golpe (volver sobre ti).</li>
-                <li><i class="nf nf-fa-expand"></i> Elige tama&ntilde;o <strong>Peque&ntilde;a</strong>, <strong>Mediana</strong> o <strong>Grande</strong>.</li>
-                <li><i class="nf nf-fa-users"></i> <strong>2 jugadores</strong>: sin paredes (los bordes envuelven), <strong>P1</strong> con WASD y <strong>P2</strong> con flechas. Chocar con el rival = pierdes, gana el otro.</li>
-              </ul>
-              <button id="snake-btn" class="btn btn-primary btn-full"><i class="nf nf-fa-gamepad"></i> Jugar Snake</button>
+                <li><i class="nf nf-fa-arrows"></i> Mueve con las <strong>flechas</strong> <strong>&larr; &rarr;</strong>; <strong>&darr;</strong> baja m&aacute;s r&aacute;pido.</li>
+                <li><i class="nf nf-fa-rotate_right"></i> <strong>&uarr;</strong> o <strong>X</strong> rota la pieza en sentido horario; <strong>Z</strong> en sentido antihorario.</li>
+                <li><i class="nf nf-fa-rocket"></i> <strong>Espacio</strong> suelta la pieza al instante (ca&iacute;da dura).</li>
+                <li><i class="nf nf-fa-pause"></i> <strong>P</strong> pausa. <i class="nf nf-fa-rotate_right"></i> <strong>R</strong> reinicia.</li>
+                 <li><i class="nf nf-fa-eye"></i> La sombra tenue indica d&oacute;nde caer&aacute; la pieza. Cada tipo tiene un dibujo propio para distinguirlo en monocromo.</li>
+                 <li><i class="nf nf-fa-expand"></i> Tablero fijo estilo Game Boy (10&times;18); la velocidad sube de nivel cada 10 l&iacute;neas.</li>
+               </ul>
+              <button id="tetris-btn" class="btn btn-primary btn-full"><i class="nf nf-fa-gamepad"></i> Jugar Tetris</button>
             </div>
             <div class="guide-tip">
               <i class="nf nf-fa-gamepad"></i>
@@ -2273,60 +2279,69 @@
     </div>
   </div>
 
-  <div id="snake-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Juego Snake">
-    <div class="modal-content snake-content">
-      <div class="modal-header">
-        <h3><i class="nf nf-fa-gamepad"></i> Snake</h3>
-        <span class="modal-close" id="snake-close" aria-label="Cerrar" title="Cerrar">&times;</span>
-      </div>
-      <div class="modal-body snake-body">
-        <div class="snake-hud">
-          <span class="snake-score-label"><strong>P1</strong>: <strong id="snake-score">0</strong></span>
-          <span class="snake-score-label snake-2p-score"><strong>P2</strong>: <strong id="snake-score-p2">0</strong></span>
-          <div class="snake-controls">
-            <button id="snake-pause-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-pause"></i> Pausa</button>
-            <button id="snake-restart-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-rotate_right"></i> Reiniciar</button>
-          </div>
-        </div>
-        <div class="snake-opts-row">
-          <div class="snake-opt">
-            <span class="snake-opt-label">Tama&ntilde;o</span>
-            <div class="snake-size-btns">
-              <button class="snake-size-btn" data-size="small" title="Peque&ntilde;a">S</button>
-              <button class="snake-size-btn" data-size="medium" title="Mediana">M</button>
-              <button class="snake-size-btn" data-size="large" title="Grande">L</button>
+   <div id="tetris-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Juego Tetris">
+     <div class="modal-content snake-content tetris-content">
+       <div class="modal-header">
+         <h3><i class="nf nf-fa-gamepad"></i> Tetris</h3>
+         <span class="modal-close" id="tetris-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+       </div>
+        <div class="modal-body snake-body tetris-body">
+          <div class="tetris-frame" id="tetris-frame">
+            <div class="tetris-field">
+              <canvas id="tetris-board" aria-label="Tablero de Tetris"></canvas>
+            </div>
+            <div class="tetris-panel">
+              <div class="tetris-score-box">
+                <div class="tetris-label">SCORE</div>
+                <div class="tetris-score-val" id="tetris-score">0</div>
+              </div>
+              <div class="tetris-stat">
+                <span class="tetris-label">LEVEL</span>
+                <span class="tetris-stat-val" id="tetris-level">1</span>
+              </div>
+              <div class="tetris-stat">
+                <span class="tetris-label">LINES</span>
+                <span class="tetris-stat-val" id="tetris-lines">0</span>
+              </div>
+              <div class="tetris-next">
+                <div class="tetris-label">NEXT</div>
+                <canvas id="tetris-next" width="64" height="64" aria-label="Pr&oacute;xima pieza"></canvas>
+              </div>
+            </div>
+            <div class="tetris-overlay hidden" id="tetris-overlay">
+              <div class="tetris-over-inner">
+                <div class="tetris-over-title">GAME OVER</div>
+                <div class="tetris-over-stats">
+                  <div><span>PUNTOS</span><b id="tetris-over-score">0</b></div>
+                  <div><span>L&IACUTE;NEAS</span><b id="tetris-over-lines">0</b></div>
+                  <div><span>NIVEL</span><b id="tetris-over-level">0</b></div>
+                </div>
+                <div class="tetris-over-hint">Pulsa <b>R</b> para reiniciar</div>
+              </div>
             </div>
           </div>
-          <label class="snake-opt snake-2p-opt">
-            <span class="snake-opt-label">2 jugadores</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="snake-2p-toggle">
-              <span class="toggle-slider"></span>
-            </label>
-          </label>
-        </div>
-        <div id="snake-status" class="snake-status ok">Jugando</div>
-        <pre id="snake-board" aria-label="Tablero de Snake"></pre>
-        <div class="snake-help">
-          <span><i class="nf nf-fa-arrows"></i> <kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>WASD</kbd></span>
-          <span><i class="nf nf-fa-pause"></i> <kbd>P</kbd> / <kbd>Espacio</kbd></span>
-          <span><i class="nf nf-fa-rotate_right"></i> <kbd>R</kbd></span>
-        </div>
-        <div class="snake-help snake-2p-help hidden">
-          <span><i class="nf nf-fa-user"></i> <strong>@</strong><i class="nf nf-fa-arrows"></i>P1 con <kbd>WASD</kbd></span>
-          <span><i class="nf nf-fa-users"></i> <strong>%</strong><i class="nf nf-fa-arrows"></i>P2 con <kbd>Flechas</kbd></span>
-        </div>
-        <div class="snake-palette-row">
-          <span class="snake-palette-label">Colores:</span>
-          <div class="snake-palette-btns">
-            <button class="snake-palette-btn" data-palette="gbGray" title="Gris Game Boy"><i class="nf nf-fa-circle"></i></button>
-            <button class="snake-palette-btn" data-palette="gbGreen" title="Verde Game Boy"><i class="nf nf-fa-circle"></i></button>
-            <button class="snake-palette-btn" data-palette="vboy" title="Virtual Boy"><i class="nf nf-fa-circle"></i></button>
+          <div id="tetris-status" class="snake-status tetris-status ok">Jugando</div>
+          <div class="tetris-controls-row">
+            <button id="tetris-pause-btn" class="btn btn-outline btn-sm"><i class="nf nf-fa-pause"></i> Pausa</button>
+            <button id="tetris-restart-btn" class="btn btn-primary btn-sm"><i class="nf nf-fa-rotate_right"></i> Reiniciar</button>
+          </div>
+          <div class="snake-help tetris-help">
+            <span><i class="nf nf-fa-arrows"></i> <kbd>&larr;</kbd><kbd>&rarr;</kbd> <kbd>&darr;</kbd></span>
+            <span><i class="nf nf-fa-rotate_right"></i> <kbd>&uarr;</kbd>/<kbd>X</kbd> <kbd>Z</kbd></span>
+            <span><i class="nf nf-fa-rocket"></i> <kbd>Espacio</kbd></span>
+            <span><i class="nf nf-fa-pause"></i> <kbd>P</kbd> <kbd>R</kbd></span>
+          </div>
+          <div class="snake-palette-row tetris-palette-row">
+            <span class="snake-palette-label tetris-palette-label">Colores:</span>
+            <div class="snake-palette-btns tetris-palette-btns">
+              <button class="snake-palette-btn tetris-palette-btn" data-palette="gbGray" title="Gris Game Boy"><i class="nf nf-fa-circle"></i></button>
+              <button class="snake-palette-btn tetris-palette-btn" data-palette="gbGreen" title="Verde Game Boy"><i class="nf nf-fa-circle"></i></button>
+              <button class="snake-palette-btn tetris-palette-btn" data-palette="vboy" title="Virtual Boy"><i class="nf nf-fa-circle"></i></button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
+     </div>
+   </div>
 
   <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
     <div class="modal-content changelog-content">
@@ -2567,7 +2582,7 @@
           <ul>
             <li>Men&uacute;s desplegables en filas de ventas, usuarios y cierres; bot&oacute;n "Ver" restaurado en reportes.</li>
             <li>B&uacute;squeda global de clientes arreglada y modales de datos protegidos al cerrar con Escape.</li>
-            <li>Juego Snake (solo PC) desde la Gu&iacute;a r&aacute;pida.</li>
+            <li>Juego Tetris (solo PC) desde la Gu&iacute;a r&aacute;pida.</li>
           </ul>
         </div>
         <div class="changelog-section">
@@ -2790,7 +2805,7 @@
   <script src="config-view.js"></script>
   <script src="shortcuts.js"></script>
   <script src="fab.js"></script>
-  <script src="snake.js"></script>
+  <script src="tetris.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
