@@ -181,7 +181,134 @@ function showProductDetail(codigo) {
     qs(SEL.detailCategoria).textContent = 'Sin categor\u00eda';
   }
   qs(SEL.detailCreated).textContent = p.created_at || 'No disponible';
+  // Set title with product name
+  qs(SEL.productDetailTitle).textContent = p.nombre;
+  // Tab content elements
+  var tabContents = {
+    detalle: qs(SEL.productDetailTabContent),
+    stock: qs(SEL.productStockHistoryTab),
+    ventas: qs(SEL.productSalesHistoryTab),
+    precios: qs(SEL.productPriceHistoryTab)
+  };
+  // Reset tabs: show Detalle, hide others
+  var tabs = qs(SEL.productDetailModal).querySelectorAll('.debt-tab');
+  tabs.forEach(function(t) {
+    t.classList.toggle('active', t.dataset.tab === 'detalle');
+    // Hide admin-only tabs for non-admins
+    if (t.classList.contains('admin-only')) t.style.display = isAdmin ? '' : 'none';
+  });
+  Object.keys(tabContents).forEach(function(k) {
+    if (tabContents[k]) tabContents[k].classList.toggle('active', k === 'detalle');
+  });
+  // Tab click handlers
+  tabs.forEach(function(tab) {
+    tab.onclick = function() {
+      tabs.forEach(function(t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      var target = tab.dataset.tab;
+      Object.keys(tabContents).forEach(function(k) {
+        if (tabContents[k]) tabContents[k].classList.toggle('active', k === target);
+      });
+      // Lazy-load data for each tab
+      if (target === 'stock') loadStockHistory(codigo);
+      else if (target === 'ventas') loadProductSalesHistory(codigo);
+      else if (target === 'precios' && isAdmin) loadProductPriceHistory(codigo, p.nombre);
+    };
+  });
   showModal(qs(SEL.productDetailModal));
+  // Pre-load stock history in background
+  loadStockHistory(codigo);
+}
+
+async function loadStockHistory(codigo) {
+  var list = qs(SEL.stockHistoryList);
+  if (!list) return;
+  list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-light)"><i class="nf nf-fa-spinner nf-fa-pulse"></i> Cargando...</div>';
+  try {
+    var events = await invoke('get_producto_stock_history', { codigo });
+    if (!events || events.length === 0) {
+      list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-light)"><i class="nf nf-fa-box_open" style="font-size:24px;display:block;margin-bottom:8px"></i>Sin movimientos registrados</div>';
+      return;
+    }
+    var html = '';
+    for (var i = events.length - 1; i >= 0; i--) {
+      var e = events[i];
+      var dotClass = e.cantidad > 0 ? 'entrada' : (e.tipo === 'venta' ? 'venta' : 'salida');
+      var montoClass = e.cantidad > 0 ? 'entrada' : 'salida';
+      var sign = e.cantidad > 0 ? '+' : '';
+      html += '<div class="stock-timeline-item">' +
+        '<div class="stock-timeline-dot ' + dotClass + '"></div>' +
+        '<div class="stock-timeline-date">' + escapeHtml(e.fecha_hora) + '</div>' +
+        '<div class="stock-timeline-row">' +
+          '<span class="stock-timeline-nota">' + escapeHtml(e.motivo) + ' <span style="color:var(--text-light);font-weight:400;font-size:12px">' + escapeHtml(e.usuario) + '</span></span>' +
+          '<span class="stock-timeline-monto ' + montoClass + '">' + sign + formatStock(e.cantidad) + '</span>' +
+        '</div>' +
+        '<div class="stock-timeline-saldo">Saldo: ' + formatStock(e.saldo_despues) + '</div>' +
+      '</div>';
+    }
+    list.innerHTML = html;
+  } catch (err) {
+    list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--danger)">Error al cargar historial</div>';
+    console.warn('stock history error:', err);
+  }
+}
+
+async function loadProductSalesHistory(codigo) {
+  var body = qs(SEL.productSalesHistoryBody);
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-light)"><i class="nf nf-fa-spinner nf-fa-pulse"></i> Cargando...</td></tr>';
+  try {
+    var items = await invoke('get_product_history', { productoCodigo: codigo });
+    if (!items || items.length === 0) {
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-light)"><i class="nf nf-fa-shopping_cart" style="font-size:24px;display:block;margin-bottom:8px"></i>Sin ventas registradas</td></tr>';
+      return;
+    }
+    var html = '';
+    items.forEach(function(v) {
+      html += '<tr>' +
+        '<td data-label="# Venta">#' + v.venta_id + '</td>' +
+        '<td data-label="Fecha">' + escapeHtml(v.fecha_hora) + '</td>' +
+        '<td data-label="Cant.">' + (Number.isInteger(v.cantidad) ? v.cantidad : v.cantidad.toFixed(3)) + '</td>' +
+        '<td data-label="Precio U.">' + formatUSD(v.precio_usd_unitario) + '</td>' +
+        '<td data-label="Subtotal">' + formatUSD(v.subtotal_usd) + '</td>' +
+        '<td data-label="Método">' + formatMetodoLabel(v.metodo_pago) + '</td>' +
+        '<td data-label="Vendedor">' + escapeHtml(v.username) + '</td>' +
+      '</tr>';
+    });
+    body.innerHTML = html;
+  } catch (err) {
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--danger)">Error al cargar historial</td></tr>';
+    console.warn('product sales history error:', err);
+  }
+}
+
+async function loadProductPriceHistory(codigo, nombre) {
+  var body = qs(SEL.productPriceHistoryBody);
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-light)"><i class="nf nf-fa-spinner nf-fa-pulse"></i> Cargando...</td></tr>';
+  try {
+    var items = await invoke('get_precio_historial', { productoCodigo: codigo });
+    if (!items || items.length === 0) {
+      body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-light)"><i class="nf nf-fa-line_chart" style="font-size:24px;display:block;margin-bottom:8px"></i>Sin cambios de precio</td></tr>';
+      return;
+    }
+    var html = '';
+    items.forEach(function(h) {
+      var diff = h.precio_nuevo - h.precio_anterior;
+      var arrow = diff > 0 ? '<i class="nf nf-fa-arrow_up" style="color:var(--success)"></i>' : '<i class="nf nf-fa-arrow_down" style="color:var(--danger)"></i>';
+      html += '<tr>' +
+        '<td data-label="Fecha">' + escapeHtml(h.fecha_hora) + '</td>' +
+        '<td data-label="Anterior">' + formatUSD(h.precio_anterior) + '</td>' +
+        '<td data-label="Nuevo">' + formatUSD(h.precio_nuevo) + '</td>' +
+        '<td data-label="Cambio">' + arrow + ' ' + formatUSD(Math.abs(diff)) + '</td>' +
+        '<td data-label="Usuario">' + escapeHtml(h.usuario) + '</td>' +
+      '</tr>';
+    });
+    body.innerHTML = html;
+  } catch (err) {
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--danger)">Error al cargar historial</td></tr>';
+    console.warn('product price history error:', err);
+  }
 }
 
 function closeProductDetail() {
@@ -324,29 +451,6 @@ function closeProductModal() {
 /* ========== STOCK ADJUST ========== */
 let stockAdjustCodigo = null;
 
-async function showPriceHistory(codigo, nombre) {
-  const modal = qs(SEL.precioHistoryModal);
-  const tbody = qs(SEL.precioHistoryBody);
-  qs(SEL.precioHistoryTitle).textContent = nombre ? ('Historial de precios — ' + nombre) : 'Historial de precios';
-  tbody.innerHTML = loadingTableRow(5);
-  showModal(modal);
-  try {
-    const items = await invoke('get_precio_historial', { productoCodigo: codigo });
-    tbody.innerHTML = '';
-    if (!items || items.length === 0) {
-      tbody.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-line_chart"></i>', 'Sin cambios de precio', 'No se registraron cambios de precio para este producto');
-      return;
-    }
-    appendRows(tbody, items, function(item) {
-      const diff = item.precio_nuevo - item.precio_anterior;
-      const arrow = diff > 0 ? '<span style="color:var(--success)">▲</span>' : (diff < 0 ? '<span style="color:var(--danger)">▼</span>' : '');
-      return '<td>' + escapeHtml(formatDateTime(item.fecha_hora)) + '</td><td>' + formatUSD(item.precio_anterior) + '</td><td>' + formatUSD(item.precio_nuevo) + '</td><td>' + arrow + ' ' + formatUSD(diff) + '</td><td>' + escapeHtml(item.usuario || '—') + '</td>';
-    });
-  } catch (e) {
-    tbody.innerHTML = errorTableRow(5, e);
-  }
-}
-
 let stockAdjustSign = 1;
 
 function openStockAdjustModal(codigo) {
@@ -366,7 +470,7 @@ function openStockAdjustModal(codigo) {
 }
 
 function updateStockAdjustSignUI() {
-  qsa('.stock-adjust-sign').forEach(function(b) {
+  qs(SEL.stockAdjustModal).querySelectorAll('.stock-adjust-sign').forEach(function(b) {
     b.classList.toggle('active', parseInt(b.dataset.sign, 10) === stockAdjustSign);
   });
   updateStockAdjustPreview();

@@ -1,3 +1,4 @@
+use crate::auth;
 use crate::db::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -51,6 +52,10 @@ pub fn create_combo(
     precio_usd: f64,
     productos: Vec<ComboProductoInput>,
 ) -> Result<Combo, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "create_combo",
+    )?;
     if nombre.trim().is_empty() {
         return Err("El nombre del combo no puede estar vacío".to_string());
     }
@@ -99,6 +104,10 @@ pub fn create_combo(
 
 #[tauri::command]
 pub fn delete_combo(state: State<AppState>, combo_id: i64) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "delete_combo",
+    )?;
     let mut db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
@@ -124,6 +133,7 @@ pub fn delete_combo(state: State<AppState>, combo_id: i64) -> Result<String, Str
 
 #[tauri::command]
 pub fn list_combos_simple(state: State<AppState>) -> Result<Vec<Combo>, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     list_combos_inner(&db)
 }

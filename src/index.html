@@ -83,7 +83,7 @@
         <div class="login-greeting-date" id="login-greeting-date"></div>
       </div>
       <div class="login-card">
-        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.2.5</button>
+        <button id="changelog-btn" class="changelog-btn" title="Notas de la versi&oacute;n">v1.3</button>
         <div class="login-brand">
           <div class="login-icon">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -151,6 +151,7 @@
           <button class="nav-btn" data-view="inventory">
             <span class="nav-icon"><i class="nf nf-fa-archive"></i></span>
             <span class="nav-text">Inventario</span>
+            <span id="stock-nav-alert" class="nav-badge hidden admin-only" title="Alertas de stock">0</span>
           </button>
           <button class="nav-btn" data-view="creditos">
             <span class="nav-icon"><i class="nf nf-fa-credit_card"></i></span>
@@ -310,6 +311,7 @@
             </div>
             <div id="inventory-categoria-filter-wrap" class="inv-cat-filter-wrap" style="position:relative;flex-shrink:0"></div>
             <button id="inventory-add-btn" class="btn btn-primary admin-only inv-header-btn"><i class="nf nf-fa-plus"></i> <span class="btn-label">Agregar Producto</span></button>
+            <button id="alertas-stock-btn" class="btn btn-outline btn-sm admin-only inv-header-btn" title="Alertas de stock"><i class="nf nf-fa-bell"></i> Alertas <span id="alertas-stock-btn-count" class="nav-badge hidden">0</span></button>
             <button id="inventory-inari-btn" class="btn btn-outline btn-sm inv-header-btn" title="Filtrar productos Inari" style="flex-shrink:0"><i class="nf nf-fa-fire"></i> <span class="btn-label">Inari</span></button>
             <div class="dropdown" style="flex-shrink:0">
               <button class="dropdown-btn" data-action="toggle-dropdown" title="M&aacute;s acciones" style="font-size:16px;padding:4px 8px"><i class="nf nf-fa-ellipsis_v"></i></button>
@@ -385,7 +387,7 @@
               <tbody id="creditos-body"></tbody>
             </table>
             <div class="load-more-wrap">
-              <button id="creditos-load-more" class="btn btn-outline load-more-btn hidden"><i class="nf nf-fa-plus"></i> Cargar m&aacute;s</button>
+              <div id="creditos-pagination" class="pagination" style="display:none;margin-top:12px;justify-content:center;align-items:center;gap:8px"></div>
             </div>
           </div>
         </section>
@@ -845,6 +847,19 @@
               </div>
             </div>
           </div>
+          <div class="config-card">
+            <div class="config-card-header">
+              <i class="nf nf-fa-bell"></i> Recordatorios
+              <span class="config-card-desc">Alertas sonoras programadas para recordarte tareas importantes</span>
+              <i class="nf nf-fa-chevron_down config-toggle"></i>
+            </div>
+            <div class="config-card-body">
+              <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+                <button id="add-reminder-btn" class="btn btn-sm btn-outline"><i class="nf nf-fa-plus"></i> Nuevo</button>
+              </div>
+              <div id="reminders-list"></div>
+            </div>
+          </div>
           <div class="config-card admin-only">
             <div class="config-card-header">
               <i class="nf nf-fa-database"></i> Datos y respaldo
@@ -1149,7 +1164,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3>Procesar Pago</h3>
-        <span class="modal-close" id="payment-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="payment-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="payment-totals">
@@ -1229,7 +1244,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3>Entregar Efectivo</h3>
-        <span class="modal-close" id="efectivo-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="efectivo-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="efectivo-saldo">Disponible en caja: <strong id="efectivo-modal-disponible">Bs. 0,00</strong></div>
@@ -1256,7 +1271,7 @@
     <div class="modal-content" style="max-width:400px">
       <div class="modal-header">
         <h3><i class="nf nf-fa-money"></i> Ajustar Efectivo</h3>
-        <span class="modal-close" id="ajustar-efectivo-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="ajustar-efectivo-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="detail-grid" style="grid-template-columns:1fr 1fr">
@@ -1291,7 +1306,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3>Administrar Categor&iacute;as</h3>
-        <span class="modal-close" id="categorias-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="categorias-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <form id="categoria-form" class="categoria-form" autocomplete="off">
@@ -1314,7 +1329,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="product-modal-title">Registrar Nuevo Producto</h3>
-        <span class="modal-close" id="product-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="product-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -1368,21 +1383,70 @@
   </div>
 
   <div id="product-detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Detalle del Producto">
-    <div class="modal-content">
+    <div class="modal-content modal-lg">
       <div class="modal-header">
-        <h3>Detalle del Producto</h3>
-        <span class="modal-close" id="product-detail-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <h3 id="product-detail-title">Detalle del Producto</h3>
+        <button class="modal-close" id="product-detail-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="detail-grid">
-          <div class="detail-field"><span class="detail-label">Nombre</span><span class="detail-value" id="detail-nombre"></span></div>
-          <div class="detail-field"><span class="detail-label" id="detail-precio-label">Precio ($)</span><span class="detail-value" id="detail-precio"></span></div>
-          <div class="detail-field"><span class="detail-label" id="detail-costo-label">Costo ($)</span><span class="detail-value" id="detail-costo"></span></div>
-          <div class="detail-field"><span class="detail-label">Margen</span><span class="detail-value" id="detail-margen"></span></div>
-          <div class="detail-field"><span class="detail-label" id="detail-stock-label">Stock</span><span class="detail-value" id="detail-stock"></span></div>
-          <div class="detail-field"><span class="detail-label" id="detail-stock-minimo-label">Stock Min</span><span class="detail-value" id="detail-stock-minimo"></span></div>
-          <div class="detail-field"><span class="detail-label">Categor&iacute;a</span><span class="detail-value" id="detail-categoria"></span></div>
-          <div class="detail-field"><span class="detail-label">Fecha de Creaci&oacute;n</span><span class="detail-value" id="detail-created"></span></div>
+        <div class="debt-tabs">
+          <button class="debt-tab active" data-tab="detalle"><i class="nf nf-fa-info_circle"></i> Detalle</button>
+          <button class="debt-tab" data-tab="stock"><i class="nf nf-fa-box"></i> Stock</button>
+          <button class="debt-tab" data-tab="ventas"><i class="nf nf-fa-shopping_cart"></i> Ventas</button>
+          <button class="debt-tab admin-only" data-tab="precios"><i class="nf nf-fa-line_chart"></i> Precios</button>
+        </div>
+        <!-- Tab: Detalle -->
+        <div id="product-detail-tab-content" class="debt-tab-content">
+          <div class="detail-grid">
+            <div class="detail-field"><span class="detail-label">Nombre</span><span class="detail-value" id="detail-nombre"></span></div>
+            <div class="detail-field"><span class="detail-label" id="detail-precio-label">Precio ($)</span><span class="detail-value" id="detail-precio"></span></div>
+            <div class="detail-field"><span class="detail-label" id="detail-costo-label">Costo ($)</span><span class="detail-value" id="detail-costo"></span></div>
+            <div class="detail-field"><span class="detail-label">Margen</span><span class="detail-value" id="detail-margen"></span></div>
+            <div class="detail-field"><span class="detail-label" id="detail-stock-label">Stock</span><span class="detail-value" id="detail-stock"></span></div>
+            <div class="detail-field"><span class="detail-label" id="detail-stock-minimo-label">Stock Min</span><span class="detail-value" id="detail-stock-minimo"></span></div>
+            <div class="detail-field"><span class="detail-label">Categor&iacute;a</span><span class="detail-value" id="detail-categoria"></span></div>
+            <div class="detail-field"><span class="detail-label">Fecha de Creaci&oacute;n</span><span class="detail-value" id="detail-created"></span></div>
+          </div>
+        </div>
+        <!-- Tab: Stock (movimientos de stock) -->
+        <div id="product-stock-history-tab" class="debt-tab-content">
+          <div id="stock-history-list" class="stock-timeline"></div>
+        </div>
+        <!-- Tab: Ventas (historial de ventas del producto) -->
+        <div id="product-sales-history-tab" class="debt-tab-content">
+          <div class="table-container">
+            <table class="table table-cards">
+              <thead>
+                <tr>
+                  <th># Venta</th>
+                  <th>Fecha</th>
+                  <th>Cant.</th>
+                  <th>Precio U.</th>
+                  <th>Subtotal</th>
+                  <th>M&eacute;todo</th>
+                  <th>Vendedor</th>
+                </tr>
+              </thead>
+              <tbody id="product-sales-history-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- Tab: Precios (historial de precios, admin only) -->
+        <div id="product-price-history-tab" class="debt-tab-content">
+          <div class="table-container">
+            <table class="table table-cards">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Precio anterior</th>
+                  <th>Precio nuevo</th>
+                  <th>Cambio</th>
+                  <th>Usuario</th>
+                </tr>
+              </thead>
+              <tbody id="product-price-history-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -1395,7 +1459,7 @@
     <div class="modal-content" style="max-width:400px">
       <div class="modal-header">
         <h3><i class="nf nf-fa-scale"></i> Ajustar Stock</h3>
-        <span class="modal-close" id="stock-adjust-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="stock-adjust-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="detail-grid" style="grid-template-columns:1fr 1fr">
@@ -1432,7 +1496,7 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3>Detalle de Venta #<span id="sale-detail-id"></span></h3>
-        <span class="modal-close" id="sale-detail-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="sale-detail-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="client-info-bar">
@@ -1462,7 +1526,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="client-modal-title">Nuevo Cliente</h3>
-        <span class="modal-close" id="client-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="client-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -1487,13 +1551,18 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3 id="debt-detail-title">Detalle de Deuda</h3>
-        <span class="modal-close" id="debt-detail-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="debt-detail-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="client-info-bar">
           <span>Saldo Deuda: <strong id="debt-detail-debt">$0.00</strong></span>
         </div>
-        <div id="debt-detail-list"></div>
+        <div class="debt-tabs">
+          <button class="debt-tab active" data-tab="ventas"><i class="nf nf-fa-shopping_cart"></i> Ventas</button>
+          <button class="debt-tab" data-tab="evolucion"><i class="nf nf-fa-line_chart"></i> Evoluci&oacute;n</button>
+        </div>
+        <div id="debt-detail-list" class="debt-tab-content"></div>
+        <div id="debt-evolution-list" class="debt-tab-content"></div>
       </div>
       <div class="modal-footer">
         <button id="debt-detail-ok-btn" class="btn btn-outline">Cerrar</button>
@@ -1505,7 +1574,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3>Registrar Abono</h3>
-        <span class="modal-close" id="abono-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="abono-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="abono-cliente-info">
@@ -1565,7 +1634,7 @@
     <div class="modal-content" style="max-width:420px">
       <div class="modal-header">
         <h3><i class="nf nf-fa-calendar"></i> Tasa Hist&oacute;rica</h3>
-        <span class="modal-close" id="tasa-historial-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="tasa-historial-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div id="tasa-calendar-wrap" style="margin-bottom:12px"></div>
@@ -1585,7 +1654,7 @@
     <div class="modal-content" style="max-width:600px">
       <div class="modal-header">
         <h3><i class="nf nf-fa-fire"></i> Crear Combo Inari</h3>
-        <span class="modal-close" id="combo-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="combo-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div style="display:flex;gap:12px;margin-bottom:12px">
@@ -1617,11 +1686,16 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3>Confirmar Cierre de Jornada</h3>
-        <span class="modal-close" id="close-cashier-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="close-cashier-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p>Se generar&aacute; un reporte de cierre con los siguientes datos:</p>
         <div id="close-summary"></div>
+        <div class="toggle-row" style="margin-top:12px">
+          <label for="close-keep-cash" style="font-size:13px">Conservar efectivo disponible</label>
+          <label class="toggle-switch"><input type="checkbox" id="close-keep-cash" checked><span class="toggle-slider"></span></label>
+        </div>
+        <p class="config-card-desc" id="close-keep-cash-desc" style="margin-top:4px">El efectivo se conservar&aacute; para la pr&oacute;xima jornada.</p>
         <p class="warning-text">Esta acci&oacute;n congelar&aacute; los datos de la jornada actual.</p>
       </div>
       <div class="modal-footer">
@@ -1635,7 +1709,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-file_text"></i> Reporte de Cierre</h3>
-        <span class="modal-close" id="close-report-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="close-report-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body" id="close-report-body"></div>
       <div class="modal-footer">
@@ -1648,7 +1722,7 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-history"></i> Historial de Cierres</h3>
-        <span class="modal-close" id="historial-cierres-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="historial-cierres-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div id="historial-cierres-list"></div>
@@ -1664,7 +1738,7 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-file_text"></i> Detalle del Cierre</h3>
-        <span class="modal-close" id="historial-cierre-detalle-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="historial-cierre-detalle-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body" id="historial-cierre-detalle-body"></div>
       <div class="modal-footer">
@@ -1678,7 +1752,7 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-bell"></i> Alertas de Cr&eacute;dito</h3>
-        <span class="modal-close" id="alertas-credito-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="alertas-credito-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="table-container">
@@ -1705,12 +1779,42 @@
     </div>
   </div>
 
+  <!-- Modal de alertas de stock (solo admin) -->
+  <div id="alertas-stock-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Alertas de Stock">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-bell"></i> Alertas de Stock</h3>
+        <button class="modal-close" id="alertas-stock-close" aria-label="Cerrar" title="Cerrar">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="table-container">
+          <table class="table table-cards" id="alertas-stock-table">
+            <thead>
+              <tr>
+                <th>Fecha / Hora</th>
+                <th>Usuario</th>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Motivo</th>
+              </tr>
+            </thead>
+            <tbody id="alertas-stock-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="alertas-stock-mark-btn" class="btn btn-primary"><i class="nf nf-fa-check"></i> Marcar todas como vistas</button>
+        <button id="alertas-stock-ok-btn" class="btn btn-outline">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal de solicitudes de anulación (solo admin) -->
   <div id="solicitudes-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Solicitudes de Anulación">
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-paper_plane"></i> Solicitudes de Anulaci&oacute;n</h3>
-        <span class="modal-close" id="solicitudes-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="solicitudes-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="text-muted" style="margin-bottom:10px">Los vendedores piden anular una venta cuando no tienen permisos. Aprueba para anular la venta localmente (la anulaci&oacute;n se sincroniza) o rechaza indicando el motivo.</div>
@@ -1742,7 +1846,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-paper_plane"></i> Solicitar Anulaci&oacute;n</h3>
-        <span class="modal-close" id="solicitud-motivo-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="solicitud-motivo-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p class="text-muted">Escribe el motivo por el que necesitas anular esta venta. El administrador la revisar&aacute;.</p>
@@ -1760,7 +1864,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-warning"></i> Cierre pendiente detectado</h3>
-        <span class="modal-close" id="pendiente-cierre-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="pendiente-cierre-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p id="pendiente-cierre-mensaje" class="text-muted"></p>
@@ -1773,51 +1877,11 @@
     </div>
   </div>
 
-  <div id="product-history-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Historial de Ventas">
-    <div class="modal-content modal-lg" style="max-width:800px">
-      <div class="modal-header">
-        <h3><i class="nf nf-fa-history"></i> Historial de Ventas</h3>
-        <span class="modal-close" id="product-history-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
-      </div>
-      <div class="modal-body" style="overflow-x:auto">
-        <p id="product-history-title" style="font-weight:600;margin-bottom:12px"></p>
-        <div class="table-container">
-          <table class="table compact-table">
-            <thead><tr><th>#Venta</th><th>Fecha</th><th>Cant.</th><th>Precio U.</th><th>Subtotal</th><th>M&eacute;todo</th><th>Vendedor</th></tr></thead>
-            <tbody id="product-history-body"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="product-history-ok-btn" class="btn btn-primary">Cerrar</button>
-      </div>
-    </div>
-  </div>
-  <div id="precio-history-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Historial de Precios">
-    <div class="modal-content modal-lg" style="max-width:600px">
-      <div class="modal-header">
-        <h3><i class="nf nf-fa-line_chart"></i> Historial de Precios</h3>
-        <span class="modal-close" id="precio-history-close" aria-label="Cerrar" title="Cerrar">&times;</span>
-      </div>
-      <div class="modal-body" style="overflow-x:auto">
-        <p id="precio-history-title" style="font-weight:600;margin-bottom:12px"></p>
-        <div class="table-container">
-          <table class="table compact-table">
-            <thead><tr><th>Fecha</th><th>Precio anterior</th><th>Precio nuevo</th><th>Cambio</th><th>Usuario</th></tr></thead>
-            <tbody id="precio-history-body"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="precio-history-ok-btn" class="btn btn-primary">Cerrar</button>
-      </div>
-    </div>
-  </div>
   <div id="admin-pwd-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Cambiar Contraseña de Usuario">
     <div class="modal-content" style="max-width:400px">
       <div class="modal-header">
         <h3><i class="nf nf-fa-lock"></i> Cambiar Contrase&ntilde;a de Usuario</h3>
-        <span class="modal-close" id="admin-pwd-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="admin-pwd-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p id="admin-pwd-user-info" style="margin-bottom:12px;font-size:14px"></p>
@@ -1833,7 +1897,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="confirm-title">Confirmar</h3>
-        <span class="modal-close" id="confirm-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="confirm-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p id="confirm-message"></p>
@@ -1849,7 +1913,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="prompt-title">Ingresar nota</h3>
-        <span class="modal-close" id="prompt-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="prompt-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p id="prompt-message" class="text-muted" style="margin-bottom:10px"></p>
@@ -1867,7 +1931,7 @@
       <div class="void-modal-icon"><i class="nf nf-fa-ban"></i></div>
       <div class="modal-header">
         <h3 id="void-sale-title">Anular venta</h3>
-        <span class="modal-close" id="void-sale-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="void-sale-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p id="void-sale-message" class="text-muted" style="margin-bottom:10px"></p>
@@ -1884,7 +1948,7 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-warning"></i> Conflictos de Sincronizaci&oacute;n</h3>
-        <span class="modal-close" id="conflict-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="conflict-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p style="margin-bottom:12px;font-size:14px;color:var(--text-secondary)">
@@ -1903,7 +1967,7 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-cloud_download"></i> Cambios disponibles para descargar</h3>
-        <span class="modal-close" id="download-preview-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="download-preview-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div id="download-preview-loading" style="text-align:center;padding:24px;color:var(--text-secondary)">Cargando cambios de Supabase...</div>
@@ -1960,7 +2024,7 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3><i class="nf nf-fa-shopping_cart"></i> Orden de Compra Sugerida</h3>
-        <span class="modal-close" id="suggestion-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="suggestion-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body" style="max-height:60vh;overflow-y:auto">
         <div id="suggestion-content" style="font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap"></div>
@@ -1976,7 +2040,7 @@
     <div class="modal-content modal-lg guide-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-file_text"></i> Gu&iacute;a r&aacute;pida</h3>
-        <span class="modal-close" id="guide-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="guide-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body guide-body">
         <aside class="guide-sidebar">
@@ -2242,7 +2306,7 @@
         <h3>Calculadora</h3>
         <div style="display:flex;gap:8px">
           <span id="calculator-dock-btn" class="modal-close" aria-label="Guardar" title="Guardar calculadora" style="font-size:20px;cursor:pointer;color:var(--text-light)">&#x25BC;</span>
-          <span class="modal-close" id="calculator-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+          <button class="modal-close" id="calculator-close" aria-label="Cerrar" title="Cerrar">&times;</button>
         </div>
       </div>
       <div class="modal-body calculator-body">
@@ -2283,7 +2347,7 @@
      <div class="modal-content snake-content tetris-content">
        <div class="modal-header">
          <h3><i class="nf nf-fa-gamepad"></i> Tetris</h3>
-         <span class="modal-close" id="tetris-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+         <button class="modal-close" id="tetris-close" aria-label="Cerrar" title="Cerrar">&times;</button>
        </div>
         <div class="modal-body snake-body tetris-body">
           <div class="tetris-frame" id="tetris-frame">
@@ -2343,13 +2407,124 @@
      </div>
    </div>
 
+  <!-- Reminder Alarm Modal -->
+  <div id="reminder-alarm-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Alarma de recordatorio">
+    <div class="modal-content alarm-modal-content">
+      <div class="alarm-clock-wrap">
+        <svg class="alarm-clock-svg" viewBox="0 0 100 100" width="120" height="120">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="var(--danger)" stroke-width="3"/>
+          <line id="alarm-hand-min" x1="50" y1="50" x2="50" y2="18" stroke="var(--text)" stroke-width="2" stroke-linecap="round"/>
+          <line id="alarm-hand-hr" x1="50" y1="50" x2="50" y2="28" stroke="var(--text)" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="50" cy="50" r="3" fill="var(--danger)"/>
+        </svg>
+      </div>
+      <div class="alarm-time" id="alarm-time-text">19:30</div>
+      <div class="alarm-name" id="alarm-name-text">Cerrar el punto</div>
+      <div class="alarm-actions">
+        <button id="alarm-snooze-btn" class="btn btn-outline"><i class="nf nf-fa-clock"></i> Postergar 10 min</button>
+        <button id="alarm-dismiss-btn" class="btn btn-primary"><i class="nf nf-fa-check"></i> Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reminder Modal -->
+  <div id="reminder-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Recordatorio">
+    <div class="modal-content" style="max-width:420px">
+      <div class="modal-header">
+        <h3><i class="nf nf-fa-bell"></i> Recordatorio</h3>
+        <button class="modal-close" onclick="closeModal(qs(SEL.reminderModal))">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Nombre</label>
+          <input type="text" id="reminder-name" class="form-input" placeholder="Ej: Cerrar el punto" maxlength="50">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Hora</label>
+          <input type="time" id="reminder-time" class="form-input" value="19:30">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Días</label>
+          <div class="custom-select" id="reminder-days-wrap">
+            <button class="custom-select-btn" id="reminder-days-btn" type="button">
+              <span class="custom-select-value">Todos los días</span>
+              <i class="nf nf-fa-chevron_down"></i>
+            </button>
+            <div class="custom-select-menu" id="reminder-days-menu">
+              <button type="button" data-day="1" class="selected"><i class="nf nf-fa-check"></i> Lunes</button>
+              <button type="button" data-day="2" class="selected"><i class="nf nf-fa-check"></i> Martes</button>
+              <button type="button" data-day="3" class="selected"><i class="nf nf-fa-check"></i> Miércoles</button>
+              <button type="button" data-day="4" class="selected"><i class="nf nf-fa-check"></i> Jueves</button>
+              <button type="button" data-day="5" class="selected"><i class="nf nf-fa-check"></i> Viernes</button>
+              <button type="button" data-day="6" class="selected"><i class="nf nf-fa-check"></i> Sábado</button>
+              <button type="button" data-day="7" class="selected"><i class="nf nf-fa-check"></i> Domingo</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sonido</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="custom-select" id="reminder-sound-wrap" style="flex:1">
+              <button class="custom-select-btn" id="reminder-sound-btn" type="button">
+                <span class="custom-select-value">Campana</span>
+                <i class="nf nf-fa-chevron_down"></i>
+              </button>
+              <div class="custom-select-menu" id="reminder-sound-menu">
+                <button type="button" data-value="chime" class="selected">Campana</button>
+                <button type="button" data-value="bell">Campana profunda</button>
+                <button type="button" data-value="gentle">Bip bip</button>
+                <button type="button" data-value="warm">Acorde</button>
+                <button type="button" data-value="calm">Melodía</button>
+              </div>
+            </div>
+            <button id="reminder-sound-preview" class="btn btn-sm btn-outline" title="Previsualizar"><i class="nf nf-fa-play"></i></button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Volumen: <span id="reminder-volume-label">70%</span></label>
+          <input type="range" id="reminder-volume" min="0" max="100" value="70">
+        </div>
+        <div class="config-row" style="margin-top:12px">
+          <span class="config-label">Activo</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="reminder-enabled" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="reminder-cancel" class="btn btn-outline">Cancelar</button>
+        <button id="reminder-save" class="btn btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="changelog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Notas de la versi&oacute;n">
     <div class="modal-content changelog-content">
       <div class="modal-header">
-        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.2.5</h3>
-        <span class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <h3><i class="nf nf-fa-file_text"></i> Notas de la versi&oacute;n v1.3</h3>
+        <button class="modal-close" id="changelog-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body changelog-body">
+        <div class="changelog-section">
+          <h4><i class="nf nf-fa-tag" style="color:var(--accent)"></i> v1.3</h4>
+          <ul>
+            <li><strong>Historial de producto:</strong> el modal de detalle ahora tiene 4 pesta&ntilde;as: Detalle, Stock, Ventas y Precios. La pesta&ntilde;a Stock muestra un timeline de movimientos (ajustes + ventas) con saldo corriendo. La de Ventas lista todas las ventas del producto. La de Precios muestra el historial de precios.</li>
+            <li><strong>Alertas de stock:</strong> badge en el men&uacute; Inventario + panel con alertas cuando un producto baja del stock m&iacute;nimo. Los vendedores pueden ajustar stock (entradas y salidas); las alertas solo se generan para vendedores.</li>
+            <li><strong>Sincronizaci&oacute;n de movimientos de caja:</strong> los movimientos de caja (ingresos/egresos) ahora se sincronizan entre dispositivos v&iacute;a Supabase.</li>
+            <li><strong>Preview de descarga mejorado:</strong> el modal de sincronizaci&oacute;n ahora muestra secciones para Movimientos de Caja y Alertas (cr&eacute;dito + stock combinadas). Las alertas solo son visibles para administradores, pero se descargan para todos los roles.</li>
+            <li><strong>Recordatorios:</strong> sistema de recordatorios configurables en Config &rarr; Preferencias. Suenan cuando el usuario est&aacute; inactivo 5+ minutos. 5 sonidos distintos (campana, campanita, notificaci&oacute;n, c&aacute;lido, tranquilo). Se pueden crear m&uacute;ltiples recordatorios con nombre, hora, d&iacute;as de la semana, sonido y volumen. Viene con un default "Cerrar el punto" a las 7:30 PM. En Android vibra adem&aacute;s de sonar.</li>
+            <li><strong>Paginaci&oacute;n de cr&eacute;ditos:</strong> reemplazado "Cargar m&aacute;s" por botones Anterior/Siguiente con b&uacute;squeda del lado del servidor.</li>
+            <li><strong>Preview de descarga:</strong> ahora muestra un aviso "Ya est&aacute;s al d&iacute;a" cuando no hay cambios pendientes, en vez de un modal vac&iacute;o.</li>
+            <li><strong>Tasa autom&aacute;tica:</strong> al iniciar sesi&oacute;n por primera vez en el d&iacute;a, se obtiene la tasa BCV autom&aacute;ticamente sin esperar a las 6PM.</li>
+            <li><strong>Seguridad:</strong> 22 comandos de lectura requieren autenticaci&oacute;n, 12 comandos de escritura tienen rate limiting, 3 funciones muertas eliminadas.</li>
+            <li><strong>Optimizaci&oacute;n:</strong> &iacute;ndices de BD para consultas frecuentes, cache de productos actualizado in-place tras ventas, paginaci&oacute;n de clientes y movimientos, profit series con CTE (sin N+1).</li>
+            <li><strong>Tetris:</strong> nuevo juego integrado en la Gu&iacute;a r&aacute;pida (solo PC), reemplaza a Snake.</li>
+            <li><strong>Adaptaci&oacute;n m&oacute;vil:</strong> back button cierra modales y navega, bot&oacute;n share en Android, teclado num&eacute;rico, safe-area/notch.</li>
+            <li><strong>Marquee:</strong> textos truncados ruedan como carrusel al pasar el mouse (PC) o tocar (m&oacute;vil).</li>
+            <li><strong>Nuevo &iacute;cono de app:</strong> logo actualizado en PC y Android.</li>
+          </ul>
+        </div>
         <div class="changelog-section">
           <h4><i class="nf nf-fa-tag" style="color:var(--accent)"></i> v1.2.5</h4>
           <ul>
@@ -2664,7 +2839,7 @@
     </div>
   </div>
 
-  <div id="toast-container"></div>
+  <div id="toast-container" aria-live="polite"></div>
   <div id="save-status" class="save-status hidden"></div>
 
   <div id="global-search-overlay" class="global-search-overlay hidden">
@@ -2704,15 +2879,15 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3><i class="nf nf-fa-money"></i> Movimientos de Caja</h3>
-        <span class="modal-close" id="movimientos-modal-close" aria-label="Cerrar" title="Cerrar">&times;</span>
+        <button class="modal-close" id="movimientos-modal-close" aria-label="Cerrar" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div class="movimientos-form">
           <div class="movimientos-form-row">
-            <select id="movimientos-tipo" class="form-input">
-              <option value="egreso">Gasto (Egreso)</option>
-              <option value="ingreso">Ingreso</option>
-            </select>
+            <div class="toggle-btn-group">
+              <button type="button" class="toggle-btn active" data-tipo="egreso"><i class="nf nf-fa-arrow_up"></i> Egreso</button>
+              <button type="button" class="toggle-btn" data-tipo="ingreso"><i class="nf nf-fa-arrow_down"></i> Ingreso</button>
+            </div>
             <input type="number" id="movimientos-monto-bs" step="any" min="0" placeholder="Monto Bs." inputmode="decimal">
             <input type="number" id="movimientos-monto-usd" step="any" min="0" placeholder="Monto USD" inputmode="decimal">
             <input type="text" id="movimientos-concepto" placeholder="Concepto (ej: hielo, cambio...)" maxlength="100">
@@ -2806,6 +2981,7 @@
   <script src="shortcuts.js"></script>
   <script src="fab.js"></script>
   <script src="tetris.js"></script>
+  <script src="reminder.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

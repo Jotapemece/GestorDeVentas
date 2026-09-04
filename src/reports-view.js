@@ -156,7 +156,7 @@ async function loadDashboard() {
         '<button class="btn btn-sm ' + (dashboardChartType === 'line' ? 'btn-primary' : 'btn-outline') + '" data-chart="line"><i class="nf nf-fa-line_chart"></i> Ganancias</button>' +
         '<button class="btn btn-sm btn-outline" id="dash-export-btn" title="Exportar gr\u00e1fico PNG"><i class="nf nf-fa-image"></i></button>' +
       '</div>' +
-        '<div class="dashboard-chart-container"><canvas id="dashboard-canvas" width="' + CHART.CANVAS_MAX_WIDTH + '" height="' + CHART.BAR_HEIGHT + '"></canvas></div>' +
+        '<div class="dashboard-chart-container"><canvas id="dashboard-canvas" width="' + CHART.CANVAS_MAX_WIDTH + '" height="' + CHART.BAR_HEIGHT + '" aria-label="Gr\u00e1fico de barras de ventas por per\u00edodo"></canvas></div>' +
         '<div class="dashboard-grid">' +
           periods.map(function(p) {
             var d = data[p.key];
@@ -457,6 +457,8 @@ function drawPieLegend(ctx, slices, total, textColor, textLight, legX, isMobile)
 
 function drawDashboardPieChart(body, paymentMethods) {
   const periodLabels = { day: 'Hoy', week: 'Semana', month: 'Mes' };
+  const existingBar = body.querySelector('.dashboard-chart-toggle');
+  if (existingBar) existingBar.remove();
   const periodBar = document.createElement('div');
   periodBar.className = 'dashboard-chart-toggle';
   periodBar.innerHTML = Object.keys(periodLabels).map(function(k) {
@@ -493,21 +495,12 @@ function drawDashboardPieChart(body, paymentMethods) {
   const cardColor = cssVar('--card', '#1f2937');
 
   const pieColors = [cssVar('--primary'), cssVar('--accent'), cssVar('--inari'), cssVar('--primary-dark'), cssVar('--accent-dark'), cssVar('--danger')];
-  const methodLabels = {
-    efectivo: 'Efectivo',
-    punto: 'Punto',
-    pago_movil: 'Pago M\u00f3vil',
-    mixto: 'Mixto',
-    credito: 'Cr\u00e9dito',
-    efectivo_usd: 'Efectivo USD',
-    movimientos_caja: 'Ingresos caja'
-  };
 
   const slices = [];
   if (paymentMethods && paymentMethods.length) {
     paymentMethods.forEach(function(m, i) {
       if (m.total_usd > 0) {
-        slices.push({ label: methodLabels[m.metodo] || m.metodo, value: m.total_usd, color: pieColors[i % pieColors.length] });
+        slices.push({ label: formatMetodoLabel(m.metodo), value: m.total_usd, color: pieColors[i % pieColors.length] });
       }
     });
   }
@@ -577,6 +570,7 @@ function drawDashboardPieChart(body, paymentMethods) {
 }
 
 function attachChartHover(canvas, bars, dpr) {
+  if (canvas._chartCleanup) canvas._chartCleanup();
   function onMove(e) {
     const cr = canvas.getBoundingClientRect();
     const mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr;
@@ -613,9 +607,16 @@ function attachChartHover(canvas, bars, dpr) {
   canvas.addEventListener('mouseout', onOut);
   canvas.addEventListener('touchstart', onTouch);
   canvas.addEventListener('click', onTap);
+  canvas._chartCleanup = function() {
+    canvas.removeEventListener('mousemove', onMove);
+    canvas.removeEventListener('mouseout', onOut);
+    canvas.removeEventListener('touchstart', onTouch);
+    canvas.removeEventListener('click', onTap);
+  };
 }
 
 function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
+  if (canvas._pieCleanup) canvas._pieCleanup();
   function onMove(e) {
     const cr = canvas.getBoundingClientRect();
     const mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr - cx;
@@ -647,6 +648,11 @@ function attachPieHover(canvas, angles, cx, cy, radius, dpr) {
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseout', onOut);
   canvas.addEventListener('touchstart', onTouch);
+  canvas._pieCleanup = function() {
+    canvas.removeEventListener('mousemove', onMove);
+    canvas.removeEventListener('mouseout', onOut);
+    canvas.removeEventListener('touchstart', onTouch);
+  };
 }
 
 /* ========== PROFIT LINE CHART ========== */
@@ -864,20 +870,28 @@ function cycleProfitRange(dir) {
   showToast('Rango: ' + PROFIT_RANGES[next].label, 'info');
 }
 function attachProfitSwipe(canvas) {
+  if (canvas._swipeCleanup) canvas._swipeCleanup();
   let sx = 0, sy = 0, st = 0;
-  canvas.addEventListener('touchstart', function(e) {
+  function onTouchStart(e) {
     const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now();
-  }, { passive: true });
-  canvas.addEventListener('touchend', function(e) {
+  }
+  function onTouchEnd(e) {
     const t = e.changedTouches[0];
     const dx = t.clientX - sx, dy = t.clientY - sy;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) && (Date.now() - st) < 1000) {
       cycleProfitRange(dx < 0 ? 1 : -1);
     }
-  }, { passive: true });
+  }
+  canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+  canvas.addEventListener('touchend', onTouchEnd, { passive: true });
+  canvas._swipeCleanup = function() {
+    canvas.removeEventListener('touchstart', onTouchStart);
+    canvas.removeEventListener('touchend', onTouchEnd);
+  };
 }
 
 function attachLineHover(canvas, dpr, data) {
+  if (canvas._lineCleanup) canvas._lineCleanup();
   function onMove(e) {
     var cr = canvas.getBoundingClientRect();
     var mx = (e.clientX - cr.left) * (canvas.width / cr.width) / dpr;
@@ -905,30 +919,11 @@ function attachLineHover(canvas, dpr, data) {
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseout', onOut);
   canvas.addEventListener('touchstart', onTouch);
-}
-
-/* ========== PRODUCT HISTORY ========== */
-async function showProductHistory(codigo, nombre) {
-  const title = qs(SEL.productHistoryTitle);
-  const tbody = qs(SEL.productHistoryBody);
-  if (title) title.textContent = 'Producto: ' + escapeHtml(nombre) + ' (C\u00f3digo: ' + escapeHtml(codigo) + ')';
-  if (tbody) {
-    tbody.innerHTML = loadingTableRow(7);
-    showModal(qs(SEL.productHistoryModal));
-    try {
-      const items = await invoke('get_product_history', { productoCodigo: codigo });
-      tbody.innerHTML = '';
-      if (items.length === 0) {
-        tbody.innerHTML = emptyTableRow(7, '<i class="nf nf-fa-history"></i>', 'Sin ventas registradas', 'El historial de movimientos aparecer\u00e1 aqu\u00ed');
-      } else {
-        appendRows(tbody, items, function(item) {
-          return '<td>' + item.venta_id + '</td><td>' + escapeHtml(formatDateTime(item.fecha_hora)) + '</td><td>' + item.cantidad + '</td><td>' + formatUSD(item.precio_usd_unitario) + '</td><td>' + formatUSD(item.subtotal_usd) + '</td><td>' + escapeHtml(item.metodo_pago) + '</td><td>' + escapeHtml(item.username) + '</td>';
-        });
-      }
-    } catch (e) { tbody.innerHTML = errorTableRow(7, e); }
-  } else {
-    showModal(qs(SEL.productHistoryModal));
-  }
+  canvas._lineCleanup = function() {
+    canvas.removeEventListener('mousemove', onMove);
+    canvas.removeEventListener('mouseout', onOut);
+    canvas.removeEventListener('touchstart', onTouch);
+  };
 }
 
 /* ========== EXPORT REPORT ========== */

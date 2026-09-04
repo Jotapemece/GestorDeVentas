@@ -24,10 +24,6 @@ function formatSolicitudFecha(iso) {
   return formatDateTime(iso);
 }
 
-function currentUserIsAdminS() {
-  return !!(currentUser && currentUser.rol === ROL_ADMIN);
-}
-
 function createSolicitudRow(s) {
   var acciones = '';
   if (s.estado === 'pendiente') {
@@ -51,7 +47,7 @@ function createSolicitudRow(s) {
 }
 
 async function refreshSolicitudesBadge() {
-  if (!currentUserIsAdminS()) return;
+  if (!isAdmin()) return;
   var count = await invokeOrError(invoke('get_solicitudes_anulacion_pendientes'));
   if (count === undefined) return;
   var badge = qs(SEL.solicitudesBtnCount);
@@ -76,7 +72,7 @@ async function loadSolicitudes() {
 }
 
 async function openSolicitudes() {
-  if (!currentUserIsAdminS()) return;
+  if (!isAdmin()) return;
   await loadSolicitudes();
   showModal(qs(SEL.solicitudesModal));
   refreshSolicitudesBadge();
@@ -88,7 +84,7 @@ async function closeSolicitudes() {
 }
 
 async function refreshSolicitudesOnly() {
-  if (!currentUserIsAdminS()) return;
+  if (!isAdmin()) return;
   var btn = qs(SEL.solicitudesRefreshBtn);
   if (btn) btn.disabled = true;
   var res = await invokeOrError(invoke('refresh_solicitudes'));
@@ -128,7 +124,7 @@ async function confirmSolicitudMotivo() {
 }
 
 async function resolveSolicitud(id, aprobar) {
-  if (!currentUserIsAdminS()) return;
+  if (!isAdmin()) return;
   var nota = '';
   if (!aprobar) {
     nota = await promptModal('Indica el motivo del rechazo', 'Rechazar solicitud', 'Rechazar');

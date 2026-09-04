@@ -50,6 +50,10 @@ pub const CFG_ULTIMO_UPLOAD_ALERTAS: &str = "ultimo_upload_alertas";
 pub const CFG_ULTIMO_DOWNLOAD_ALERTAS: &str = "ultimo_download_alertas";
 pub const CFG_ULTIMO_UPLOAD_SOLICITUDES: &str = "ultimo_upload_solicitudes";
 pub const CFG_ULTIMO_DOWNLOAD_SOLICITUDES: &str = "ultimo_download_solicitudes";
+pub const CFG_ULTIMO_UPLOAD_ALERTAS_STOCK: &str = "ultimo_upload_alertas_stock";
+pub const CFG_ULTIMO_DOWNLOAD_ALERTAS_STOCK: &str = "ultimo_download_alertas_stock";
+pub const CFG_ULTIMO_UPLOAD_MOVIMIENTOS: &str = "ultimo_upload_movimientos";
+pub const CFG_ULTIMO_DOWNLOAD_MOVIMIENTOS: &str = "ultimo_download_movimientos";
 pub const CFG_DISPOSITIVO_ID: &str = "dispositivo_id";
 /// Flag: el dispositivo ya completó su primera descarga completa. Antes de
 /// eso, los downloaders fuerzan el dato remoto (LWW off) para sanar la BD
@@ -62,7 +66,6 @@ pub const CFG_OPENROUTER_API_KEY: &str = "openrouter_api_key";
 pub const CFG_ULTIMO_BACKUP_DIARIO: &str = "ultimo_backup_diario";
 pub const CFG_MAX_BACKUPS: &str = "max_backups";
 pub const DEFAULT_MAX_BACKUPS: usize = 10;
-pub const CFG_EFECTIVO_DISPONIBLE: &str = "efectivo_disponible_bs";
 
 // Roles
 pub const ROL_ADMIN: &str = "admin";

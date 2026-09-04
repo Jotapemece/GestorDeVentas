@@ -1,4 +1,5 @@
 use rusqlite::Connection;
+use rusqlite::params;
 
 pub const SQL_CREATE_TABLES: &str = "
     CREATE TABLE IF NOT EXISTS productos (
@@ -135,6 +136,9 @@ const MIGRATIONS: &[(&str, fn(&Connection) -> Result<(), String>)] = &[
     ("041_fix_future_timestamps", fix_future_timestamps),
     ("042_add_movimientos_cliente_id", add_movimientos_cliente_id),
     ("043_add_performance_indexes", add_performance_indexes),
+    ("044_efectivo_as_product", efectivo_as_product),
+    ("045_stock_history_and_fixes", stock_history_and_fixes),
+    ("046_movimientos_caja_sync", movimientos_caja_sync),
 ];
 
 fn ensure_schema_version(conn: &Connection) {
@@ -563,6 +567,40 @@ fn add_performance_indexes(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn efectivo_as_product(conn: &Connection) -> Result<(), String> {
+    // Read current efectivo_disponible_bs from configuracion
+    let current_bs: f64 = conn
+        .query_row(
+            "SELECT valor FROM configuracion WHERE clave = 'efectivo_disponible_bs'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| "0.00".to_string())
+        .trim()
+        .parse::<f64>()
+        .unwrap_or(0.0);
+
+    // Stock in centavos (×100) to keep precision with INTEGER column
+    let stock_centavos = (current_bs * 100.0).round() as i64;
+
+    // Insert EFECTIVO as a real product (idempotent)
+    conn.execute(
+        "INSERT OR IGNORE INTO productos (codigo, nombre, precio_usd, stock, stock_minimo, activo, es_inari, favorito) \
+         VALUES ('EFECTIVO', 'Efectivo', 0, ?1, 0, 1, 0, 0)",
+        params![stock_centavos],
+    )
+    .map_err(|e| format!("044 insert efectivo: {}", e))?;
+
+    // If EFECTIVO already existed, update its stock from configuracion
+    conn.execute(
+        "UPDATE productos SET stock = ?1 WHERE codigo = 'EFECTIVO'",
+        params![stock_centavos],
+    )
+    .map_err(|e| format!("044 update efectivo stock: {}", e))?;
+
+    Ok(())
+}
+
 fn add_es_pesable(conn: &Connection) -> Result<(), String> {
     if !column_exists(conn, "productos", "es_pesable") {
         conn.execute_batch(
@@ -838,11 +876,109 @@ fn fix_future_timestamps(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Historial de stock + alertas_stock + fixes de normalización de BD.
+/// - Crea tabla `alertas_stock` (alertas de cambios de stock para admins).
+/// - Reconstruye `ajustes_stock` con `cantidad REAL` (antes INTEGER truncaba pesables)
+///   y timestamps UTC ISO (antes naive local).
+/// - Índices faltantes en `movimientos_caja(cliente_id)`, `detalles_ventas(producto_codigo)`,
+///   `ventas(cliente_id)`.
+/// - Fix: `combos` con defaults consistentes.
+fn stock_history_and_fixes(conn: &Connection) -> Result<(), String> {
+    // 1. Tabla alertas_stock
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS alertas_stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sync_id TEXT UNIQUE,
+            producto_codigo TEXT NOT NULL,
+            producto_nombre TEXT DEFAULT '',
+            cantidad REAL NOT NULL,
+            motivo TEXT DEFAULT '',
+            usuario TEXT,
+            fecha_hora TEXT,
+            visto INTEGER DEFAULT 0,
+            updated_at TEXT,
+            dispositivo_origen TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_alertas_stock_updated_at ON alertas_stock(updated_at);
+        CREATE INDEX IF NOT EXISTS idx_alertas_stock_producto ON alertas_stock(producto_codigo);",
+    )
+    .map_err(|e| format!("045 create alertas_stock: {}", e))?;
+
+    // 2. Rebuild ajustes_stock: cantidad INTEGER → REAL, timestamps naive → UTC ISO
+    let has_ajustes: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='ajustes_stock'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(false);
+    if has_ajustes {
+        let col_type: String = conn
+            .query_row(
+                "SELECT type FROM pragma_table_info('ajustes_stock') WHERE name = 'cantidad'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or_default();
+        if col_type == "INTEGER" {
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS ajustes_stock_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sync_id TEXT UNIQUE,
+                    producto_codigo TEXT NOT NULL,
+                    cantidad REAL NOT NULL,
+                    motivo TEXT DEFAULT '',
+                    dispositivo_origen TEXT DEFAULT '',
+                    created_at TEXT,
+                    updated_at TEXT,
+                    usuario TEXT
+                );
+                INSERT OR IGNORE INTO ajustes_stock_new
+                    SELECT id, sync_id, producto_codigo, CAST(cantidad AS REAL), motivo,
+                           COALESCE(dispositivo_origen,''), created_at, updated_at, usuario
+                    FROM ajustes_stock;
+                DROP TABLE ajustes_stock;
+                ALTER TABLE ajustes_stock_new RENAME TO ajustes_stock;",
+            )
+            .map_err(|e| format!("045 rebuild ajustes_stock: {}", e))?;
+        }
+        // Convertir timestamps naive a UTC ISO (idempotente)
+        conn.execute_batch(
+            "UPDATE ajustes_stock SET
+                created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at, 'utc'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', updated_at, 'utc')
+             WHERE created_at NOT LIKE '%T%' AND created_at IS NOT NULL AND created_at != '';
+             UPDATE ajustes_stock SET
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', updated_at, 'utc')
+             WHERE updated_at NOT LIKE '%T%' AND updated_at IS NOT NULL AND updated_at != '';",
+        )
+        .map_err(|e| format!("045 fix ajustes_stock timestamps: {}", e))?;
+    }
+
+    // 3. Índices faltantes
+    for sql in [
+        "CREATE INDEX IF NOT EXISTS idx_movimientos_caja_cliente ON movimientos_caja(cliente_id)",
+        "CREATE INDEX IF NOT EXISTS idx_detalles_ventas_producto ON detalles_ventas(producto_codigo)",
+        "CREATE INDEX IF NOT EXISTS idx_ventas_cliente ON ventas(cliente_id)",
+        "CREATE INDEX IF NOT EXISTS idx_ajustes_stock_producto ON ajustes_stock(producto_codigo)",
+    ] {
+        conn.execute_batch(sql).map_err(|e| format!("045 índice: {}", e))?;
+    }
+
+    // 4. Fix combos defaults (idempotente: solo toca si falta)
+    if !column_exists(conn, "combos", "created_at") {
+        conn.execute_batch("ALTER TABLE combos ADD COLUMN created_at TEXT NOT NULL DEFAULT '';")
+            .map_err(|e| format!("045 combos created_at: {}", e))?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::Connection;
     use rusqlite::params;
+
 
     fn setup() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
@@ -1033,4 +1169,104 @@ mod tests {
         // Idempotente.
         fix_future_timestamps(&conn).unwrap();
     }
+
+    #[test]
+    fn test_stock_history_and_fixes_crea_alertas_stock_y_rebuild() {
+        let conn = setup();
+        // Insertar un ajuste viejo con cantidad INTEGER y timestamps naive
+        conn.execute(
+            "INSERT INTO ajustes_stock (producto_codigo, cantidad, motivo, usuario, created_at, updated_at) \
+             VALUES ('P1', 5, 'test', 'admin', '2026-08-01 10:00:00', '2026-08-01 10:00:00')",
+            [],
+        ).unwrap();
+
+        stock_history_and_fixes(&conn).unwrap();
+
+        // alertas_stock existe
+        let has: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='alertas_stock'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has, 1);
+
+        // ajustes_stock.cantidad es REAL
+        let col_type: String = conn
+            .query_row(
+                "SELECT type FROM pragma_table_info('ajustes_stock') WHERE name = 'cantidad'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(col_type, "REAL");
+
+        // Timestamps convertidos a UTC ISO
+        let ts: String = conn
+            .query_row("SELECT updated_at FROM ajustes_stock WHERE producto_codigo = 'P1'", [], |r| r.get(0))
+            .unwrap();
+        assert!(ts.contains('T'), "timestamp debe ser UTC ISO, fue: {}", ts);
+
+        // Índices creados
+        let idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_movimientos_caja_cliente'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx, 1);
+
+        // Idempotente
+        stock_history_and_fixes(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_046_movimientos_caja_sync() {
+        let conn = setup();
+        conn.execute_batch(
+            "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username) \
+             VALUES ('ingreso', 100, 5, 'test', 1, 'admin')"
+        ).unwrap();
+        movimientos_caja_sync(&conn).unwrap();
+        let sync_id: String = conn.query_row(
+            "SELECT sync_id FROM movimientos_caja WHERE id = 1", [], |r| r.get(0)
+        ).unwrap();
+        assert!(!sync_id.is_empty());
+        let updated_at: String = conn.query_row(
+            "SELECT updated_at FROM movimientos_caja WHERE id = 1", [], |r| r.get(0)
+        ).unwrap();
+        assert!(!updated_at.is_empty());
+        let idx: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_movimientos_caja_updated_at'",
+            [], |r| r.get(0)
+        ).unwrap();
+        assert_eq!(idx, 1);
+        movimientos_caja_sync(&conn).unwrap();
+    }
+}
+
+/// 046: Add sync columns to movimientos_caja for multi-device sync.
+fn movimientos_caja_sync(conn: &Connection) -> Result<(), String> {
+    if !column_exists(conn, "movimientos_caja", "sync_id") {
+        conn.execute_batch(
+            "ALTER TABLE movimientos_caja ADD COLUMN sync_id TEXT;
+             ALTER TABLE movimientos_caja ADD COLUMN updated_at TEXT;
+             ALTER TABLE movimientos_caja ADD COLUMN dispositivo_origen TEXT DEFAULT '';"
+        ).map_err(|e| format!("046 add sync columns: {}", e))?;
+    }
+    // Backfill sync_id for existing rows
+    conn.execute_batch(
+        "UPDATE movimientos_caja SET sync_id = lower(hex(randomblob(16))) WHERE sync_id IS NULL OR sync_id = ''"
+    ).map_err(|e| format!("046 backfill sync_id: {}", e))?;
+    // Backfill updated_at from created_at (UTC)
+    conn.execute_batch(
+        "UPDATE movimientos_caja SET updated_at = created_at WHERE updated_at IS NULL OR updated_at = ''"
+    ).map_err(|e| format!("046 backfill updated_at: {}", e))?;
+    // Index for sync queries
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_movimientos_caja_updated_at ON movimientos_caja(updated_at)"
+    ).map_err(|e| format!("046 index: {}", e))?;
+    Ok(())
 }

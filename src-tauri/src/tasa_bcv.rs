@@ -1,3 +1,4 @@
+use crate::auth;
 use crate::db::AppState;
 use crate::models::HistorialTasa;
 use rusqlite::params;
@@ -44,6 +45,7 @@ pub(crate) fn fetch_tasa_bcv() -> Result<f64, String> {
 
 #[tauri::command]
 pub fn get_historial_tasas(state: State<AppState>, dias: i64) -> Result<Vec<HistorialTasa>, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let dias = dias.clamp(1, 365);
     let mut stmt = db

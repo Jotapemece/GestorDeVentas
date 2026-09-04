@@ -20,6 +20,7 @@
 .nf-fa-shopping_cart::before { content: "\f07a"; }
 .nf-fa-cart_plus::before { content: "\f217"; }
 .nf-fa-archive::before { content: "\f187"; }
+.nf-fa-box::before { content: "\f466"; }
 .nf-fa-credit_card::before { content: "\f09d"; }
 .nf-fa-money::before { content: "\f0d6"; }
 .nf-fa-arrow_right_arrow_left::before { content: "\f2f1"; }

@@ -384,6 +384,15 @@ pub struct VentaDetallada {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DebtEvent {
+    pub fecha_hora: String,
+    pub tipo: String,
+    pub monto_usd: f64,
+    pub nota: String,
+    pub saldo_despues: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TopProductItem {
     pub codigo: String,
     pub nombre: String,
@@ -498,5 +507,27 @@ pub struct VendorSales {
     pub total_costo_usd: f64,
     pub total_ganancia_usd: f64,
     pub ventas_anuladas: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StockEvent {
+    pub fecha_hora: String,
+    pub tipo: String,
+    pub cantidad: f64,
+    pub motivo: String,
+    pub usuario: String,
+    pub saldo_despues: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AlertaStock {
+    pub id: i64,
+    pub producto_codigo: String,
+    pub producto_nombre: String,
+    pub cantidad: f64,
+    pub motivo: String,
+    pub usuario: String,
+    pub fecha_hora: String,
+    pub visto: bool,
 }
 

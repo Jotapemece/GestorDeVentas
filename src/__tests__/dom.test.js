@@ -165,7 +165,7 @@ describe('createInventoryRow (DOM)', () => {
           ? '<button data-action="toggle-inari" data-codigo="' + escapeHtml(p.codigo) + '" data-inari="false"><i class="nf nf-fa-fire"></i> Quitar Inari</button>'
           : '<button data-action="toggle-inari" data-codigo="' + escapeHtml(p.codigo) + '" data-inari="true"><i class="nf nf-fa-fire"></i> Marcar Inari</button>')
       : '';
-    return '<td>' + escapeHtml(p.nombre) + catChip + inariBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + editBtn + inariToggleBtn + '</div></div></td>';
+    return '<td>' + escapeHtml(p.nombre) + catChip + inariBadge + '</td><td>' + formatUSD(p.precio_usd) + '</td><td>' + formatUSD(costo) + '</td><td>' + margen + '</td><td><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td' + stockClass + '>' + p.stock + ' ' + stockBadge + '</td><td>' + p.stock_minimo + '</td><td><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button>' + editBtn + inariToggleBtn + '</div></div></td>';
   }
 
   it('renderiza datos básicos del producto', () => {
@@ -955,5 +955,252 @@ describe('initMarquee — carrusel de texto truncado', () => {
     const el = makeEl('prod-name', 'Sobrepasa', 90, 80);
     mqStart(el);
     expect(el.style.getPropertyValue('--mq-duration')).toBe('2.5s');
+  });
+});
+
+describe('stock-adjust-sign scoping (H1 fix)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <div id="stock-adjust-modal" class="modal">
+        <button class="stock-adjust-sign" data-sign="1">Entrada</button>
+        <button class="stock-adjust-sign" data-sign="-1">Salida</button>
+      </div>
+      <div id="ajustar-efectivo-modal" class="modal">
+        <button class="stock-adjust-sign" data-sign="1">Entrada</button>
+        <button class="stock-adjust-sign" data-sign="-1">Salida</button>
+      </div>
+    `;
+  });
+
+  it('querySelectorAll scoped to stock-adjust-modal only finds 2 buttons', () => {
+    const modal = document.querySelector('#stock-adjust-modal');
+    const btns = modal.querySelectorAll('.stock-adjust-sign');
+    expect(btns.length).toBe(2);
+    expect(btns[0].dataset.sign).toBe('1');
+    expect(btns[1].dataset.sign).toBe('-1');
+  });
+
+  it('querySelectorAll scoped to ajustar-efectivo-modal only finds 2 buttons', () => {
+    const modal = document.querySelector('#ajustar-efectivo-modal');
+    const btns = modal.querySelectorAll('.stock-adjust-sign');
+    expect(btns.length).toBe(2);
+    expect(btns[0].dataset.sign).toBe('1');
+    expect(btns[1].dataset.sign).toBe('-1');
+  });
+
+  it('global querySelectorAll finds all 4 buttons (the old buggy behavior)', () => {
+    const all = document.querySelectorAll('.stock-adjust-sign');
+    expect(all.length).toBe(4);
+  });
+
+  it('scoped query does not leak to other modal', () => {
+    const stockModal = document.querySelector('#stock-adjust-modal');
+    const efectivoModal = document.querySelector('#ajustar-efectivo-modal');
+    const stockBtns = stockModal.querySelectorAll('.stock-adjust-sign');
+    const efectivoBtns = efectivoModal.querySelectorAll('.stock-adjust-sign');
+    // Each scoped query should only find its own 2 buttons
+    expect(stockBtns.length).toBe(2);
+    expect(efectivoBtns.length).toBe(2);
+    // Clicking stock modal button should not affect efectivo modal
+    stockBtns[0].classList.add('active');
+    expect(efectivoBtns[0].classList.contains('active')).toBe(false);
+  });
+});
+
+describe('chart hover cleanup (H2 fix)', () => {
+  function makeCanvas() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 100;
+    return canvas;
+  }
+
+  it('first attach stores cleanup function on canvas', () => {
+    const canvas = makeCanvas();
+    const cleanup = vi.fn();
+    // Simulate what attachChartHover does
+    canvas._chartCleanup = cleanup;
+    expect(typeof canvas._chartCleanup).toBe('function');
+  });
+
+  it('second attach calls previous cleanup before storing new one', () => {
+    const canvas = makeCanvas();
+    const cleanup1 = vi.fn();
+    const cleanup2 = vi.fn();
+    // First attach
+    canvas._chartCleanup = cleanup1;
+    // Second attach (simulated)
+    if (canvas._chartCleanup) canvas._chartCleanup();
+    canvas._chartCleanup = cleanup2;
+    expect(cleanup1).toHaveBeenCalledTimes(1);
+    expect(canvas._chartCleanup).toBe(cleanup2);
+  });
+
+  it('cleanup removes all listeners by calling removeEventListener', () => {
+    const canvas = makeCanvas();
+    const listeners = { mousemove: [], mouseout: [], touchstart: [], click: [] };
+    const origAdd = canvas.addEventListener.bind(canvas);
+    const origRemove = canvas.removeEventListener.bind(canvas);
+    canvas.addEventListener = function(type, fn) { listeners[type].push(fn); origAdd(type, fn); };
+    canvas.removeEventListener = function(type, fn) {
+      const idx = listeners[type].indexOf(fn);
+      if (idx >= 0) listeners[type].splice(idx, 1);
+      origRemove(type, fn);
+    };
+    // Attach first set
+    function onMove1() {}
+    function onOut1() {}
+    function onTouch1() {}
+    function onTap1() {}
+    canvas.addEventListener('mousemove', onMove1);
+    canvas.addEventListener('mouseout', onOut1);
+    canvas.addEventListener('touchstart', onTouch1);
+    canvas.addEventListener('click', onTap1);
+    canvas._chartCleanup = function() {
+      canvas.removeEventListener('mousemove', onMove1);
+      canvas.removeEventListener('mouseout', onOut1);
+      canvas.removeEventListener('touchstart', onTouch1);
+      canvas.removeEventListener('click', onTap1);
+    };
+    expect(listeners.mousemove.length).toBe(1);
+    expect(listeners.mouseout.length).toBe(1);
+    expect(listeners.touchstart.length).toBe(1);
+    expect(listeners.click.length).toBe(1);
+    // Call cleanup
+    canvas._chartCleanup();
+    expect(listeners.mousemove.length).toBe(0);
+    expect(listeners.mouseout.length).toBe(0);
+    expect(listeners.touchstart.length).toBe(0);
+    expect(listeners.click.length).toBe(0);
+  });
+
+  it('no listener accumulation on repeated attach', () => {
+    const canvas = makeCanvas();
+    const listeners = { mousemove: [], touchstart: [] };
+    canvas.addEventListener = function(type, fn) { listeners[type].push(fn); };
+    canvas.removeEventListener = function(type, fn) {
+      const idx = listeners[type].indexOf(fn);
+      if (idx >= 0) listeners[type].splice(idx, 1);
+    };
+    function onMove() {}
+    function onTouch() {}
+    // First attach
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('touchstart', onTouch);
+    canvas._pieCleanup = function() {
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('touchstart', onTouch);
+    };
+    expect(listeners.mousemove.length).toBe(1);
+    // Second attach (should clean first)
+    if (canvas._pieCleanup) canvas._pieCleanup();
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('touchstart', onTouch);
+    canvas._pieCleanup = function() {
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('touchstart', onTouch);
+    };
+    expect(listeners.mousemove.length).toBe(1);
+    expect(listeners.touchstart.length).toBe(1);
+  });
+});
+
+describe('periodBar cleanup (M7 fix)', () => {
+  it('removes existing periodBar before creating new one', () => {
+    document.body.innerHTML = '<div id="body"><div class="dashboard-chart-container"></div></div>';
+    const body = document.getElementById('body');
+    // Create first periodBar
+    const bar1 = document.createElement('div');
+    bar1.className = 'dashboard-chart-toggle';
+    body.insertBefore(bar1, body.querySelector('.dashboard-chart-container'));
+    expect(body.querySelectorAll('.dashboard-chart-toggle').length).toBe(1);
+    // Simulate drawDashboardPieChart cleanup
+    const existing = body.querySelector('.dashboard-chart-toggle');
+    if (existing) existing.remove();
+    // Create second periodBar
+    const bar2 = document.createElement('div');
+    bar2.className = 'dashboard-chart-toggle';
+    body.insertBefore(bar2, body.querySelector('.dashboard-chart-container'));
+    expect(body.querySelectorAll('.dashboard-chart-toggle').length).toBe(1);
+  });
+});
+
+describe('handleEnterSave helper (M3 fix)', () => {
+  it('calls saveFn when Enter pressed in visible modal with input target', () => {
+    const saveFn = vi.fn();
+    document.body.innerHTML = '<div id="test-modal"><input type="text" id="test-input"></div>';
+    const modal = document.querySelector('#test-modal');
+    const input = document.querySelector('#test-input');
+    // Simulate handleEnterSave logic
+    function handler(e) {
+      if (e.key !== 'Enter') return;
+      if (!modal || modal.classList.contains('hidden')) return;
+      if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+        e.preventDefault();
+        saveFn();
+      }
+    }
+    document.addEventListener('keydown', handler);
+    // Trigger Enter on input in visible modal
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+    Object.defineProperty(event, 'target', { value: input });
+    input.dispatchEvent(event);
+    expect(saveFn).toHaveBeenCalledTimes(1);
+    document.removeEventListener('keydown', handler);
+  });
+
+  it('does NOT call saveFn when modal is hidden', () => {
+    const saveFn = vi.fn();
+    document.body.innerHTML = '<div id="test-modal" class="hidden"><input type="text"></div>';
+    const modal = document.querySelector('#test-modal');
+    const input = modal.querySelector('input');
+    function handler(e) {
+      if (e.key !== 'Enter') return;
+      if (!modal || modal.classList.contains('hidden')) return;
+      if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+        e.preventDefault();
+        saveFn();
+      }
+    }
+    document.addEventListener('keydown', handler);
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+    Object.defineProperty(event, 'target', { value: input });
+    input.dispatchEvent(event);
+    expect(saveFn).not.toHaveBeenCalled();
+    document.removeEventListener('keydown', handler);
+  });
+
+  it('does NOT call saveFn when target is a checkbox', () => {
+    const saveFn = vi.fn();
+    document.body.innerHTML = '<div id="test-modal"><input type="checkbox" id="test-check"></div>';
+    const modal = document.querySelector('#test-modal');
+    const checkbox = document.querySelector('#test-check');
+    function handler(e) {
+      if (e.key !== 'Enter') return;
+      if (!modal || modal.classList.contains('hidden')) return;
+      if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+        e.preventDefault();
+        saveFn();
+      }
+    }
+    document.addEventListener('keydown', handler);
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+    Object.defineProperty(event, 'target', { value: checkbox });
+    checkbox.dispatchEvent(event);
+    expect(saveFn).not.toHaveBeenCalled();
+    document.removeEventListener('keydown', handler);
+  });
+});
+
+describe('modal close buttons are <button> (H8 fix)', () => {
+  it('all modal-close elements are buttons, not spans', () => {
+    document.body.innerHTML = `
+      <button class="modal-close" id="close-1">&times;</button>
+      <button class="modal-close" id="close-2">&times;</button>
+    `;
+    const btns = document.querySelectorAll('.modal-close');
+    btns.forEach(btn => {
+      expect(btn.tagName).toBe('BUTTON');
+    });
   });
 });

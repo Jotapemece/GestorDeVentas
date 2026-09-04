@@ -42,7 +42,7 @@ npm run tauri build                     # Genera instalador NSIS en src-tauri/ta
 
 ### Testing
 ```sh
-cd src-tauri && cargo test --lib        # 90 tests (auth, config, sales, sync, clients, cashier, products)
+cd src-tauri && cargo test --lib        # 203 tests (auth, config, sales, sync, clients, cashier, products, efectivo, migrations)
 cd src-tauri && cargo check             # Verifica compilación Rust
 node --check src/*.js && node --check dist/*.js   # Verifica JS (src y minificado)
 ```
@@ -59,8 +59,9 @@ node --check src/*.js && node --check dist/*.js   # Verifica JS (src y minificad
 - `src/cashier.rs` — Caja, cierres, dashboard summary
 - `src/products.rs` — CRUD productos, list_products con paginación
 - `src/auth.rs` — Login, cambio password, admin_change_password
+- `src/efectivo.rs` — Efectivo como producto real (stock en centavos, sync gratis)
 - `src/config.rs` — Configuraciones (tasa, sonido, temas, etc.)
-- `src/migrations.rs` — Migraciones 001 a 013
+- `src/migrations.rs` — Migraciones 001 a 044
 - `src/tasa_bcv.rs` — Fetch BCV, check_tasa_update
 - `src/audit.rs` — Auditoría
 - `src/clients.rs` — Clientes/crédito/abonos
@@ -310,6 +311,7 @@ Plan de limpieza (raíz + código) verificado contra el código real (2 agentes 
 Lógica de caja correcta: las ventas a crédito (fiado) no cuentan en el saldo de caja (el dinero no entró), los egresos/ingresos de `movimientos_caja` afectan el saldo y los gráficos de reportes (barras, ganancias, pastel), y los abonos/pagos de deuda se registran como ingreso de caja indicando el método de pago usado. **✅ APLICADO (2026-08-06)** — ver "Lógica de caja" en Completed.
 
 ### Completed (this session)
+- **Stock alerts + history (2026-09-04)**: **203/203** Rust + **148/148** vitest + `node --check` OK + minify OK. Historial de stock en modal de producto (tabs Detalle/Stock/Ventas/Precios con timeline de movimientos: ajustes + ventas con saldo corriendo), badge `#stock-nav-alert` en nav Inventario + botón `#alertas-stock-btn` + modal `#alertas-stock-modal` (patrón alertas_credito), guard `check_employee_role` en `registrar_ajuste_stock` (antes admin-only, ahora vendedores pueden ajustar), alertas de stock solo para vendedores (`insertar_alerta_stock_si_vendedor` omite admin), sync alertas_stock a Supabase (upload/download + orchestrator etapas), migración 045 (alertas_stock + rebuild ajustes_stock INTEGER→REAL + timestamps UTC + indexes), migración 046 (sync movimientos_caja: sync_id, updated_at, dispositivo_origen). SELs + CSS `.stock-timeline-*` + delegación en app.js.
 - **Marquee de texto truncado (2026-08-20)**: **128/128** vitest + `node --check src/*.js` OK + minify OK (17 JS + 2 CSS + HTML). Plan aprobado por el usuario ("Apruebo, en cuanto a pc solo una vez por hover y que regrese al estado en que estaba cuando se posa el mouse sobre otro"). Solo frontend (sin tocar Rust).
   - **Comportamiento**: textos que no caben (con elipsis hoy) ruedan como carrusel SOLO cuando se truncan de verdad (`scrollWidth > clientWidth`, tolerancia 2px). **PC**: una pasada por hover (ida-vuelta-ida-vuelta = "rueda dos veces") y se detiene; al mover el mouse a otro elemento el anterior se restaura a su estado original (nada de bucle infinito ni rodar todo). **Móvil**: al tocar el texto truncado rueda dos veces y se queda quieto; re-tocar vuelve a rodar. Los textos cortos nunca se mueven.
   - **Alcance** (`MQ_SELECTOR` en utils.js): `.prod-name` (lista de productos POS), `.product-card-name` (tarjetas móviles), `.cart-product-name` (carrito), `.cell-name` (tarjetas colapsadas móviles: inventario, clientes, ventas del día, auditoría), `.global-search-item-title` (búsqueda global).
@@ -654,16 +656,81 @@ Lógica de caja correcta: las ventas a crédito (fiado) no cuentan en el saldo d
   5. Verificar que la migración 031 convirtió `updated_at` a UTC (filas con `T`/`Z`).
 - **Auditoría profunda 2026-08-04 registrada en AGENTS.md** (ver sección arriba); Fases A-D aplicadas.
 - **Tetris (solo PC)** (reemplaza a Snake, 2026-08-28): juego en modal con gráficos monocromos a `<canvas>` (patrones de bloque por pieza estilo Game Boy), acceso desde la Guía rápida (tab "Juego"), oculto en Android. Verificado node --check + minify + 20 tests de lógica pura.
+- **Stock alerts + history (2026-09-04)**: ✅ COMPLETADO. Historial de stock en modal de producto (tabs Detalle/Stock/Ventas/Precios), badge + panel alertas de stock para admin (patrón alertas_credito), guard `check_employee_role` en `registrar_ajuste_stock` (antes admin-only), sync alertas_stock a Supabase (upload/download + orchestrator). **203/203** Rust + **148/148** vitest + `node --check` OK + minify OK. Pendiente de probar en vivo.
+- **PARTE C — Fix download preview silent failure**: ✅ CORREGIDO. `openDownloadPreviewModal` con `showIfEmpty===true` ahora muestra toast "Ya estás al día" cuando no hay cambios y `console.warn` + toast warning cuando falla.
+- **PARTE D — Auto-fetch tasa first login**: ✅ CORREGIDO. `runTasaAutoCheck` usa `CFG_TASA_DAILY_FETCHED_DATE` para detectar si ya se fetchó hoy. Primera vez del día = fetch inmediato sin importar la hora, luego 6PM como antes.
+
+### Pulido Frontend — plan APROBADO (2026-09-03, COMPLETADO)
+Auditoría completa de JS, CSS y HTML del frontend vanilla. 6 fases. **148/148** vitest + `node --check` OK + minify OK. Solo frontend, sin tocar Rust ni Android layout.
+
+#### Fase 1 — Bugs de alta prioridad (JS) ✅
+- **H1 — stock-adjust-sign bug (CRÍTICO)**: ✅ CORREGIDO. `qsa('.stock-adjust-sign')` en `app.js` (2 bloques), `inventory-view.js` y `cashier-view.js` ahora seleccionan dentro del modal activo (`qs(SEL.stockAdjustModal).querySelectorAll(...)` / `qs(SEL.ajustarEfectivoModal).querySelectorAll(...)`) en vez de `document.querySelectorAll`.
+- **H2 — Acumulación de listeners en charts (memory leak)**: ✅ CORREGIDO. `attachChartHover`, `attachPieHover`, `attachLineHover`, `attachProfitSwipe` ahora almacenan cleanup function en `canvas._chartCleanup`/`_pieCleanup`/`_lineCleanup`/`_swipeCleanup` y la ejecutan antes de añadir nuevos listeners.
+- **H3 — Promise.all con 3 llamadas IPC independientes**: ✅ CORREGIDO. `loadDailySummary` (cashier-view.js) usa `Promise.allSettled` — `summaryRes` crítico (retorna si falla), `cajaRes` y `saldoRes` con fallbacks.
+- **H4 — Rechazos no manejados en `saveExportedFile`**: ✅ VERIFICADO. Todos los callers ya tienen try/catch o .catch.
+- **H5 — `modalDragEnabled` es global implícito**: ✅ DOCUMENTADO. Declarado como `var` en `utils.js:751`; añadido comentario de dependencia en `app.js`.
+
+#### Fase 2 — Lógica duplicada JS ✅
+- **M1 — Dos implementaciones de pie chart**: SALTADO. Implementaciones demasiado diferentes (estático vs animado, propósitos distintos).
+- **M2 — Tres handlers de hover**: ✅ CORREGIDO en H2.
+- **M3 — Dos handlers de Enter en modales**: ✅ CORREGIDO. Nuevo helper `handleEnterSave(modalSelector, saveFn)` en `app.js` reemplaza ambos bloques.
+- **M4 — 5 bloques config-read-toggle**: SALTADO. Lógica de parseo diferente entre cada uno; bajo ratio esfuerzo/beneficio.
+- **M5 — Inconsistencia `var` vs `let`/`const`**: SALTADO. Refactoring masivo de cashier-view.js (2150+ líneas).
+
+#### Fase 3 — Manejo de errores y DOM ✅
+- **M6 — 15+ bloques `catch (e) {}` silenciosos**: ✅ CORREGIDO. 5 catches críticos (4 config writes + 1 product search fallback) ahora tienen `console.warn`.
+- **M7 — `periodBar` sin limpiar**: ✅ CORREGIDO. `drawDashboardPieChart` elimina el `.dashboard-chart-toggle` existente antes de crear uno nuevo.
+- **M8 — `methodLabels` duplica `METODO_LABELS`**: ✅ CORREGIDO. Eliminado mapa local; se usa `formatMetodoLabel()`. Añadido `movimientos_caja` a `METODO_LABELS` en constants.js.
+
+#### Fase 4 — CSS cleanup ✅
+- **H6 — `@keyframes spin` duplicados**: ✅ CORREGIDO. Eliminada definición duplicada en line 1371.
+- **H7 — Variables RGB faltantes en `:root`**: ✅ CORREGIDO. Añadidos `--accent-rgb` y `--danger-rgb` al `:root`.
+- **M10 — Breakpoints responsive superpuestos**: SALTADO. Requiere refactoring cuidadoso de media queries.
+- **M11 — 37 usos de `!important`**: SALTADO. Requiere refactoring selectores específicos.
+- **L8 — 27 tokens de diseño semánticos sin usar**: ✅ CORREGIDO. Eliminados 27 tokens (`--surface-*`, `--text-*`, `--spacing-*`, `--radius-*`, `--shadow-*`, `--font-*`, `--control-height`, `--transition`). **Bugfix post**: 4 referencias CSS rotas (`--font-xs`, `--shadow-sm`, `--transition`) reemplazadas por valores hardcoded en `style.css:1314-1316,3152`.
+- **L9 — Clases `snake-*` legacy**: ✅ CORREGIDO. Eliminadas ~25 reglas CSS de snake (se conservaron las `.tetris-*`).
+
+#### Fase 5 — Accesibilidad y HTML ✅
+- **H8 — Botones de cerrar modal usan `<span>`**: ✅ CORREGIDO. 35 `<span class="modal-close">` cambiados a `<button class="modal-close">` con CSS reset (`background:none; border:none; padding:0`).
+- **M13 — 168 atributos `style=` inline**: SALTADO. Refactoring masivo.
+- **M12 — CSS muerto `.card-alt`**: ✅ CORREGIDO. Eliminada regla `.card-alt` (clase nunca usada).
+
+#### Fase 6 — Limpieza menor ✅
+- **L1 — Constantes muertas `FONT_SIZE_*`**: SALTADO. Se usan en config-view.js.
+- **L2 — Handler `tauri://blur` vacío**: ✅ CORREGIDO. Eliminado handler vacío de `app.js`.
+- **L3 — Números mágicos en charts**: SALTADO.
+- **L4 — Tooltip como string inline CSS**: SALTADO.
+- **L5 — Splash oculto pero no eliminado**: ✅ CORREGIDO. `splashEl.remove()` en vez de `style.display = 'none'`.
+- **L6 — Iframe de print nunca se elimina**: ✅ CORREGIDO. `afterprint` event listener + fallback `setTimeout` de 30s.
+- **L7 — Entidades HTML en vez de `ICON.*`**: SALTADO.
+- **L10 — Sombras hardcodeadas**: SALTADO.
+- **L11 — `<label>` oculto como espaciador**: SALTADO.
+
+#### Resumen de cambios
+| Archivo | Cambios |
+|---------|---------|
+| `app.js` | H1 (2 fixes), H5 (comentario), M3 (helper + 2 usos), M6 (4 console.warn), L2 (handler eliminado), L5 (splash remove) |
+| `cashier-view.js` | H1 (1 fix), H3 (Promise.allSettled), M6 (1 console.warn), L6 (iframe cleanup) |
+| `inventory-view.js` | H1 (1 fix) |
+| `reports-view.js` | H2 (4 cleanup functions), M7 (periodBar cleanup), M8 (methodLabels→formatMetodoLabel) |
+| `constants.js` | M8 (movimientos_caja a METODO_LABELS) |
+| `style.css` | H6 (spin dedup), H7 (RGB vars), L8 (27 tokens + 4 broken refs fix), L9 (snake-*), H8 (button reset), M12 (card-alt) |
+| `index.html` | H8 (35 span→button) |
+| `__tests__/dom.test.js` | +12 tests: H1 scoping (4), H2 chart cleanup (4), M7 periodBar (1), M3 handleEnterSave (3), H8 button check (1) |
+| `__tests__/constants.test.js` | +2 tests: movimientos_caja in METODO_LABELS + formatMetodoLabel |
+
+#### Items saltados (por bajo ratio esfuerzo/beneficio o demasiado grandes)
+M1, M4, M5, M10, M11, M13, L1, L3, L4, L7, L10, L11
 
 ### Next Move
-- **Plan de optimización + nuevo logo (ver Active)** — ✅ COMPLETADO solo local (sin commit/push): 195/195 Rust, 135/135 vitest, node --check OK, minify OK (17 JS + 2 CSS + HTML), cargo check OK. Índices (migración 043), `get_profit_series` con CTE, paginación clientes/movimientos + `get_clientes_resumen`, `productCache` in-place, `preview_download` delta, `get_config_values` (HashMap), fuga de toast + `syncRelInterval` corregidas, `upsert_config` propaga errores. Logo regenerado (PC+iOS+Android) desde `logonuevo.jpeg` con fondo transparente. Pendiente de decisión del usuario: commitear/pushear a `origin/duo`.
-- **Probar en vivo la lógica de caja** (2026-08-06): (1) vender a crédito y verificar que NO sube el saldo de caja (Movimientos) pero sí aparece en ventas del día; (2) registrar un egreso/ingreso manual y ver que mueve el saldo y la barra "Caja"/"Mov. neto" del dashboard; (3) abonar una deuda y verificar que sube la caja, aparece en el listado de movimientos con el método de pago, y suma en el pastel "Ingresos caja" y en la línea de ganancias.
-- **Ejecutar el ALTER en Supabase** (ver Active): `dispositivo_origen` en `productos` y `clientes`.
-- Commitear/pushear los Sync fixes a `origin/duo`.
-- Añadir también el badge de cliente temporal y verificar en vivo la búsqueda global F5 + Fase D.
-- Probar sync en vivo (F5 + botones de Configuración → Sincronización) según listas "Pendiente por probar (Fase C)" y "Pendiente de probar en vivo (sync fixes)".
-- Probar la Fase B en vivo (combos, anulaciones con deuda, pesables, total_bs) según lista "Pendiente por probar en vivo (Fase B)".
-- Build Android completo (`npm run tauri android build`) para confirmar integración Gradle del plugin de punta a punta.
+- **Stock alerts + history (2026-09-04)**: ✅ Historial de stock en modal de producto (tabs Detalle/Stock/Ventas/Precios), badge + panel alertas de stock (patrón alertas_credito), guard `check_employee_role` en `registrar_ajuste_stock`, sync alertas_stock a Supabase. **203/203** Rust + 148/148 vitest + node --check OK + minify OK. Pendiente de probar en vivo.
+- **PARTE B — Clients pagination**: ✅ COMPLETADO. Prev/next en créditos (`#creditos-pagination`), server-side search.
+- **PARTE C — Fix download preview silent failure**: ✅ CORREGIDO. Toast "Ya estás al día" + `console.warn`.
+- **PARTE D — Auto-fetch tasa first login**: ✅ CORREGIDO. `runTasaAutoCheck` con `CFG_TASA_DAILY_FETCHED_DATE`.
+- **Migración 046 (movimientos_caja sync)**: ✅ COMPLETADO. sync_id, updated_at, dispositivo_origen en movimientos_caja; upload/download + orchestrator.
+- **Ejecutar el ALTER en Supabase**: `dispositivo_origen` en `productos` y `clientes` + tabla `alertas_stock` + tabla `movimientos_caja` (sync_id, updated_at, dispositivo_origen).
+- Commitear/pushear los Sync fixes + features a `origin/duo`.
+- Build Android completo (`npm run tauri android build`).
 - Probar el Tetris manualmente en PC (F5 recarga frontend).
 
 ---

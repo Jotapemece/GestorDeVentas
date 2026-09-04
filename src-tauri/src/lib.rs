@@ -1,5 +1,6 @@
 mod auth;
 mod alertas;
+mod alertas_stock;
 mod app;
 mod audit;
 mod cashier;
@@ -81,6 +82,7 @@ pub fn run() {
             clients::quick_create_cliente,
             clients::toggle_cliente_credito,
             clients::get_cliente_history,
+            clients::get_cliente_debt_evolution,
             clients::pay_debt,
             clients::update_cliente,
             clients::delete_cliente,
@@ -108,6 +110,10 @@ pub fn run() {
             alertas::get_alertas_credito,
             alertas::get_alertas_credito_nuevas,
             alertas::marcar_alertas_credito_vistas,
+            // Alertas de stock
+            alertas_stock::get_alertas_stock,
+            alertas_stock::get_alertas_stock_nuevas,
+            alertas_stock::marcar_alertas_stock_vistas,
             // Solicitudes de anulación
             solicitudes::solicitar_anulacion,
             solicitudes::get_solicitudes_anulacion,
@@ -145,15 +151,13 @@ pub fn run() {
             products::update_categoria,
             products::delete_categoria,
             products::registrar_ajuste_stock,
+            products::get_producto_stock_history,
             products::toggle_producto_favorito,
             products::get_precio_historial,
             // Sync
-            sync::download_products,
-            sync::download_clientes,
             sync::upload_usuarios,
             sync::download_usuarios,
             sync::register_device,
-            sync::is_device_registered,
             sync::recover_device,
             sync::list_dispositivos,
             sync::get_conflictos,

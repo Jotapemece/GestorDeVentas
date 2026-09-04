@@ -15,7 +15,7 @@ async function loadCreditos(reset) {
     tbody.innerHTML = emptyTableRow(3, '<i class="nf nf-fa-credit_card"></i>', 'No hay clientes registrados', 'Registre personas para otorgar cr\u00e9dito');
     creditoRows = [];
     updateCreditoStatsResumen();
-    renderLoadMore(qs(SEL.creditosLoadMore), false);
+    renderCreditosPagination(0);
     return;
   }
   appendRows(tbody, clientes, createClientRow, function(tr, c) {
@@ -23,36 +23,31 @@ async function loadCreditos(reset) {
     tr.classList.add('card-collapsible', 'collapsed');
     creditoRows.push(tr);
   });
-  clienteHasMore = clientes.length === CLIENTE_PAGE_SIZE;
   updateCreditoStatsResumen();
-  renderLoadMore(qs(SEL.creditosLoadMore), clienteHasMore, loadMoreClientes);
   applyCreditoFilter();
+  // Get total for pagination
+  try {
+    const resumen = await invoke('get_clientes_resumen');
+    renderCreditosPagination(resumen.total || 0);
+  } catch (e) {
+    // Fallback: if length === PAGE_SIZE, assume there are more
+    renderCreditosPagination(clienteHasMore ? (clientePage + 1) * CLIENTE_PAGE_SIZE : clientePage * CLIENTE_PAGE_SIZE);
+  }
 }
 
-async function loadMoreClientes() {
-  if (clienteLoadingMore || !clienteHasMore) return;
-  clienteLoadingMore = true;
-  clientePage++;
-  const tbody = qs(SEL.creditosBody);
-  const clientes = await invokeOrError(invoke('list_clientes', { page: clientePage, page_size: CLIENTE_PAGE_SIZE }));
-  clienteLoadingMore = false;
-  if (clientes === undefined) { clientePage--; return; }
-  appendRows(tbody, clientes, createClientRow, function(tr, c) {
-    tr.dataset.nombre = c.nombre.toLowerCase();
-    tr.classList.add('card-collapsible', 'collapsed');
-    creditoRows.push(tr);
+function renderCreditosPagination(total) {
+  var el = qs(SEL.creditosPagination);
+  if (!el) return;
+  renderPagination(el, clientePage, total, CLIENTE_PAGE_SIZE, 'clientes', function(page) {
+    clientePage = page;
+    loadCreditos(false);
   });
-  clienteHasMore = clientes.length === CLIENTE_PAGE_SIZE;
-  renderLoadMore(qs(SEL.creditosLoadMore), clienteHasMore, loadMoreClientes);
-  applyCreditoFilter();
 }
 
 let creditoFilterTimer = null;
 let abonoMonedaToggler = null;
 let clientePage = 1;
 const CLIENTE_PAGE_SIZE = 50;
-let clienteHasMore = false;
-let clienteLoadingMore = false;
 function applyCreditoFilter() {
   clearTimeout(creditoFilterTimer);
   creditoFilterTimer = setTimeout(function() {
@@ -149,6 +144,15 @@ async function openDebtDetail(id) {
   if (hist === undefined) return;
   qs(SEL.debtDetailTitle).textContent = 'Deuda: ' + hist.cliente.nombre;
   qs(SEL.debtDetailDebt).textContent = formatUSD(hist.total_deuda);
+
+  // Reset tabs
+  const tabs = qs(SEL.debtDetailModal).querySelectorAll('.debt-tab');
+  tabs.forEach(t => t.classList.remove('active'));
+  if (tabs[0]) tabs[0].classList.add('active');
+  qs(SEL.debtDetailList).classList.add('active');
+  qs(SEL.debtEvolutionList).classList.remove('active');
+
+  // Render ventas tab
   const container = qs(SEL.debtDetailList);
   container.innerHTML = '';
   if (hist.ventas.length === 0) {
@@ -165,7 +169,50 @@ async function openDebtDetail(id) {
       container.appendChild(card);
     });
   }
+
+  // Load evolution data
+  const evoContainer = qs(SEL.debtEvolutionList);
+  evoContainer.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+
+  // Tab click handlers
+  tabs.forEach(tab => {
+    tab.onclick = function() {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.tab;
+      qs(SEL.debtDetailList).classList.toggle('active', target === 'ventas');
+      qs(SEL.debtEvolutionList).classList.toggle('active', target === 'evolucion');
+    };
+  });
+
   showModal(qs(SEL.debtDetailModal));
+
+  // Load evolution asynchronously
+  const evo = await invokeOrError(invoke('get_cliente_debt_evolution', { clienteId: id }));
+  if (evo === undefined) return;
+  evoContainer.innerHTML = '';
+  if (evo.length === 0) {
+    evoContainer.innerHTML = emptyState('<i class="nf nf-fa-line_chart"></i>', 'Sin movimientos', 'Las ventas y abonos de este cliente aparecer\u00e1n aqu\u00ed');
+    return;
+  }
+  const timeline = document.createElement('div');
+  timeline.className = 'debt-timeline';
+  evo.forEach(ev => {
+    const item = document.createElement('div');
+    item.className = 'debt-timeline-item';
+    const sign = ev.tipo === 'venta' ? '+' : '-';
+    const prefix = ev.tipo === 'venta' ? '' : '-';
+    item.innerHTML =
+      '<div class="debt-timeline-dot ' + ev.tipo + '"></div>' +
+      '<div class="debt-timeline-date">' + formatDateTime(ev.fecha_hora) + '</div>' +
+      '<div class="debt-timeline-row">' +
+        '<span class="debt-timeline-nota">' + escapeHtml(ev.nota) + '</span>' +
+        '<span class="debt-timeline-monto ' + ev.tipo + '">' + prefix + formatUSD(ev.monto_usd) + '</span>' +
+      '</div>' +
+      '<div class="debt-timeline-saldo">Saldo: ' + formatUSD(ev.saldo_despues) + '</div>';
+    timeline.appendChild(item);
+  });
+  evoContainer.appendChild(timeline);
 }
 
 function closeDebtDetail() {

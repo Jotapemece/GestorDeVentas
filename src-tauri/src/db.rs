@@ -364,6 +364,10 @@ fn sanitize_backup_path(
 
 #[tauri::command]
 pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "backup_database",
+    )?;
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
     let db = state.lock_db()?;
     let _admin = crate::auth::require_admin(&state, &db, "Respaldó la base de datos")?;
@@ -376,6 +380,10 @@ pub fn backup_database(state: State<AppState>, dest_path: String) -> Result<Stri
 #[tauri::command]
 pub fn backup_database_b64(app: tauri::AppHandle, state: State<AppState>) -> Result<serde_json::Value, String> {
     use base64::Engine;
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "backup_database_b64",
+    )?;
     let db_path = state.db_path.lock().map_err(|_| "Error interno")?.clone();
     let db = state.lock_db()?;
     let _admin = crate::auth::require_admin(&state, &db, "Respaldó la base de datos")?;
@@ -414,6 +422,10 @@ pub fn backup_database_b64(app: tauri::AppHandle, state: State<AppState>) -> Res
 /// backup cifrado a Descargas y luego llama a este comando.
 #[tauri::command]
 pub fn clear_all_data(state: State<AppState>) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "clear_all_data",
+    )?;
     let mut db = state.lock_db()?;
     let _admin = crate::auth::require_admin(&state, &db, "Borró todos los datos de la aplicación")?;
     clear_all_data_inner(&mut db)

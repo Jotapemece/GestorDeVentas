@@ -1,5 +1,39 @@
+/* ========== HELPERS ========== */
+function handleEnterSave(modalSelector, saveFn) {
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    const modal = qs(modalSelector);
+    if (!modal || modal.classList.contains('hidden')) return;
+    if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+      e.preventDefault();
+      saveFn();
+    }
+  });
+}
+
+/* ========== ACTIVITY TRACKING ========== */
+let lastActivityAt = Date.now();
+let _activityThrottle = 0;
+function initActivityTracking() {
+  const THROTTLE = 5000;
+  function markActive() {
+    const now = Date.now();
+    if (now - _activityThrottle < THROTTLE) return;
+    _activityThrottle = now;
+    lastActivityAt = now;
+  }
+  ['mousemove', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+    document.addEventListener(evt, markActive, { passive: true });
+  });
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) lastActivityAt = Date.now();
+  });
+}
+window.lastActivityAt = Date.now();
+
 /* ========== INIT ========== */
 document.addEventListener('DOMContentLoaded', async function() {
+  /* modalDragEnabled is declared in utils.js as var (global) */
   loadStoredPrefs();
   initConnectionMonitor();
   initAndroidBack();
@@ -20,6 +54,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   initLoginGreeting();
   initHoverCard();
   initCompactToggle();
+  if (typeof initReminders === 'function') initReminders();
+  initActivityTracking();
   if (typeof initDatePickers === 'function') initDatePickers();
   window.addEventListener('beforeunload', function() { saveCartSnapshot(); });
   // Collapse all config cards by default
@@ -298,6 +334,15 @@ document.addEventListener('DOMContentLoaded', async function() {
       const tr = toggleBtn.closest('tr.card-collapsible');
       if (tr) tr.classList.toggle('collapsed');
     }
+    // Toggle btn group (movimientos tipo)
+    const btnGroup = e.target.closest('.toggle-btn');
+    if (btnGroup) {
+      const group = btnGroup.closest('.toggle-btn-group');
+      if (group) {
+        group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btnGroup.classList.add('active');
+      }
+    }
   });
 
   // Payment modal
@@ -413,16 +458,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       editProduct(editBtn.dataset.codigo);
       return;
     }
-    const histBtn = e.target.closest('[data-action="show-product-history"]');
-    if (histBtn) {
-      showProductHistory(histBtn.dataset.codigo, histBtn.dataset.nombre);
-      return;
-    }
-    const priceHistBtn = e.target.closest('[data-action="show-price-history"]');
-    if (priceHistBtn) {
-      showPriceHistory(priceHistBtn.dataset.codigo, priceHistBtn.dataset.nombre);
-      return;
-    }
     const adjustBtn = e.target.closest('[data-action="open-stock-adjust"]');
     if (adjustBtn) {
       openStockAdjustModal(adjustBtn.dataset.codigo);
@@ -475,15 +510,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.productPrecio).addEventListener('input', function() { applyComaAutomatica(this); });
   qs(SEL.productEsPesable).addEventListener('change', function() { updateProductFormLabels(this.checked); });
   /* Enter en el modal de producto guarda (evitando el toggle pesable) */
-  document.addEventListener('keydown', function(e) {
-    if (e.key !== 'Enter') return;
-    const modal = qs(SEL.productModal);
-    if (!modal || modal.classList.contains('hidden')) return;
-    if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
-      e.preventDefault();
-      saveProduct();
-    }
-  });
+  handleEnterSave(SEL.productModal, saveProduct);
 
   // Combo modal
   qs(SEL.comboSaveBtn).addEventListener('click', saveCombo);
@@ -502,7 +529,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.stockAdjustClose).addEventListener('click', closeStockAdjustModal);
   qs(SEL.stockAdjustCancelBtn).addEventListener('click', closeStockAdjustModal);
   qs(SEL.stockAdjustConfirmBtn).addEventListener('click', confirmStockAdjust);
-  qsa('.stock-adjust-sign').forEach(function(b) {
+  qs(SEL.stockAdjustModal).querySelectorAll('.stock-adjust-sign').forEach(function(b) {
     b.addEventListener('click', function() {
       stockAdjustSign = parseInt(this.dataset.sign, 10);
       updateStockAdjustSignUI();
@@ -535,7 +562,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.ajustarEfectivoClose).addEventListener('click', closeAjustarEfectivoModal);
   qs(SEL.ajustarEfectivoCancelBtn).addEventListener('click', closeAjustarEfectivoModal);
   qs(SEL.ajustarEfectivoConfirmBtn).addEventListener('click', confirmAjustarEfectivo);
-  qsa('.stock-adjust-sign').forEach(function(b) {
+  qs(SEL.ajustarEfectivoModal).querySelectorAll('.stock-adjust-sign').forEach(function(b) {
     b.addEventListener('click', function() {
       ajustarEfectivoSign = parseInt(this.dataset.sign, 10);
       updateAjustarEfectivoSignUI();
@@ -555,15 +582,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.clientCancelBtn).addEventListener('click', closeClientModal);
   qs(SEL.clientSaveBtn).addEventListener('click', saveClient);
   /* Enter en el modal de cliente guarda */
-  document.addEventListener('keydown', function(e) {
-    if (e.key !== 'Enter') return;
-    const modal = qs(SEL.clientModal);
-    if (!modal || modal.classList.contains('hidden')) return;
-    if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
-      e.preventDefault();
-      saveClient();
-    }
-  });
+  handleEnterSave(SEL.clientModal, saveClient);
 
   // Creditos dropdown
   qs(SEL.creditosHeader)?.addEventListener('click', function(e) {
@@ -678,6 +697,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   qs(SEL.closeCashierClose).addEventListener('click', closeCloseCashier);
   qs(SEL.closeCashierCancelBtn).addEventListener('click', closeCloseCashier);
   qs(SEL.closeCashierConfirmBtn).addEventListener('click', confirmCloseCashier);
+  qs(SEL.closeKeepCash).addEventListener('change', function() {
+    const desc = qs(SEL.closeKeepCashDesc);
+    if (desc) desc.textContent = this.checked
+      ? 'El efectivo se conservará para la próxima jornada.'
+      : 'El efectivo se reseteará a Bs. 0.00.';
+  });
   qs(SEL.closeReportClose).addEventListener('click', closeReport);
   qs(SEL.closeReportOkBtn).addEventListener('click', closeReport);
 
@@ -1046,9 +1071,16 @@ document.addEventListener('DOMContentLoaded', async function() {
       { key: 'ventas', label: 'Ventas', icon: 'nf-fa-receipt' },
       { key: 'clientes', label: 'Clientes', icon: 'nf-fa-user' },
       { key: 'productos', label: 'Productos', icon: 'nf-fa-cube' },
+      { key: 'movimientos', label: 'Movimientos de Caja', icon: 'nf-fa-money' },
     ];
+    if (currentUser && currentUser.rol === ROL_ADMIN) {
+      const alertasItems = (result.alertas_credito || []).concat(result.alertas_stock || []);
+      if (alertasItems.length > 0) {
+        secciones.push({ key: '_alertas_combined', label: 'Alertas', icon: 'nf-fa-bell', items: alertasItems });
+      }
+    }
     const sections = secciones.map(function(sec) {
-      const items = result[sec.key];
+      const items = sec.items || result[sec.key];
       if (!items || items.length === 0) return '';
       const html = items.map(renderPreviewItem).join('');
       return '<div class="dl-preview-section">' +
@@ -1089,7 +1121,10 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await invoke('preview_download', { ventasDesde, ventasHasta });
       if (result.total === 0) {
         qs(SEL.downloadPreviewLoading).classList.add('hidden');
-        if (showIfEmpty) return;
+        if (showIfEmpty) {
+          showToast('Ya estás al día', 'success');
+          return;
+        }
         qs(SEL.downloadPreviewEmpty).classList.remove('hidden');
         qs(SEL.downloadPreviewSelectInfo).textContent = '0 / 0';
         return;
@@ -1098,7 +1133,12 @@ document.addEventListener('DOMContentLoaded', async function() {
       renderPreviewSections(result, false);
     } catch (e) {
       qs(SEL.downloadPreviewLoading).classList.add('hidden');
-      if (!showIfEmpty) showToast('Error al cargar cambios: ' + e, 'error');
+      if (showIfEmpty) {
+        console.warn('preview_download error:', e);
+        showToast('No se pudo verificar cambios: ' + e, 'warning');
+      } else {
+        showToast('Error al cargar cambios: ' + e, 'error');
+      }
     }
   }
   window.openLoginDownloadPreview = function() {
@@ -1249,14 +1289,6 @@ statusEl.style.color = cssVar('--text-secondary');
   if (exportBtn) exportBtn.addEventListener('click', handleExportReport);
   const pdfBtn = qs(SEL.reportPdfBtn);
   if (pdfBtn) pdfBtn.addEventListener('click', handleExportReportPdf);
-
-  /* ========== PRECIO HISTORY MODAL ========== */
-  qs(SEL.precioHistoryClose)?.addEventListener('click', function() { closeModal(qs(SEL.precioHistoryModal)); });
-  qs(SEL.precioHistoryOkBtn)?.addEventListener('click', function() { closeModal(qs(SEL.precioHistoryModal)); });
-
-  /* ========== PRODUCT HISTORY MODAL ========== */
-  qs(SEL.productHistoryModalClose)?.addEventListener('click', function() { closeModal(qs(SEL.productHistoryModal)); });
-  qs(SEL.productHistoryOkBtn)?.addEventListener('click', function() { closeModal(qs(SEL.productHistoryModal)); });
 
   /* ========== VOID SALE (delegation on daily sales table) ========== */
   qs(SEL.dailySalesBody).addEventListener('click', function(e) {
@@ -1477,28 +1509,28 @@ statusEl.style.color = cssVar('--text-secondary');
     comaToggle.addEventListener('change', async function() {
       comaAutomaticaEnabled = this.checked;
       updatePrecioInputType();
-      try { await setUserConfig(CFG_COMA_AUTOMATICA, this.checked ? '1' : '0'); } catch (e) {}
+      try { await setUserConfig(CFG_COMA_AUTOMATICA, this.checked ? '1' : '0'); } catch (e) { console.warn('config save failed:', CFG_COMA_AUTOMATICA, e); }
     });
   }
   const vueltoToggle = qs(SEL.calcularVueltoToggle);
   if (vueltoToggle) {
     vueltoToggle.addEventListener('change', async function() {
       calcularVuelto = this.checked;
-      try { await setUserConfig(CFG_CALCULAR_VUELTO, this.checked ? '1' : '0'); } catch (e) {}
+      try { await setUserConfig(CFG_CALCULAR_VUELTO, this.checked ? '1' : '0'); } catch (e) { console.warn('config save failed:', CFG_CALCULAR_VUELTO, e); }
     });
   }
   const redondeoToggle = qs(SEL.redondeoBsToggle);
   if (redondeoToggle) {
     redondeoToggle.addEventListener('change', async function() {
       redondeoBs = this.checked;
-      try { await setUserConfig(CFG_REDONDEO_BS, this.checked ? '1' : '0'); } catch (e) {}
+      try { await setUserConfig(CFG_REDONDEO_BS, this.checked ? '1' : '0'); } catch (e) { console.warn('config save failed:', CFG_REDONDEO_BS, e); }
     });
   }
   const redondeoTotalToggle = qs(SEL.redondeoTotalToggle);
   if (redondeoTotalToggle) {
     redondeoTotalToggle.addEventListener('change', async function() {
       redondeoTotal = this.checked;
-      try { await setUserConfig(CFG_REDONDEO_TOTAL, this.checked ? '1' : '0'); } catch (e) {}
+      try { await setUserConfig(CFG_REDONDEO_TOTAL, this.checked ? '1' : '0'); } catch (e) { console.warn('config save failed:', CFG_REDONDEO_TOTAL, e); }
     });
   }
 
@@ -1514,7 +1546,7 @@ statusEl.style.color = cssVar('--text-secondary');
       soundVolume = parseInt(savedVol) / 100 || 0.5;
       if (soundVolumeRange) soundVolumeRange.value = soundVolume * 100;
     }
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
 
   // Load coma automática config
   try {
@@ -1522,28 +1554,28 @@ statusEl.style.color = cssVar('--text-secondary');
     comaAutomaticaEnabled = savedComa === '1' || savedComa === true;
     if (comaToggle) comaToggle.checked = comaAutomaticaEnabled;
     updatePrecioInputType();
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
 
   // Load calcular vuelto config
   try {
     const savedVuelto = await getUserConfig(CFG_CALCULAR_VUELTO);
     calcularVuelto = savedVuelto !== '0';
     if (vueltoToggle) vueltoToggle.checked = calcularVuelto;
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
 
   // Load redondeo Bs config
   try {
     const savedRedondeo = await getUserConfig(CFG_REDONDEO_BS);
     redondeoBs = savedRedondeo === '1' || savedRedondeo === true;
     if (redondeoToggle) redondeoToggle.checked = redondeoBs;
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
 
   // Load redondeo total config
   try {
     const savedTotal = await getUserConfig(CFG_REDONDEO_TOTAL);
     redondeoTotal = savedTotal === '1' || savedTotal === true;
     if (redondeoTotalToggle) redondeoTotalToggle.checked = redondeoTotal;
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
 
   // Load saved theme on startup
   var savedTheme;
@@ -1571,14 +1603,14 @@ statusEl.style.color = cssVar('--text-secondary');
     const enabled = val !== '0';
     if (animToggle) animToggle.checked = enabled;
     setAnimations(enabled);
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
 
   // Load confirmar venta config
   try {
     const val = await getUserConfig(CFG_CONFIRMAR_VENTA);
     const toggle =   qs(SEL.confirmarVentaToggle);
     if (toggle) toggle.checked = val === '1';
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
 
   // Load IA config
   const iaToggle =   qs(SEL.iaToggle);
@@ -1600,7 +1632,7 @@ statusEl.style.color = cssVar('--text-secondary');
     const enabled = val !== '0';
     if (iaToggle) iaToggle.checked = enabled;
     setIaEnabled(enabled);
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
 
   // Hover card toggle
   const hoverToggle = qs(SEL.hoverCardToggle);
@@ -1611,7 +1643,7 @@ statusEl.style.color = cssVar('--text-secondary');
     try {
       const val = await getUserConfig(CFG_HOVER_CARD);
       hoverToggle.checked = val !== '0';
-    } catch (e) {}
+    } catch (e) { console.warn('config read error:', e); }
   }
 
   // Modal drag toggle
@@ -1626,7 +1658,7 @@ statusEl.style.color = cssVar('--text-secondary');
       var dragOn = val !== '0';
       modalDragEnabled = dragOn;
       if (dragToggle) dragToggle.checked = dragOn;
-    } catch (e) {}
+    } catch (e) { console.warn('config read error:', e); }
   }
 
   // Inari config toggle
@@ -1656,7 +1688,7 @@ statusEl.style.color = cssVar('--text-secondary');
       input.value = parseInt(days) || 0;
       updateHistoryCleanupStatus(parseInt(days) || 0);
     }
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
   const histSaveBtn = qs(SEL.historialLimpiezaSave);
   if (histSaveBtn) {
     histSaveBtn.addEventListener('click', async () => {
@@ -1676,7 +1708,7 @@ statusEl.style.color = cssVar('--text-secondary');
     const cfg = await getConfigValues([CFG_MAX_BACKUPS]);
     const backupInput = qs(SEL.backupMaxInput);
     if (backupInput) backupInput.value = (parseInt(cfg[CFG_MAX_BACKUPS]) || DEFAULT_MAX_BACKUPS);
-  } catch (e) {}
+  } catch (e) { console.warn('config read error:', e); }
   const backupSaveBtn = qs(SEL.backupMaxSave);
   if (backupSaveBtn) {
     backupSaveBtn.addEventListener('click', async () => {
@@ -1771,7 +1803,7 @@ statusEl.style.color = cssVar('--text-secondary');
   } catch (_) {
     qs(SEL.deviceRegScreen).style.display = 'flex';
   }
-  if (splashEl) splashEl.style.display = 'none';
+  if (splashEl) splashEl.remove();
 
   // Restore remembered username
   const savedUser = localStorage.getItem('recordar_usuario');
@@ -1785,7 +1817,6 @@ statusEl.style.color = cssVar('--text-secondary');
   window.addEventListener('tauri://focus', () => {
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   });
-  window.addEventListener('tauri://blur', () => {});
 
   // Mobile keyboard: push content up when keyboard opens
   if (window.visualViewport) {
@@ -2038,6 +2069,14 @@ statusEl.style.color = cssVar('--text-secondary');
   qs(SEL.creditoNavAlert)?.addEventListener('click', openAlertasCredito);
   // Refresco inicial del badge tras login
   refreshCreditoAlertBadge();
+
+  /* ========== ALERTAS DE STOCK (admin) ========== */
+  qs(SEL.alertasStockBtn)?.addEventListener('click', openAlertasStock);
+  qs(SEL.alertasStockClose)?.addEventListener('click', closeAlertasStock);
+  qs(SEL.alertasStockOkBtn)?.addEventListener('click', closeAlertasStock);
+  qs(SEL.alertasStockMarkBtn)?.addEventListener('click', markAllStockAlertasVistas);
+  qs(SEL.stockNavAlert)?.addEventListener('click', openAlertasStock);
+  refreshStockAlertBadge();
 
   /* ========== SOLICITUDES DE ANULACIÓN (vendedor pide, admin resuelve) ========== */
   qs(SEL.solicitudesBtn)?.addEventListener('click', openSolicitudes);

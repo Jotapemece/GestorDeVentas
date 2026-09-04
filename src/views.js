@@ -494,6 +494,7 @@ async function handleLogin() {
       if (typeof loadCartConfig === 'function') loadCartConfig();
       loadSyncStats();
       refreshCreditoAlertBadge();
+      refreshStockAlertBadge();
       loadOpenRouterKey();
       loadNombreNegocio();
       await loadTasa();
@@ -522,7 +523,7 @@ async function handleLogin() {
       errEl.textContent = res.message;
     }
   } catch (e) {
-    console.log('login invoke error:', e);
+    console.warn('login invoke error:', e);
     errEl.textContent = 'Error: ' + e;
   } finally { if (btn) btn.disabled = false; }
 }
@@ -544,7 +545,7 @@ async function runLoginSync() {
     if (typeof loadSyncStats === 'function') loadSyncStats();
     if (typeof refreshCashierAfterSync === 'function') refreshCashierAfterSync();
   } catch (e) {
-    console.log('login sync error:', e);
+    console.warn('login sync error:', e);
   } finally {
     _loginSyncRunning = false;
   }
@@ -571,6 +572,7 @@ async function handleLogout() {
   // para no dejarlos corriendo en segundo plano tras el logout.
   if (_greetingInterval) { clearInterval(_greetingInterval); _greetingInterval = null; }
   if (_clockInterval) { clearInterval(_clockInterval); _clockInterval = null; }
+  if (typeof stopReminders === 'function') stopReminders();
   // Detener el timer de tasa automática al cerrar sesión.
   if (typeof stopTasaAutoUpdate === 'function') stopTasaAutoUpdate();
   currentUser = null; carts = [{ id: 1, items: [], folded: false }]; cart = carts[0].items; cartIdCounter = 1; recentProducts = []; lastCloseReportData = null;

@@ -3,11 +3,12 @@ import { describe, it, expect } from 'vitest';
 describe('METODO_LABELS', () => {
   const METODO_LABELS = {
     efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago',
-    punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto'
+    punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto',
+    movimientos_caja: 'Ingresos caja'
   };
 
   it('tiene todos los métodos de pago', () => {
-    expect(Object.keys(METODO_LABELS)).toHaveLength(7);
+    expect(Object.keys(METODO_LABELS)).toHaveLength(8);
   });
 
   it('cada label es un string no vacío', () => {
@@ -16,12 +17,17 @@ describe('METODO_LABELS', () => {
       expect(v.length).toBeGreaterThan(0);
     });
   });
+
+  it('incluye movimientos_caja', () => {
+    expect(METODO_LABELS.movimientos_caja).toBe('Ingresos caja');
+  });
 });
 
 describe('formatMetodoLabel', () => {
   const METODO_LABELS = {
     efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago',
-    punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto'
+    punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto',
+    movimientos_caja: 'Ingresos caja'
   };
   function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
 
@@ -33,6 +39,7 @@ describe('formatMetodoLabel', () => {
     expect(formatMetodoLabel('pago_movil')).toBe('Pago M\u00f3vil');
     expect(formatMetodoLabel('credito')).toBe('Cr\u00e9dito');
     expect(formatMetodoLabel('mixto')).toBe('Mixto');
+    expect(formatMetodoLabel('movimientos_caja')).toBe('Ingresos caja');
   });
 
   it('retorna el key si no hay label', () => {

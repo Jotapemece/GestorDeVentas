@@ -1,3 +1,4 @@
+use crate::auth;
 use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
@@ -209,6 +210,7 @@ fn compute_report_data_range(
 
 #[tauri::command]
 pub fn get_daily_summary(state: State<AppState>) -> Result<DailySummary, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
 
     let today = chrono::Local::now()
@@ -287,6 +289,7 @@ pub fn abrir_caja(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 pub fn get_caja_abierta(state: State<AppState>) -> Result<bool, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let val = crate::db::get_config_value(&db, constants::CFG_CAJA_ABIERTA)
         .unwrap_or_default()
@@ -367,6 +370,7 @@ fn detectar_pendiente_cierre(db: &rusqlite::Connection) -> Result<Option<Pendien
 pub fn close_cashier(
     state: State<AppState>,
     fecha: Option<String>,
+    keep_cash: Option<bool>,
 ) -> Result<CloseReport, String> {
     let username = state.get_username()?;
     let user_id = state
@@ -427,6 +431,11 @@ pub fn close_cashier(
     crate::db::set_config_value(&tx, constants::CFG_CAJA_ABIERTA, "false")
         .map_err(|e| format!("Error al cerrar caja: {}", e))?;
 
+    if keep_cash == Some(false) {
+        crate::efectivo::set_efectivo(&tx, 0.0)
+            .map_err(|e| format!("Error al resetear efectivo: {}", e))?;
+    }
+
     let accion = format!(
         "Cierre de caja - Ventas: {}, Total USD: ${:.2}, Total Bs.: Bs. {:.2}",
         total_ventas, total_usd, total_bs
@@ -462,6 +471,7 @@ pub fn get_close_report_data(
     state: State<AppState>,
     fecha: Option<String>,
 ) -> Result<CloseReportData, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let today = chrono::Local::now()
         .format("%Y-%m-%d")
@@ -631,6 +641,7 @@ pub fn get_cierre_detalle(
     state: State<AppState>,
     cierre_id: i64,
 ) -> Result<CierreDetalle, String> {
+    let _username = auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
 
     let (fecha_hora, usuario_id, total_ventas, total_usd, total_bs, tasa_cierre, desde, hasta): (
@@ -858,13 +869,17 @@ pub fn get_profit_series(
 
 /* ========== MOVIMIENTOS CAJA ========== */
 const SQL_INSERT_MOVIMIENTO: &str =
-    "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+    "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username, sync_id, updated_at, dispositivo_origen) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, '')";
 const SQL_LIST_MOVIMIENTOS: &str =
     "SELECT id, tipo, monto_bs, monto_usd, concepto, usuario_id, username, created_at \
      FROM movimientos_caja WHERE date(created_at) = date('now','localtime') ORDER BY id DESC";
 
 #[tauri::command]
 pub fn register_movimiento(state: State<AppState>, tipo: String, monto_bs: f64, monto_usd: f64, concepto: String) -> Result<MovimientoCaja, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "register_movimiento",
+    )?;
     // Autoría desde la sesión (no acepta usuario_id/username del frontend).
     let usuario = state.get_employee()?;
     if tipo != "ingreso" && tipo != "egreso" {
@@ -883,9 +898,11 @@ pub fn register_movimiento(state: State<AppState>, tipo: String, monto_bs: f64, 
         return Err("Debe escribir un concepto".to_string());
     }
     let db = state.lock_db()?;
+    let sync_id = uuid::Uuid::new_v4().to_string();
+    let now = crate::helpers::now_iso();
     db.execute(
         SQL_INSERT_MOVIMIENTO,
-        params![tipo, monto_bs, monto_usd, concepto.trim(), usuario.id, usuario.username],
+        params![tipo, monto_bs, monto_usd, concepto.trim(), usuario.id, usuario.username, sync_id, now],
     )
     .map_err(|e| format!("Error al registrar movimiento: {}", e))?;
     let id = db.last_insert_rowid();
@@ -898,6 +915,7 @@ pub fn list_movimientos(
     page: Option<i64>,
     page_size: Option<i64>,
 ) -> Result<Vec<MovimientoCaja>, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let query = if let (Some(p), Some(ps)) = (page, page_size) {
         let ps = ps.max(1);
@@ -928,6 +946,7 @@ pub fn list_movimientos(
 
 #[tauri::command]
 pub fn get_saldo_caja(state: State<AppState>) -> Result<SaldoCaja, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let tomorrow = crate::helpers::siguiente_dia(&today);

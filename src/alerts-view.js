@@ -47,12 +47,8 @@ function createAlertaRow(a) {
     '<td data-label="Nota">' + nota + '</td>';
 }
 
-function currentUserIsAdmin() {
-  return !!(currentUser && currentUser.rol === ROL_ADMIN);
-}
-
 async function refreshCreditoAlertBadge() {
-  if (!currentUserIsAdmin()) return;
+  if (!isAdmin()) return;
   var count = await invokeOrError(invoke('get_alertas_credito_nuevas'));
   if (count === undefined) return;
   var navBadge = qs(SEL.creditoNavAlert);
@@ -82,7 +78,7 @@ async function loadAlertasCredito() {
 }
 
 async function openAlertasCredito() {
-  if (!currentUserIsAdmin()) return;
+  if (!isAdmin()) return;
   await loadAlertasCredito();
   showModal(qs(SEL.alertasCreditoModal));
   refreshCreditoAlertBadge();
@@ -94,10 +90,74 @@ async function closeAlertasCredito() {
 }
 
 async function markAllAlertasVistas() {
-  if (!currentUserIsAdmin()) return;
+  if (!isAdmin()) return;
   var ok = await invokeOrError(invoke('marcar_alertas_credito_vistas'));
   if (ok === undefined) return;
   showToast('Todas las alertas marcadas como vistas');
   refreshCreditoAlertBadge();
   loadAlertasCredito();
+}
+
+/* ========== ALERTAS DE STOCK (solo admin) ========== */
+
+function createAlertaStockRow(a) {
+  var cant = a.cantidad;
+  var cantLabel = (cant > 0 ? '+' : '') + (Number.isInteger(cant) ? cant : cant.toFixed(3));
+  var cantClass = cant > 0 ? 'badge-success' : 'badge-danger';
+  return '<td data-label="Fecha">' + formatAlertaFecha(a.fecha_hora) + '</td>' +
+    '<td data-label="Usuario">' + escapeHtml(a.usuario || '-') + '</td>' +
+    '<td data-label="Producto">' + escapeHtml(a.producto_nombre || a.producto_codigo) + '</td>' +
+    '<td data-label="Cantidad"><span class="' + cantClass + '">' + cantLabel + '</span></td>' +
+    '<td data-label="Motivo">' + escapeHtml(a.motivo || '-') + '</td>';
+}
+
+async function refreshStockAlertBadge() {
+  if (!isAdmin()) return;
+  var count = await invokeOrError(invoke('get_alertas_stock_nuevas'));
+  if (count === undefined) return;
+  var navBadge = qs(SEL.stockNavAlert);
+  if (navBadge) {
+    navBadge.textContent = count;
+    navBadge.classList.toggle('hidden', count === 0);
+    navBadge.title = count === 1 ? '1 alerta de stock' : (count + ' alertas de stock');
+  }
+  var btnCount = qs(SEL.alertasStockBtnCount);
+  if (btnCount) {
+    btnCount.textContent = count;
+    btnCount.classList.toggle('hidden', count === 0);
+  }
+}
+
+async function loadAlertasStock() {
+  var body = qs(SEL.alertasStockBody);
+  showSkeleton(body, 4);
+  var alertas = await invokeOrError(invoke('get_alertas_stock', { limit: 100, offset: 0 }));
+  if (alertas === undefined) return;
+  body.innerHTML = '';
+  if (!alertas.length) {
+    body.innerHTML = emptyTableRow(5, '<i class="nf nf-fa-bell"></i>', 'No hay alertas de stock', 'Los ajustes de stock hechos por vendedores aparecerán aquí');
+  } else {
+    appendRows(body, alertas, createAlertaStockRow);
+  }
+}
+
+async function openAlertasStock() {
+  if (!isAdmin()) return;
+  await loadAlertasStock();
+  showModal(qs(SEL.alertasStockModal));
+  refreshStockAlertBadge();
+}
+
+async function closeAlertasStock() {
+  closeModal(qs(SEL.alertasStockModal));
+  refreshStockAlertBadge();
+}
+
+async function markAllStockAlertasVistas() {
+  if (!isAdmin()) return;
+  var ok = await invokeOrError(invoke('marcar_alertas_stock_vistas'));
+  if (ok === undefined) return;
+  showToast('Todas las alertas marcadas como vistas');
+  refreshStockAlertBadge();
+  loadAlertasStock();
 }

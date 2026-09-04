@@ -1,11 +1,9 @@
 use super::conflicts::{check_and_record_conflict, is_conflict};
-use super::{api_url, now_iso, run_download, supabase_get_paginated, supabase_post, upsert_config, urlencoding};
+use super::{api_url, now_iso, supabase_get_paginated, supabase_post, upsert_config, urlencoding};
 use crate::constants;
-use crate::db::AppState;
 use rusqlite::{params, Connection};
 use serde_json::json;
 use std::collections::HashMap;
-use tauri::State;
 
 pub(crate) fn upload_products_inner(
     db: &Connection,
@@ -365,13 +363,6 @@ pub(crate) fn download_products_inner(
     ))
 }
 
-// DEAD CODE: wrapper público no invocado desde el frontend (el orquestador usa download_products_inner).
-#[tauri::command]
-pub fn download_products(state: State<AppState>) -> Result<String, String> {
-    run_download(&state, |tx, supabase_url, supabase_key, dispositivo_id| {
-        download_products_inner(tx, supabase_url, supabase_key, dispositivo_id)
-    })
-}
 
 #[cfg(test)]
 mod tests {

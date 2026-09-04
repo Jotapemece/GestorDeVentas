@@ -1,15 +1,21 @@
 use crate::constants;
 use crate::db::AppState;
 use rusqlite::Connection;
+use rusqlite::params;
 use tauri::State;
 
 /// Saldo de efectivo físico disponible en Bs. (el "stock" del pseudo-producto
-/// `EFECTIVO`). Vive en `configuracion` para no tocar el esquema ni el sync.
+/// `EFECTIVO`). Almacenado en `productos.stock` como centavos (×100) para
+/// mantener precisión con la columna INTEGER.
 pub(crate) fn efectivo_disponible(conn: &Connection) -> Result<f64, String> {
-    match crate::db::get_config_value(conn, constants::CFG_EFECTIVO_DISPONIBLE)? {
-        Some(v) => Ok(v.trim().parse::<f64>().unwrap_or(0.0)),
-        None => Ok(0.0),
-    }
+    let centavos: i64 = conn
+        .query_row(
+            "SELECT stock FROM productos WHERE codigo = ?1",
+            params![constants::CODIGO_EFECTIVO],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    Ok(centavos as f64 / 100.0)
 }
 
 pub(crate) fn set_efectivo(conn: &Connection, valor: f64) -> Result<(), String> {
@@ -19,7 +25,13 @@ pub(crate) fn set_efectivo(conn: &Connection, valor: f64) -> Result<(), String> 
     if valor < 0.0 {
         return Err("El efectivo disponible no puede ser negativo".to_string());
     }
-    crate::db::set_config_value(conn, constants::CFG_EFECTIVO_DISPONIBLE, &format!("{:.2}", valor))
+    let centavos = (valor * 100.0).round() as i64;
+    conn.execute(
+        "UPDATE productos SET stock = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE codigo = ?2",
+        params![centavos, constants::CODIGO_EFECTIVO],
+    )
+    .map_err(|e| format!("Error al actualizar efectivo: {}", e))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -96,12 +108,23 @@ fn ajustar_efectivo_bs_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::params;
 
     fn setup() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
-            "CREATE TABLE configuracion (clave TEXT PRIMARY KEY, valor TEXT NOT NULL);",
+            "CREATE TABLE productos (
+                codigo TEXT PRIMARY KEY,
+                nombre TEXT NOT NULL,
+                precio_usd REAL NOT NULL,
+                stock INTEGER NOT NULL DEFAULT 0,
+                stock_minimo INTEGER NOT NULL DEFAULT 0,
+                activo INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                favorito INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO productos (codigo, nombre, precio_usd, stock, activo)
+            VALUES ('EFECTIVO', 'Efectivo', 0, 0, 1);",
         )
         .unwrap();
         conn
@@ -160,13 +183,10 @@ mod tests {
     }
 
     #[test]
-    fn test_valor_existente_no_válido_se_trata_como_cero() {
+    fn test_centavos_se_redondean() {
         let conn = setup();
-        conn.execute(
-            "INSERT INTO configuracion (clave, valor) VALUES (?1, 'abc')",
-            params![constants::CFG_EFECTIVO_DISPONIBLE],
-        )
-        .unwrap();
-        assert_eq!(efectivo_disponible(&conn).unwrap(), 0.0);
+        set_efectivo(&conn, 10.05).unwrap();
+        // 10.05 * 100 = 1005 centavos → 10.05 Bs.
+        assert!((efectivo_disponible(&conn).unwrap() - 10.05).abs() < 0.001);
     }
 }

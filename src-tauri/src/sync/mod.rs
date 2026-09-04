@@ -6,10 +6,10 @@ pub(crate) mod conflicts;
 pub(crate) mod orchestrator;
 pub(crate) mod preview;
 pub(crate) mod alertas;
+pub(crate) mod alertas_stock;
 pub(crate) mod solicitudes;
+pub(crate) mod movimientos;
 
-pub use products::*;
-pub use clients::*;
 pub use users::*;
 pub use conflicts::*;
 pub use orchestrator::*;

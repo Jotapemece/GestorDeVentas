@@ -1,7 +1,9 @@
 use super::alertas::{download_alertas_inner, upload_alertas_inner};
+use super::alertas_stock::{download_alertas_stock_inner, upload_alertas_stock_inner};
 use super::clients::{download_clientes_inner, upload_clientes_inner};
 use super::products::{download_products_inner, upload_products_inner};
 use super::sales::{download_sales_inner, upload_sales_inner};
+use super::movimientos::{download_movimientos_inner, upload_movimientos_inner};
 use super::solicitudes::{download_solicitudes_inner, upload_solicitudes_inner};
 use super::users::{download_usuarios_inner, upload_usuarios_inner};
 use super::{api_url, emit_progress, get_config, supabase_config, supabase_get, upsert_config, urlencoding};
@@ -178,15 +180,6 @@ pub fn register_device(state: State<AppState>, nombre: String) -> Result<String,
 /// Check pre-login (público, como register_device): solo lee config con lock
 /// corto. Usado por el arranque de la UI para decidir si mostrar la pantalla
 /// de registro. No confiar en get_sync_stats aquí porque exige sesión.
-// DEAD CODE: comando registrado pero no invocado desde el frontend (el arranque usa recover_device).
-#[tauri::command]
-pub fn is_device_registered(state: State<AppState>) -> Result<bool, String> {
-    let db = state.lock_db()?;
-    Ok(crate::db::get_config_value(&db, constants::CFG_DISPOSITIVO_ID)
-        .unwrap_or_default()
-        .unwrap_or_default()
-        .len() > 0)
-}
 
 /// Auto-recuperación pre-login (público): si no hay dispositivo local, busca la
 /// huella del hardware en Supabase y, si existe (instalación previa), la guarda
@@ -250,7 +243,9 @@ pub fn upload_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Resul
         ("usuarios", upload_usuarios_inner),
         ("ventas", upload_sales_inner),
         ("alertas", upload_alertas_inner),
+        ("alertas_stock", upload_alertas_stock_inner),
         ("solicitudes", upload_solicitudes_inner),
+        ("movimientos", upload_movimientos_inner),
     ];
     let mut parts = Vec::new();
     let total = steps.len() as u32;
@@ -283,6 +278,7 @@ pub fn upload_after_sale(state: State<AppState>) -> Result<String, String> {
         ("ventas", upload_sales_inner),
         ("alertas", upload_alertas_inner),
         ("clientes", upload_clientes_inner),
+        ("movimientos", upload_movimientos_inner),
     ];
     let mut parts = Vec::new();
     for (label, f) in steps.iter() {
@@ -309,7 +305,9 @@ pub fn download_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Res
         ("usuarios", download_usuarios_inner),
         ("ventas", download_sales_inner),
         ("alertas", download_alertas_inner),
+        ("alertas_stock", download_alertas_stock_inner),
         ("solicitudes", download_solicitudes_inner),
+        ("movimientos", download_movimientos_inner),
     ];
     let mut parts = Vec::new();
     let total = steps.len() as u32;
@@ -339,13 +337,17 @@ pub fn sync_all(state: State<AppState>, app_handle: tauri::AppHandle) -> Result<
         ("usuarios", upload_usuarios_inner),
         ("ventas", upload_sales_inner),
         ("alertas", upload_alertas_inner),
+        ("alertas_stock", upload_alertas_stock_inner),
         ("solicitudes", upload_solicitudes_inner),
+        ("movimientos", upload_movimientos_inner),
         ("productos", download_products_inner),
         ("clientes", download_clientes_inner),
         ("usuarios", download_usuarios_inner),
         ("ventas", download_sales_inner),
         ("alertas", download_alertas_inner),
+        ("alertas_stock", download_alertas_stock_inner),
         ("solicitudes", download_solicitudes_inner),
+        ("movimientos", download_movimientos_inner),
     ];
     let mut parts = Vec::new();
     let total = steps.len() as u32;

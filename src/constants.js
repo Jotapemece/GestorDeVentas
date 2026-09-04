@@ -48,6 +48,7 @@ const FONT_SIZE_DEFAULT = 100;
 // Config keys (db::configuracion.clave) y métodos de pago
 const CFG_TASA_UPDATED_AT = 'tasa_updated_at';
 const CFG_TASA_AUTO_UPDATED_AT = 'tasa_auto_updated_at';
+const CFG_TASA_DAILY_FETCHED_DATE = 'tasa_daily_fetched_date';
 const CFG_TEMA = 'tema';
 const CFG_FONT_SIZE = 'font_size';
 const CFG_NOMBRE_NEGOCIO = 'nombre_negocio';
@@ -71,7 +72,8 @@ const CFG_TASA_DOLAR = 'tasa_dolar';
 // Payment method labels (source of truth — matches sales.rs)
 const METODO_LABELS = {
   efectivo_bs: 'Efectivo Bs.', efectivo_usd: 'Efectivo USD', biopago: 'Biopago',
-  punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto'
+  punto: 'Punto', pago_movil: 'Pago M\u00f3vil', credito: 'Cr\u00e9dito', mixto: 'Mixto',
+  movimientos_caja: 'Ingresos caja'
 };
 function formatMetodoLabel(m) { return METODO_LABELS[m] || m; }
 
@@ -96,6 +98,9 @@ const METODO_PAGO_MOVIL = 'pago_movil';
 const METODO_CREDITO = 'credito';
 const METODO_MIXTO = 'mixto';
 const ROL_ADMIN = 'admin';
+
+// Helper global: true si el usuario actual es admin
+function isAdmin() { return !!(currentUser && currentUser.rol === ROL_ADMIN); }
 
 // Faltante máximo permitido (con confirmación) al cobrar en Efectivo Bs por
 // debajo del total (p. ej. pagar Bs. 200 de un total de 205).
@@ -398,6 +403,7 @@ const SEL = {
   categoriaSaveText: '#categoria-save-text',
   categoriasList: '#categorias-list',
   productDetailModal: '#product-detail-modal',
+  productDetailTabContent: '#product-detail-tab-content',
   detailNombre: '#detail-nombre',
   detailPrecio: '#detail-precio',
   detailPrecioLabel: '#detail-precio-label',
@@ -424,11 +430,12 @@ const SEL = {
   creditosTotalPersonas: '#creditos-total-personas',
   creditosConDeuda: '#creditos-con-deuda',
   creditosDeudaTotal: '#creditos-deuda-total',
-  creditosLoadMore: '#creditos-load-more',
+  creditosPagination: '#creditos-pagination',
   debtDetailModal: '#debt-detail-modal',
   debtDetailTitle: '#debt-detail-title',
   debtDetailDebt: '#debt-detail-debt',
   debtDetailList: '#debt-detail-list',
+  debtEvolutionList: '#debt-evolution-list',
   abonoModal: '#abono-modal',
   abonoClienteNombre: '#abono-cliente-nombre',
   abonoDeudaUsd: '#abono-deuda-usd',
@@ -480,6 +487,14 @@ const SEL = {
   alertasCreditoClose: '#alertas-credito-close',
   alertasCreditoOkBtn: '#alertas-credito-ok-btn',
   alertasCreditoMarkBtn: '#alertas-credito-mark-btn',
+  stockNavAlert: '#stock-nav-alert',
+  alertasStockBtn: '#alertas-stock-btn',
+  alertasStockBtnCount: '#alertas-stock-btn-count',
+  alertasStockModal: '#alertas-stock-modal',
+  alertasStockBody: '#alertas-stock-body',
+  alertasStockClose: '#alertas-stock-close',
+  alertasStockOkBtn: '#alertas-stock-ok-btn',
+  alertasStockMarkBtn: '#alertas-stock-mark-btn',
 
   // --- Solicitudes de anulación ---
   solicitudesBtn: '#solicitudes-btn',
@@ -689,6 +704,13 @@ const SEL = {
   productSaveBtn: '#product-save-btn',
   productDetailClose: '#product-detail-close',
   productDetailOkBtn: '#product-detail-ok-btn',
+  stockHistoryList: '#stock-history-list',
+  productStockHistoryTab: '#product-stock-history-tab',
+  productSalesHistoryTab: '#product-sales-history-tab',
+  productSalesHistoryBody: '#product-sales-history-body',
+  productPriceHistoryTab: '#product-price-history-tab',
+  productPriceHistoryBody: '#product-price-history-body',
+  productDetailTitle: '#product-detail-title',
   stockAdjustModal: '#stock-adjust-modal',
   stockAdjustClose: '#stock-adjust-close',
   stockAdjustNombre: '#stock-adjust-nombre',
@@ -706,6 +728,8 @@ const SEL = {
   closeCashierClose: '#close-cashier-close',
   closeCashierCancelBtn: '#close-cashier-cancel-btn',
   closeCashierConfirmBtn: '#close-cashier-confirm-btn',
+  closeKeepCash: '#close-keep-cash',
+  closeKeepCashDesc: '#close-keep-cash-desc',
   closeReportClose: '#close-report-close',
   closeReportOkBtn: '#close-report-ok-btn',
   historialCierresClose: '#historial-cierres-close',
@@ -838,7 +862,6 @@ const SEL = {
   movimientosModal: '#movimientos-modal',
   movimientosClose: '#movimientos-modal-close',
   movimientosList: '#movimientos-list',
-  movimientosTipo: '#movimientos-tipo',
   movimientosMontoBs: '#movimientos-monto-bs',
   movimientosMontoUsd: '#movimientos-monto-usd',
   movimientosConcepto: '#movimientos-concepto',
@@ -903,5 +926,31 @@ const SEL = {
   downloadPreviewVentasDesde: '#download-preview-ventas-desde',
   downloadPreviewVentasHasta: '#download-preview-ventas-hasta',
   downloadPreviewReload: '#download-preview-reload',
+
+  // --- Reminders ---
+  remindersList: '#reminders-list',
+  addReminderBtn: '#add-reminder-btn',
+  reminderModal: '#reminder-modal',
+  reminderName: '#reminder-name',
+  reminderTime: '#reminder-time',
+  reminderEnabled: '#reminder-enabled',
+  reminderVolume: '#reminder-volume',
+  reminderVolumeLabel: '#reminder-volume-label',
+  reminderSoundPreview: '#reminder-sound-preview',
+  reminderSave: '#reminder-save',
+  reminderCancel: '#reminder-cancel',
+  reminderDaysWrap: '#reminder-days-wrap',
+  reminderDaysBtn: '#reminder-days-btn',
+  reminderDaysMenu: '#reminder-days-menu',
+  reminderSoundWrap: '#reminder-sound-wrap',
+  reminderSoundBtn: '#reminder-sound-btn',
+  reminderSoundMenu: '#reminder-sound-menu',
+  reminderAlarmModal: '#reminder-alarm-modal',
+  alarmTimeText: '#alarm-time-text',
+  alarmNameText: '#alarm-name-text',
+  alarmSnoozeBtn: '#alarm-snooze-btn',
+  alarmDismissBtn: '#alarm-dismiss-btn',
+  alarmHandMin: '#alarm-hand-min',
+  alarmHandHr: '#alarm-hand-hr',
 };
 

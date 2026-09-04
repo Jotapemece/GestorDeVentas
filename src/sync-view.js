@@ -92,6 +92,7 @@ async function loadSyncStats() {
     if (!syncRelInterval) syncRelInterval = setInterval(renderSyncRelative, 30000);
     // Refresco del badge de alertas de crédito alineado al ciclo de sync (10 min auto-sync)
     if (typeof refreshCreditoAlertBadge === 'function') refreshCreditoAlertBadge();
+    if (typeof refreshStockAlertBadge === 'function') refreshStockAlertBadge();
     if (typeof refreshSolicitudesBadge === 'function') refreshSolicitudesBadge();
   } catch (e) { showToast('Error al cargar estadísticas de sincronización: ' + e, 'error'); }
 }
@@ -257,7 +258,7 @@ async function checkPendienteCierre() {
       loadSyncStats();
       if (typeof refreshCashierAfterSync === 'function') refreshCashierAfterSync();
     } catch (e) {
-      console.log('download_all en cierre pendiente:', e);
+      console.warn('download_all en cierre pendiente:', e);
     }
     const pendFinal = await invoke('get_pendiente_cierre');
     if (!pendFinal) return;
@@ -286,7 +287,7 @@ async function checkPendienteCierre() {
     }
     showModal(qs(SEL.pendienteCierreModal));
   } catch (e) {
-    console.log('error en checkPendienteCierre:', e);
+    console.warn('error en checkPendienteCierre:', e);
   }
 }
 

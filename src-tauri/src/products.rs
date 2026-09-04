@@ -1,6 +1,7 @@
+use crate::auth;
 use crate::constants;
 use crate::db::AppState;
-use crate::models::{Categoria, PaginatedResult, PrecioHistorialItem, Producto, TopProductItem};
+use crate::models::{Categoria, PaginatedResult, PrecioHistorialItem, Producto, StockEvent, TopProductItem};
 use base64::Engine;
 use rusqlite::params;
 use rust_xlsxwriter::*;
@@ -64,6 +65,7 @@ pub fn list_products(
     subcategoria: Option<String>,
     categoria_id: Option<i64>,
 ) -> Result<PaginatedResult<Producto>, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
 
     let has_query = search.as_ref().is_some_and(|s| !s.is_empty());
@@ -77,7 +79,7 @@ pub fn list_products(
     let ps = page_size.unwrap_or(constants::PAGE_SIZE_DEFAULT).clamp(1, constants::PAGE_SIZE_MAX);
     let offset = (p - 1) * ps;
 
-    let mut where_clauses: Vec<String> = vec!["p.activo = 1".to_string()];
+    let mut where_clauses: Vec<String> = vec!["p.activo = 1".to_string(), "p.codigo != 'EFECTIVO'".to_string()];
     let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = vec![];
     if has_inari_filter {
         where_clauses.push(if inari_val { "p.es_inari = 1" } else { "p.es_inari = 0" }.to_string());
@@ -136,6 +138,10 @@ pub fn create_product(
     es_inari: Option<bool>,
     es_pesable: Option<bool>,
 ) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "create_product",
+    )?;
     if precio_usd <= 0.0 {
         return Err("El precio debe ser mayor a cero".to_string());
     }
@@ -201,6 +207,10 @@ pub fn update_product(
     costo: f64,
     stock: f64,
 ) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "update_product",
+    )?;
     if precio_usd <= 0.0 {
         return Err("El precio debe ser mayor a cero".to_string());
     }
@@ -305,6 +315,96 @@ pub fn get_precio_historial(
     Ok(items)
 }
 
+/// Devuelve el historial de movimientos de stock de un producto (ajustes + ventas).
+/// Incluye un campo `saldo_despues` calculado con running balance.
+#[tauri::command]
+pub fn get_producto_stock_history(
+    state: State<AppState>,
+    codigo: String,
+) -> Result<Vec<StockEvent>, String> {
+    crate::auth::check_employee_role(&state)?;
+    let db = state.lock_db()?;
+
+    // Stock actual
+    let stock_actual: f64 = db
+        .query_row(
+            "SELECT COALESCE(stock, 0) FROM productos WHERE codigo = ?1",
+            params![codigo],
+            |r| r.get(0),
+        )
+        .map_err(|e| format!("Error leyendo stock: {}", e))?;
+
+    // Ajustes de stock
+    let mut stmt_aj = db
+        .prepare(
+            "SELECT cantidad, COALESCE(motivo,''), COALESCE(usuario,''), created_at \
+             FROM ajustes_stock WHERE producto_codigo = ?1 ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let ajustes: Vec<(f64, String, String, String)> = stmt_aj
+        .query_map(params![codigo], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(stmt_aj);
+
+    // Ventas (detalles no anulados)
+    let mut stmt_vent = db
+        .prepare(
+            "SELECT d.cantidad, v.id, v.fecha_hora, COALESCE(u.username, '') \
+             FROM detalles_ventas d \
+             JOIN ventas v ON v.id = d.venta_id \
+             LEFT JOIN usuarios u ON u.id = v.usuario_id \
+             WHERE d.producto_codigo = ?1 AND (v.anulada IS NULL OR v.anulada = 0) \
+             ORDER BY v.fecha_hora ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let ventas: Vec<(f64, i64, String, String)> = stmt_vent
+        .query_map(params![codigo], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(stmt_vent);
+
+    // Merge como eventos
+    let mut events: Vec<StockEvent> = Vec::with_capacity(ajustes.len() + ventas.len());
+    for (cant, motivo, usuario, fecha) in &ajustes {
+        events.push(StockEvent {
+            fecha_hora: fecha.clone(),
+            tipo: if *cant > 0.0 { "ajuste_entrada".to_string() } else { "ajuste_salida".to_string() },
+            cantidad: *cant,
+            motivo: motivo.clone(),
+            usuario: usuario.clone(),
+            saldo_despues: 0.0,
+        });
+    }
+    for (cant, venta_id, fecha, usuario) in &ventas {
+        events.push(StockEvent {
+            fecha_hora: fecha.clone(),
+            tipo: "venta".to_string(),
+            cantidad: -*cant,
+            motivo: format!("# Venta {}", venta_id),
+            usuario: usuario.clone(),
+            saldo_despues: 0.0,
+        });
+    }
+    events.sort_by(|a, b| a.fecha_hora.cmp(&b.fecha_hora));
+
+    // Calcular running balance
+    let total_effect: f64 = events.iter().map(|e| e.cantidad).sum();
+    let mut saldo = stock_actual - total_effect;
+    for event in &mut events {
+        saldo += event.cantidad;
+        event.saldo_despues = saldo;
+    }
+
+    Ok(events)
+}
+
 #[tauri::command]
 pub fn set_product_inari(
     state: State<AppState>,
@@ -341,6 +441,10 @@ pub fn toggle_producto_favorito(
 
 #[tauri::command]
 pub fn delete_product(state: State<AppState>, codigo: String) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "delete_product",
+    )?;
     let db = state.lock_db()?;
     crate::auth::require_admin(
         &state,
@@ -368,6 +472,7 @@ fn delete_product_inner(db: &rusqlite::Connection, codigo: &str) -> Result<Strin
 
 #[tauri::command]
 pub fn export_products_xlsx(state: State<AppState>, tasa: f64) -> Result<String, String> {
+    let _username = auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
 
     let full_sql = format!("{} ORDER BY p.nombre ASC", SQL_BASE_PRODUCTOS);
@@ -561,11 +666,9 @@ pub fn registrar_ajuste_stock(
     )?;
     let username = state.get_username()?;
     let mut db = state.lock_db()?;
-    crate::auth::require_admin(
-        &state,
-        &db,
-        &format!("Ajustó stock de '{}' ({:+}) — {}", codigo, cantidad, motivo.trim()),
-    )?;
+    crate::auth::check_employee_role(&state)?;
+    crate::audit::log_action(&db, &username, &format!("Ajustó stock de '{}' ({:+}) — {}", codigo, cantidad, motivo.trim()))
+        .ok();
     let res = registrar_ajuste_stock_inner(&mut db, &username, &codigo, cantidad, &motivo);
     if res.is_ok() {
         if let Ok(mut attempts) = state.admin_action_attempts.lock() {
@@ -634,6 +737,18 @@ fn registrar_ajuste_stock_inner(
 
     tx.commit().map_err(|e| format!("Error al confirmar ajuste: {}", e))?;
 
+    // Alerta de stock para admins (solo si es vendedor)
+    let nombre: String = db
+        .query_row(
+            "SELECT COALESCE(nombre, '') FROM productos WHERE codigo = ?1",
+            params![codigo],
+            |r| r.get(0),
+        )
+        .unwrap_or_default();
+    let _ = crate::alertas_stock::insertar_alerta_stock_si_vendedor(
+        db, username, codigo, &nombre, cantidad, &motivo,
+    );
+
     Ok(format!(
         "Stock de '{}' ajustado en {:+}. Motivo: {}",
         codigo, cantidad, motivo
@@ -700,6 +815,7 @@ pub fn get_top_products(
 
 #[tauri::command]
 pub fn list_categorias(state: State<AppState>) -> Result<Vec<Categoria>, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let mut stmt = db
         .prepare("SELECT id, nombre, color FROM categorias ORDER BY nombre ASC")

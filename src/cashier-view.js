@@ -67,21 +67,36 @@ async function runTasaAutoCheck() {
   _tasaAutoRunning = true;
   try {
     const now = new Date();
-    if (now.getHours() < TASA_AUTO_HORA) return;
-    let lastAuto = '';
+    const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    // Check if we already fetched today
+    let lastFetchedDate = '';
     try {
-      lastAuto = await invoke('get_user_config_value', { key: CFG_TASA_AUTO_UPDATED_AT });
+      lastFetchedDate = await invoke('get_user_config_value', { key: CFG_TASA_DAILY_FETCHED_DATE });
     } catch (e) {}
-    if (lastAuto && (now.getTime() - new Date(lastAuto).getTime()) < TASA_AUTO_INTERVAL_MS) return;
+    const alreadyFetchedToday = lastFetchedDate === todayStr;
+    if (!alreadyFetchedToday) {
+      // First login of the day — fetch immediately regardless of hour
+    } else if (now.getHours() < TASA_AUTO_HORA) {
+      return; // Already fetched today and not yet 6PM
+    } else {
+      // After 6PM, use the existing interval check
+      let lastAuto = '';
+      try {
+        lastAuto = await invoke('get_user_config_value', { key: CFG_TASA_AUTO_UPDATED_AT });
+      } catch (e) {}
+      if (lastAuto && (now.getTime() - new Date(lastAuto).getTime()) < TASA_AUTO_INTERVAL_MS) return;
+    }
     const rate = await invoke('fetch_tasa_bcv');
     const actual = tasaActual || 0;
     if (Math.abs(rate - actual) < 0.0001) {
       await invoke('set_user_config_value', { key: CFG_TASA_AUTO_UPDATED_AT, value: now.toISOString() });
+      await invoke('set_user_config_value', { key: CFG_TASA_DAILY_FETCHED_DATE, value: todayStr });
       return;
     }
     tasaActual = rate;
     await invoke('set_tasa', { tasa: tasaActual });
     await invoke('set_user_config_value', { key: CFG_TASA_AUTO_UPDATED_AT, value: now.toISOString() });
+    await invoke('set_user_config_value', { key: CFG_TASA_DAILY_FETCHED_DATE, value: todayStr });
     const input = qs(SEL.tasaInput);
     if (input) input.value = tasaActual.toFixed(2);
     const warn = qs(SEL.tasaWarning);
@@ -91,7 +106,7 @@ async function runTasaAutoCheck() {
     refreshAllBsPrices();
     showToast('Tasa BCV actualizada automáticamente: ' + formatBS(rate), 'success');
   } catch (e) {
-    console.log('tasa auto check error:', e);
+    console.warn('tasa auto check error:', e);
   } finally {
     _tasaAutoRunning = false;
   }
@@ -501,7 +516,7 @@ function resolveCartProduct(codigo) {
         const fallback = await invoke('list_products', { search: codigo, page: 1, pageSize: 20 });
         const data = fallback.data || fallback;
         if (data && data.length) p = data.find(x => x.codigo === codigo) || data[0];
-      } catch (e) {}
+      } catch (e) { console.warn('product search fallback failed:', codigo, e); }
     }
     if (p) {
      const item = cart.find(x => x.codigo === codigo);
@@ -553,10 +568,10 @@ function handleCartEfectivoInput(inputEl) {
     saveCartSnapshot();
     return;
   }
-  if (cobrar + 0.005 < entregar) { showToast('El monto a cobrar no puede ser menor al entregado', 'error'); renderCart(); return; }
-  if (entregar + 0.005 > efectivoDisponibleBs) { showToast('Efectivo disponible insuficiente', 'error'); renderCart(); return; }
+  if (cobrar + 0.005 < entregar) { showToast('El monto a cobrar no puede ser menor al entregado', 'error'); return; }
+  if (entregar + 0.005 > efectivoDisponibleBs) { showToast('Efectivo disponible insuficiente', 'error'); return; }
   const precio = efectivoPrecioUsd(entregar, cobrar, tasaActual);
-  if (!(precio > 0)) { showToast('La tasa debe ser mayor a cero', 'error'); renderCart(); return; }
+  if (!(precio > 0)) { showToast('La tasa debe ser mayor a cero', 'error'); return; }
   item.cantidad = entregar;
   item.precio_usd = precio;
   item.monto_entregar_bs = entregar;
@@ -942,7 +957,7 @@ function openAjustarEfectivoModal() {
 }
 
 function updateAjustarEfectivoSignUI() {
-  qsa('.stock-adjust-sign').forEach(function(b) {
+  qs(SEL.ajustarEfectivoModal).querySelectorAll('.stock-adjust-sign').forEach(function(b) {
     b.classList.toggle('active', parseInt(b.dataset.sign, 10) === ajustarEfectivoSign);
   });
 }
@@ -1424,7 +1439,7 @@ function uploadAfterSale() {
   if (typeof updateSyncIndicator === 'function') updateSyncIndicator('Subiendo venta...', true);
   invoke('upload_after_sale')
     .then(() => { if (typeof loadSyncStats === 'function') loadSyncStats(); })
-    .catch(e => console.log('upload tras venta:', e))
+    .catch(e => console.warn('upload tras venta:', e))
     .finally(() => {
       _saleUploadRunning = false;
       if (typeof updateSyncIndicator === 'function') updateSyncIndicator('', false);
@@ -1435,13 +1450,18 @@ function uploadAfterSale() {
 async function loadDailySummary() {
   const tbody = qs(SEL.dailySalesBody);
   showSkeleton(tbody, 7);
-  const results = await invokeOrError(Promise.all([
+  const [summaryRes, cajaRes, saldoRes] = await Promise.allSettled([
     invoke('get_daily_summary'),
     invoke('get_caja_abierta'),
     invoke('get_saldo_caja')
-  ]));
-  if (results === undefined) return;
-  const [summary, cajaAbierta, saldo] = results;
+  ]);
+  if (summaryRes.status === 'rejected') {
+    showToast('Error al cargar resumen: ' + toFriendlyError(summaryRes.reason), 'error');
+    return;
+  }
+  const summary = summaryRes.value;
+  const cajaAbierta = cajaRes.status === 'fulfilled' ? cajaRes.value : false;
+  const saldo = saldoRes.status === 'fulfilled' ? saldoRes.value : { total_usd: 0, total_bs: 0 };
   qs(SEL.dailyCount).textContent = summary.total_ventas;
     var badge = qs(SEL.cashierNavBadge);
     if (badge) {
@@ -1544,6 +1564,12 @@ async function handleOpenCashier() {
 }
 
 async function openCloseCashier() {
+  // Reset keep-cash toggle
+  const keepCashEl = qs(SEL.closeKeepCash);
+  if (keepCashEl) { keepCashEl.checked = true; }
+  const keepCashDesc = qs(SEL.closeKeepCashDesc);
+  if (keepCashDesc) { keepCashDesc.textContent = 'El efectivo se conservará para la próxima jornada.'; }
+
   // Si hay un cierre pendiente (corte de energía), el resumen debe reflejar ESE
   // día/días, no el de hoy. Se re-consulta para que "Cerrar Jornada" siempre apunte
   // al cierre pendiente aunque el modal inicial se haya cerrado con "Ahora no".
@@ -1551,7 +1577,7 @@ async function openCloseCashier() {
   try {
     pend = await invoke('get_pendiente_cierre');
   } catch (e) {
-    console.log('openCloseCashier (pendiente):', e);
+    console.warn('openCloseCashier (pendiente):', e);
   }
   if (pend && pend.desde) {
     lastPendienteCierre = pend;
@@ -1579,10 +1605,11 @@ async function confirmCloseCashier() {
   const btn = qs(SEL.closeCashierConfirmBtn);
   if (btn) btn.disabled = true;
   const esPendiente = !!lastPendienteCierre;
+  const keepCash = qs(SEL.closeKeepCash) ? qs(SEL.closeKeepCash).checked : true;
   const results = await invokeOrError(esPendiente
     ? invoke('close_pendiente_cashier')
     : Promise.all([
-        invoke('close_cashier', { fecha: lastPendienteFecha || null }),
+        invoke('close_cashier', { fecha: lastPendienteFecha || null, keepCash }),
         invoke('get_close_report_data', { fecha: lastPendienteFecha || null })
       ]));
   if (btn) btn.disabled = false;
@@ -1614,7 +1641,7 @@ async function confirmCloseCashier() {
   }
   if (finalData.por_metodo && finalData.por_metodo.length) {
     html += '<hr class="close-report-hr"><h4>Totales por M\u00e9todo de Pago</h4>';
-    html += '<canvas id="close-pie-chart" class="chart-canvas" width="' + CHART.CANVAS_WIDTH + '" height="' + CHART.CANVAS_HEIGHT + '"></canvas>';
+    html += '<canvas id="close-pie-chart" class="chart-canvas" width="' + CHART.CANVAS_WIDTH + '" height="' + CHART.CANVAS_HEIGHT + '" aria-label="Gr\u00e1fico circular de totales por m\u00e9todo de pago"></canvas>';
     finalData.por_metodo.forEach(m => {
       const label = formatMetodoLabel(m.metodo);
       let refStr = '';
@@ -1758,6 +1785,8 @@ function printCloseReport() {
   doc.close();
   iframe.contentWindow.focus();
   iframe.contentWindow.print();
+  iframe.contentWindow.addEventListener('afterprint', function() { iframe.remove(); }, { once: true });
+  setTimeout(function() { if (iframe.parentNode) iframe.remove(); }, 30000);
 }
 
 // En Android el `iframe.print()` no funciona: el reporte se comparte como texto
@@ -1840,7 +1869,7 @@ async function showCierreDetalle(cierreId) {
     html += '<p><strong>Total Bs.:</strong> ' + formatBS(d.total_bs) + '</p>';
     if (d.por_metodo && d.por_metodo.length) {
       html += '<hr style="margin:8px 0;"><h4>Totales por M\u00e9todo de Pago</h4>';
-      html += '<canvas id="historial-pie-chart" width="' + CHART.CANVAS_WIDTH + '" height="' + CHART.CANVAS_HEIGHT + '" style="margin:4px auto;display:block;max-width:100%;"></canvas>';
+      html += '<canvas id="historial-pie-chart" width="' + CHART.CANVAS_WIDTH + '" height="' + CHART.CANVAS_HEIGHT + '" style="margin:4px auto;display:block;max-width:100%;" aria-label="Gr\u00e1fico circular de historial de cierres"></canvas>';
       d.por_metodo.forEach(m => {
         let label = formatMetodoLabel(m.metodo);
         if (m.referencias && m.referencias.length) {
@@ -1985,7 +2014,7 @@ function openMovimientosModal() {
 
 async function saveMovimiento() {
   await withButtonLock(qs(SEL.movimientosSaveBtn), async () => {
-    var tipo = qs(SEL.movimientosTipo).value;
+    var tipo = qs('.toggle-btn-group .toggle-btn.active')?.dataset.tipo || 'egreso';
     var montoBs = parseInput(qs(SEL.movimientosMontoBs).value);
     var montoUsd = parseInput(qs(SEL.movimientosMontoUsd).value);
     var concepto = qs(SEL.movimientosConcepto).value.trim();

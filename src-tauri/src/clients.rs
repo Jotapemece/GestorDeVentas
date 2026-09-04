@@ -1,3 +1,4 @@
+use crate::auth;
 use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
@@ -67,6 +68,7 @@ pub fn list_clientes(
     page_size: Option<i64>,
     search: Option<String>,
 ) -> Result<Vec<Cliente>, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let search_term = search.filter(|s| !s.trim().is_empty());
     let base = match &search_term {
@@ -101,6 +103,7 @@ pub fn list_clientes(
 
 #[tauri::command]
 pub fn get_clientes_resumen(state: State<AppState>) -> Result<crate::models::ClienteResumen, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let (total,): (i64,) = db
         .query_row(
@@ -130,6 +133,10 @@ pub fn create_cliente(
     state: State<AppState>,
     nombre: String,
 ) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "create_cliente",
+    )?;
     if nombre.trim().is_empty() {
         return Err("El nombre del cliente no puede estar vacío".to_string());
     }
@@ -197,6 +204,7 @@ pub fn get_cliente_history(
     state: State<AppState>,
     cliente_id: i64,
 ) -> Result<ClienteHistory, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
 
     let cliente: Cliente = db
@@ -271,7 +279,99 @@ pub fn get_cliente_history(
 }
 
 #[tauri::command]
+pub fn get_cliente_debt_evolution(
+    state: State<AppState>,
+    cliente_id: i64,
+) -> Result<Vec<DebtEvent>, String> {
+    let _username = auth::check_employee_role(&state)?;
+    let db = state.lock_db()?;
+
+    // Verify client exists
+    db.query_row(SQL_CLIENTE_BY_ID, params![cliente_id], |_| Ok(()))
+        .map_err(|_| "Cliente no encontrado".to_string())?;
+
+    // Credit sales (anuladas excluidas)
+    let mut stmt_ventas = db
+        .prepare(
+            "SELECT id, fecha_hora, total_usd FROM ventas \
+             WHERE cliente_id = ?1 AND metodo_pago = 'credito' \
+             AND (anulada IS NULL OR anulada = 0) \
+             ORDER BY fecha_hora ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let ventas_rows: Vec<(i64, String, f64)> = stmt_ventas
+        .query_map(params![cliente_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Abonos (movimientos_caja con concepto que empieza por 'Abono')
+    let mut stmt_abonos = db
+        .prepare(
+            "SELECT id, monto_usd, concepto, created_at FROM movimientos_caja \
+             WHERE cliente_id = ?1 AND tipo = 'ingreso' \
+             AND concepto LIKE 'Abono%' \
+             ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let abonos_rows: Vec<(i64, f64, String, String)> = stmt_abonos
+        .query_map(params![cliente_id], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Merge and sort by timestamp
+    let mut events: Vec<DebtEvent> = Vec::new();
+
+    for (id, fecha, total) in ventas_rows {
+        events.push(DebtEvent {
+            fecha_hora: fecha,
+            tipo: "venta".to_string(),
+            monto_usd: total,
+            nota: format!("# Venta {}", id),
+            saldo_despues: 0.0, // calculated below
+        });
+    }
+
+    for (_id, monto, concepto, fecha) in abonos_rows {
+        events.push(DebtEvent {
+            fecha_hora: fecha,
+            tipo: "abono".to_string(),
+            monto_usd: monto,
+            nota: concepto,
+            saldo_despues: 0.0,
+        });
+    }
+
+    // Sort by fecha_hora ascending
+    events.sort_by(|a, b| a.fecha_hora.cmp(&b.fecha_hora));
+
+    // Calculate running balance
+    let mut saldo: f64 = 0.0;
+    for event in &mut events {
+        if event.tipo == "venta" {
+            saldo += event.monto_usd;
+        } else {
+            saldo -= event.monto_usd;
+        }
+        event.saldo_despues = (saldo * 100.0).round() / 100.0;
+    }
+
+    Ok(events)
+}
+
+#[tauri::command]
 pub fn export_clientes_xlsx(state: State<AppState>, tasa: f64) -> Result<String, String> {
+    let _username = auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
     export_clientes_xlsx_inner(&db, tasa)
 }
@@ -553,9 +653,9 @@ fn pay_debt_inner(
         request.pago_detalle.as_deref(),
     );
     tx.execute(
-        "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username, cliente_id) \
-         VALUES ('ingreso', ?1, ?2, ?3, ?4, ?5, ?6)",
-        params![monto_bs, request.monto_usd, concepto, usuario_id, username, request.cliente_id],
+        "INSERT INTO movimientos_caja (tipo, monto_bs, monto_usd, concepto, usuario_id, username, cliente_id, sync_id, updated_at) \
+         VALUES ('ingreso', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![monto_bs, request.monto_usd, concepto, usuario_id, username, request.cliente_id, uuid::Uuid::new_v4().to_string(), crate::helpers::now_iso()],
     )
     .map_err(|e| format!("Error al registrar ingreso de caja: {}", e))?;
 
@@ -600,6 +700,10 @@ fn pay_debt_inner(
 
 #[tauri::command]
 pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String, saldo_deuda_usd: Option<f64>) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "update_cliente",
+    )?;
     if nombre.trim().is_empty() {
         return Err("El nombre no puede estar vacío".to_string());
     }
@@ -654,6 +758,10 @@ pub fn update_cliente(state: State<AppState>, cliente_id: i64, nombre: String, s
 
 #[tauri::command]
 pub fn delete_cliente(state: State<AppState>, cliente_id: i64) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "delete_cliente",
+    )?;
     let mut db = state.lock_db()?;
     crate::auth::require_admin(
         &state,

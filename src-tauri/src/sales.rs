@@ -1,5 +1,6 @@
 use base64::Engine;
 use std::collections::HashMap;
+use crate::auth;
 use crate::constants;
 use crate::db::AppState;
 use crate::models::*;
@@ -497,6 +498,7 @@ pub fn get_sale_detail(
     state: State<AppState>,
     venta_id: i64,
 ) -> Result<Vec<SaleDetailItem>, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
 
     let mut stmt = db
@@ -534,6 +536,7 @@ pub fn get_sale_detail(
 
 #[tauri::command]
 pub fn get_tasa(state: State<AppState>) -> Result<f64, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     crate::db::get_tasa_from_db(&db)
 }
@@ -758,6 +761,7 @@ pub fn get_product_history(
     state: State<AppState>,
     producto_codigo: String,
 ) -> Result<Vec<ProductHistoryItem>, String> {
+    let _username = auth::check_employee_role(&state)?;
     let db = state.lock_db()?;
     let mut stmt = db
         .prepare(
@@ -794,6 +798,7 @@ pub fn export_report_xlsx(
     state: State<AppState>,
     filter: SalesReportFilter,
 ) -> Result<String, String> {
+    let _username = auth::check_admin_role(&state)?;
     use rust_xlsxwriter::*;
 
     let db = state.lock_db()?;
@@ -857,6 +862,7 @@ pub fn export_report_pdf(
     filter: SalesReportFilter,
     chart_image: Option<crate::pdf::PdfImagePayload>,
 ) -> Result<String, String> {
+    let _username = auth::check_admin_role(&state)?;
     let db = state.lock_db()?;
     let report = get_sales_report_inner(&db, filter.clone())?;
 

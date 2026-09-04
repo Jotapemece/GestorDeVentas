@@ -31,6 +31,9 @@ pub struct PreviewResult {
     pub productos: Vec<PreviewItem>,
     pub clientes: Vec<PreviewItem>,
     pub ventas: Vec<PreviewItem>,
+    pub movimientos: Vec<PreviewItem>,
+    pub alertas_credito: Vec<PreviewItem>,
+    pub alertas_stock: Vec<PreviewItem>,
     pub total: usize,
 }
 
@@ -74,13 +77,19 @@ pub fn preview_download(
     // T1: NO mantener lock_db durante el HTTP (congelaba el POS ~90s). Se lee
     // config con lock corto, se hace toda la red sin lock, y los reads locales
     // vuelven a tomar lock solo en bloques scoped.
-    let (supabase_url, supabase_key, dispositivo_id, first_sync, wm_prod, wm_cli) = {
+    let (supabase_url, supabase_key, dispositivo_id, first_sync, wm_prod, wm_cli, wm_mov, wm_ac, wm_as) = {
         let db = state.lock_db()?;
         let (u, k) = super::supabase_config(&db)?;
         let fs = super::get_config(&db, constants::CFG_FIRST_SYNC_DONE)?;
         let wmp = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD)?;
         let wmc = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_CLIENTES)?;
-        (u, k, super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?, fs != "1", wmp, wmc)
+        let wmm = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_MOVIMIENTOS)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+        let wmac = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_ALERTAS)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+        let wmas = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_ALERTAS_STOCK)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+        (u, k, super::get_config(&db, constants::CFG_DISPOSITIVO_ID)?, fs != "1", wmp, wmc, wmm, wmac, wmas)
     };
     // Delta: en sync posteriores al primero solo traemos lo modificado desde el
     // último download (igual que apply_download). El primer sync trae todo para
@@ -421,8 +430,161 @@ let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &s
     }
     drop(local_vent);
 
-    let total = productos.len() + clientes.len() + ventas.len();
-    Ok(PreviewResult { productos, clientes, ventas, total })
+    // ---------- Movimientos de caja ----------
+    let mut movimientos: Vec<PreviewItem> = Vec::new();
+    {
+        let wm = if wm_mov.is_empty() { "1970-01-01T00:00:00.000Z".to_string() } else { wm_mov };
+        let mov_url = api_url(
+            &supabase_url,
+            &format!(
+                "/movimientos_caja?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*",
+                urlencoding(&wm), urlencoding(&dispositivo_id),
+            ),
+        );
+        let cloud_mov: Vec<serde_json::Value> = supabase_get_paginated(&mov_url, &supabase_key, "id")?;
+        let mut local_ts: HashMap<String, String> = HashMap::new();
+        {
+            let db = state.lock_db()?;
+            let mut stmt = db
+                .prepare("SELECT sync_id, COALESCE(updated_at,'') FROM movimientos_caja WHERE sync_id IS NOT NULL AND sync_id != ''")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+                .map_err(|e| e.to_string())?;
+            for r in rows.filter_map(|r| r.ok()) { local_ts.insert(r.0, r.1); }
+        }
+        for mv in &cloud_mov {
+            let sid = mv["sync_id"].as_str().unwrap_or("");
+            if sid.is_empty() { continue; }
+            let remote_ts = mv["updated_at"].as_str().unwrap_or("");
+            let exists = local_ts.contains_key(sid);
+            if exists && !first_sync {
+                if let Some(lts) = local_ts.get(sid) {
+                    if !lts.is_empty() && remote_ts <= lts.as_str() { continue; }
+                }
+            }
+            let nombre = format!("{} ${}", mv["tipo"].as_str().unwrap_or(""), fmt_num(&mv["monto_usd"]));
+            if exists {
+                let mut campos = Vec::new();
+                campos.push(FieldDiff { campo: "monto_usd".into(), local: "—".into(), remoto: fmt_num(&mv["monto_usd"]) });
+                campos.push(FieldDiff { campo: "monto_bs".into(), local: "—".into(), remoto: fmt_num(&mv["monto_bs"]) });
+                campos.push(FieldDiff { campo: "concepto".into(), local: "—".into(), remoto: mv["concepto"].as_str().unwrap_or("").to_string() });
+                movimientos.push(PreviewItem {
+                    tipo: "movimiento".into(), sync_id: sid.to_string(), nombre,
+                    local_ts: local_ts.get(sid).cloned().unwrap_or_default(), remote_ts: remote_ts.to_string(), campos,
+                });
+            } else {
+                let all = vec![
+                    FieldDiff { campo: "tipo".into(), local: "—".into(), remoto: mv["tipo"].as_str().unwrap_or("").to_string() },
+                    FieldDiff { campo: "monto_usd".into(), local: "—".into(), remoto: fmt_num(&mv["monto_usd"]) },
+                    FieldDiff { campo: "monto_bs".into(), local: "—".into(), remoto: fmt_num(&mv["monto_bs"]) },
+                    FieldDiff { campo: "concepto".into(), local: "—".into(), remoto: mv["concepto"].as_str().unwrap_or("").to_string() },
+                    FieldDiff { campo: "usuario".into(), local: "—".into(), remoto: mv["username"].as_str().unwrap_or("").to_string() },
+                ];
+                movimientos.push(PreviewItem {
+                    tipo: "movimiento".into(), sync_id: sid.to_string(), nombre,
+                    local_ts: String::new(), remote_ts: remote_ts.to_string(), campos: all,
+                });
+            }
+        }
+    }
+
+    // ---------- Alertas de crédito ----------
+    let mut alertas_credito: Vec<PreviewItem> = Vec::new();
+    {
+        let wm = if wm_ac.is_empty() { "1970-01-01T00:00:00.000Z".to_string() } else { wm_ac };
+        let url = api_url(
+            &supabase_url,
+            &format!(
+                "/alertas_credito?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*",
+                urlencoding(&wm), urlencoding(&dispositivo_id),
+            ),
+        );
+        let cloud: Vec<serde_json::Value> = supabase_get_paginated(&url, &supabase_key, "id")?;
+        let mut local_ts: HashMap<String, String> = HashMap::new();
+        {
+            let db = state.lock_db()?;
+            let mut stmt = db
+                .prepare("SELECT sync_id, COALESCE(updated_at,'') FROM alertas_credito WHERE sync_id IS NOT NULL AND sync_id != ''")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+                .map_err(|e| e.to_string())?;
+            for r in rows.filter_map(|r| r.ok()) { local_ts.insert(r.0, r.1); }
+        }
+        for al in &cloud {
+            let sid = al["sync_id"].as_str().unwrap_or("");
+            if sid.is_empty() { continue; }
+            let remote_ts = al["updated_at"].as_str().unwrap_or("");
+            let exists = local_ts.contains_key(sid);
+            if exists && !first_sync {
+                if let Some(lts) = local_ts.get(sid) {
+                    if !lts.is_empty() && remote_ts <= lts.as_str() { continue; }
+                }
+            }
+            let nombre = format!("{} - {}", al["tipo"].as_str().unwrap_or(""), al["cliente_nombre"].as_str().unwrap_or(""));
+            let all = vec![
+                FieldDiff { campo: "tipo".into(), local: "—".into(), remoto: al["tipo"].as_str().unwrap_or("").to_string() },
+                FieldDiff { campo: "monto".into(), local: "—".into(), remoto: fmt_num(&al["monto_usd"]) },
+                FieldDiff { campo: "cliente".into(), local: "—".into(), remoto: al["cliente_nombre"].as_str().unwrap_or("").to_string() },
+                FieldDiff { campo: "método".into(), local: "—".into(), remoto: al["metodo_pago"].as_str().unwrap_or("").to_string() },
+                FieldDiff { campo: "usuario".into(), local: "—".into(), remoto: al["usuario"].as_str().unwrap_or("").to_string() },
+            ];
+            alertas_credito.push(PreviewItem {
+                tipo: "alerta_credito".into(), sync_id: sid.to_string(), nombre,
+                local_ts: if exists { local_ts.get(sid).cloned().unwrap_or_default() } else { String::new() },
+                remote_ts: remote_ts.to_string(), campos: all,
+            });
+        }
+    }
+
+    // ---------- Alertas de stock ----------
+    let mut alertas_stock: Vec<PreviewItem> = Vec::new();
+    {
+        let wm = if wm_as.is_empty() { "1970-01-01T00:00:00.000Z".to_string() } else { wm_as };
+        let url = api_url(
+            &supabase_url,
+            &format!(
+                "/alertas_stock?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*",
+                urlencoding(&wm), urlencoding(&dispositivo_id),
+            ),
+        );
+        let cloud: Vec<serde_json::Value> = supabase_get_paginated(&url, &supabase_key, "id")?;
+        let mut local_ts: HashMap<String, String> = HashMap::new();
+        {
+            let db = state.lock_db()?;
+            let mut stmt = db
+                .prepare("SELECT sync_id, COALESCE(updated_at,'') FROM alertas_stock WHERE sync_id IS NOT NULL AND sync_id != ''")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+                .map_err(|e| e.to_string())?;
+            for r in rows.filter_map(|r| r.ok()) { local_ts.insert(r.0, r.1); }
+        }
+        for al in &cloud {
+            let sid = al["sync_id"].as_str().unwrap_or("");
+            if sid.is_empty() { continue; }
+            let remote_ts = al["updated_at"].as_str().unwrap_or("");
+            let exists = local_ts.contains_key(sid);
+            if exists && !first_sync {
+                if let Some(lts) = local_ts.get(sid) {
+                    if !lts.is_empty() && remote_ts <= lts.as_str() { continue; }
+                }
+            }
+            let nombre = format!("{} - {}", al["tipo"].as_str().unwrap_or(""), al["producto_codigo"].as_str().unwrap_or(""));
+            let all = vec![
+                FieldDiff { campo: "tipo".into(), local: "—".into(), remoto: al["tipo"].as_str().unwrap_or("").to_string() },
+                FieldDiff { campo: "producto".into(), local: "—".into(), remoto: al["producto_codigo"].as_str().unwrap_or("").to_string() },
+                FieldDiff { campo: "mensaje".into(), local: "—".into(), remoto: al["mensaje"].as_str().unwrap_or("").to_string() },
+                FieldDiff { campo: "usuario".into(), local: "—".into(), remoto: al["usuario"].as_str().unwrap_or("").to_string() },
+            ];
+            alertas_stock.push(PreviewItem {
+                tipo: "alerta_stock".into(), sync_id: sid.to_string(), nombre,
+                local_ts: if exists { local_ts.get(sid).cloned().unwrap_or_default() } else { String::new() },
+                remote_ts: remote_ts.to_string(), campos: all,
+            });
+        }
+    }
+
+    let total = productos.len() + clientes.len() + ventas.len() + movimientos.len() + alertas_credito.len() + alertas_stock.len();
+    Ok(PreviewResult { productos, clientes, ventas, movimientos, alertas_credito, alertas_stock, total })
 }
 
 /// Aplica solo los cambios seleccionados por el usuario (LWW: remoto solo gana si
@@ -445,11 +607,17 @@ pub fn apply_download(state: State<AppState>, changes: Vec<ApplyChange>, force: 
     let mut wanted_prod: Vec<&str> = Vec::new();
     let mut wanted_cli: Vec<&str> = Vec::new();
     let mut wanted_ventas: Vec<&str> = Vec::new();
+    let mut wanted_mov: Vec<&str> = Vec::new();
+    let mut wanted_ac: Vec<&str> = Vec::new();
+    let mut wanted_as: Vec<&str> = Vec::new();
     for c in &changes {
         match c.tipo.as_str() {
             "producto" => wanted_prod.push(&c.sync_id),
             "cliente" => wanted_cli.push(&c.sync_id),
             "venta" => wanted_ventas.push(&c.sync_id),
+            "movimiento" => wanted_mov.push(&c.sync_id),
+            "alerta_credito" => wanted_ac.push(&c.sync_id),
+            "alerta_stock" => wanted_as.push(&c.sync_id),
             _ => {}
         }
     }
@@ -659,6 +827,137 @@ let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &s
         tx.commit().map_err(|e| format!("Error al confirmar ventas: {}", e))?;
     }
 
+    // ---------- Movimientos de caja ----------
+    let mut applied_mov = 0usize;
+    if !wanted_mov.is_empty() {
+        let wm = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_MOVIMIENTOS)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+        let url = api_url(
+            &supabase_url,
+            &format!(
+                "/movimientos_caja?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*",
+                urlencoding(&wm), urlencoding(&dispositivo_id),
+            ),
+        );
+        let cloud: Vec<serde_json::Value> = supabase_get_paginated(&url, &supabase_key, "id")?;
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+        for mv in &cloud {
+            let sid = mv["sync_id"].as_str().unwrap_or("");
+            if !wanted_mov.contains(&sid) { continue; }
+            let remote_ts = mv["updated_at"].as_str().unwrap_or("");
+            let exists: bool = tx.query_row(
+                "SELECT COUNT(*) > 0 FROM movimientos_caja WHERE sync_id = ?1", params![sid], |r| r.get(0)
+            ).unwrap_or(false);
+            if exists && !force && !first_sync {
+                let lts: String = tx.query_row(
+                    "SELECT COALESCE(updated_at,'') FROM movimientos_caja WHERE sync_id = ?1", params![sid], |r| r.get(0)
+                ).unwrap_or_default();
+                if !lts.is_empty() && remote_ts <= lts.as_str() { skipped += 1; continue; }
+            }
+            let tipo = mv["tipo"].as_str().unwrap_or("ingreso");
+            let monto_bs = mv["monto_bs"].as_f64().unwrap_or(0.0);
+            let monto_usd = mv["monto_usd"].as_f64().unwrap_or(0.0);
+            let concepto = mv["concepto"].as_str().unwrap_or("");
+            let username = mv["username"].as_str().unwrap_or("system");
+            let created_at = mv["created_at"].as_str().unwrap_or("");
+            let cliente_id = mv["cliente_id"].as_i64();
+            let usuario_id: i64 = tx.query_row(
+                "SELECT id FROM usuarios WHERE username = ?1", params![username], |r| r.get(0)
+            ).unwrap_or(0);
+            let rows = if exists {
+                tx.execute(
+                    "UPDATE movimientos_caja SET tipo = ?1, monto_bs = ?2, monto_usd = ?3, concepto = ?4, \
+                     username = ?5, updated_at = ?6 WHERE sync_id = ?7",
+                    params![tipo, monto_bs, monto_usd, concepto, username, remote_ts, sid],
+                ).map_err(|e| format!("Error actualizando movimiento: {}", e))?
+            } else {
+                tx.execute(
+                    "INSERT OR IGNORE INTO movimientos_caja (sync_id, tipo, monto_bs, monto_usd, concepto, \
+                     usuario_id, username, cliente_id, created_at, updated_at, dispositivo_origen) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    params![sid, tipo, monto_bs, monto_usd, concepto, usuario_id, username, cliente_id, created_at, remote_ts, dispositivo_id],
+                ).map_err(|e| format!("Error insertando movimiento: {}", e))?
+            };
+            if rows > 0 { applied_mov += 1; }
+        }
+        tx.commit().map_err(|e| format!("Error al confirmar movimientos: {}", e))?;
+    }
+
+    // ---------- Alertas de crédito ----------
+    let mut applied_ac = 0usize;
+    if !wanted_ac.is_empty() {
+        let wm = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_ALERTAS)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+        let url = api_url(
+            &supabase_url,
+            &format!(
+                "/alertas_credito?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*",
+                urlencoding(&wm), urlencoding(&dispositivo_id),
+            ),
+        );
+        let cloud: Vec<serde_json::Value> = supabase_get_paginated(&url, &supabase_key, "id")?;
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+        for al in &cloud {
+            let sid = al["sync_id"].as_str().unwrap_or("");
+            if !wanted_ac.contains(&sid) { continue; }
+            let remote_ts = al["updated_at"].as_str().unwrap_or("");
+            let exists: bool = tx.query_row(
+                "SELECT COUNT(*) > 0 FROM alertas_credito WHERE sync_id = ?1", params![sid], |r| r.get(0)
+            ).unwrap_or(false);
+            if exists { skipped += 1; continue; }
+            tx.execute(
+                "INSERT OR IGNORE INTO alertas_credito (sync_id, tipo, monto_usd, cliente_nombre, metodo_pago, \
+                 usuario, fecha_hora, updated_at, dispositivo_origen) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    sid, al["tipo"].as_str().unwrap_or(""), al["monto_usd"].as_f64().unwrap_or(0.0),
+                    al["cliente_nombre"].as_str().unwrap_or(""), al["metodo_pago"].as_str().unwrap_or(""),
+                    al["usuario"].as_str().unwrap_or(""), al["fecha_hora"].as_str().unwrap_or(""),
+                    remote_ts, dispositivo_id,
+                ],
+            ).map_err(|e| format!("Error insertando alerta crédito: {}", e))?;
+            applied_ac += 1;
+        }
+        tx.commit().map_err(|e| format!("Error al confirmar alertas crédito: {}", e))?;
+    }
+
+    // ---------- Alertas de stock ----------
+    let mut applied_as = 0usize;
+    if !wanted_as.is_empty() {
+        let wm = super::get_config(&db, constants::CFG_ULTIMO_DOWNLOAD_ALERTAS_STOCK)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string());
+        let url = api_url(
+            &supabase_url,
+            &format!(
+                "/alertas_stock?updated_at=gt.{}&or=(dispositivo_origen.is.null,dispositivo_origen.neq.{})&select=*",
+                urlencoding(&wm), urlencoding(&dispositivo_id),
+            ),
+        );
+        let cloud: Vec<serde_json::Value> = supabase_get_paginated(&url, &supabase_key, "id")?;
+        let tx = db.transaction().map_err(|e| format!("Error al iniciar transacción: {}", e))?;
+        for al in &cloud {
+            let sid = al["sync_id"].as_str().unwrap_or("");
+            if !wanted_as.contains(&sid) { continue; }
+            let remote_ts = al["updated_at"].as_str().unwrap_or("");
+            let exists: bool = tx.query_row(
+                "SELECT COUNT(*) > 0 FROM alertas_stock WHERE sync_id = ?1", params![sid], |r| r.get(0)
+            ).unwrap_or(false);
+            if exists { skipped += 1; continue; }
+            tx.execute(
+                "INSERT OR IGNORE INTO alertas_stock (sync_id, producto_codigo, tipo, mensaje, usuario, \
+                 fecha_hora, updated_at, dispositivo_origen) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    sid, al["producto_codigo"].as_str().unwrap_or(""), al["tipo"].as_str().unwrap_or(""),
+                    al["mensaje"].as_str().unwrap_or(""), al["usuario"].as_str().unwrap_or(""),
+                    al["fecha_hora"].as_str().unwrap_or(""), remote_ts, dispositivo_id,
+                ],
+            ).map_err(|e| format!("Error insertando alerta stock: {}", e))?;
+            applied_as += 1;
+        }
+        tx.commit().map_err(|e| format!("Error al confirmar alertas stock: {}", e))?;
+    }
+
     let mut parts: Vec<String> = Vec::new();
     if applied_prod > 0 {
         parts.push(format!("{} producto(s)", applied_prod));
@@ -668,6 +967,15 @@ let cloud_clientes: Vec<serde_json::Value> = supabase_get_paginated(&cli_url, &s
     }
     if !ventas_msg.is_empty() && ventas_msg != "No hay ventas nuevas para descargar" {
         parts.push(ventas_msg);
+    }
+    if applied_mov > 0 {
+        parts.push(format!("{} movimiento(s)", applied_mov));
+    }
+    if applied_ac > 0 {
+        parts.push(format!("{} alerta(s) de crédito", applied_ac));
+    }
+    if applied_as > 0 {
+        parts.push(format!("{} alerta(s) de stock", applied_as));
     }
     if skipped > 0 {
         parts.push(format!("{} omitido(s) (local más reciente)", skipped));

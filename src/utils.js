@@ -117,7 +117,7 @@ function createInventoryRow(p, editBtn) {
         ? '<button data-action="toggle-inari" data-codigo="' + escapeHtml(p.codigo) + '" data-inari="false"><i class="nf nf-fa-fire"></i> Quitar Inari</button>'
         : '<button data-action="toggle-inari" data-codigo="' + escapeHtml(p.codigo) + '" data-inari="true"><i class="nf nf-fa-fire"></i> Marcar Inari</button>')
     : '';
-  var adjustBtn = (currentUser && currentUser.rol === ROL_ADMIN)
+  var adjustBtn = currentUser
     ? '<button data-action="open-stock-adjust" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-scale"></i> Ajustar stock</button>'
     : '';
   var deleteComboBtn = (currentUser && currentUser.rol === ROL_ADMIN && p.subcategoria === 'combos')
@@ -129,10 +129,7 @@ function createInventoryRow(p, editBtn) {
   var isAdmin = currentUser && currentUser.rol === ROL_ADMIN;
   var costCell = isAdmin ? '<td data-label="Costo">' + formatUSD(costo) + '</td>' : '<td class="admin-only" data-label="Costo" style="display:none"></td>';
   var marginCell = isAdmin ? '<td data-label="Margen">' + margen + '</td>' : '<td class="admin-only" data-label="Margen" style="display:none"></td>';
-  var priceHistoryBtn = isAdmin
-    ? '<button data-action="show-price-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-line_chart"></i> Historial precios</button>'
-    : '';
-  return '<td class="cell-key cell-name" data-label="Producto">' + escapeHtml(p.nombre) + catChip + inariBadge + pesableBadge + '</td><td class="cell-key cell-price" data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td>' + costCell + marginCell + '<td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td class="cell-key cell-stock' + stockClass + '" data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button><button data-action="show-product-history" data-codigo="' + escapeHtml(p.codigo) + '" data-nombre="' + escapeHtml(p.nombre) + '"><i class="nf nf-fa-history"></i> Historial</button>' + priceHistoryBtn + editBtn + adjustBtn + inariToggleBtn + deleteComboBtn + '</div></div></td>' + toggleCell;
+  return '<td class="cell-key cell-name" data-label="Producto">' + escapeHtml(p.nombre) + catChip + inariBadge + pesableBadge + '</td><td class="cell-key cell-price" data-label="Precio ($)">' + formatUSD(p.precio_usd) + '</td>' + costCell + marginCell + '<td data-label="Precio (Bs.)"><span class="bs-price-cell" data-usd-price="' + p.precio_usd + '">' + formatBS(p.precio_usd * tasa) + '</span></td><td class="cell-key cell-stock' + stockClass + '" data-label="Stock">' + stockDisplay + ' ' + stockBadge + '</td><td data-label="Mínimo">' + stockMinDisplay + '</td><td data-label="Acciones"><div class="dropdown"><button class="dropdown-btn" data-action="toggle-dropdown" title="Acciones"><i class="nf nf-fa-ellipsis_v"></i></button><div class="dropdown-menu"><button data-action="show-product-detail" data-codigo="' + escapeHtml(p.codigo) + '"><i class="nf nf-fa-info_circle"></i> Detalles</button>' + editBtn + adjustBtn + inariToggleBtn + deleteComboBtn + '</div></div></td>' + toggleCell;
 }
 function createClientRow(c) {
   const isAdmin = currentUser && currentUser.rol === ROL_ADMIN;

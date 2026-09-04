@@ -386,6 +386,10 @@ pub fn admin_change_password(
     usuario_id: i64,
     new_password: String,
 ) -> Result<String, String> {
+    crate::db::check_action_rate_limit(
+        &mut *state.admin_action_attempts.lock().map_err(|_| "Error interno".to_string())?,
+        "admin_change_password",
+    )?;
     let admin_username = {
         let lock = state
             .current_user
