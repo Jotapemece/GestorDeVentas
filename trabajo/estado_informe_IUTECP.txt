@@ -1,0 +1,68 @@
+ESTADO DEL INFORME DE PASANTÍA IUTECP
+Guardado: 2026-08-09 (retomando trabajo del informe)
+
+TÍTULO:
+"PROPUESTA DE UN SISTEMA DE INFORMACIÓN CONTABLE PARA OPTIMIZAR LA GESTIÓN
+DE DATOS FINANCIEROS Y EL CUMPLIMIENTO DE LOS DEBERES FORMALES EN LA EMPRESA
+H & M GRUPO EMPRESARIAL C.A."
+
+PASANTE: Leonardo Escobar · C.I. V-32.412.031 · Especialidad: Informática.
+
+ARCHIVOS CLAVE (todo en la carpeta trabajo/):
+- generador_informe.py   → generador python-docx (fuente)
+- contenido.py           → datos del informe (fuente)
+- contenido.pdf          → contenido real que dio el usuario
+- estructura.pdf         → referencia de formato de la IUTECP (solo formato, NO copiar texto)
+- imagenes/mapa.png      → única imagen útil extraída (Gráfico 1)
+- Informe_Pasantia_IUTECP.docx → salida generada
+
+QUÉ ESTÁ HECHO:
+- Portada, contraportada, actas de aprobación (tutor industrial/académico).
+- Índice general, lista de cuadros/gráficos según estructura.pdf.
+- Dedicatoria, agradecimientos (3 párrafos cada uno), Resumen (1 párrafo) +
+  Palabras clave (6 términos), Introducción (7 párrafos: contexto, experiencia,
+  5 capítulos).
+- Capítulo II: 4 párrafos seguidos sin subtítulos:
+    1. Macro-entorno (Motel Mancora Suites, Hotel Premier, Parque Premier Aventura, Redoma de Aguanca)
+    2. Micro-entorno (H&M Grupo Empresarial C.A.)
+    3. Historia/especialidad (referencia a la empresa)
+    4. Matriz FODA + interrogante de investigación al final
+  · Objetivo general: "Proponer..."
+  · 3 objetivos específicos orientados a la propuesta.
+- Cuadro 1 "Planificación integral de los objetivos específicos." (5 columnas:
+  Objetivo/Variable/Actividades/Técnica/Instrumento, 3 filas con bullets).
+- Capítulo III: Bloom en 3 secciones (3.1 Sistemas de Información Contable y
+  Gestión Financiera, 3.2 Tecnologías de Información y Diseño de Software,
+  3.3 Automatización y SIG) con 13 conceptos. Se agregaron: Bases de Datos
+  Relacionales y SGBD, Ingeniería de Requerimientos, SIG. Encabezado "Bases
+  Teóricas Referenciales" + intro.
+
+AVANCES (2026-08-09): actas de aprobación + agradecimientos/dedicatoria
+- AGRADECIMIENTOS y DEDICATORIA completados en contenido.py: 3 párrafos cada uno,
+  genéricos pero consistentes (IUTECP, TSU Informática, H & M Grupo Empresarial
+  C.A., depto. Administrativo/Contable: Lcda. Marta Rojas y Diego Aray, tutores).
+- generador_informe.py ahora soporta valores lista/tupla en AGRADECIMIENTOS y
+  DEDICATORIA (itera con agregar_parrafo_normado).
+- Actas de aprobación activadas (solo_encabezado=False) siguiendo la estructura
+  del PDF de referencia (estructura.pdf actualizado por el usuario):
+    · Industrial: firma con placeholder X — nombre "XXXX", "C.I.: XX.XXX.XXX"
+    · Académico:  "Mejía José", "C.I.: 4.273.815" (mismo tutor que el informe de referencia, confirmado por el usuario)
+  AUTOR_DATOS alimenta ambas actas y la contraportada.
+- Corregido bug de CI duplicada en el texto de las actas: "V-V-32.412.031" →
+  "V-32.412.031" (el prefijo V- estaba en la f-string y en CI_PASANTE).
+- DOCX regenerado (modo completo) y verificado por XML: bookmarks
+  bm_aprob_ind, bm_aprob_acad, bm_agradecimientos, bm_dedicatoria presentes,
+  footers romanos intactos, actas con texto completo + firma.
+
+VÉASE TAMBIÉN:
+- reglas de no-división de página en generador_informe.py (2026-08-08):
+    agregar_parrafo_normado / agregar_item_lista → keep_together + widow_control
+    agregar_titulo_nivel2/3/4/5 y agregar_titulo_cuadro → keep_with_next
+    helper _mantener_tabla_junta(): cantSplit en filas + gluing
+    agregar_imagen → gráfico pegado a su título
+    PDF NO se puede generar: LibreOffice no está instalado (solo OnlyOffice).
+
+PENDIENTE:
+- Cronograma de Gantt (definir semanas junio-julio-agosto)
+- Capítulo IV: análisis e interpretación de datos
+- Capítulo V: conclusiones, recomendaciones, referencias y anexos.

@@ -1,0 +1,266 @@
+SÍNTESIS PARA DEFENSA ORAL DEL INFORME DE PASANTÍAS
+Pasantías de Técnico Superior Universitario en Informática
+
+Pasante: Juan Moya (C.I. V-32.383.863)
+Instituto Universitario de Tecnología "Elías Calixto Pompa" (IUTECP) — El Tigre, estado Anzoátegui
+Trabajo de grado: Propuesta de Sistema de Gestión Documental Digital para la Optimización de los
+Procesos Administrativos en la Gerencia Administrativa de la empresa Servicios y Suministros GEO, C.A.
+El Tigre, agosto 2026
+
+========================================================================
+                           DESARROLLO DE LA EXPOSICIÓN
+========================================================================
+
+Buenos días, estimados miembros del jurado, profesores y tutor académico. Mi nombre
+es Juan Moya, pasante de la carrera de Técnico Superior Universitario en Informática
+del Instituto Universitario de Tecnología "Elías Calixto Pompa". Comparezco ante
+ustedes para presentar y defender el informe de pasantías titulado "Propuesta de
+Sistema de Gestión Documental Digital para la Optimización de los Procesos
+Administrativos en la Gerencia Administrativa de la empresa Servicios y Suministros
+GEO, C.A.", desarrollado entre junio y agosto de 2026.
+
+Esta presentación recorre de manera integrada la realidad de la empresa, el diagnóstico
+y los objetivos del trabajo, el marco que lo sustenta, las actividades ejecutadas
+durante las diez semanas de pasantía, y finalmente las conclusiones y recomendaciones.
+
+========================================================================
+                  CAPÍTULO I — REALIDAD ORGANIZACIONAL
+========================================================================
+
+La pasantía se llevó a cabo en Servicios y Suministros GEO, C.A., compañía inscrita
+en el Registro Mercantil Segundo de la Circunscripción Judicial del estado Anzoátegui,
+con RIF J-40833844-0. La organización nació en 2016 por iniciativa de Gustavo Ovalles,
+con la visión de prestar servicios integrales a la industria, especialmente al sector
+petrolero. Sus oficinas administrativas están en San José de Guanipa, y con el tiempo
+amplió su alcance a los estados Falcón y Zulia, ejecutando trabajos para importantes
+empresas petroleras y petroquímicas del occidente del país. Su portafolio abarca desde
+el mantenimiento industrial hasta el suministro de materiales y la consultoría técnica,
+lo que demanda una gestión documental constante y bien organizada en el día a día.
+
+— Misión, visión y valores —
+Su misión es brindar servicios y soluciones corporativas que superen las expectativas
+del cliente, con eficiencia y responsabilidad hacia la seguridad, la salud y el medio
+ambiente; su visión, convertirse en una empresa líder en crecimiento y rentabilidad
+sustentable mediante la mejora continua. Estos principios, junto a valores como la
+transparencia, la honestidad y la constancia, fueron la base ética de la propuesta.
+
+— Estructura organizacional —
+La empresa cuenta con veinte trabajadores y una estructura que abarca la presidencia,
+la gerencia general, la gerencia administrativa, el departamento de tecnología de la
+información y las coordinaciones de compras, proyectos y construcción, operaciones y
+recursos humanos.
+
+— La Gerencia de Administración —
+Mi pasantía se desarrolló en la Gerencia de Administración, conformada por el analista
+financiero, contabilidad, el asistente, cuentas por pagar y tributación, y cuentas por
+cobrar y facturación. Esta unidad maneja los procesos administrativos y financieros,
+incluida la elaboración y declaración de las retenciones del IVA ante el fisco nacional,
+función crítica dada la condición de la empresa como contribuyente especial.
+
+========================================================================
+             CAPÍTULO II — DIAGNÓSTICO SITUACIONAL Y OBJETIVOS
+========================================================================
+
+— La situación problemática —
+No obstante, al observar la operatividad diaria de esa gerencia surgió una situación
+concreta: la documentación contable y fiscal se almacenaba de forma aislada en los
+discos locales de los empleados, en formato Excel y PDF. Esa dispersión generaba
+retrasos en el rastreo de comprobantes, fallas de versiones y riesgo de pérdida de
+datos confidenciales, y al no existir un software estandarizado local, producía
+duplicidad de funciones y demoras en la declaración de retenciones de IVA, exponiendo
+a la organización, como contribuyente especial, a sanciones legales y fiscales. Baste
+señalar que un solo comprobante extraviado podía implicar una multa o la improcedencia
+de una deducción fiscal, con el consecuente perjuicio económico para la compañía.
+
+— Análisis con el Diagrama de Ishikawa —
+Para analizarlo se aplicó el Diagrama de Ishikawa, cuyo desglose sistemático de causas
+raíz evidenció que la dispersión de archivos y la falta de un índice centralizado
+impactaban directamente la eficiencia y el control fiscal del departamento. De este
+modo quedó claro que el problema no era de capacidad del personal, sino de diseño del
+proceso.
+
+— Objetivos de la investigación —
+A partir de ahí se fijó como objetivo general proponer un sistema de gestión documental
+digital para optimizar los procesos administrativos de la gerencia. De él se derivaron
+tres específicos: diagnosticar la situación procedimental y los requerimientos de
+información; evaluar el impacto de las deficiencias y las limitaciones de control
+interno sobre la eficiencia y el cumplimiento fiscal; y diseñar la arquitectura lógica,
+los esquemas de datos y una demostración técnica funcional en lenguaje Rust.
+
+— Metodología y fases de análisis —
+Metodológicamente, el trabajo fue un proyecto factible apoyado en investigación de
+campo y revisión documental, siguiendo las fases de análisis de sistemas de Kendall y
+Kendall: diagnóstico, levantamiento de requerimientos, diseño de la arquitectura lógica
+y desarrollo del prototipo. Se emplearon la observación participante, entrevistas no
+estructuradas, listas de cotejo, matrices causa-efecto y un diagrama de Gantt que
+organizó las actividades a lo largo de las diez semanas reglamentarias.
+
+========================================================================
+                        CAPÍTULO III — MARCO TEÓRICO
+========================================================================
+
+— Gestión documental y procesos administrativos —
+Para sustentar la propuesta, el marco teórico partió de la gestión documental digital,
+que administra los documentos en soporte electrónico a lo largo de su ciclo de vida,
+garantizando preservación, disponibilidad e integridad. Se subrayó además la
+importancia del control de versiones y la trazabilidad, así como la simplificación de
+procesos para eliminar pasos redundantes y ganar productividad. En la práctica, esto
+implica capturar, clasificar, almacenar y disponer el documento desde su creación hasta
+su archivo definitivo, sin rupturas en la cadena de custodia.
+
+— Tecnologías de información y desarrollo de software —
+En ese mismo sentido, se fundamentó la arquitectura de software para sistemas de
+información, las bases de datos relacionales y la gestión de metadatos —indispensables
+para catalogar cada archivo por campos clave como RIF, número de factura, tipo de
+retención y cliente—, el diseño de interfaces orientado a la usabilidad y la seguridad
+mediante el control de acceso basado en roles (RBAC).
+
+— Sistemas de información gerencial y calidad del software —
+Finalmente, se destacó cómo un sistema de información gerencial apoya la toma de
+decisiones, la relevancia de la ingeniería de requerimientos para modelar un sistema
+ajustado a la realidad operativa, y los atributos de calidad, mantenibilidad y
+fiabilidad considerados durante todo el diseño para asegurar la sostenibilidad.
+
+========================================================================
+         CAPÍTULO IV — ACTIVIDADES REALIZADAS (PARTE CENTRAL)
+========================================================================
+
+Sobre esa base conceptual se edificó el trabajo práctico, que agrupé en cuatro etapas
+estratégicas para evidenciar la coherencia entre la gestión gerencial y el desarrollo
+de la propuesta. Cada etapa entregó un producto concreto que alimentó al siguiente,
+de modo que el prototipo final fue el resultado de un proceso continuo y no de una
+fase aislada.
+
+1. Etapa de Inducción y Diagnóstico Situacional (Semanas 1 y 2)
+[Ver Diapositiva: Diagnóstico y Inspección de Archivos]
+En las dos primeras semanas completé la inducción con el tutor industrial e inspeccioné
+la documentación contable crítica: facturas, órdenes de servicio y comprobantes de
+retención de IVA. Paralelamente analicé el procedimiento de retenciones del SENIAT,
+dada la condición de contribuyente especial, y el levantamiento del archivo digital
+local reveló los cuellos de botella: carpetas dispersas en discos, duplicidad de
+expedientes y riesgo de demora en localizar soportes históricos.
+
+2. Etapa de Levantamiento de Requerimientos y Modelado (Semanas 3 y 4)
+[Ver Diapositiva: Diagramas de Flujo ERS]
+En la tercera y cuarta semana mapeé la secuencia documental en cuentas por cobrar, por
+pagar y tributación. Mediante entrevistas con el contador y el analista financiero
+definí los metadatos clave (RIF, número de factura, fecha y tipo de retención) y, con
+esa información, modelé los diagramas de flujo según Kendall y Kendall, consolidando
+la Especificación de Requerimientos de Software (ERS).
+
+3. Etapa de Diseño y Codificación en Rust (Semanas 5, 6 y 7)
+[Ver Diapositiva: Arquitectura del Software y Demostración Técnica]
+Esta etapa fue el núcleo técnico. Definí las políticas de RBAC para resguardar la
+integridad de los datos conforme al Código Orgánico Tributario, estructuré las rutas
+locales en Linux Debian y codifiqué de forma modular la demostración en Rust. El
+desarrollo creó algoritmos de extracción automática de metadatos e indexación
+centralizada para PDF y Excel, permitiendo filtrados inmediatos sin software comercial
+pesado.
+
+4. Etapa de Pruebas, Capacitación y Cierre (Semanas 8, 9 y 10)
+[Ver Diapositiva: Pruebas de Usabilidad e Integración]
+En la fase final ejecuté las pruebas piloto con el analista financiero y el personal
+administrativo, evaluando la velocidad del motor de búsqueda en Rust sobre volúmenes
+reales en Linux Debian. Con la retroalimentación ajusté los algoritmos de filtrado,
+dicté la jornada de capacitación y entregué los manuales de usuario y la documentación
+técnica.
+
+Semana 1 (Diagnóstico e Inspección Tributaria):
+Realicé la inspección inicial de la documentación operativa (facturas, órdenes de
+servicio y comprobantes de retención de IVA) y analicé el procedimiento de retenciones
+fiscales exigido por el SENIAT para contribuyentes especiales, identificando los
+cuellos de botella del resguardo local.
+
+Semana 3 (Levantamiento de Requerimientos y Metadatos):
+Mapeé la secuencia documental en cuentas por cobrar, cuentas por pagar y tributación.
+Junto al contador y el analista financiero, definí la estructura de metadatos requeridos
+(RIF, N° de factura, fecha y porcentaje de retención) para la Especificación de
+Requerimientos de Software (ERS).
+
+Semana 6 (Desarrollo y Codificación en Rust):
+Estructuré el entorno de trabajo en Linux Debian y codifiqué de forma modular la
+demostración técnica funcional en lenguaje Rust. Desarrollé los algoritmos de
+extracción automática de metadatos e indexación centralizada para archivos PDF y
+hojas de cálculo Excel.
+
+Semana 8 (Pruebas Piloto y Búsqueda por Metadatos):
+Ejecuté las pruebas piloto junto con el analista financiero y el personal administrativo.
+Se evaluó el rendimiento y velocidad de respuesta del motor de búsqueda en Rust
+sobre volúmenes reales de carpetas locales en Linux Debian, validando la precisión en
+los filtrados de comprobantes.
+
+========================================================================
+              CAPÍTULO V — CONCLUSIONES Y RECOMENDACIONES
+========================================================================
+
+— Conclusiones por objetivo —
+Los resultados de este recorrido permiten concluir, articulados con los objetivos
+planteados, lo siguiente. Respecto al primer objetivo, el diagnóstico constató la
+inexistencia de una estructura digital centralizada: la conservación dispersa en discos
+locales generaba duplicidad, demoras y vulnerabilidad tributaria, y fue determinante
+para catalogar los metadatos esenciales y consolidar la ERS. En cuanto al segundo, el
+análisis causa-efecto demostró que la falta de un flujo digital estandarizado
+comprometía la productividad y elevaba el riesgo de sanciones, justificando la
+automatización. Y sobre el tercero, las pruebas piloto en Linux Debian validaron la
+viabilidad técnica: la estructuración modular y el motor parametrizado por metadatos
+reducen drásticamente los tiempos de localización, la interfaz resultó intuitiva y el
+RBAC garantizó la seguridad, confirmando que un sistema de escritorio en Rust es una
+solución robusta.
+
+— Aporte del plan de estudios —
+Asimismo, el éxito de la pasantía debe mucho al plan de estudios: Administración aportó
+el marco organizacional; Técnicas de Estudio e Investigación, la rigurosidad
+metodológica; Análisis y Diseño de Sistemas I y II, las herramientas de modelado y la
+ERS; Lenguajes de Programación y Base de Datos, los fundamentos para los metadatos y
+el prototipo; y Auditoría de Sistemas Computarizados, los criterios de control interno
+y trazabilidad.
+
+— Recomendaciones —
+De estas conclusiones se derivan recomendaciones concretas. A la empresa: formalizar la
+adopción progresiva del sistema, institucionalizar el esquema de nombrado por metadatos,
+integrarlo en cuentas por cobrar y por pagar, capacitar al personal y seguir abriendo
+pasantías. Al IUTECP: promover talleres sobre lenguajes y arquitecturas emergentes,
+fortalecer la comunicación entre pasantías y tutores, y fomentar proyectos integradores
+que simulen auditoría y gestión documental. Y a los futuros pasantes: priorizar el
+diagnóstico de campo y el levantamiento de requerimientos desde las primeras semanas
+antes de programar, y mantener comunicación constante con ambos tutores.
+
+========================================================================
+                               CIERRE
+========================================================================
+
+Para concluir, esta pasantía en Servicios y Suministros GEO, C.A. integró los
+conocimientos de la carrera en un entorno operativo real. La propuesta del Sistema de
+Gestión Documental Digital, materializada en una demostración funcional en Rust,
+demostró que centralizar el archivo elimina brechas operacionales, minimiza los tiempos
+de consulta y garantiza la trazabilidad exigida en auditorías internas y tributarias.
+La sistematización de la información se presenta, en definitiva, como pilar de la
+productividad y del fortalecimiento del control interno y la memoria corporativa.
+Queda así demostrado que, incluso con recursos locales y un lenguaje de sistemas como
+Rust, es posible resolver una necesidad real de la industria nacional.
+
+Agradezco sinceramente a los miembros del jurado por su atención, a mi tutor industrial
+y a mi tutor académico por su orientación constante, y a todos quienes hicieron posible
+este trabajo. Muchas gracias.
+
+========================================================================
+
+¿Por qué seleccionó el lenguaje Rust para desarrollar la demostración técnica en lugar de opciones más comunes como Python o PHP?
+
+Respuesta: Rust fue seleccionado por tres razones técnicas fundamentales: rendimiento, seguridad de memoria sin recolector de basura (garbage collector) y eficiencia de recursos. A diferencia de lenguajes interpretados como Python, Rust compila directamente a código nativo de alto rendimiento, lo que permite realizar el escaneo, indexación y filtrado de cientos de metadatos en archivos PDF y Excel en cuestión de milisegundos. Además, su sistema de tipos y control de memoria evita fallos de ejecución (crashes o fuga de memoria), ofreciendo un software de escritorio local ligero, seguro y sumamente estable para el entorno Linux Debian del departamento.
+
+2. ¿Cómo gestiona el prototipo la extracción y catalogación de metadatos sin utilizar un servidor de base de datos corporativo complejo como Oracle o PostgreSQL?
+
+Respuesta: Para evitar sobrecargar la infraestructura informática de la empresa con servidores de base de datos dedicados, la propuesta implementa una arquitectura embebida y local en Rust. Los metadatos extraídos de los documentos (RIF, número de factura, tipo de retención) se indexan en estructuras de datos optimizadas (como una base de datos local SQLite o archivos JSON de metadatos). Esto simplifica los respaldos continuos y garantiza una consulta ultrarrápida sin requerir configuraciones de red o servicios de base de datos externos.
+
+3. ¿De qué manera la propuesta resuelve directamente el riesgo fiscal de la empresa ante el SENIAT?
+
+Respuesta: La empresa tiene la condición de contribuyente especial, lo que implica plazos estrictos y sanciones severas por retrasos en la declaración de retenciones de IVA. Al eliminar el almacenamiento disperso en computadores individuales y centralizar la catalogación por metadatos (RIF, número de retención, período), el analista financiero puede ubicar y verificar la trazabilidad de cualquier comprobante en segundos durante los cierres tributarios o ante fiscalizaciones del SENIAT, eliminando el riesgo de pérdida o extravío.
+
+4. ¿Cómo se implementó la seguridad y la restricción de acceso en la propuesta digital?
+
+Respuesta: La propuesta aplica el principio de Control de Acceso Basado en Roles (RBAC). Se definieron permisos específicos según las funciones gerenciales: el personal operativo y asistentes cuentan con permisos de lectura e indexación de archivos, mientras que la modificación de reglas de metadatos o eliminación de registros queda restringida exclusivamente a la Gerencia Administrativa. Además, la compatibilidad nativa con los permisos de usuario en Linux Debian garantiza que los archivos originales PDF o Excel no puedan ser alterados accidentalmente.
+
+5. ¿Qué metodología metodológica sustentó el desarrollo del software y cómo evaluó la usabilidad del sistema?
+
+Respuesta: El proyecto se sustentó en la metodología de Análisis y Diseño de Sistemas de Kendall y Kendall, recorriendo las fases de diagnóstico procedimental, determinación de requerimientos, diseño de la arquitectura lógica y desarrollo del prototipo. La usabilidad se evaluó cuantitativa y cualitativamente durante las semanas 8 y 9 mediante pruebas piloto con el personal administrativo, midiendo la facilidad de navegación y los tiempos de localización de soportes, lo que permitió ajustar la interfaz antes de la jornada final de capacitación.

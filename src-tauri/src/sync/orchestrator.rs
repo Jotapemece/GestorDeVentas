@@ -269,12 +269,10 @@ pub fn upload_after_sale(state: State<AppState>) -> Result<String, String> {
         (u, k, get_config(&db, constants::CFG_DISPOSITIVO_ID)?)
     };
 
-    // Subida liviana tras cada venta: solo las tablas que pueden haber cambiado con
-    // la venta (ventas + detalles, alertas de crédito y clientes nuevos/modificados).
-    // NO incluye productos/usuarios/solicitudes (carga pesada) para no congelar el
-    // POS mientras sube el catálogo completo en cada venta.
-    // Cada etapa usa su propia transacción corta (red fuera del lock de escritura).
+    // Subida liviana tras cada venta: tablas que pueden haber cambiado.
+    // Productos incluido para propagar stock decrementado por la venta.
     let steps: Vec<(&str, fn(&Connection, &str, &str, &str) -> Result<String, String>)> = vec![
+        ("productos", upload_products_inner),
         ("ventas", upload_sales_inner),
         ("alertas", upload_alertas_inner),
         ("clientes", upload_clientes_inner),
